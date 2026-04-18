@@ -1,0 +1,52 @@
+{
+  "common": {
+    "loading": "Chargement...",
+    "error": "Erreur",
+    "success": "Succès",
+    "save": "Sauvegarder",
+    "cancel": "Annuler",
+    "back": "Retour",
+    "logout": "Se déconnecter",
+    "settings": "Paramètres",
+    "language": "Langue",
+    "notifications": "Notifications"
+  },
+  "auth": {
+    "login": "Connexion",
+    "register": "S'inscrire",
+    "email": "E-mail",
+    "password": "Mot de passe",
+    "forgot_password": "Mot de passe oublié ?"
+  },
+  "tabs": {
+    "home": "Explorer",
+    "tickets": "Mes Billets",
+    "resale": "Revente",
+    "wallet": "Portefeuille",
+    "profile": "Profil"
+  },
+  "tickets": {
+    "my_tickets": "Mes Billets",
+    "no_tickets": "Votre portefeuille est vide",
+    "buy_tickets": "Explorer les événements",
+    "add_to_wallet": "Ajouter au Wallet",
+    "in_wallet": "Dans le Wallet",
+    "download": "Télécharger",
+    "sell": "Vendre",
+    "used": "Utilisé",
+    "valid": "Valide"
+  },
+  "notifications_msg": {
+    "purchase_completed": "🎟️ Billet assuré ! Préparez-vous, cet événement fait désormais partie de votre histoire.",
+    "ticket_ready": "📲 Votre pass secret est prêt. Ce QR est votre clé pour l'événement.",
+    "reminder_24h": "⏳ Demain est le grand jour. Préparez la tenue, le plan et l'excitation.",
+    "reminder_2h": "🔥 Dans 2 heures tout commence. C'est le moment de sortir.",
+    "event_cancelled": "⚠️ L'événement a été annulé. Rassurez-vous, nous gérons votre remboursement.",
+    "event_modified": "🔁 Attention, il y a des changements dans l'événement. Vérifiez les nouveaux détails pour ne rien manquer.",
+    "reimbursement": "💸 Remboursement en cours. Vous le verrez très bientôt.",
+    "transfer_success": "🤝 Vous avez transmis votre billet. Maintenant, quelqu'un d'autre vivra cette expérience.",
+    "transfer_received": "🎁 Un billet vous a été transféré. Vous avez un plan sans l'avoir cherché.",
+    "entry_validated": "✅ Entré. Que l'expérience commence.",
+    "validation_failed": "🚫 Ce QR a déjà été utilisé ou n'est pas valide. Consultez le personnel pour vous aider."
+  }
+}

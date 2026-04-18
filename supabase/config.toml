@@ -1,0 +1,20 @@
+[functions.create-payment-intent-v2]
+verify_jwt = false
+
+[functions.confirm-payment]
+verify_jwt = false
+
+[functions.stripe-connect-create-account]
+verify_jwt = false
+
+[functions.stripe-connect-onboarding-link]
+verify_jwt = false
+
+[functions.stripe-connect-refresh-status]
+verify_jwt = false
+
+[functions.stripe-get-account-stats]
+verify_jwt = false
+
+[functions.send-push]
+verify_jwt = false

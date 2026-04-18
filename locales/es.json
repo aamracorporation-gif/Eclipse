@@ -1,0 +1,65 @@
+{
+  "common": {
+    "loading": "Cargando...",
+    "error": "Error",
+    "success": "Éxito",
+    "save": "Guardar",
+    "cancel": "Cancelar",
+    "back": "Volver",
+    "logout": "Cerrar sesión",
+    "settings": "Ajustes",
+    "language": "Idioma",
+    "notifications": "Notificaciones",
+    "greeting": "Buenas noches,",
+    "explore": "Explora la Noche"
+  },
+  "auth": {
+    "login": "Iniciar sesión",
+    "register": "Crear cuenta",
+    "email": "Email",
+    "password": "Contraseña",
+    "forgot_password": "¿Olvidaste tu contraseña?"
+  },
+  "home": {
+    "search_placeholder": "Buscar eventos, artistas...",
+    "search_city": "Buscar ciudad o zona...",
+    "empty_title": "Sin fiestas para este momento",
+    "empty_subtitle": "Cambia la fecha o prueba a limpiar filtros para descubrir más.",
+    "clear_filters": "Limpiar filtros",
+    "view_map": "Ver mapa"
+  },
+  "tabs": {
+    "home": "Explorar",
+    "tickets": "Mis Entradas",
+    "resale": "Reventa",
+    "wallet": "Cartera",
+    "profile": "Perfil"
+  },
+  "tickets": {
+    "my_tickets": "Mis Entradas",
+    "ticket": "entrada",
+    "tickets_count": "entradas",
+    "no_tickets": "Tu cartera está vacía",
+    "empty_subtitle": "Compra entradas y aquí tendrás tu QR listo. Si no puedes ir, revéndelas con un toque.",
+    "buy_tickets": "Explorar eventos",
+    "add_to_wallet": "Añadir a Wallet",
+    "in_wallet": "En Wallet",
+    "download": "Descargar",
+    "sell": "Vender",
+    "used": "Usado",
+    "valid": "Válido"
+  },
+  "notifications_msg": {
+    "purchase_completed": "🎟️ ¡Entrada asegurada! Prepárate, porque este evento ya es parte de tu historia.",
+    "ticket_ready": "📲 Tu pase secreto está listo. Este QR es tu llave al evento.",
+    "reminder_24h": "⏳ Mañana es el día. Ve preparando el outfit, el plan y las ganas.",
+    "reminder_2h": "🔥 En 2 horas empieza todo. Es momento de salir.",
+    "event_cancelled": "⚠️ El evento ha sido cancelado. Tranquilo, estamos gestionando tu reembolso.",
+    "event_modified": "🔁 Atención, hay cambios en el evento. Revisa los nuevos detalles para no perderte nada.",
+    "reimbursement": "💸 Reembolso en camino. Lo verás reflejado muy pronto.",
+    "transfer_success": "🤝 Has pasado tu entrada. Ahora otra persona vivirá esta experiencia.",
+    "transfer_received": "🎁 Te han transferido una entrada. Tienes plan sin haberlo buscado.",
+    "entry_validated": "✅ Dentro. Que empiece la experiencia.",
+    "validation_failed": "🚫 Este QR ya fue usado o no es válido. Consulta con el staff para ayudarte."
+  }
+}

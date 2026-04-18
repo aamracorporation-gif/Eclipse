@@ -1,0 +1,383 @@
+import { useState, useEffect, useRef } from 'react';
+import { StyleSheet, Text, View, TouchableOpacity, Modal, Alert, Vibration } from 'react-native';
+import { CameraView, useCameraPermissions } from 'expo-camera';
+import { router } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
+import { supabase } from '@/lib/supabase';
+import { useAuth } from '@/lib/AuthContext';
+import { Colors } from '@/constants/Colors';
+import { GlassView } from '@/components/ui/GlassView';
+import { ThemedButton } from '@/components/ui/ThemedButton';
+import { DiscoLoader } from '@/components/ui/DiscoLoader';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import * as Haptics from 'expo-haptics';
+
+export default function ScanScreen() {
+  const { user } = useAuth();
+  const insets = useSafeAreaInsets();
+  const [permission, requestPermission] = useCameraPermissions();
+  const [scanned, setScanned] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [result, setResult] = useState<any>(null);
+  const [modalVisible, setModalVisible] = useState(false);
+  const isScanning = useRef(false);
+
+  const safeBack = () => {
+    const canGoBack = (router as any)?.canGoBack?.();
+    if (canGoBack) router.back();
+    else router.replace('/(creator)');
+  };
+
+  useEffect(() => {
+    if (!permission?.granted) {
+      requestPermission();
+    }
+  }, []);
+
+  const playFeedback = async (success: boolean) => {
+    try {
+      if (success) {
+        await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      } else {
+        await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      }
+    } catch (error) {
+      console.log('Error playing haptics', error);
+      // Fallback to vibration
+      Vibration.vibrate(success ? 100 : 500);
+    }
+  };
+
+  const handleBarCodeScanned = async ({ type, data }: { type: string; data: string }) => {
+    if (scanned || loading || isScanning.current) return;
+
+    // 1. Immediate Feedback & Lock
+    isScanning.current = true;
+    setScanned(true);
+    setLoading(true);
+    // Short haptic to indicate "scan captured" before validation
+    await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    
+    // Clean data
+    const cleanData = data.trim();
+    console.log(`[Scanner] Code detected. Type: ${type}, Data: ${cleanData}`);
+
+    try {
+      if (!user?.id) {
+        throw new Error('Usuario no autenticado');
+      }
+
+      // Validate with Supabase RPC (v2)
+      // We use v2 because it handles RLS bypassing and Type casting (UUID/Text) safely
+      const { data: validationData, error } = await supabase
+        .rpc('validate_ticket_qr_v2', { 
+          p_qr_token: cleanData, 
+          p_scanned_by_text: user.id 
+        });
+
+      if (error) throw error;
+
+      console.log('[Scanner] Validation Result:', validationData);
+      setResult(validationData);
+      await playFeedback(validationData.valid);
+      setModalVisible(true);
+
+    } catch (error: any) {
+      console.error('[Scanner] Validation Error:', error);
+      // DO NOT reset scanned here immediately, or it loops.
+      // Show Alert and reset ONLY when user presses OK
+      Alert.alert(
+        'Error', 
+        'Error al validar el código: ' + error.message,
+        [{ 
+          text: 'OK', 
+          onPress: () => {
+            setScanned(false);
+            isScanning.current = false;
+          }
+        }]
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const closeModal = () => {
+    setModalVisible(false);
+    setResult(null);
+    // Add a small delay before allowing next scan to prevent accidental double scans
+    setTimeout(() => {
+      setScanned(false);
+      isScanning.current = false;
+    }, 1000);
+  };
+
+  if (!permission) {
+    return <View style={styles.container} />;
+  }
+
+  if (!permission.granted) {
+    return (
+      <View style={styles.container}>
+        <Text style={styles.message}>Necesitamos acceso a la cámara para escanear entradas.</Text>
+        <ThemedButton onPress={requestPermission} title="Dar Permiso" />
+      </View>
+    );
+  }
+
+  return (
+    <View style={styles.container}>
+      <CameraView
+        style={StyleSheet.absoluteFillObject}
+        facing="back"
+        onBarcodeScanned={scanned ? undefined : handleBarCodeScanned}
+        barcodeScannerSettings={{
+          barcodeTypes: ["qr"],
+        }}
+      />
+      
+      {/* Overlay UI */}
+      <View style={[styles.overlay, { paddingTop: insets.top + 20 }]}>
+        <View style={styles.header}>
+          <TouchableOpacity onPress={safeBack} style={styles.backButton}>
+            <Ionicons name="close" size={28} color="white" />
+          </TouchableOpacity>
+          <Text style={styles.title}>Escanear Entrada</Text>
+          <View style={{ width: 40 }} />
+        </View>
+
+        <View style={styles.scanFrameContainer}>
+           <View style={styles.scanFrame} />
+           <Text style={styles.scanText}>Apunta al código QR de la entrada</Text>
+        </View>
+        
+        {loading && (
+           <View style={styles.loadingOverlay}>
+             <DiscoLoader size={90} />
+             <Text style={styles.loadingText}>Validando...</Text>
+           </View>
+        )}
+      </View>
+
+      {/* Result Modal */}
+      <Modal
+        animationType="slide"
+        transparent={true}
+        visible={modalVisible}
+        onRequestClose={closeModal}
+      >
+        <View style={styles.modalContainer}>
+          <GlassView intensity={40} style={styles.modalContent}>
+             {result?.valid ? (
+               <View style={styles.resultContent}>
+                 <View style={[styles.iconCircle, { backgroundColor: '#4ade80' }]}>
+                   <Ionicons name="checkmark" size={50} color="white" />
+                 </View>
+                 <Text style={styles.resultTitle}>¡ENTRADA VÁLIDA!</Text>
+                 <Text style={styles.resultMessage}>{result.message}</Text>
+                 
+                 <View style={styles.ticketInfo}>
+                   <Text style={styles.infoLabel}>Evento:</Text>
+                   <Text style={styles.infoValue}>{result.ticket?.event}</Text>
+                   
+                   <Text style={styles.infoLabel}>Titular:</Text>
+                   <Text style={styles.infoValue}>{result.ticket?.owner}</Text>
+
+                   <Text style={styles.infoLabel}>Fecha:</Text>
+                   <Text style={styles.infoValue}>
+                      {result.ticket?.date ? new Date(result.ticket.date).toLocaleDateString() : 'N/A'}
+                   </Text>
+                 </View>
+               </View>
+             ) : (
+               <View style={styles.resultContent}>
+                 <View style={[styles.iconCircle, { backgroundColor: '#ef4444' }]}>
+                   <Ionicons name="close" size={50} color="white" />
+                 </View>
+                 <Text style={[styles.resultTitle, { color: '#ef4444' }]}>INVÁLIDA</Text>
+                 
+                 {(() => {
+                   const msg = result?.message?.toUpperCase() || '';
+                   const isExpired = msg.includes('YA FUE UTILIZADA') || msg.includes('YA UTILIZADA') || msg.includes('USED');
+                   
+                   return isExpired && (
+                     <View style={styles.expiredBanner}>
+                       <Ionicons name="warning" size={24} color="white" />
+                       <Text style={styles.expiredText}>ENTRADA CADUCADA</Text>
+                     </View>
+                   );
+                 })()}
+
+                 <Text style={styles.resultMessage}>{result?.message || 'Código no reconocido'}</Text>
+                 
+                 {result?.ticket && (
+                   <View style={styles.errorInfo}>
+                     <Text style={styles.errorText}>
+                        Escaneado previamente: {new Date(result.ticket.scanned_at).toLocaleString()}
+                     </Text>
+                   </View>
+                 )}
+               </View>
+             )}
+
+             <ThemedButton 
+               title={result?.valid ? "Siguiente Escaneo" : "Cerrar"} 
+               onPress={closeModal}
+               style={styles.modalButton}
+               variant={result?.valid ? "primary" : "outline"}
+             />
+          </GlassView>
+        </View>
+      </Modal>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: 'black',
+  },
+  message: {
+    textAlign: 'center',
+    paddingBottom: 10,
+    color: 'white',
+  },
+  overlay: {
+    flex: 1,
+    justifyContent: 'space-between',
+  },
+  header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+  },
+  backButton: {
+    padding: 10,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    borderRadius: 20,
+  },
+  title: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: 'white',
+  },
+  scanFrameContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  scanFrame: {
+    width: 250,
+    height: 250,
+    borderWidth: 2,
+    borderColor: Colors.dark.primary,
+    backgroundColor: 'transparent',
+    borderRadius: 20,
+  },
+  scanText: {
+    color: 'white',
+    marginTop: 20,
+    fontSize: 16,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    padding: 10,
+    borderRadius: 5,
+  },
+  loadingOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.7)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingText: {
+    color: 'white',
+    marginTop: 10,
+    fontSize: 18,
+  },
+  modalContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0,0,0,0.8)',
+    padding: 20,
+  },
+  modalContent: {
+    width: '100%',
+    borderRadius: 20,
+    padding: 20,
+    alignItems: 'center',
+    backgroundColor: '#1e1b4b', // Fallback
+  },
+  resultContent: {
+    alignItems: 'center',
+    width: '100%',
+    marginBottom: 20,
+  },
+  iconCircle: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  resultTitle: {
+    fontSize: 28,
+    fontWeight: 'bold',
+    color: '#4ade80',
+    marginBottom: 10,
+  },
+  resultMessage: {
+    fontSize: 16,
+    color: 'white',
+    textAlign: 'center',
+    marginBottom: 20,
+  },
+  ticketInfo: {
+    width: '100%',
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    borderRadius: 10,
+    padding: 15,
+  },
+  infoLabel: {
+    color: Colors.dark.textSecondary,
+    fontSize: 14,
+    marginTop: 5,
+  },
+  infoValue: {
+    color: 'white',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  errorInfo: {
+    marginTop: 10,
+    padding: 10,
+    backgroundColor: 'rgba(239, 68, 68, 0.2)',
+    borderRadius: 8,
+  },
+  errorText: {
+    color: '#ef4444',
+    textAlign: 'center',
+  },
+  modalButton: {
+    width: '100%',
+    marginTop: 10,
+  },
+  expiredBanner: {
+    backgroundColor: '#ef4444',
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    borderRadius: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 15,
+  },
+  expiredText: {
+    color: 'white',
+    fontWeight: 'bold',
+    fontSize: 18,
+    textTransform: 'uppercase',
+  },
+});

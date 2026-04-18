@@ -1,0 +1,777 @@
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert } from 'react-native';
+import { useState, useEffect } from 'react';
+import { useRouter } from 'expo-router';
+import { useAuth } from '@/lib/AuthContext';
+import { supabase } from '@/lib/supabase';
+import { ChevronLeft, DollarSign, Plus, Minus, CheckCircle, FileText, Share, User, Mail, Calendar, Tag } from 'lucide-react-native';
+import { LinearGradient } from 'expo-linear-gradient';
+import { Colors } from '@/constants/Colors';
+import { GlassView } from '@/components/ui/GlassView';
+import { ThemedButton } from '@/components/ui/ThemedButton';
+import { ThemedInput } from '@/components/ui/ThemedInput';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import * as Print from 'expo-print';
+import { readAsStringAsync } from 'expo-file-system/legacy';
+import * as MailComposer from 'expo-mail-composer';
+import QRCodeSVG from 'qrcode-svg';
+import * as Sharing from 'expo-sharing';
+// import * as MailComposer from 'expo-mail-composer';
+
+export default function WorkerSell() {
+  const { user, workerProfile } = useAuth();
+  const router = useRouter();
+  const [loading, setLoading] = useState(true);
+  const [events, setEvents] = useState<any[]>([]);
+  const [selectedEvent, setSelectedEvent] = useState<any>(null);
+  const [ticketTypes, setTicketTypes] = useState<any[]>([]);
+  const [quantities, setQuantities] = useState<{[key: string]: number}>({});
+  const [vipReservados, setVipReservados] = useState<any[]>([]);
+  const [vipQty, setVipQty] = useState(0);
+  const [selectedVipId, setSelectedVipId] = useState<string | null>(null);
+  const [processing, setProcessing] = useState(false);
+  const [lastSaleTickets, setLastSaleTickets] = useState<any[] | null>(null);
+
+  const safeBack = () => {
+    const canGoBack = (router as any)?.canGoBack?.();
+    if (canGoBack) router.back();
+    else router.replace('/(worker)');
+  };
+
+  // Buyer Details
+  const [buyerDetails, setBuyerDetails] = useState({
+    name: '',
+    email: '',
+    age: ''
+  });
+
+  useEffect(() => {
+    fetchAssignedEvents();
+  }, []);
+
+  const fetchAssignedEvents = async () => {
+    if (!workerProfile) return;
+    try {
+      const { data, error } = await supabase
+        .from('events')
+        .select(`
+          id, title, event_date, poster_url,
+          venues (name)
+        `)
+        .eq('creator_id', workerProfile.organizer_id)
+        // Show only future or today's events
+        .gte('event_date', new Date().toISOString())
+        .order('event_date', { ascending: true });
+
+      if (error) throw error;
+
+      if (data) {
+        setEvents(data);
+        if (data.length > 0) {
+          selectEvent(data[0]);
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching events:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const selectEvent = async (event: any) => {
+    setSelectedEvent(event);
+    setLoading(true);
+    setTicketTypes([]);
+    setQuantities({});
+    setVipReservados([]);
+    setVipQty(0);
+    setSelectedVipId(null);
+    setBuyerDetails({ name: '', email: '', age: '' }); // Reset buyer form
+
+    try {
+      // Fetch REAL ticket types from the database
+      const { data, error } = await supabase
+        .from('event_ticket_types')
+        .select('*')
+        .eq('event_id', event.id);
+
+      if (error) throw error;
+
+      if (data && data.length > 0) {
+        setTicketTypes(data);
+        // Initialize quantities
+        const initialQty: any = {};
+        data.forEach((t: any) => initialQty[t.id] = 0);
+        setQuantities(initialQty);
+      } else {
+        // Fallback or empty state
+        Alert.alert("Aviso", "Este evento no tiene tipos de entrada definidos.");
+        setTicketTypes([]);
+      }
+
+      const vipRes = await supabase
+        .from('reservados_vip')
+        .select('*')
+        .eq('event_id', event.id)
+        .order('base_price', { ascending: true });
+
+      if (!vipRes.error && Array.isArray(vipRes.data)) {
+        setVipReservados(vipRes.data);
+        const firstAvailable = vipRes.data.find((v: any) => (v.quantity_available ?? 0) > 0) || vipRes.data[0];
+        setSelectedVipId(firstAvailable?.id ?? null);
+      }
+    } catch (e) {
+      console.error("Error fetching ticket types:", e);
+      Alert.alert("Error", "No se pudieron cargar los tipos de entrada.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const updateQuantity = (typeId: string, delta: number) => {
+    setQuantities(prev => {
+      const current = prev[typeId] || 0;
+      const newValue = Math.max(0, current + delta);
+      return { ...prev, [typeId]: newValue };
+    });
+  };
+
+  const calculateTotal = () => {
+    const ticketsTotal = ticketTypes.reduce((total, type) => {
+      return total + (type.price * (quantities[type.id] || 0));
+    }, 0);
+    const vip = vipReservados.find((v) => v.id === selectedVipId);
+    const vipTotal = vip && vipQty > 0 ? vip.base_price * vipQty : 0;
+    return ticketsTotal + vipTotal;
+  };
+
+  const handleSale = async () => {
+    const total = calculateTotal();
+    if (total === 0) {
+      Alert.alert('Error', 'Selecciona al menos una entrada');
+      return;
+    }
+
+    Alert.alert(
+      'Confirmar Venta',
+      `Total a cobrar: ${total}€\n\n¿Confirmar pago en efectivo?`,
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        { text: 'Confirmar', onPress: processSale }
+      ]
+    );
+  };
+
+  const generateAndSharePDF = async (tickets: any[]) => {
+    if (!selectedEvent) return;
+
+    try {
+      const buyer = tickets[0];
+      // Build QR SVG for each ticket (pure SVG, no canvas)
+      const qrSvgs: Record<string, string> = {};
+      for (const ticket of tickets) {
+        const token = ticket.qr_token || ticket.qr_code || '';
+        const svg = new QRCodeSVG({
+          content: token,
+          padding: 0,
+          width: 160,
+          height: 160,
+          color: '#000',
+          background: '#fff'
+        }).svg();
+        qrSvgs[token] = svg;
+      }
+
+      const html = `
+        <html>
+          <head>
+            <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no" />
+            <style>
+              body { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; padding: 20px; color: #333; }
+              .header { text-align: center; margin-bottom: 30px; border-bottom: 2px solid #eee; padding-bottom: 20px; }
+              .title { font-size: 24px; font-weight: bold; color: #000; margin-bottom: 5px; }
+              .subtitle { font-size: 14px; color: #666; }
+              .ticket { border: 1px dashed #ccc; padding: 20px; margin-bottom: 20px; border-radius: 8px; background: #f9f9f9; page-break-inside: avoid; }
+              .ticket-header { display: flex; justify-content: space-between; border-bottom: 1px solid #ddd; padding-bottom: 10px; margin-bottom: 10px; }
+              .event-name { font-size: 18px; font-weight: bold; }
+              .ticket-type { font-size: 16px; font-weight: bold; color: #2563eb; }
+              .details { font-size: 14px; line-height: 1.6; }
+              .qr-code { text-align: center; margin-top: 15px; }
+              .footer { text-align: center; font-size: 10px; color: #999; margin-top: 40px; }
+              .poster { text-align: center; margin-bottom: 15px; }
+            </style>
+          </head>
+          <body>
+            <div class="header">
+              ${selectedEvent.poster_url ? `<div class="poster"><img src="${selectedEvent.poster_url}" style="max-width:100%;height:160px;object-fit:cover;" /></div>` : ''}
+              <div class="title">Recibo de Compra</div>
+              <div class="subtitle">Fecha: ${new Date().toLocaleDateString()} ${new Date().toLocaleTimeString()}</div>
+              <div class="subtitle">Vendido por: ${workerProfile?.name}</div>
+              <div class="subtitle"><strong>Comprador: ${buyer.attendee_name || buyer.buyer_name}</strong></div>
+              <div class="subtitle">Email: ${buyer.attendee_email || buyer.buyer_email}</div>
+            </div>
+
+            ${tickets.map(ticket => `
+              <div class="ticket">
+                <div class="ticket-header">
+                  <span class="event-name">${selectedEvent.title}</span>
+                  <span class="ticket-type">${ticket.ticket_type}</span>
+                </div>
+                <div class="details">
+                  <div><strong>Precio:</strong> ${ticket.price}€</div>
+                  <div><strong>ID Entrada:</strong> ${ticket.id?.substring(0, 8) || 'PENDING'}</div>
+                  <div><strong>Asistente:</strong> ${ticket.attendee_name || ticket.buyer_name}</div>
+                  <div><strong>Estado:</strong> Pagado (Efectivo)</div>
+                </div>
+                <div class="qr-code">
+                  ${qrSvgs[ticket.qr_token || ticket.qr_code || ''] || '<div style="font-size:12px;color:#999">QR no disponible</div>'}
+                  <div style="font-size: 10px; margin-top: 5px;">Código QR</div>
+                </div>
+              </div>
+            `).join('')}
+
+            <div class="footer">
+              <p>Gracias por tu compra. Presenta este recibo en la entrada.</p>
+              <p>Este documento es válido como entrada.</p>
+            </div>
+          </body>
+        </html>
+      `;
+
+      const { uri } = await Print.printToFileAsync({ html });
+      const pdfBase64 = await readAsStringAsync(uri, { encoding: 'base64' as any });
+
+      const buyerEmail = tickets[0].attendee_email || tickets[0].buyer_email;
+      const isMailAvailable = await MailComposer.isAvailableAsync();
+      if (isMailAvailable) {
+        await MailComposer.composeAsync({
+          recipients: buyerEmail ? [buyerEmail] : [],
+          subject: `Tu entrada para ${selectedEvent.title}`,
+          body: `Hola ${tickets[0].attendee_name || 'Asistente'},\n\nAdjunto encontrarás tu entrada para ${selectedEvent.title}.\n\nGracias por tu compra.`,
+          attachments: [uri],
+          isHtml: true,
+        });
+      } else {
+        await Sharing.shareAsync(uri, { UTI: '.pdf', mimeType: 'application/pdf' });
+      }
+    } catch (error) {
+      console.error('Error generating PDF:', error);
+      Alert.alert('Error', 'No se pudo generar el PDF');
+    }
+  };
+
+  // Process Sale
+  const processSale = async () => {
+    if (!workerProfile || !selectedEvent) return;
+    
+    // Validate Buyer Details
+    if (!buyerDetails.name.trim() || !buyerDetails.email.trim() || !buyerDetails.age.trim()) {
+      Alert.alert('Error', 'Por favor completa los datos del comprador (Nombre, Email, Edad)');
+      return;
+    }
+
+    setProcessing(true);
+
+    try {
+      // Create tickets in DB
+      const ticketsToCreate = [];
+      for (const type of ticketTypes) {
+        const qty = quantities[type.id] || 0;
+        for (let i = 0; i < qty; i++) {
+          ticketsToCreate.push({
+            event_id: selectedEvent.id,
+            ticket_type: type.name, // Matches organizer's ticket name
+            ticket_type_id: type.id, // Link to exact ticket type
+            price: type.price,
+            quantity: 1,
+            total_price: type.price,
+            status: 'valid',
+            payment_status: 'paid', // Cash
+            sold_by_worker_id: workerProfile.id,
+            purchase_date: new Date().toISOString(), // Ensure purchase date is set
+            // Buyer Details
+            attendee_name: buyerDetails.name,
+            attendee_email: buyerDetails.email,
+            attendee_age: parseInt(buyerDetails.age) || 0,
+            // Fallback columns if schema requires them (backward compatibility)
+            buyer_name: buyerDetails.name, 
+            buyer_email: buyerDetails.email
+            
+            // qr_token and qr_code omitted to let Postgres generate them correctly
+          });
+        }
+      }
+
+      const { data, error } = await supabase.from('tickets').insert(ticketsToCreate).select();
+      if (error) throw error;
+
+      let allTickets = data || [];
+
+      if (selectedVipId && vipQty > 0) {
+        const { data: vipResult, error: vipError } = await supabase.rpc('sell_vip_manual', {
+          p_worker_id: workerProfile.id,
+          p_vip_reservado_id: selectedVipId,
+          p_quantity: vipQty,
+          p_buyer_name: buyerDetails.name,
+          p_buyer_email: buyerDetails.email,
+          p_buyer_age: parseInt(buyerDetails.age) || 0,
+        });
+        if (vipError) throw vipError;
+        if (vipResult?.ticket_ids?.length) {
+          const { data: vipTickets } = await supabase.from('tickets').select('*').in('id', vipResult.ticket_ids);
+          if (vipTickets?.length) allTickets = [...allTickets, ...vipTickets];
+        }
+      }
+
+      setLastSaleTickets(allTickets);
+      
+      Alert.alert(
+        'Venta Exitosa',
+        `La venta a ${buyerDetails.name} se ha registrado correctamente.`,
+        [
+          { 
+            text: 'Enviar por Gmail', 
+            onPress: () => generateAndSharePDF(allTickets) 
+          },
+          { 
+            text: 'Nueva Venta', 
+            style: 'cancel',
+            onPress: () => {
+              setQuantities({});
+              setBuyerDetails({ name: '', email: '', age: '' });
+              setLastSaleTickets(null);
+            }
+          }
+        ]
+      );
+
+    } catch (error: any) {
+      console.error('Error processing sale:', JSON.stringify(error, null, 2));
+      Alert.alert('Error', 'No se pudo registrar la venta: ' + (error.message || 'Error desconocido') + (error.details ? `\n\n${error.details}` : ''));
+    } finally {
+      setProcessing(false);
+    }
+  };
+
+  return (
+    <View style={styles.container}>
+      <LinearGradient
+        colors={[Colors.dark.background, '#1e1b4b']}
+        style={StyleSheet.absoluteFill}
+      />
+      <SafeAreaView style={styles.safeArea}>
+        <View style={styles.header}>
+          <TouchableOpacity onPress={safeBack} style={styles.backButton}>
+            <ChevronLeft size={24} color="white" />
+          </TouchableOpacity>
+          <Text style={styles.title}>Venta Manual</Text>
+          <View style={{ width: 24 }} />
+        </View>
+
+        <ScrollView contentContainerStyle={styles.content}>
+          {/* Event Selector */}
+          <Text style={styles.sectionTitle}>Evento</Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.eventScroll}>
+            {events.map(event => (
+              <TouchableOpacity 
+                key={event.id} 
+                onPress={() => selectEvent(event)}
+                activeOpacity={0.8}
+              >
+                <GlassView 
+                  intensity={selectedEvent?.id === event.id ? 40 : 10} 
+                  style={[
+                    styles.eventCard,
+                    selectedEvent?.id === event.id && styles.selectedEvent
+                  ]}
+                >
+                  <Text style={styles.eventName}>{event.title}</Text>
+                  <Text style={styles.eventDate}>
+                    {new Date(event.event_date).toLocaleDateString()}
+                  </Text>
+                </GlassView>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+
+          {/* Ticket Types */}
+          {selectedEvent && (
+            <>
+              <Text style={styles.sectionTitle}>Entradas</Text>
+              {ticketTypes.length === 0 ? (
+                <GlassView intensity={10} style={styles.emptyCard}>
+                  <View style={styles.emptyIcon}>
+                    <Tag size={24} color={Colors.dark.textSecondary} />
+                  </View>
+                  <Text style={styles.emptyText}>No hay entradas disponibles para este evento.</Text>
+                </GlassView>
+              ) : ticketTypes.map(type => (
+                <GlassView key={type.id} intensity={15} style={styles.ticketRow}>
+                  <View>
+                    <Text style={styles.ticketName}>{type.name}</Text>
+                    <Text style={styles.ticketPrice}>{type.price}€</Text>
+                  </View>
+                  
+                  <View style={styles.quantityControl}>
+                    <TouchableOpacity 
+                      onPress={() => updateQuantity(type.id, -1)}
+                      style={styles.qtyButton}
+                    >
+                      <Minus size={20} color="white" />
+                    </TouchableOpacity>
+                    <Text style={styles.qtyText}>{quantities[type.id] || 0}</Text>
+                    <TouchableOpacity 
+                      onPress={() => updateQuantity(type.id, 1)}
+                      style={[styles.qtyButton, { backgroundColor: Colors.dark.primary }]}
+                    >
+                      <Plus size={20} color="white" />
+                    </TouchableOpacity>
+                  </View>
+                </GlassView>
+              ))}
+
+              {vipReservados.length > 0 && (
+                <>
+                  <Text style={[styles.sectionTitle, { marginTop: 16 }]}>Reservados VIP</Text>
+                  <GlassView intensity={12} style={styles.vipCard}>
+                    <Text style={styles.vipLabel}>Reservado</Text>
+                    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.vipChips}>
+                      {vipReservados.map((vip) => {
+                        const isSelected = selectedVipId === vip.id;
+                        const available = vip.quantity_available ?? 0;
+                        return (
+                          <TouchableOpacity
+                            key={vip.id}
+                            onPress={() => setSelectedVipId(vip.id)}
+                            activeOpacity={0.85}
+                            style={[
+                              styles.vipChip,
+                              isSelected && styles.vipChipActive,
+                              available <= 0 && styles.vipChipDisabled,
+                            ]}
+                            disabled={available <= 0}
+                          >
+                            <Text style={[styles.vipChipText, isSelected && styles.vipChipTextActive]} numberOfLines={1}>
+                              {vip.name}
+                            </Text>
+                            <Text style={styles.vipChipSub} numberOfLines={1}>
+                              {available > 0 ? `${available} disponibles` : 'Agotado'}
+                            </Text>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </ScrollView>
+
+                    {selectedVipId ? (
+                      <View style={styles.vipRow}>
+                        <View style={{ flex: 1 }}>
+                          <Text style={styles.ticketName}>
+                            {vipReservados.find((v) => v.id === selectedVipId)?.name || 'VIP'}
+                          </Text>
+                          <Text style={styles.ticketPrice}>
+                            {vipReservados.find((v) => v.id === selectedVipId)?.base_price ?? 0}€
+                          </Text>
+                        </View>
+                        <View style={styles.quantityControl}>
+                          <TouchableOpacity
+                            onPress={() => setVipQty((q) => Math.max(0, q - 1))}
+                            style={styles.qtyButton}
+                          >
+                            <Minus size={20} color="white" />
+                          </TouchableOpacity>
+                          <Text style={styles.qtyText}>{vipQty}</Text>
+                          <TouchableOpacity
+                            onPress={() => {
+                              const available = vipReservados.find((v) => v.id === selectedVipId)?.quantity_available ?? 0;
+                              setVipQty((q) => Math.min(available, q + 1));
+                            }}
+                            style={[styles.qtyButton, { backgroundColor: Colors.dark.primary }]}
+                          >
+                            <Plus size={20} color="white" />
+                          </TouchableOpacity>
+                        </View>
+                      </View>
+                    ) : null}
+                  </GlassView>
+                </>
+              )}
+
+              {/* Buyer Details Form - Only show if tickets selected */}
+              {calculateTotal() > 0 && (
+                <View style={{ marginTop: 10, marginBottom: 20 }}>
+                   <Text style={styles.sectionTitle}>Datos del Comprador</Text>
+                   <GlassView intensity={10} style={{ padding: 15, borderRadius: 16 }}>
+                      <ThemedInput
+                        label="Nombre Completo"
+                        placeholder="Ej: Juan Pérez"
+                        value={buyerDetails.name}
+                        onChangeText={(text) => setBuyerDetails(prev => ({...prev, name: text}))}
+                        containerStyle={{ marginBottom: 15 }}
+                        icon={<User size={20} color={Colors.dark.textSecondary} />}
+                      />
+                      <ThemedInput
+                        label="Email (para envío de entrada)"
+                        placeholder="juan@ejemplo.com"
+                        value={buyerDetails.email}
+                        onChangeText={(text) => setBuyerDetails(prev => ({...prev, email: text}))}
+                        keyboardType="email-address"
+                        autoCapitalize="none"
+                        containerStyle={{ marginBottom: 15 }}
+                        icon={<Mail size={20} color={Colors.dark.textSecondary} />}
+                      />
+                      <ThemedInput
+                        label="Edad"
+                        placeholder="Ej: 25"
+                        value={buyerDetails.age}
+                        onChangeText={(text) => setBuyerDetails(prev => ({...prev, age: text}))}
+                        keyboardType="numeric"
+                        containerStyle={{ marginBottom: 5 }}
+                        icon={<Calendar size={20} color={Colors.dark.textSecondary} />}
+                      />
+                   </GlassView>
+                </View>
+              )}
+
+              {/* Total */}
+              <View style={styles.totalContainer}>
+                <Text style={styles.totalLabel}>Total a Cobrar:</Text>
+                <Text style={styles.totalValue}>{calculateTotal()}€</Text>
+              </View>
+            </>
+          )}
+        </ScrollView>
+
+        <View style={styles.footer}>
+          {lastSaleTickets ? (
+            <View style={styles.successActions}>
+              <ThemedButton
+                title="Compartir/Imprimir Entradas"
+                onPress={() => generateAndSharePDF(lastSaleTickets)}
+                icon={<Share size={20} color="white" />}
+                style={{ marginBottom: 10 }}
+              />
+              <ThemedButton
+                title="Nueva Venta"
+                onPress={() => {
+                  setQuantities({});
+                  setLastSaleTickets(null);
+                }}
+                variant="outline"
+                icon={<Plus size={20} color={Colors.dark.primary} />}
+              />
+            </View>
+          ) : (
+            <ThemedButton
+              title={processing ? "Procesando..." : "Confirmar Venta (Efectivo)"}
+              onPress={handleSale}
+              disabled={processing || calculateTotal() === 0}
+              icon={<DollarSign size={20} color="white" />}
+            />
+          )}
+        </View>
+      </SafeAreaView>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+  },
+  safeArea: {
+    flex: 1,
+  },
+  header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 20,
+  },
+  backButton: {
+    padding: 8,
+    borderRadius: 12,
+    backgroundColor: 'rgba(255,255,255,0.1)',
+  },
+  title: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: 'white',
+  },
+  content: {
+    padding: 20,
+  },
+  sectionTitle: {
+    color: 'white',
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginBottom: 15,
+  },
+  eventScroll: {
+    marginBottom: 30,
+    maxHeight: 100,
+  },
+  eventCard: {
+    padding: 15,
+    borderRadius: 16,
+    marginRight: 15,
+    width: 160,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.1)',
+  },
+  selectedEvent: {
+    borderColor: Colors.dark.primary,
+    backgroundColor: 'rgba(59, 130, 246, 0.2)',
+  },
+  eventName: {
+    color: 'white',
+    fontWeight: 'bold',
+    marginBottom: 5,
+  },
+  eventDate: {
+    color: Colors.dark.textSecondary,
+    fontSize: 12,
+  },
+  ticketRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 15,
+    borderRadius: 16,
+    marginBottom: 15,
+  },
+  vipCard: {
+    padding: 14,
+    borderRadius: 16,
+    marginBottom: 10,
+  },
+  vipLabel: {
+    color: Colors.dark.textSecondary,
+    fontSize: 12,
+    fontWeight: '700',
+    marginBottom: 10,
+    textTransform: 'uppercase',
+    letterSpacing: 0.6,
+  },
+  vipChips: {
+    gap: 10,
+    paddingBottom: 10,
+  },
+  vipChip: {
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.15)',
+    backgroundColor: 'rgba(255,255,255,0.06)',
+    minWidth: 140,
+  },
+  vipChipActive: {
+    borderColor: Colors.dark.primary,
+    backgroundColor: 'rgba(251,191,36,0.12)',
+  },
+  vipChipDisabled: {
+    opacity: 0.5,
+  },
+  vipChipText: {
+    color: 'white',
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  vipChipTextActive: {
+    color: Colors.dark.primary,
+  },
+  vipChipSub: {
+    marginTop: 4,
+    color: Colors.dark.textSecondary,
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  vipRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 6,
+  },
+  emptyCard: {
+    paddingVertical: 18,
+    paddingHorizontal: 16,
+    borderRadius: 18,
+    alignItems: 'center',
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.12)',
+    backgroundColor: 'rgba(255,255,255,0.04)',
+  },
+  emptyIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.06)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.10)',
+    marginBottom: 12,
+  },
+  emptyText: {
+    color: Colors.dark.textSecondary,
+    fontSize: 14,
+    fontWeight: '600',
+    textAlign: 'center',
+    lineHeight: 18,
+  },
+  ticketName: {
+    color: 'white',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  ticketPrice: {
+    color: '#4ade80',
+    fontSize: 18,
+    fontWeight: 'bold',
+  },
+  quantityControl: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 15,
+  },
+  qtyButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  qtyText: {
+    color: 'white',
+    fontSize: 20,
+    fontWeight: 'bold',
+    width: 30,
+    textAlign: 'center',
+  },
+  totalContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 20,
+    padding: 20,
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    borderRadius: 20,
+  },
+  totalLabel: {
+    color: 'white',
+    fontSize: 18,
+  },
+  totalValue: {
+    color: '#4ade80',
+    fontSize: 32,
+    fontWeight: 'bold',
+  },
+  footer: {
+    padding: 20,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(255,255,255,0.1)',
+  },
+  successActions: {
+    gap: 10,
+  }
+});

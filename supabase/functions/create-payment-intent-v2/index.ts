@@ -1,0 +1,669 @@
+type Json = Record<string, unknown>;
+
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
+};
+
+function jsonResponse(body: Json) {
+  return new Response(JSON.stringify(body), {
+    status: 200,
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
+}
+
+function toInt(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) return Math.trunc(value);
+  if (typeof value === "string" && value.trim() && !Number.isNaN(Number(value))) return Math.trunc(Number(value));
+  return null;
+}
+
+function getStripeSecretKey(): string {
+  const key = (Deno.env.get("STRIPE_SECRET_KEY") ?? "").trim();
+  if (!key) throw new Error("Stripe no configurado: falta STRIPE_SECRET_KEY en Supabase Secrets");
+  if (!(key.startsWith("sk_") || key.startsWith("rk_"))) throw new Error("Stripe no configurado: STRIPE_SECRET_KEY inválida");
+  if (/\s/.test(key)) throw new Error("Stripe no configurado: STRIPE_SECRET_KEY contiene espacios o saltos de línea");
+  return key;
+}
+
+function getStripeMode(): "test" | "live" {
+  const key = getStripeSecretKey();
+  if (key.startsWith("sk_test_") || key.startsWith("rk_test_")) return "test";
+  return "live";
+}
+
+function getCommissionBps(): number {
+  const raw = (Deno.env.get("STRIPE_PLATFORM_FEE_BPS") ?? "").trim();
+  const parsed = raw ? Number(raw) : 1000;
+  if (!Number.isFinite(parsed)) return 1000;
+  const bps = Math.trunc(parsed);
+  if (bps < 0) return 0;
+  if (bps > 10000) return 10000;
+  return bps;
+}
+
+function computeFeeCents(amountCents: number, bps: number): number {
+  const fee = Math.round((amountCents * bps) / 10000);
+  if (!Number.isFinite(fee)) return 0;
+  if (fee < 0) return 0;
+  if (fee > amountCents) return amountCents;
+  return fee;
+}
+
+function isStripeConnectPlatformError(message: string): boolean {
+  const msg = String(message || "").toLowerCase();
+  return msg.includes("only stripe connect platforms can work with other accounts");
+}
+
+function isStripeNoSuchDestinationError(message: string): boolean {
+  const msg = String(message || "").toLowerCase();
+  return msg.includes("no such destination");
+}
+
+async function stripeGetPlatformAccount() {
+  const STRIPE_SECRET_KEY = getStripeSecretKey();
+  const res = await fetch("https://api.stripe.com/v1/account", {
+    method: "GET",
+    headers: {
+      Authorization: `Bearer ${STRIPE_SECRET_KEY}`,
+    },
+  });
+  const data = await res.json().catch(() => null);
+  if (!res.ok) {
+    const msg = (data as any)?.error?.message || "Stripe error";
+    throw new Error(String(msg));
+  }
+  return data as { id: string; charges_enabled?: boolean; payouts_enabled?: boolean; details_submitted?: boolean };
+}
+
+async function getStripePlatformAccountIdSafe() {
+  try {
+    const platform = await stripeGetPlatformAccount();
+    return typeof (platform as any)?.id === "string" ? (platform as any).id : null;
+  } catch {
+    return null;
+  }
+}
+
+async function stripeGetAccount(accountId: string) {
+  const STRIPE_SECRET_KEY = getStripeSecretKey();
+  const res = await fetch(`https://api.stripe.com/v1/accounts/${encodeURIComponent(accountId)}`, {
+    method: "GET",
+    headers: {
+      Authorization: `Bearer ${STRIPE_SECRET_KEY}`,
+    },
+  });
+
+  const data = await res.json().catch(() => null);
+  if (!res.ok) {
+    if (res.status === 404) return null;
+    if (res.status === 401 || res.status === 403) {
+      const msg = String((data as any)?.error?.message || "");
+      if (msg.toLowerCase().includes("does not have access to account")) return null;
+    }
+    const msg = (data as any)?.error?.message || "Stripe error";
+    throw new Error(String(msg));
+  }
+
+  return data as { id: string };
+}
+
+async function stripeCreatePaymentIntent(params: Record<string, string>) {
+  const STRIPE_SECRET_KEY = getStripeSecretKey();
+  const res = await fetch("https://api.stripe.com/v1/payment_intents", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${STRIPE_SECRET_KEY}`,
+      "Content-Type": "application/x-www-form-urlencoded",
+    },
+    body: new URLSearchParams(params),
+  });
+
+  const data = await res.json().catch(() => null);
+  if (!res.ok) {
+    const msg = (data as any)?.error?.message || "Stripe error";
+    throw new Error(String(msg));
+  }
+
+  return data as { id: string; client_secret: string; amount: number; currency: string };
+}
+
+async function authUser(supabaseUrl: string, anonKey: string, authorization: string) {
+  const res = await fetch(`${supabaseUrl}/auth/v1/user`, {
+    headers: {
+      apikey: anonKey,
+      Authorization: authorization,
+    },
+  });
+  const data = await res.json().catch(() => null);
+  if (!res.ok) return { user: null, error: (data as any)?.msg || (data as any)?.message || "Unauthorized" };
+  return { user: data as any, error: null };
+}
+
+async function restGet(supabaseUrl: string, serviceKey: string, path: string) {
+  const res = await fetch(`${supabaseUrl}/rest/v1/${path}`, {
+    headers: {
+      apikey: serviceKey,
+      Authorization: `Bearer ${serviceKey}`,
+      Accept: "application/json",
+    },
+  });
+  const text = await res.text().catch(() => "");
+  let json: any = null;
+  try {
+    json = text ? JSON.parse(text) : null;
+  } catch {
+    json = null;
+  }
+  return { ok: res.ok, status: res.status, json, text };
+}
+
+async function restPost(supabaseUrl: string, serviceKey: string, table: string, body: unknown) {
+  const res = await fetch(`${supabaseUrl}/rest/v1/${table}`, {
+    method: "POST",
+    headers: {
+      apikey: serviceKey,
+      Authorization: `Bearer ${serviceKey}`,
+      "Content-Type": "application/json",
+      Prefer: "return=representation",
+    },
+    body: JSON.stringify(body),
+  });
+  const text = await res.text().catch(() => "");
+  let json: any = null;
+  try {
+    json = text ? JSON.parse(text) : null;
+  } catch {
+    json = null;
+  }
+  return { ok: res.ok, status: res.status, json, text };
+}
+
+Deno.serve(async (req) => {
+  if (req.method === "OPTIONS") return jsonResponse({ ok: true });
+
+  try {
+    if (req.method !== "POST") return jsonResponse({ ok: false, error: "Method not allowed" });
+
+    const SUPABASE_URL = (Deno.env.get("SUPABASE_URL") ?? "").trim();
+    const SUPABASE_ANON_KEY = (Deno.env.get("SUPABASE_ANON_KEY") ?? "").trim();
+    const SUPABASE_SERVICE_ROLE_KEY = (Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "").trim();
+    if (!SUPABASE_URL || !SUPABASE_ANON_KEY || !SUPABASE_SERVICE_ROLE_KEY) {
+      return jsonResponse({ ok: false, error: "Missing Supabase env vars" });
+    }
+
+    const authorization = req.headers.get("Authorization") || "";
+    if (!authorization) return jsonResponse({ ok: false, error: "Unauthorized" });
+
+    const { user, error: userErr } = await authUser(SUPABASE_URL, SUPABASE_ANON_KEY, authorization);
+    if (!user || userErr) return jsonResponse({ ok: false, error: String(userErr || "Unauthorized") });
+
+    const userId = String((user as any)?.id || "");
+    if (!userId) return jsonResponse({ ok: false, error: "Unauthorized" });
+
+    let body: any;
+    try {
+      body = await req.json();
+    } catch {
+      return jsonResponse({ ok: false, error: "Invalid JSON" });
+    }
+
+    const kind = body?.kind;
+    if (kind !== "event_ticket" && kind !== "vip_table" && kind !== "resale_ticket") {
+      return jsonResponse({ ok: false, error: "Not implemented" });
+    }
+
+    const requireOrganizerConnect = (Deno.env.get("REQUIRE_ORGANIZER_STRIPE_CONNECT") ?? "").trim().toLowerCase() === "true";
+
+    if (kind === "event_ticket") {
+      const eventId = String(body?.event_id || "");
+      const ticketTypeId = body?.ticket_type_id ? String(body.ticket_type_id) : null;
+      const quantity = toInt(body?.quantity) ?? 0;
+      if (!eventId || quantity < 1 || quantity > 10) return jsonResponse({ ok: false, error: "Invalid request" });
+
+      const ev = await restGet(
+        SUPABASE_URL,
+        SUPABASE_SERVICE_ROLE_KEY,
+        `events?id=eq.${encodeURIComponent(eventId)}&select=id,title,creator_id,ticket_price,available_tickets,event_ticket_types(id,price,quantity,sold)`,
+      );
+      if (!ev.ok || !Array.isArray(ev.json) || ev.json.length === 0) return jsonResponse({ ok: false, error: "Event not found" });
+      const eventRow = ev.json[0];
+
+      if (Number(eventRow.available_tickets ?? 0) < quantity) return jsonResponse({ ok: false, error: "Not enough tickets available" });
+
+      let price = Number(eventRow.ticket_price ?? 0);
+      if (ticketTypeId) {
+        const types = Array.isArray(eventRow.event_ticket_types) ? eventRow.event_ticket_types : [];
+        const selected = types.find((t: any) => String(t.id) === ticketTypeId);
+        if (!selected) return jsonResponse({ ok: false, error: "Ticket type not found" });
+        const available = Number(selected.quantity ?? 0) - Number(selected.sold ?? 0);
+        if (available < quantity) return jsonResponse({ ok: false, error: "Ticket type sold out" });
+        price = Number(selected.price ?? price);
+      }
+
+      const originalTotalCents = Math.round(price * 100) * quantity;
+      if (!Number.isFinite(originalTotalCents) || originalTotalCents <= 0) return jsonResponse({ ok: false, error: "Invalid price" });
+
+      const walletDebitRaw = body?.wallet_debit_eur;
+      let walletDebitCents = 0;
+      if (typeof walletDebitRaw === "number" && Number.isFinite(walletDebitRaw)) walletDebitCents = Math.round(walletDebitRaw * 100);
+      if (typeof walletDebitRaw === "string" && walletDebitRaw.trim()) {
+        const n = Number(walletDebitRaw);
+        if (Number.isFinite(n)) walletDebitCents = Math.round(n * 100);
+      }
+      if (!Number.isFinite(walletDebitCents) || walletDebitCents < 0) walletDebitCents = 0;
+      if (walletDebitCents > originalTotalCents) walletDebitCents = originalTotalCents;
+
+      const amountCents = originalTotalCents - walletDebitCents;
+      if (!Number.isFinite(amountCents) || amountCents <= 0) return jsonResponse({ ok: false, error: "Invalid price" });
+
+      const organizerId = eventRow.creator_id ? String(eventRow.creator_id) : "";
+      if (!organizerId) return jsonResponse({ ok: false, error: "Organizer not found" });
+
+      const org = await restGet(
+        SUPABASE_URL,
+        SUPABASE_SERVICE_ROLE_KEY,
+        `profiles?id=eq.${encodeURIComponent(organizerId)}&select=stripe_account_id,stripe_charges_enabled`,
+      );
+      const organizerProfile = Array.isArray(org.json) && org.json.length ? org.json[0] : null;
+      const rawStripeAccountId = organizerProfile?.stripe_account_id ? String(organizerProfile.stripe_account_id) : "";
+      let hasConnect = !!rawStripeAccountId && Boolean(organizerProfile?.stripe_charges_enabled);
+
+      if (hasConnect) {
+        const exists = await stripeGetAccount(rawStripeAccountId);
+        if (!exists) {
+          hasConnect = false;
+        }
+      }
+
+      if (!hasConnect && requireOrganizerConnect) {
+        return jsonResponse({
+          ok: false,
+          error:
+            rawStripeAccountId
+              ? `Stripe Connect inválido o en otro modo (test/live). Re-vincula Stripe del organizador. (acct=${rawStripeAccountId})`
+              : "El organizador debe vincular Stripe para poder cobrar.",
+        });
+      }
+
+      const commissionBps = getCommissionBps();
+      let platformFeeCents = hasConnect ? computeFeeCents(amountCents, commissionBps) : 0;
+      let destinationAmountCents = hasConnect ? amountCents - platformFeeCents : 0;
+
+      const intentParams: Record<string, string> = {
+        amount: String(amountCents),
+        currency: "eur",
+        "automatic_payment_methods[enabled]": "true",
+        description: `Event ticket(s) - ${eventId}`,
+        "metadata[kind]": "event_ticket",
+        "metadata[user_id]": userId,
+        "metadata[event_id]": eventId,
+        ...(ticketTypeId ? { "metadata[ticket_type_id]": ticketTypeId } : {}),
+        "metadata[quantity]": String(quantity),
+        "metadata[original_total_cents]": String(originalTotalCents),
+        "metadata[wallet_debit_cents]": String(walletDebitCents),
+      };
+      if (hasConnect) {
+        intentParams["transfer_data[destination]"] = rawStripeAccountId;
+        if (platformFeeCents > 0) intentParams.application_fee_amount = String(platformFeeCents);
+      }
+
+      let intent;
+      try {
+        intent = await stripeCreatePaymentIntent(intentParams);
+      } catch (e: any) {
+        const message = String(e?.message || e || "");
+        if (hasConnect && isStripeConnectPlatformError(message)) {
+          let platformId = "desconocido";
+          try {
+            const platform = await stripeGetPlatformAccount();
+            platformId = platform?.id || platformId;
+          } catch {}
+          return jsonResponse({
+            ok: false,
+            error:
+              "Stripe Connect no está habilitado en tu cuenta plataforma o estás usando una STRIPE_SECRET_KEY que no pertenece a una Connect platform. " +
+              "Ve a Stripe Dashboard → Settings → Connect y habilítalo (y asegúrate de usar la clave secreta de ESA cuenta plataforma). " +
+              `Cuenta plataforma detectada: ${platformId}. Error: ${message}`,
+          });
+        }
+
+        if (hasConnect && isStripeNoSuchDestinationError(message)) {
+          return jsonResponse({
+            ok: false,
+            error:
+              `Stripe Connect destination inválido: ${rawStripeAccountId}. ` +
+              "Esto suele pasar por mezcla test/live o porque el acct fue desconectado/borrado. " +
+              `Re-vincula Stripe del organizador. Error: ${message}`,
+          });
+        }
+
+        throw e;
+      }
+
+      const buyerName = typeof body?.buyer_name === "string" ? body.buyer_name : "";
+      const buyerEmail = typeof body?.buyer_email === "string" ? body.buyer_email : "";
+
+      const metadata = {
+        event_id: eventId,
+        ticket_type_id: ticketTypeId ?? "",
+        quantity,
+        buyer_name: buyerName,
+        buyer_email: buyerEmail,
+        original_total_cents: originalTotalCents,
+        wallet_debit_cents: walletDebitCents,
+        event_title: String(eventRow.title || ""),
+        platform_fee_cents: platformFeeCents,
+        destination_amount_cents: destinationAmountCents,
+      };
+
+      const txInsert = await restPost(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, "payment_transactions", {
+        user_id: userId,
+        kind: "event_ticket",
+        amount_cents: intent.amount,
+        currency: intent.currency,
+        stripe_payment_intent_id: intent.id,
+        status: "created",
+        platform_fee_cents: hasConnect ? platformFeeCents : 0,
+        destination_account_id: hasConnect ? String(organizerProfile?.stripe_account_id || rawStripeAccountId) : null,
+        destination_amount_cents: hasConnect ? destinationAmountCents : 0,
+        commission_bps: hasConnect ? commissionBps : 0,
+        metadata,
+      });
+
+      if (!txInsert.ok || !Array.isArray(txInsert.json) || txInsert.json.length === 0) {
+        return jsonResponse({ ok: false, error: "Failed to store transaction" });
+      }
+
+      return jsonResponse({
+        ok: true,
+        client_secret: intent.client_secret,
+        payment_intent_id: intent.id,
+        amount_cents: intent.amount,
+        currency: intent.currency,
+        transaction_id: String(txInsert.json[0]?.id || ""),
+        stripe_mode: getStripeMode(),
+        stripe_platform_account_id: await getStripePlatformAccountIdSafe(),
+      });
+    }
+
+    if (kind === "resale_ticket") {
+      const listingId = String(body?.listing_id || "");
+      if (!listingId) return jsonResponse({ ok: false, error: "Invalid request" });
+
+      const listingRes = await restGet(
+        SUPABASE_URL,
+        SUPABASE_SERVICE_ROLE_KEY,
+        `resale_listings?id=eq.${encodeURIComponent(listingId)}&select=id,ticket_id,seller_id,price,status`,
+      );
+      if (!listingRes.ok || !Array.isArray(listingRes.json) || listingRes.json.length === 0) {
+        return jsonResponse({ ok: false, error: "Listing not found" });
+      }
+      const listing = listingRes.json[0];
+      if (String(listing.status || "") !== "active") return jsonResponse({ ok: false, error: "Listing not active" });
+      if (String(listing.seller_id || "") === userId) return jsonResponse({ ok: false, error: "Cannot buy your own ticket" });
+
+      const ticketId = String(listing.ticket_id || "");
+      if (!ticketId) return jsonResponse({ ok: false, error: "Listing not found" });
+
+      const ticketRes = await restGet(
+        SUPABASE_URL,
+        SUPABASE_SERVICE_ROLE_KEY,
+        `tickets?id=eq.${encodeURIComponent(ticketId)}&select=id,event_id,total_price,status,ticket_status,user_id`,
+      );
+      if (!ticketRes.ok || !Array.isArray(ticketRes.json) || ticketRes.json.length === 0) {
+        return jsonResponse({ ok: false, error: "Ticket not found" });
+      }
+      const ticket = ticketRes.json[0];
+
+      const inResaleState =
+        String(ticket.ticket_status || "") === "reselling" || String(ticket.status || "") === "resale";
+      if (!inResaleState) return jsonResponse({ ok: false, error: "Ticket is not in resale state" });
+
+      const eventId = String(ticket.event_id || "");
+      if (!eventId) return jsonResponse({ ok: false, error: "Event not found" });
+
+      const ev = await restGet(
+        SUPABASE_URL,
+        SUPABASE_SERVICE_ROLE_KEY,
+        `events?id=eq.${encodeURIComponent(eventId)}&select=id,title,creator_id`,
+      );
+      if (!ev.ok || !Array.isArray(ev.json) || ev.json.length === 0) return jsonResponse({ ok: false, error: "Event not found" });
+      const eventRow = ev.json[0];
+
+      const priceEur = Number(listing.price ?? 0);
+      const amountCents = Math.round(priceEur * 100);
+      if (!Number.isFinite(amountCents) || amountCents <= 0) return jsonResponse({ ok: false, error: "Invalid price" });
+
+      const intentParams: Record<string, string> = {
+        amount: String(amountCents),
+        currency: "eur",
+        "automatic_payment_methods[enabled]": "true",
+        description: `Resale ticket - ${eventId}`,
+        "metadata[kind]": "resale_ticket",
+        "metadata[user_id]": userId,
+        "metadata[event_id]": eventId,
+        "metadata[listing_id]": listingId,
+        "metadata[ticket_id]": ticketId,
+        "metadata[seller_id]": String(listing.seller_id || ""),
+        "metadata[original_total_cents]": String(amountCents),
+        "metadata[wallet_debit_cents]": "0",
+      };
+
+      const intent = await stripeCreatePaymentIntent(intentParams);
+
+      const metadata = {
+        event_id: eventId,
+        event_title: String(eventRow.title || ""),
+        listing_id: listingId,
+        ticket_id: ticketId,
+        seller_id: String(listing.seller_id || ""),
+        original_total_cents: amountCents,
+        wallet_debit_cents: 0,
+      };
+
+      const txInsert = await restPost(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, "payment_transactions", {
+        user_id: userId,
+        kind: "resale_ticket",
+        amount_cents: intent.amount,
+        currency: intent.currency,
+        stripe_payment_intent_id: intent.id,
+        status: "created",
+        platform_fee_cents: 0,
+        destination_account_id: null,
+        destination_amount_cents: 0,
+        commission_bps: 0,
+        metadata,
+      });
+
+      if (!txInsert.ok || !Array.isArray(txInsert.json) || txInsert.json.length === 0) {
+        return jsonResponse({ ok: false, error: "Failed to store transaction" });
+      }
+
+      return jsonResponse({
+        ok: true,
+        client_secret: intent.client_secret,
+        payment_intent_id: intent.id,
+        amount_cents: intent.amount,
+        currency: intent.currency,
+        transaction_id: String(txInsert.json[0]?.id || ""),
+        stripe_mode: getStripeMode(),
+        stripe_platform_account_id: await getStripePlatformAccountIdSafe(),
+      });
+    }
+
+    if (kind === "vip_table") {
+      const vipId = String(body?.reference_id || "");
+      if (!vipId) return jsonResponse({ ok: false, error: "Invalid request" });
+
+      const vipRes = await restGet(
+        SUPABASE_URL,
+        SUPABASE_SERVICE_ROLE_KEY,
+        `reservados_vip?id=eq.${encodeURIComponent(vipId)}&select=id,event_id,base_price,quantity_available,capacity_people,name`,
+      );
+      if (!vipRes.ok || !Array.isArray(vipRes.json) || vipRes.json.length === 0) return jsonResponse({ ok: false, error: "VIP not found" });
+      const vip = vipRes.json[0];
+
+      if (Number(vip.quantity_available ?? 0) < 1) return jsonResponse({ ok: false, error: "VIP sold out" });
+
+      const eventId = String(vip.event_id || "");
+      if (!eventId) return jsonResponse({ ok: false, error: "VIP not found" });
+
+      const ev = await restGet(
+        SUPABASE_URL,
+        SUPABASE_SERVICE_ROLE_KEY,
+        `events?id=eq.${encodeURIComponent(eventId)}&select=id,title,creator_id`,
+      );
+      if (!ev.ok || !Array.isArray(ev.json) || ev.json.length === 0) return jsonResponse({ ok: false, error: "Event not found" });
+      const eventRow = ev.json[0];
+
+      const basePrice = Number(vip.base_price ?? 0);
+      const originalTotalCents = Math.round(basePrice * 100);
+      if (!Number.isFinite(originalTotalCents) || originalTotalCents <= 0) return jsonResponse({ ok: false, error: "Invalid price" });
+
+      const walletDebitRaw = body?.wallet_debit_eur;
+      let walletDebitCents = 0;
+      if (typeof walletDebitRaw === "number" && Number.isFinite(walletDebitRaw)) walletDebitCents = Math.round(walletDebitRaw * 100);
+      if (typeof walletDebitRaw === "string" && walletDebitRaw.trim()) {
+        const n = Number(walletDebitRaw);
+        if (Number.isFinite(n)) walletDebitCents = Math.round(n * 100);
+      }
+      if (!Number.isFinite(walletDebitCents) || walletDebitCents < 0) walletDebitCents = 0;
+      if (walletDebitCents > originalTotalCents) walletDebitCents = originalTotalCents;
+
+      const amountCents = originalTotalCents - walletDebitCents;
+      if (!Number.isFinite(amountCents) || amountCents <= 0) return jsonResponse({ ok: false, error: "Invalid price" });
+
+      const organizerId = eventRow.creator_id ? String(eventRow.creator_id) : "";
+      if (!organizerId) return jsonResponse({ ok: false, error: "Organizer not found" });
+
+      const org = await restGet(
+        SUPABASE_URL,
+        SUPABASE_SERVICE_ROLE_KEY,
+        `profiles?id=eq.${encodeURIComponent(organizerId)}&select=stripe_account_id,stripe_charges_enabled`,
+      );
+      const organizerProfile = Array.isArray(org.json) && org.json.length ? org.json[0] : null;
+      const rawStripeAccountId = organizerProfile?.stripe_account_id ? String(organizerProfile.stripe_account_id) : "";
+      let hasConnect = !!rawStripeAccountId && Boolean(organizerProfile?.stripe_charges_enabled);
+
+      if (hasConnect) {
+        const exists = await stripeGetAccount(rawStripeAccountId);
+        if (!exists) hasConnect = false;
+      }
+
+      if (!hasConnect && requireOrganizerConnect) {
+        return jsonResponse({
+          ok: false,
+          error:
+            rawStripeAccountId
+              ? `Stripe Connect inválido o en otro modo (test/live). Re-vincula Stripe del organizador. (acct=${rawStripeAccountId})`
+              : "El organizador debe vincular Stripe para poder cobrar.",
+        });
+      }
+
+      const commissionBps = getCommissionBps();
+      let platformFeeCents = hasConnect ? computeFeeCents(amountCents, commissionBps) : 0;
+      let destinationAmountCents = hasConnect ? amountCents - platformFeeCents : 0;
+
+      const intentParams: Record<string, string> = {
+        amount: String(amountCents),
+        currency: "eur",
+        "automatic_payment_methods[enabled]": "true",
+        description: `VIP reservado - ${vipId}`,
+        "metadata[kind]": "vip_table",
+        "metadata[user_id]": userId,
+        "metadata[event_id]": eventId,
+        "metadata[reference_id]": vipId,
+        "metadata[vip_reservado_id]": vipId,
+        "metadata[original_total_cents]": String(originalTotalCents),
+        "metadata[wallet_debit_cents]": String(walletDebitCents),
+      };
+      if (hasConnect) {
+        intentParams["transfer_data[destination]"] = rawStripeAccountId;
+        if (platformFeeCents > 0) intentParams.application_fee_amount = String(platformFeeCents);
+      }
+
+      let intent;
+      try {
+        intent = await stripeCreatePaymentIntent(intentParams);
+      } catch (e: any) {
+        const message = String(e?.message || e || "");
+        if (hasConnect && isStripeConnectPlatformError(message)) {
+          let platformId = "desconocido";
+          try {
+            const platform = await stripeGetPlatformAccount();
+            platformId = platform?.id || platformId;
+          } catch {}
+          return jsonResponse({
+            ok: false,
+            error:
+              "Stripe Connect no está habilitado en tu cuenta plataforma o estás usando una STRIPE_SECRET_KEY que no pertenece a una Connect platform. " +
+              "Ve a Stripe Dashboard → Settings → Connect y habilítalo (y asegúrate de usar la clave secreta de ESA cuenta plataforma). " +
+              `Cuenta plataforma detectada: ${platformId}. Error: ${message}`,
+          });
+        }
+        if (hasConnect && isStripeNoSuchDestinationError(message)) {
+          return jsonResponse({
+            ok: false,
+            error:
+              `Stripe Connect destination inválido: ${rawStripeAccountId}. ` +
+              "Esto suele pasar por mezcla test/live o porque el acct fue desconectado/borrado. " +
+              `Re-vincula Stripe del organizador. Error: ${message}`,
+          });
+        }
+        throw e;
+      }
+
+      const buyerName = typeof body?.buyer_name === "string" ? body.buyer_name : "";
+      const buyerEmail = typeof body?.buyer_email === "string" ? body.buyer_email : "";
+
+      const metadata = {
+        event_id: eventId,
+        vip_reservado_id: vipId,
+        reference_id: vipId,
+        buyer_name: buyerName,
+        buyer_email: buyerEmail,
+        original_total_cents: originalTotalCents,
+        wallet_debit_cents: walletDebitCents,
+        event_title: String(eventRow.title || ""),
+        vip_name: String(vip.name || ""),
+        platform_fee_cents: platformFeeCents,
+        destination_amount_cents: destinationAmountCents,
+      };
+
+      const txInsert = await restPost(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, "payment_transactions", {
+        user_id: userId,
+        kind: "vip_table",
+        amount_cents: intent.amount,
+        currency: intent.currency,
+        stripe_payment_intent_id: intent.id,
+        status: "created",
+        platform_fee_cents: hasConnect ? platformFeeCents : 0,
+        destination_account_id: hasConnect ? rawStripeAccountId : null,
+        destination_amount_cents: hasConnect ? destinationAmountCents : 0,
+        commission_bps: hasConnect ? commissionBps : 0,
+        metadata,
+      });
+
+      if (!txInsert.ok || !Array.isArray(txInsert.json) || txInsert.json.length === 0) {
+        return jsonResponse({ ok: false, error: "Failed to store transaction" });
+      }
+
+      return jsonResponse({
+        ok: true,
+        client_secret: intent.client_secret,
+        payment_intent_id: intent.id,
+        amount_cents: intent.amount,
+        currency: intent.currency,
+        transaction_id: String(txInsert.json[0]?.id || ""),
+        stripe_mode: getStripeMode(),
+        stripe_platform_account_id: await getStripePlatformAccountIdSafe(),
+      });
+    }
+
+    return jsonResponse({ ok: false, error: "Not implemented" });
+  } catch (e: any) {
+    return jsonResponse({ ok: false, error: `create-payment-intent: ${e?.message || "Internal error"}` });
+  }
+});

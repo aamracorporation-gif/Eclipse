@@ -1,0 +1,302 @@
+{
+  "common": {
+    "loading": "Chargement…",
+    "app_loading_title": "Chargement d’Eclipse…",
+    "app_loading_subtitle": "Préparation de la nuit",
+    "greeting": "Bonsoir,",
+    "explore": "Explorez la nuit",
+    "cancel": "Annuler",
+    "no": "Non",
+    "ok": "OK",
+    "error": "Erreur",
+    "wallet": "Portefeuille",
+    "all": "Toutes",
+    "session": "Session",
+    "language": "Langue",
+    "notifications": "Notifications"
+  },
+  "auth": {
+    "login": "Connexion",
+    "register": "Créer un compte"
+  },
+  "tabs": {
+    "home": "Événements",
+    "tickets": "Mes billets",
+    "resale": "Revente",
+    "profile": "Profil"
+  },
+  "profile": {
+    "notification_preferences": "Préférences de notifications",
+    "notification_center": "Centre de notifications",
+    "change_language": "Changer la langue",
+    "segment_panel": "Tableau",
+    "segment_account": "Compte",
+    "section_account": "COMPTE",
+    "section_management": "GESTION",
+    "section_staff": "PERSONNEL",
+    "name": "Nom",
+    "email": "E-mail",
+    "wallet": "Mon Portefeuille",
+    "review_organizers": "Examiner les organisateurs",
+    "location_label": "Lieu",
+    "address_label": "Adresse",
+    "phone_label": "Téléphone",
+    "not_specified": "Non spécifié",
+    "scan_tickets": "Scanner les billets",
+    "logout": "Déconnexion",
+    "unknown_date": "Date inconnue",
+    "member_since": "MEMBRE DEPUIS {{year}}",
+    "resale": {
+      "loading_title": "Chargement de vos annonces…",
+      "loading_subtitle": "Vérification de vos billets en revente",
+      "active_title": "Mes billets en vente",
+      "active_subtitle": "Vos annonces actives.",
+      "withdraw": "Retirer de la vente",
+      "empty_active": "Vous n'avez aucun billet en vente",
+      "sold_title": "Mes billets vendus",
+      "sold_subtitle": "Historique des ventes.",
+      "sold_badge": "Vendu",
+      "empty_sold": "Vous n'avez vendu aucun billet"
+    }
+  },
+  "home": {
+    "unknown_event": "Événement inconnu",
+    "unknown_location": "Lieu inconnu",
+    "view_map": "Carte",
+    "search_placeholder": "Rechercher des événements, artistes…",
+    "location_not_found_title": "Lieu introuvable",
+    "location_not_found_body": "Nous n'avons trouvé aucun événement ou lieu avec ce nom. Essayez d'être plus précis.",
+    "search_limited_title": "Recherche limitée",
+    "search_limited_body": "Nous n'avons pas pu rechercher sur la carte globale. Seuls les événements chargés seront recherchés.",
+    "search_error": "Un problème est survenu lors de la recherche."
+  },
+  "event": {
+    "types": {
+      "fiesta": "Soirée",
+      "concierto": "Concert",
+      "festival": "Festival"
+    },
+    "details": {
+      "title": "Détails",
+      "date": "Date",
+      "time": "Heure",
+      "place": "Lieu",
+      "type": "Type",
+      "music": "Musique",
+      "age": "Âge",
+      "dress_code": "Dress code"
+    },
+    "actions": {
+      "map": "Carte",
+      "view_plan": "Voir le plan"
+    },
+    "tickets": {
+      "sold_out": "Complet",
+      "remaining": "Plus que {{count}}",
+      "per_ticket": "par billet",
+      "ticket_type": "Type de billet",
+      "price": "Prix",
+      "available": "{{count}} disponibles",
+      "full_name_placeholder": "Nom complet",
+      "email_placeholder": "E-mail",
+      "quantity": "Quantité"
+    },
+    "purchase": {
+      "title": "Acheter",
+      "subtitle_tickets_vip": "Billets et VIP",
+      "subtitle_tickets": "Billets",
+      "sign_in_to_buy": "Connectez-vous pour acheter",
+      "tab_tickets": "Billets",
+      "tab_vip": "VIP",
+      "success_title": "Achat réussi !",
+      "success_one": "Votre billet est prêt. Vous le trouverez dans \"{{tickets}}\".",
+      "success_many": "Vos {{count}} billets ont été achetés et enregistrés individuellement.",
+      "pay_with_wallet": "Payer avec le portefeuille",
+      "balance_loading": "Chargement du solde…",
+      "balance": "Solde : {{amount}}€",
+      "no_wallet_balance": "Vous n'avez pas de solde dans le portefeuille.",
+      "wallet_split": "Vous utiliserez {{wallet}}€ de votre portefeuille et paierez {{card}}€ par carte.",
+      "insufficient_balance_title": "Solde insuffisant",
+      "use_wallet_card": "Utiliser portefeuille + carte",
+      "total": "Total",
+      "pay_wallet": "Payer avec le portefeuille",
+      "pay_card": "Payer par carte",
+      "pay_split": "Payer (portefeuille + carte)",
+      "login_required": "Vous devez être connecté pour acheter des billets.",
+      "enter_name": "Veuillez saisir votre nom.",
+      "invalid_quantity": "Quantité invalide.",
+      "not_enough_tickets": "Pas assez de billets disponibles.",
+      "select_ticket_type": "Sélectionnez un type de billet.",
+      "not_enough_of_type": "Pas assez de billets de ce type.",
+      "wallet_loading": "Nous chargeons votre solde. Veuillez réessayer dans un moment.",
+      "verify_failed": "Impossible de vérifier la disponibilité. Veuillez réessayer.",
+      "sold_out_during": "Les billets se sont épuisés pendant votre achat."
+    },
+    "vip": {
+      "section_title": "Tables VIP",
+      "your_vip": "Votre VIP",
+      "available": "Disponible",
+      "people": "{{count}} personnes",
+      "bottles": "{{count}} bouteilles",
+      "bottles_included": "{{count}} bouteilles incluses",
+      "extra_bottle": "Bouteille extra {{price}}",
+      "not_available": "Cette table VIP n'est plus disponible.",
+      "load_failed": "Impossible de charger les tables VIP."
+    }
+  },
+  "resale": {
+    "seller": "Vendeur",
+    "buy": "Acheter",
+    "status": {
+      "sold": "Vendu",
+      "on_sale": "En vente"
+    },
+    "subtitle": "Billets disponibles d'autres utilisateurs",
+    "filter_title": "Filtrer",
+    "filter_event_placeholder": "Événement",
+    "filter_min_price": "Min €",
+    "filter_max_price": "Max €",
+    "login_required_title": "Connexion requise",
+    "login_required_body": "Vous devez être connecté pour acheter des billets.",
+    "cannot_buy_own": "Vous ne pouvez pas acheter votre propre billet.",
+    "confirm_purchase_title": "Confirmer l'achat",
+    "confirm_purchase_body": "Comment voulez-vous payer {{price}} ?",
+    "pay_card": "Carte",
+    "pay_wallet": "Portefeuille",
+    "payment_failed": "Le paiement n'a pas pu être effectué.",
+    "purchase_success_title": "Achat réussi !",
+    "purchase_success_body": "Votre billet est prêt. Vous le trouverez dans \"{{tickets}}\".",
+    "wallet_insufficient": "Solde insuffisant dans le portefeuille.",
+    "empty_no_results": "Aucun résultat",
+    "empty_no_results_subtitle": "Essayez moins de filtres ou recherchez par nom d'événement.",
+    "empty_no_listings": "Aucun billet en revente",
+    "empty_no_listings_subtitle": "Lorsque d'autres utilisateurs publient des billets, ils apparaîtront ici avec un achat rapide et sécurisé.",
+    "view_my_tickets": "Voir mes billets"
+  },
+  "tickets_pdf": {
+    "ticket_title": "Billet",
+    "organizer": "Organisateur / Salle",
+    "event": "Événement",
+    "date_time": "Date et heure",
+    "location": "Lieu",
+    "location_tbd": "Lieu à confirmer",
+    "holder": "Titulaire du billet",
+    "guest": "Invité",
+    "ticket_id": "ID du billet",
+    "present_code": "Présentez ce code à l'entrée"
+  },
+  "tickets": {
+    "download": "Télécharger le PDF",
+    "add_to_wallet": "Ajouter au Portefeuille",
+    "sell": "Vendre",
+    "used": "UTILISÉ",
+    "my_tickets": "Mes billets",
+    "ticket": "billet",
+    "tickets_count": "billets",
+    "pdf_disabled_resale_title": "Indisponible",
+    "pdf_disabled_resale_body": "Vous ne pouvez pas télécharger le PDF tant que ce billet est en revente.",
+    "qr_disabled_resale": "En revente",
+    "empty": {
+      "view_resale": "Voir la revente"
+    },
+    "login_required_body": "Vous avez besoin d'un compte pour voir et gérer vos billets.",
+    "wallet_install_hint": "Assurez-vous d'avoir Wallet installé.",
+    "action_not_allowed_title": "Action non autorisée",
+    "used_ticket_cannot_resell": "Ce billet a déjà été utilisé pour entrer à l'événement et ne peut pas être mis en vente.",
+    "cancel_sale_title": "Annuler la vente",
+    "cancel_sale_body": "Voulez-vous retirer ce billet de la revente ? Il sera à nouveau disponible dans vos billets.",
+    "cancel_sale_confirm": "Oui, retirer",
+    "cancel_sale_success": "Le billet a été retiré de la revente.",
+    "cancel_sale_error": "Impossible de retirer le billet de la revente.",
+    "invalid_price_title": "Prix invalide",
+    "invalid_price_body": "Veuillez saisir un prix valide.",
+    "resale_min_price_body": "Le prix de revente doit être au minimum {{price}}€ (100% du prix d'origine).",
+    "resale_max_price_body": "Le prix de revente ne peut pas dépasser {{price}}€ (120% du prix d'origine).",
+    "processing_title": "C'est fait !",
+    "processing_body": "Votre billet est en cours de traitement pour la revente.",
+    "put_on_sale_failed": "Impossible de mettre en vente : {{error}}",
+    "sell_modal": {
+      "title": "Vendre le billet",
+      "body": "Vous êtes sur le point de mettre en vente votre billet pour {{event}}.",
+      "original_price": "Prix d'origine : {{price}}€",
+      "min_price": "Minimum autorisé : {{price}}€",
+      "max_price": "Maximum autorisé : {{price}}€",
+      "price_label": "Prix (€)",
+      "processing": "Traitement…",
+      "confirm": "Confirmer la vente"
+    },
+    "card": {
+      "date": "DATE",
+      "time": "HEURE",
+      "location": "LIEU",
+      "holder": "TITULAIRE",
+      "seat": "SIÈGE",
+      "access": "ACCÈS",
+      "general": "GÉNÉRAL",
+      "used_overlay": "UTILISÉ",
+      "scan_at_entry": "SCANNER À L'ENTRÉE",
+      "unique_code_hint": "Ce code est unique et personnel. Ne pas partager."
+    }
+  },
+  "errors": {
+    "generic": "Une erreur inattendue s'est produite. Veuillez réessayer.",
+    "network": "Erreur de connexion. Veuillez vérifier votre internet.",
+    "session_expired": "Votre session a expiré. Veuillez vous reconnecter.",
+    "invalid_credentials": "E-mail ou mot de passe incorrect.",
+    "email_exists": "Un compte avec cet e-mail existe déjà.",
+    "password_short": "Mot de passe trop court. Il doit avoir au moins 6 caractères.",
+    "email_format": "Format d'e-mail invalide.",
+    "email_unconfirmed": "Veuillez confirmer votre e-mail avant de vous connecter.",
+    "rate_limit": "Trop de tentatives. Veuillez patienter et réessayer.",
+    "invalid_jwt": "Votre session n'est pas valide. Veuillez vous reconnecter.",
+    "duplicate": "Cet enregistrement existe déjà.",
+    "foreign_key": "Opération invalide : référence à un enregistrement inexistant."
+  },
+  "notifications": {
+    "filters": {
+      "all": "Toutes",
+      "unread": "Non lues",
+      "urgent": "Urgentes"
+    },
+    "empty": "Vous n'avez pas encore de notifications"
+  },
+  "notification_preferences": {
+    "title": "Préférences",
+    "card_title": "Notifications",
+    "card_subtitle": "Activez seulement ce qui vous intéresse. Évitez le spam.",
+    "items": {
+      "purchase": { "label": "Achats", "desc": "Confirmations et état des achats." },
+      "reminders": { "label": "Rappels", "desc": "Rappels d'événements et alertes à proximité." },
+      "resale": { "label": "Revente", "desc": "Changements d'état des reventes." },
+      "stock": { "label": "Stock", "desc": "Alertes de stock faible / complet (organisateurs)." },
+      "realtime_sales": { "label": "Ventes en temps réel", "desc": "Alertes de nouvelles ventes (organisateurs)." },
+      "daily_summary": { "label": "Résumé quotidien", "desc": "Résumé d'activité (organisateurs/admin)." },
+      "thresholds": { "label": "Seuils", "desc": "Alertes par seuils de stock (organisateurs)." }
+    }
+  },
+  "my_resales": {
+    "event_id": "Événement ID : {{id}}…",
+    "date_unavailable": "Date indisponible"
+  },
+  "creator": {
+    "event_stats": {
+      "tickets_sold": "Billets vendus",
+      "percent_sold": "{{percent}}% vendus",
+      "remaining": "{{count}} restants",
+      "breakdown_title": "Répartition des billets",
+      "breakdown_subtitle": "Détail des ventes par type",
+      "price_per_unit": "{{price}}€ / unité"
+    },
+    "workers": {
+      "form_required": "Veuillez remplir tous les champs.",
+      "permissions_title": "Autorisations",
+      "permissions_subtitle": "Définissez ce que ce membre peut faire",
+      "perm_scan_title": "Scanner les billets",
+      "perm_scan_desc": "Valider les QR codes à l'entrée",
+      "perm_sell_title": "Vente manuelle",
+      "perm_sell_desc": "Vendre des billets en espèces/à l'entrée",
+      "perm_stats_title": "Voir les statistiques",
+      "perm_stats_desc": "Voir le récapitulatif des ventes de l'événement"
+    }
+  }
+}

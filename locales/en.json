@@ -1,0 +1,65 @@
+{
+  "common": {
+    "loading": "Loading...",
+    "error": "Error",
+    "success": "Success",
+    "save": "Save",
+    "cancel": "Cancel",
+    "back": "Back",
+    "logout": "Log out",
+    "settings": "Settings",
+    "language": "Language",
+    "notifications": "Notifications",
+    "greeting": "Good evening,",
+    "explore": "Explore the Night"
+  },
+  "auth": {
+    "login": "Login",
+    "register": "Register",
+    "email": "Email",
+    "password": "Password",
+    "forgot_password": "Forgot your password?"
+  },
+  "home": {
+    "search_placeholder": "Search events, artists...",
+    "search_city": "Search city or area...",
+    "empty_title": "No parties for this moment",
+    "empty_subtitle": "Change the date or try clearing filters to discover more.",
+    "clear_filters": "Clear filters",
+    "view_map": "View map"
+  },
+  "tabs": {
+    "home": "Explore",
+    "tickets": "My Tickets",
+    "resale": "Resale",
+    "wallet": "Wallet",
+    "profile": "Profile"
+  },
+  "tickets": {
+    "my_tickets": "My Tickets",
+    "ticket": "ticket",
+    "tickets_count": "tickets",
+    "no_tickets": "Your wallet is empty",
+    "empty_subtitle": "Buy tickets and you'll have your QR ready here. If you can't go, resell them with a tap.",
+    "buy_tickets": "Explore events",
+    "add_to_wallet": "Add to Wallet",
+    "in_wallet": "In Wallet",
+    "download": "Download",
+    "sell": "Sell",
+    "used": "Used",
+    "valid": "Valid"
+  },
+  "notifications_msg": {
+    "purchase_completed": "🎟️ Ticket secured! Get ready, because this event is now part of your history.",
+    "ticket_ready": "📲 Your secret pass is ready. This QR is your key to the event.",
+    "reminder_24h": "⏳ Tomorrow is the day. Start preparing the outfit, the plan, and the excitement.",
+    "reminder_2h": "🔥 In 2 hours it all begins. It's time to head out.",
+    "event_cancelled": "⚠️ The event has been cancelled. Don't worry, we are processing your refund.",
+    "event_modified": "🔁 Attention, there are changes in the event. Check the new details so you don't miss anything.",
+    "reimbursement": "💸 Refund on its way. You'll see it reflected very soon.",
+    "transfer_success": "🤝 You've passed your ticket. Now someone else will live this experience.",
+    "transfer_received": "🎁 You've been transferred a ticket. You have a plan without even looking for it.",
+    "entry_validated": "✅ You're in. Let the experience begin.",
+    "validation_failed": "🚫 This QR was already used or is not valid. Consult with staff for help."
+  }
+}
