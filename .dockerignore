@@ -1,0 +1,35 @@
+# Dependencies
+node_modules
+backend/node_modules
+
+# Version control
+.git
+.gitignore
+
+# Environment secrets — set these in Railway dashboard
+.env
+.env.*
+!.env.example
+
+# Expo / React Native — not needed in the backend image
+android
+ios
+assets
+app
+__tests__
+expo-env.d.ts
+app.json
+app.config.js
+babel.config.js
+eas.json
+eslint.config.js
+jest.config.js
+delete_user.js
+
+# Build artifacts
+dist
+build
+
+# Logs
+*.log
+npm-debug.log*
