@@ -94,6 +94,7 @@ function RootLayoutNav({ fontsLoaded }: { fontsLoaded: boolean }) {
           >
             <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
             <Stack.Screen name="(auth)" options={{ headerShown: false }} />
+            <Stack.Screen name="auth/callback" options={{ headerShown: false }} />
             <Stack.Screen name="(creator)" options={{ headerShown: false }} />
             <Stack.Screen name="(worker)" options={{ headerShown: false }} />
             <Stack.Screen 
