@@ -1,8 +1,17 @@
-const { env } = require('./config/env');
-const { createApp } = require('./app');
+const express = require('express');
+const app = express();
+app.use(express.json());
 
-const app = createApp();
+const PORT = Number(process.env.PORT) || 8081;
 
-app.listen(env.port, () => {
-  process.stdout.write(`Backend listening on port ${env.port}\n`);
+app.get('/health', (_req, res) => {
+  res.status(200).json({ ok: true });
+});
+
+app.get('/', (_req, res) => {
+  res.status(200).send('Eclipse API viva 🚀');
+});
+
+app.listen(PORT, '0.0.0.0', () => {
+  console.log('Servidor escuchando en puerto', PORT);
 });
