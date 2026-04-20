@@ -12,7 +12,7 @@ function getInt(name, fallback) {
 
 const env = {
   nodeEnv: process.env.NODE_ENV || 'development',
-  port: getInt('PORT', 3000),
+  port: getInt('PORT', 8081),
   supabaseUrl: process.env.SUPABASE_URL || 'https://placeholder.supabase.co',
   supabaseAnonKey: process.env.SUPABASE_ANON_KEY || 'placeholder-key',
   supabaseServiceRoleKey: process.env.SUPABASE_SERVICE_ROLE_KEY || '',
