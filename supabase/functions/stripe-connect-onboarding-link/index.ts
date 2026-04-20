@@ -86,6 +86,9 @@ serve(async (req) => {
     return jsonResponse({ ok: false, error: "Invalid return_url/refresh_url" }, 400);
   }
 
+  const base = (Deno.env.get("PUBLIC_API_URL") || "https://api.weareeclipseoficial.com").replace(/\/$/, "");
+  const completeUrl = `${base}/stripe/complete`;
+
   const userId = userData.user.id;
   const { data: profile, error: profileError } = await serviceClient
     .from("profiles")
@@ -100,8 +103,8 @@ serve(async (req) => {
   try {
     const link = await stripeCreateAccountLink({
       account: profile.stripe_account_id,
-      refresh_url: refreshUrl,
-      return_url: returnUrl,
+      refresh_url: completeUrl,
+      return_url: completeUrl,
       type: "account_onboarding",
     });
 
