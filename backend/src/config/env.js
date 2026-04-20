@@ -1,6 +1,6 @@
 const path = require('path');
 
-require('dotenv').config({ path: path.join(process.cwd(), '.env') });
+require('dotenv').config({ path: path.join(__dirname, '..', '..', '.env') });
 
 function mustGet(name) {
   const value = process.env[name];
@@ -20,7 +20,7 @@ function getInt(name, fallback) {
 
 const env = {
   nodeEnv: process.env.NODE_ENV || 'development',
-  port: getInt('PORT', 3000),
+  port: getInt('PORT', 8081),
   supabaseUrl: mustGet('SUPABASE_URL'),
   supabaseAnonKey: mustGet('SUPABASE_ANON_KEY'),
   supabaseServiceRoleKey: process.env.SUPABASE_SERVICE_ROLE_KEY || '',
