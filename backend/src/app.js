@@ -31,6 +31,10 @@ function createApp() {
 
   app.get('/health', (req, res) => res.json({ ok: true }));
 
+  app.get('/', (req, res) => {
+    res.send('Eclipse API funcionando correctamente');
+  });
+
   app.use('/api/stripe', stripeWebhookRoutes);
   app.use(express.json({ limit: '1mb' }));
 
