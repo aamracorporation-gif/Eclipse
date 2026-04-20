@@ -20,6 +20,7 @@ function stripeHeaders(secretKey: string) {
 function isAllowedReturnUrl(url: string) {
   const u = url.toLowerCase();
   return (
+    u.startsWith("eclipse://") || 
     u.startsWith("partyapp://") || 
     u.startsWith("exp://") || 
     u.startsWith("http://localhost") ||
