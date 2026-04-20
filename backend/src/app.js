@@ -29,6 +29,7 @@ function createApp() {
   app.use(cors({ origin: true, credentials: true }));
   app.use(morgan(env.nodeEnv === 'production' ? 'combined' : 'dev'));
 
+  app.get('/', (req, res) => res.json({ ok: true, message: 'Eclipse API funcionando correctamente' }));
   app.get('/health', (req, res) => res.json({ ok: true }));
 
   app.use('/api/stripe', stripeWebhookRoutes);
