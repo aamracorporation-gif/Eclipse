@@ -86,8 +86,7 @@ serve(async (req) => {
     return jsonResponse({ ok: false, error: "Invalid return_url/refresh_url" }, 400);
   }
 
-  const base = (Deno.env.get("PUBLIC_API_URL") || "https://api.weareeclipseoficial.com").replace(/\/$/, "");
-  const completeUrl = `${base}/stripe/complete`;
+  const completeUrl = "https://api.weareeclipseoficial.com/stripe/complete";
 
   const userId = userData.user.id;
   const { data: profile, error: profileError } = await serviceClient
