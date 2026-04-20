@@ -27,7 +27,6 @@ export default function RegisterScreen() {
   // 3. Specific Info (Attendee: DOB/Music, Organizer: Legal/Tax/Phone)
   // 4. Account (Email, Password)
   // 5. Email verification
-  // 6. Phone OTP verification
   const [step, setStep] = useState(1);
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
@@ -46,11 +45,6 @@ export default function RegisterScreen() {
   const [acceptedPrivacy, setAcceptedPrivacy] = useState(false);
   const [acceptedLicenses, setAcceptedLicenses] = useState(false);
   const [emailConfirmedLoading, setEmailConfirmedLoading] = useState(false);
-  const [otpPhone, setOtpPhone] = useState('');
-  const [otpSent, setOtpSent] = useState(false);
-  const [otpCode, setOtpCode] = useState('');
-  const [verifyingOtp, setVerifyingOtp] = useState(false);
-  const [sendingOtp, setSendingOtp] = useState(false);
 
   // Form Data
   const [formData, setFormData] = useState({
@@ -291,7 +285,6 @@ export default function RegisterScreen() {
       const age = birthDate ? calculateAgeFromDate(birthDate) : 0;
       const acceptedAt = new Date().toISOString();
       const phoneE164 = normalizePhoneEsE164(formData.phone);
-      setOtpPhone(phoneE164);
       
       const metadata = {
         role: safeRole,
@@ -336,11 +329,60 @@ export default function RegisterScreen() {
       const lower = msg.toLowerCase();
       const isEmailRateLimit = lower.includes('email rate limit') || lower.includes('rate limit exceeded');
       if (isEmailRateLimit) {
-        Alert.alert(
-          'Límite de emails alcanzado',
-          'Se alcanzó el límite de emails de confirmación. Intenta registrarte más tarde.'
-        );
-        return;
+        const allowDevBypass = __DEV__ && String(process.env.EXPO_PUBLIC_DEV_BYPASS_EMAIL_RATE_LIMIT || '') === '1';
+        if (!allowDevBypass) {
+          Alert.alert(
+            'Límite de emails alcanzado',
+            'Supabase ha bloqueado temporalmente el envío de emails de confirmación (rate limit). Para poder registrar más cuentas debes:\n\n- Esperar y reintentar más tarde, o\n- Configurar un proveedor SMTP propio en Supabase (Auth → Email) para aumentar límites.\n\nEn desarrollo puedes activar un bypass con EXPO_PUBLIC_DEV_BYPASS_EMAIL_RATE_LIMIT=1.'
+          );
+          return;
+        }
+
+        try {
+          const supabaseUrl = String(process.env.EXPO_PUBLIC_SUPABASE_URL || '').replace(/\/$/, '');
+          const anonKey = String(process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '');
+          if (!supabaseUrl || !anonKey) throw new Error('Falta configuración de Supabase (URL/ANON KEY).');
+
+          const endpoint = `${supabaseUrl}/functions/v1/register-user-fallback`;
+          const res = await fetch(endpoint, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              apikey: anonKey,
+            },
+            body: JSON.stringify({ email: formData.email, password: formData.password, metadata }),
+          });
+
+          const text = await res.text().catch(() => '');
+          let json: any = null;
+          try {
+            json = text ? JSON.parse(text) : null;
+          } catch {
+            json = null;
+          }
+
+          if (!res.ok || json?.ok === false) {
+            throw new Error(String(json?.error || json?.message || text || 'No se pudo crear la cuenta.'));
+          }
+
+          const { error: signInError } = await supabase.auth.signInWithPassword({
+            email: formData.email.trim(),
+            password: formData.password,
+          });
+          if (signInError) throw signInError;
+
+          await invokeEdgeFunction('record-legal-acceptance', {});
+
+          Alert.alert(
+            'Cuenta creada (DEV)',
+            'Por límite de emails, en desarrollo se creó la cuenta sin enviar el email de confirmación. En producción el email será obligatorio.'
+          );
+          router.replace(formData.role === 'organizer' ? '/(creator)/verification' : '/(tabs)');
+          return;
+        } catch (e: any) {
+          Alert.alert('Error de Registro', String(e?.message || 'No se pudo registrar por bypass DEV.'));
+          return;
+        }
       }
       const hint = msg.includes('Database error saving new user')
         ? '\n\nSuele indicar que falló un trigger/migración en Supabase (creación de profile/wallet). Aplica las migraciones y refresca el schema cache.'
@@ -567,7 +609,7 @@ export default function RegisterScreen() {
             });
             if (signInError) throw signInError;
             await invokeEdgeFunction('record-legal-acceptance', {});
-            setStep(6);
+            router.replace(formData.role === 'organizer' ? '/(creator)/verification' : '/(tabs)');
           } catch (e: any) {
             Alert.alert('Aún no verificado', 'Confirma el email y vuelve a intentarlo.');
           } finally {
@@ -575,97 +617,6 @@ export default function RegisterScreen() {
           }
         }}
       />
-    </View>
-  );
-
-  const renderStep6 = () => (
-    <View style={styles.stepContainer}>
-      <Text style={styles.stepTitle}>Verifica tu teléfono</Text>
-      <Text style={styles.roleDesc}>Te enviaremos un código SMS para verificar tu número.</Text>
-      <ThemedInput placeholder="Teléfono" value={otpPhone} onChangeText={setOtpPhone} icon={Phone} keyboardType="phone-pad" />
-      <ThemedButton
-        title={sendingOtp ? 'Enviando…' : otpSent ? 'Reenviar código' : 'Enviar código'}
-        disabled={sendingOtp}
-        onPress={async () => {
-          try {
-            if (sendingOtp) return;
-            setSendingOtp(true);
-            const phone = normalizePhoneEsE164(otpPhone);
-            setOtpPhone(phone);
-            const { error } = await supabase.auth.updateUser({ phone });
-            if (error) {
-              const msg = String((error as any)?.message || error || '');
-              const lower = msg.toLowerCase();
-              if (lower.includes('unable to get sms provider')) {
-                Alert.alert(
-                  'SMS no configurado',
-                  'Tu proyecto de Supabase no tiene proveedor SMS configurado para la verificación por teléfono.\n\nConfigúralo en Supabase Dashboard → Authentication → Providers → Phone (SMS Provider: Twilio/Vonage/MessageBird).\n\nMientras no esté configurado, no se puede enviar el OTP.'
-                );
-                return;
-              }
-              throw error;
-            }
-            setOtpSent(true);
-            Alert.alert('Código enviado', 'Revisa tus SMS e introduce el código.');
-          } catch (e: any) {
-            Alert.alert('Error', String(e?.message || 'No se pudo enviar el SMS.'));
-          } finally {
-            setSendingOtp(false);
-          }
-        }}
-      />
-      {__DEV__ && !otpSent && (
-        <ThemedButton
-          title="Continuar sin SMS (solo DEV)"
-          variant="outline"
-          onPress={async () => {
-            try {
-              const phone = normalizePhoneEsE164(otpPhone);
-              const { data: u } = await supabase.auth.getUser();
-              const uid = u.user?.id;
-              if (uid) {
-                await supabase.from('profiles').update({ phone_e164: phone, phone_verified_at: new Date().toISOString() }).eq('id', uid);
-              }
-              await invokeEdgeFunction('record-legal-acceptance', {});
-              Alert.alert('DEV', 'Teléfono marcado como verificado en modo desarrollo.');
-              router.replace(formData.role === 'organizer' ? '/(creator)/verification' : '/(tabs)');
-            } catch (e: any) {
-              Alert.alert('Error', String(e?.message || 'No se pudo continuar.'));
-            }
-          }}
-        />
-      )}
-      {otpSent && (
-        <>
-          <ThemedInput placeholder="Código SMS" value={otpCode} onChangeText={setOtpCode} icon={Check} keyboardType="number-pad" />
-          <ThemedButton
-            title={verifyingOtp ? 'Verificando…' : 'Verificar'}
-            disabled={verifyingOtp}
-            onPress={async () => {
-              if (verifyingOtp) return;
-              setVerifyingOtp(true);
-              try {
-                const phone = normalizePhoneEsE164(otpPhone);
-                const token = String(otpCode || '').trim();
-                const { error } = await supabase.auth.verifyOtp({ phone, token, type: 'phone_change' as any });
-                if (error) throw error;
-                const { data: u } = await supabase.auth.getUser();
-                const uid = u.user?.id;
-                if (uid) {
-                  await supabase.from('profiles').update({ phone_e164: phone, phone_verified_at: new Date().toISOString() }).eq('id', uid);
-                }
-                await invokeEdgeFunction('record-legal-acceptance', {});
-                Alert.alert('Verificado', 'Tu teléfono ha sido verificado.');
-                router.replace(formData.role === 'organizer' ? '/(creator)/verification' : '/(tabs)');
-              } catch (e: any) {
-                Alert.alert('Error', String(e?.message || 'Código inválido.'));
-              } finally {
-                setVerifyingOtp(false);
-              }
-            }}
-          />
-        </>
-      )}
     </View>
   );
 
@@ -677,11 +628,11 @@ export default function RegisterScreen() {
           <View style={styles.header}>
             <Text style={styles.title}>Registro</Text>
             <View style={styles.progressContainer}>
-                {[1, 2, 3, 4, 5, 6].map(i => (
+                {[1, 2, 3, 4, 5].map(i => (
                     <View key={i} style={[styles.progressDot, i <= step ? styles.activeDot : styles.inactiveDot]} />
                 ))}
             </View>
-            <Text style={styles.subtitle}>Paso {step} de 6</Text>
+            <Text style={styles.subtitle}>Paso {step} de 5</Text>
           </View>
 
           <GlassView style={styles.formCard}>
@@ -690,7 +641,6 @@ export default function RegisterScreen() {
             {step === 3 && renderStep3()}
             {step === 4 && renderStep4()}
             {step === 5 && renderStep5()}
-            {step === 6 && renderStep6()}
 
             <View style={styles.buttonsContainer}>
               {step > 1 && step < 5 && <ThemedButton title="Atrás" onPress={() => setStep(step - 1)} variant="outline" style={{ flex: 1, marginRight: 10 }} />}
