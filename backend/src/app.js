@@ -11,6 +11,9 @@ const { paymentRoutes } = require('./routes/paymentRoutes');
 const { stripeRoutes } = require('./routes/stripeRoutes');
 const { stripeWebhookRoutes } = require('./routes/stripeWebhookRoutes');
 const { testRoutes } = require('./routes/testRoutes');
+const { organizerRoutes } = require('./routes/organizerRoutes');
+const { retrieveAccount } = require('./services/stripeService');
+const { setOnboardingCompletedByStripeAccountId } = require('./services/userService');
 
 function createApp() {
   const app = express();
@@ -47,6 +50,17 @@ function createApp() {
 
   app.get('/', (req, res) => res.send('Eclipse API viva 🚀'));
   app.get('/health', (req, res) => res.json({ ok: true }));
+  app.get('/stripe/complete', async (req, res) => {
+    try {
+      const account = String(req.query.account || '');
+      if (account) {
+        const acct = await retrieveAccount(account);
+        const completed = Boolean(acct.charges_enabled && acct.payouts_enabled);
+        await setOnboardingCompletedByStripeAccountId(account, completed);
+      }
+    } catch {}
+    return res.redirect('eclipse://stripe/success');
+  });
   app.get('/verified', (req, res) => {
     const rawNext = typeof req.query.next === 'string' ? req.query.next : '';
     const next =
@@ -96,6 +110,7 @@ function createApp() {
   app.use('/api/payments', paymentRoutes);
   app.use('/api/stripe', stripeRoutes);
   app.use('/api/test', testRoutes);
+  app.use('/organizer', organizerRoutes);
 
   app.use((req, res) => res.status(404).json({ ok: false, error: 'Not found' }));
   app.use(errorHandler);
