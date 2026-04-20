@@ -10,8 +10,8 @@ RUN cd backend && npm ci --omit=dev
 # Copy backend source code
 COPY backend/src ./backend/src
 
-# Expose the port Railway will assign (default 3000)
-EXPOSE 3000
+# Expose the port the API listens on
+EXPOSE 8081
 
-# Start the Express API
-CMD ["node", "backend/src/index.js"]
+# Start the Express API via npm script
+CMD ["npm", "run", "api"]

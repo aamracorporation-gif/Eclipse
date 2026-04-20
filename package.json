@@ -5,6 +5,7 @@
   "private": true,
   "scripts": {
     "start": "node backend/src/index.js",
+    "api": "node backend/src/index.js",
     "build": "cd backend && npm install --omit=dev",
     "dev": "cd backend && npm run dev",
     "start:expo": "npx expo start --lan",
