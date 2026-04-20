@@ -5,7 +5,7 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/Icon.png",
-    "scheme": "partyapp",
+    "scheme": "eclipse",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
