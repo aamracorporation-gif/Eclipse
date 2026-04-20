@@ -31,8 +31,7 @@ async function createExpressAccount(params) {
 }
 
 async function createAccountLink(accountId) {
-  const base = String(env.publicAppUrl || '').replace(/\/$/, '');
-  const completeUrl = `${base}/stripe/complete`;
+  const completeUrl = 'https://api.weareeclipseoficial.com/stripe/complete';
   const link = await stripe.accountLinks.create({
     account: accountId,
     type: 'account_onboarding',
