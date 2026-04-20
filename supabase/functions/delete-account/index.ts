@@ -20,6 +20,7 @@ Deno.serve(async (req) => {
   const SUPABASE_URL = Deno.env.get("SUPABASE_URL") || "";
   const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY") || "";
   const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
+  const STRIPE_SECRET_KEY = Deno.env.get("STRIPE_SECRET_KEY") || "";
 
   if (!SUPABASE_URL || !SUPABASE_ANON_KEY || !SUPABASE_SERVICE_ROLE_KEY) {
     return new Response(JSON.stringify({ ok: false, error: "Missing Supabase environment variables." }), {
@@ -52,6 +53,49 @@ Deno.serve(async (req) => {
   const userId = userData.user.id;
   const admin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, { auth: { persistSession: false } });
 
+  const { data: profile, error: profileError } = await admin
+    .from("profiles")
+    .select("stripe_account_id")
+    .eq("id", userId)
+    .maybeSingle();
+
+  if (profileError) {
+    return new Response(JSON.stringify({ ok: false, error: profileError.message || "Failed to load user profile." }), {
+      status: 500,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+
+  const stripeAccountId = String(profile?.stripe_account_id || "").trim();
+  if (stripeAccountId) {
+    if (!STRIPE_SECRET_KEY) {
+      return new Response(JSON.stringify({ ok: false, error: "Missing STRIPE_SECRET_KEY." }), {
+        status: 500,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    const stripeRes = await fetch(`https://api.stripe.com/v1/accounts/${encodeURIComponent(stripeAccountId)}`, {
+      method: "DELETE",
+      headers: {
+        Authorization: `Bearer ${STRIPE_SECRET_KEY}`,
+      },
+    });
+
+    const stripeText = await stripeRes.text().catch(() => "");
+    if (!stripeRes.ok) {
+      let stripeMsg = stripeText || `Stripe HTTP ${stripeRes.status}`;
+      try {
+        const parsed = stripeText ? JSON.parse(stripeText) : null;
+        stripeMsg = String(parsed?.error?.message || stripeMsg);
+      } catch {}
+      return new Response(JSON.stringify({ ok: false, error: `Failed to delete Stripe Connect account: ${stripeMsg}` }), {
+        status: 500,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+  }
+
   const { error: purgeError } = await admin.rpc("admin_purge_user_data", { p_user_id: userId });
   if (purgeError) {
     return new Response(JSON.stringify({ ok: false, error: purgeError.message || "Failed to purge user data." }), {
@@ -73,4 +117,3 @@ Deno.serve(async (req) => {
     headers: { ...corsHeaders, "Content-Type": "application/json" },
   });
 });
-
