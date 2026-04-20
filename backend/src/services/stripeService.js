@@ -31,11 +31,13 @@ async function createExpressAccount(params) {
 }
 
 async function createAccountLink(accountId) {
+  const base = String(env.publicAppUrl || '').replace(/\/$/, '');
+  const completeUrl = `${base}/stripe/complete`;
   const link = await stripe.accountLinks.create({
     account: accountId,
     type: 'account_onboarding',
-    refresh_url: env.publicAppUrl,
-    return_url: env.publicAppUrl,
+    refresh_url: completeUrl,
+    return_url: completeUrl,
   });
   return link;
 }
