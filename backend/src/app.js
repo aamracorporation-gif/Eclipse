@@ -52,6 +52,7 @@ function createApp() {
   app.get('/health', (req, res) => res.json({ ok: true }));
   app.get('/stripe/complete', async (req, res) => {
     const account = String(req.query.account || '').trim();
+    const rawNext = String(req.query.next || '').trim();
     const isValid = /^acct_[A-Za-z0-9]+$/.test(account);
 
     if (isValid) {
@@ -62,7 +63,11 @@ function createApp() {
       } catch {}
     }
 
-    const next = 'eclipse://stripe/success';
+    const next =
+      rawNext.startsWith('eclipse://') || rawNext.startsWith('partyapp://') || rawNext.startsWith('exp://')
+        ? rawNext
+        : 'eclipse://(creator)/verification?stripe=return';
+
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
     return res.status(200).send(`<!doctype html>
 <html lang="es">

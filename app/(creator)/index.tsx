@@ -15,6 +15,7 @@ import { RevenueChart } from '@/components/dashboard/RevenueChart';
 import { ThemedButton } from '@/components/ui/ThemedButton';
 import { DiscoLoader } from '@/components/ui/DiscoLoader';
 import * as Notifications from 'expo-notifications';
+import * as ExpoLinking from 'expo-linking';
 import { scheduleLocalNotification, registerForPushNotifications } from '@/lib/notifications';
 
 
@@ -213,10 +214,13 @@ export default function CreatorDashboard() {
         setStripeAccountId(created.stripe_account_id);
       }
       
-      // Usamos URLs de retorno estándar que Stripe acepta sin problemas
+      // Usamos URLs de retorno dinámicas
+      const return_url = ExpoLinking.createURL('/(creator)/verification', { queryParams: { stripe: 'return' } });
+      const refresh_url = ExpoLinking.createURL('/(creator)/verification', { queryParams: { stripe: 'refresh' } });
+      
       const res = await createStripeConnectOnboardingLink({
-        return_url: 'https://zurbdrfmwjqbrscairub.supabase.co',
-        refresh_url: 'https://zurbdrfmwjqbrscairub.supabase.co',
+        return_url,
+        refresh_url,
       });
       
       console.log('[DEBUG] Stripe response:', res);

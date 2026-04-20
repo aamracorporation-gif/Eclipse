@@ -86,8 +86,6 @@ serve(async (req) => {
     return jsonResponse({ ok: false, error: "Invalid return_url/refresh_url" }, 400);
   }
 
-  const completeUrl = "https://api.weareeclipseoficial.com/stripe/complete";
-
   const userId = userData.user.id;
   const { data: profile, error: profileError } = await serviceClient
     .from("profiles")
@@ -98,6 +96,8 @@ serve(async (req) => {
   if (profileError) return jsonResponse({ ok: false, error: "Failed to load profile" }, 500);
   if (!profile?.stripe_account_id) return jsonResponse({ ok: false, error: "Stripe account not found" }, 404);
   if (profile.role !== "organizer") return jsonResponse({ ok: false, error: "Not an organizer" }, 403);
+
+  const completeUrl = `https://api.weareeclipseoficial.com/stripe/complete?account=${profile.stripe_account_id}&next=${encodeURIComponent(returnUrl)}`;
 
   try {
     const link = await stripeCreateAccountLink({
