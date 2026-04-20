@@ -45,7 +45,47 @@ function createApp() {
   );
   app.use(morgan(env.nodeEnv === 'production' ? 'combined' : 'dev'));
 
+  app.get('/', (req, res) => res.send('Eclipse API viva 🚀'));
   app.get('/health', (req, res) => res.json({ ok: true }));
+  app.get('/verified', (req, res) => {
+    const rawNext = typeof req.query.next === 'string' ? req.query.next : '';
+    const next =
+      rawNext.startsWith('eclipse://') || rawNext.startsWith('partyapp://') || rawNext.startsWith('exp://')
+        ? rawNext
+        : 'eclipse://auth/callback';
+
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    res.status(200).send(`<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Eclipse · Verificación completada</title>
+    <style>
+      body { margin:0; font-family: -apple-system, BlinkMacSystemFont, Segoe UI, Roboto, Arial, sans-serif; background:#0f0f1a; color:#fff; }
+      .wrap { min-height:100vh; display:flex; align-items:center; justify-content:center; padding:24px; }
+      .card { max-width:520px; width:100%; background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.12); border-radius:18px; padding:22px; }
+      h1 { margin:0 0 10px; font-size:22px; }
+      p { margin:0 0 16px; color:rgba(255,255,255,0.78); line-height:1.45; }
+      a.btn { display:inline-block; background:#7c3aed; color:#fff; text-decoration:none; padding:12px 16px; border-radius:14px; font-weight:800; }
+      .muted { margin-top:10px; font-size:12px; color:rgba(255,255,255,0.55); }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <div class="card">
+        <h1>Registro verificado</h1>
+        <p>Tu cuenta se ha verificado correctamente. Ya puedes volver a la app.</p>
+        <a class="btn" href="${next}">Abrir Eclipse</a>
+        <div class="muted">Si no se abre automáticamente, pulsa el botón.</div>
+      </div>
+    </div>
+    <script>
+      setTimeout(function(){ window.location.href = ${JSON.stringify(next)}; }, 900);
+    </script>
+  </body>
+</html>`);
+  });
   app.use('/test', testRoutes);
 
   app.use('/api/stripe', stripeWebhookRoutes);
