@@ -18,7 +18,7 @@
     "eas:configure": "powershell -NoProfile -Command \"$env:EAS_NO_VCS='1'; npx eas-cli build:configure\"",
     "android": "expo run:android",
     "ios": "expo run:ios",
-    "api": "node server.js"
+    "api": "node backend/server.js"
   },
   "dependencies": {
     "@expo-google-fonts/permanent-marker": "^0.4.0",
