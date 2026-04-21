@@ -339,6 +339,35 @@ export default function RegisterScreen() {
         }
 
         try {
+          const age = birthDate ? calculateAgeFromDate(birthDate) : 0;
+          const acceptedAt = new Date().toISOString();
+          const phoneE164 = normalizePhoneEsE164(formData.phone);
+          const metadata = {
+            role: safeRole,
+            full_name: safeRole === 'organizer' ? formData.clubName : `${formData.firstName} ${formData.lastName}`,
+            email: formData.email.trim(),
+            club_name: formData.clubName,
+            address: formData.venueAddress,
+            phone: phoneE164,
+            legal_name: formData.legalName,
+            tax_id_number: formData.taxIdNumber,
+            business_type: formData.businessType,
+            first_name: formData.firstName,
+            last_name: formData.lastName,
+            age: age,
+            city: formData.city,
+            country: formData.country,
+            organizer_venue_address: formData.venueAddress,
+            organizer_fiscal_address: formData.fiscalAddress,
+            organizer_postal_code: formData.postalCode,
+            organizer_responsible_name: formData.responsibleName,
+            organizer_responsible_birthdate: responsibleBirthDate ? responsibleBirthDate.toISOString().slice(0, 10) : null,
+            organizer_iban: formData.iban,
+            organizer_licenses_declared_at: safeRole === 'organizer' ? acceptedAt : null,
+            accepted_terms_at: acceptedAt,
+            accepted_privacy_at: acceptedAt,
+          };
+
           const supabaseUrl = String(process.env.EXPO_PUBLIC_SUPABASE_URL || '').replace(/\/$/, '');
           const anonKey = String(process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '');
           if (!supabaseUrl || !anonKey) throw new Error('Falta configuración de Supabase (URL/ANON KEY).');
