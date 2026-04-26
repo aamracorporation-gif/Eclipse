@@ -11,10 +11,12 @@ import { ThemedButton } from '@/components/ui/ThemedButton';
 import { DiscoLoader } from '@/components/ui/DiscoLoader';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Haptics from 'expo-haptics';
+import { useTranslation } from 'react-i18next';
 
 export default function ScanScreen() {
   const { user } = useAuth();
   const insets = useSafeAreaInsets();
+  const { t } = useTranslation();
   const [permission, requestPermission] = useCameraPermissions();
   const [scanned, setScanned] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -64,7 +66,7 @@ export default function ScanScreen() {
 
     try {
       if (!user?.id) {
-        throw new Error('Usuario no autenticado');
+        throw new Error(t('errors.session_expired'));
       }
 
       // Validate with Supabase RPC (v2)
@@ -87,10 +89,10 @@ export default function ScanScreen() {
       // DO NOT reset scanned here immediately, or it loops.
       // Show Alert and reset ONLY when user presses OK
       Alert.alert(
-        'Error', 
-        'Error al validar el código: ' + error.message,
+        t('common.error'),
+        t('creator.scan.validation_error', { detail: error.message }),
         [{ 
-          text: 'OK', 
+          text: t('common.ok'), 
           onPress: () => {
             setScanned(false);
             isScanning.current = false;
@@ -119,8 +121,8 @@ export default function ScanScreen() {
   if (!permission.granted) {
     return (
       <View style={styles.container}>
-        <Text style={styles.message}>Necesitamos acceso a la cámara para escanear entradas.</Text>
-        <ThemedButton onPress={requestPermission} title="Dar Permiso" />
+        <Text style={styles.message}>{t('creator.scan.camera_permission_body')}</Text>
+        <ThemedButton onPress={requestPermission} title={t('creator.scan.camera_permission_cta')} />
       </View>
     );
   }
@@ -142,19 +144,19 @@ export default function ScanScreen() {
           <TouchableOpacity onPress={safeBack} style={styles.backButton}>
             <Ionicons name="close" size={28} color="white" />
           </TouchableOpacity>
-          <Text style={styles.title}>Escanear Entrada</Text>
+          <Text style={styles.title}>{t('creator.scan.title')}</Text>
           <View style={{ width: 40 }} />
         </View>
 
         <View style={styles.scanFrameContainer}>
            <View style={styles.scanFrame} />
-           <Text style={styles.scanText}>Apunta al código QR de la entrada</Text>
+           <Text style={styles.scanText}>{t('creator.scan.aim_qr')}</Text>
         </View>
         
         {loading && (
            <View style={styles.loadingOverlay}>
              <DiscoLoader size={90} />
-             <Text style={styles.loadingText}>Validando...</Text>
+             <Text style={styles.loadingText}>{t('creator.scan.validating')}</Text>
            </View>
         )}
       </View>
@@ -173,19 +175,19 @@ export default function ScanScreen() {
                  <View style={[styles.iconCircle, { backgroundColor: '#4ade80' }]}>
                    <Ionicons name="checkmark" size={50} color="white" />
                  </View>
-                 <Text style={styles.resultTitle}>¡ENTRADA VÁLIDA!</Text>
+                 <Text style={styles.resultTitle}>{t('creator.scan.valid_title')}</Text>
                  <Text style={styles.resultMessage}>{result.message}</Text>
                  
                  <View style={styles.ticketInfo}>
-                   <Text style={styles.infoLabel}>Evento:</Text>
+                   <Text style={styles.infoLabel}>{t('creator.scan.labels.event')}</Text>
                    <Text style={styles.infoValue}>{result.ticket?.event}</Text>
                    
-                   <Text style={styles.infoLabel}>Titular:</Text>
+                   <Text style={styles.infoLabel}>{t('creator.scan.labels.holder')}</Text>
                    <Text style={styles.infoValue}>{result.ticket?.owner}</Text>
 
-                   <Text style={styles.infoLabel}>Fecha:</Text>
+                   <Text style={styles.infoLabel}>{t('creator.scan.labels.date')}</Text>
                    <Text style={styles.infoValue}>
-                      {result.ticket?.date ? new Date(result.ticket.date).toLocaleDateString() : 'N/A'}
+                      {result.ticket?.date ? new Date(result.ticket.date).toLocaleDateString() : t('creator.scan.na')}
                    </Text>
                  </View>
                </View>
@@ -194,7 +196,7 @@ export default function ScanScreen() {
                  <View style={[styles.iconCircle, { backgroundColor: '#ef4444' }]}>
                    <Ionicons name="close" size={50} color="white" />
                  </View>
-                 <Text style={[styles.resultTitle, { color: '#ef4444' }]}>INVÁLIDA</Text>
+                 <Text style={[styles.resultTitle, { color: '#ef4444' }]}>{t('creator.scan.invalid_title')}</Text>
                  
                  {(() => {
                    const msg = result?.message?.toUpperCase() || '';
@@ -203,17 +205,17 @@ export default function ScanScreen() {
                    return isExpired && (
                      <View style={styles.expiredBanner}>
                        <Ionicons name="warning" size={24} color="white" />
-                       <Text style={styles.expiredText}>ENTRADA CADUCADA</Text>
+                       <Text style={styles.expiredText}>{t('creator.scan.expired_banner')}</Text>
                      </View>
                    );
                  })()}
 
-                 <Text style={styles.resultMessage}>{result?.message || 'Código no reconocido'}</Text>
+                 <Text style={styles.resultMessage}>{result?.message || t('creator.scan.not_recognized')}</Text>
                  
                  {result?.ticket && (
                    <View style={styles.errorInfo}>
                      <Text style={styles.errorText}>
-                        Escaneado previamente: {new Date(result.ticket.scanned_at).toLocaleString()}
+                        {t('creator.scan.previously_scanned', { at: new Date(result.ticket.scanned_at).toLocaleString() })}
                      </Text>
                    </View>
                  )}
@@ -221,7 +223,7 @@ export default function ScanScreen() {
              )}
 
              <ThemedButton 
-               title={result?.valid ? "Siguiente Escaneo" : "Cerrar"} 
+               title={result?.valid ? t('creator.scan.next_scan') : t('common.cancel')} 
                onPress={closeModal}
                style={styles.modalButton}
                variant={result?.valid ? "primary" : "outline"}
