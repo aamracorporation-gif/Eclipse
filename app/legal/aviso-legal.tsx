@@ -1,7 +1,7 @@
 import { LegalDocumentScreen } from '@/components/legal/LegalDocumentScreen';
-import { avisoLegalText, avisoLegalTitle } from '@/legal/avisoLegal';
+import { useTranslation } from 'react-i18next';
 
 export default function AvisoLegalScreen() {
-  return <LegalDocumentScreen title={avisoLegalTitle} text={avisoLegalText} />;
+  const { t } = useTranslation();
+  return <LegalDocumentScreen title={t('legal.documents.legal_notice.title')} text={t('legal.documents.legal_notice.text')} />;
 }
-
