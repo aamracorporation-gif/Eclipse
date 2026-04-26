@@ -6,7 +6,7 @@ import { StatusBar } from 'expo-status-bar';
 import { useFrameworkReady } from '@/hooks/useFrameworkReady';
 import { AuthProvider, useAuth } from '@/lib/AuthContext';
 import { EventProvider } from '@/lib/EventContext';
-import { WalletProvider } from '@/lib/WalletContext';
+import { CreditProvider } from '@/lib/WalletContext';
 import { NotificationProvider } from '@/lib/NotificationContext';
 import { I18nProvider } from '@/lib/I18nContext';
 import { StripeProvider } from '@/lib/payments/StripeProvider';
@@ -83,7 +83,7 @@ function RootLayoutNav({ fontsLoaded }: { fontsLoaded: boolean }) {
   return (
     <StripeProvider>
       <EventProvider>
-        <WalletProvider>
+        <CreditProvider>
           <Stack
             screenOptions={{
               headerShown: false,
@@ -107,7 +107,7 @@ function RootLayoutNav({ fontsLoaded }: { fontsLoaded: boolean }) {
             <Stack.Screen name="+not-found" />
           </Stack>
           <StatusBar style="light" />
-        </WalletProvider>
+        </CreditProvider>
       </EventProvider>
     </StripeProvider>
   );
