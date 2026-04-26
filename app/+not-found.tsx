@@ -5,9 +5,11 @@ import { AlertTriangle, Home } from 'lucide-react-native';
 import { Colors } from '@/constants/Colors';
 import { GlassView } from '@/components/ui/GlassView';
 import { ThemedButton } from '@/components/ui/ThemedButton';
+import { useTranslation } from 'react-i18next';
 
 export default function NotFoundScreen() {
   const router = useRouter();
+  const { t } = useTranslation();
 
   return (
     <>
@@ -23,14 +25,12 @@ export default function NotFoundScreen() {
             <AlertTriangle size={64} color={Colors.dark.primary} />
           </View>
           
-          <Text style={styles.title}>¡404!</Text>
-          <Text style={styles.subtitle}>Te has perdido en la noche...</Text>
-          <Text style={styles.text}>
-            La página que buscas no existe o ha sido movida a otro lugar.
-          </Text>
+          <Text style={styles.title}>{t('not_found.title')}</Text>
+          <Text style={styles.subtitle}>{t('not_found.subtitle')}</Text>
+          <Text style={styles.text}>{t('not_found.body')}</Text>
 
           <ThemedButton 
-            title="Volver al inicio" 
+            title={t('not_found.cta')} 
             onPress={() => router.replace('/')}
             icon={<Home size={20} color="white" />}
             style={styles.button}
