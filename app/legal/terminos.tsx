@@ -1,7 +1,7 @@
 import { LegalDocumentScreen } from '@/components/legal/LegalDocumentScreen';
-import { terminosText, terminosTitle } from '@/legal/terminos';
+import { useTranslation } from 'react-i18next';
 
 export default function TerminosScreen() {
-  return <LegalDocumentScreen title={terminosTitle} text={terminosText} />;
+  const { t } = useTranslation();
+  return <LegalDocumentScreen title={t('legal.documents.terms.title')} text={t('legal.documents.terms.text')} />;
 }
-
