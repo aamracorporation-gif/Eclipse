@@ -4,7 +4,7 @@ import { router } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
 import { supabase, Ticket } from '@/lib/supabase';
 import { useAuth } from '@/lib/AuthContext';
-import { useWallet } from '@/lib/WalletContext';
+import { useCredit } from '@/lib/WalletContext';
 import { Ticket as TicketIcon, LogIn, DollarSign, X, Download, ChevronRight, Sparkles, CreditCard } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Colors } from '@/constants/Colors';
@@ -36,7 +36,7 @@ export default function TicketsScreen() {
   const { user } = useAuth();
   const insets = useSafeAreaInsets();
   const { horizontalPadding, maxContentWidth } = useResponsive();
-  const { createResaleListing, cancelResaleListing } = useWallet();
+  const { createResaleListing, cancelResaleListing } = useCredit();
   const [tickets, setTickets] = useState<ExtendedTicket[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
