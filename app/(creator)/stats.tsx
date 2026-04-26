@@ -10,6 +10,7 @@ import { useResponsive } from '@/lib/responsive';
 import { supabase } from '@/lib/supabase';
 import { useEffect, useMemo, useState } from 'react';
 import { ArrowLeft, ArrowUpRight, ArrowDownRight, Download, Filter, LineChart, BarChart2, PieChart, Activity } from 'lucide-react-native';
+import { useTranslation } from 'react-i18next';
 
 type TimeFilter = 'today' | 'week' | 'month' | 'custom';
 
@@ -18,6 +19,7 @@ export default function OrganizerStatsScreen() {
   const { events } = useEvents();
   const { user } = useAuth();
   const { isTablet, isDesktop, isSmallPhone, horizontalPadding, maxContentWidth } = useResponsive();
+  const { t } = useTranslation();
 
   const safeBack = () => {
     const canGoBack = (router as any)?.canGoBack?.();
@@ -123,16 +125,16 @@ export default function OrganizerStatsScreen() {
           <View style={styles.filtersRow}>
             <GlassView intensity={18} style={styles.filterPill}>
               <Filter size={16} color={Colors.dark.textSecondary} />
-              <Text style={styles.filterLabel}>Hoy</Text>
+              <Text style={styles.filterLabel}>{t('creator.stats.filters.today')}</Text>
             </GlassView>
             <GlassView intensity={18} style={styles.filterPill}>
-              <Text style={styles.filterLabel}>Semana</Text>
+              <Text style={styles.filterLabel}>{t('creator.stats.filters.week')}</Text>
             </GlassView>
             <GlassView intensity={22} style={[styles.filterPill, styles.filterPillActive]}>
-              <Text style={styles.filterLabelActive}>Mes</Text>
+              <Text style={styles.filterLabelActive}>{t('creator.stats.filters.month')}</Text>
             </GlassView>
             <GlassView intensity={18} style={styles.filterPill}>
-              <Text style={styles.filterLabel}>Personalizado</Text>
+              <Text style={styles.filterLabel}>{t('creator.stats.filters.custom')}</Text>
             </GlassView>
           </View>
 
