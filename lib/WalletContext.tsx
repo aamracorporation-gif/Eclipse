@@ -3,57 +3,54 @@ import { supabase } from '@/lib/supabase';
 import { useAuth } from './AuthContext';
 import { invokeEdgeFunction } from '@/lib/edgeFunctions';
 
-type Transaction = {
+type LedgerMovimiento = {
   id: string;
-  amount: number;
-  type: 'credit' | 'debit';
-  description: string;
+  tipo: string;
+  importe: number;
+  referencia_id?: string | null;
+  descripcion?: string | null;
   created_at: string;
 };
 
-type WalletContextType = {
-  balance: number;
-  transactions: Transaction[];
+type CreditContextType = {
+  creditBalance: number;
+  movimientos: LedgerMovimiento[];
   loading: boolean;
-  refreshWallet: () => Promise<void>;
+  refreshCredit: () => Promise<void>;
   createResaleListing: (ticketId: string, price: number) => Promise<void>;
   cancelResaleListing: (ticketId: string) => Promise<void>;
-  buyResaleTicket: (listingId: string, price: number) => Promise<void>;
-  buyTicketWithWallet: (params: any) => Promise<void>;
-  buyVipWithWallet: (params: { p_vip_reservado_id: string; p_buyer_name: string; p_buyer_email: string }) => Promise<any>;
-  addFunds: (amount: number) => Promise<void>;
+  buyResaleTicketWithCredit: (listingId: string) => Promise<void>;
+  buyTicketWithCredit: (params: any) => Promise<void>;
+  buyVipWithCredit: (params: { p_vip_reservado_id: string; p_buyer_name: string; p_buyer_email: string }) => Promise<any>;
 };
 
-const WalletContext = createContext<WalletContextType>({
-  balance: 0,
-  transactions: [],
+const CreditContext = createContext<CreditContextType>({
+  creditBalance: 0,
+  movimientos: [],
   loading: true,
-  refreshWallet: async () => {},
+  refreshCredit: async () => {},
   createResaleListing: async () => {},
   cancelResaleListing: async () => {},
-  buyResaleTicket: async () => {},
-  buyTicketWithWallet: async () => {},
-  buyVipWithWallet: async () => {},
-  addFunds: async () => {},
+  buyResaleTicketWithCredit: async () => {},
+  buyTicketWithCredit: async () => {},
+  buyVipWithCredit: async () => {},
 });
 
-export const useWallet = () => useContext(WalletContext);
+export const useCredit = () => useContext(CreditContext);
 
-export function WalletProvider({ children }: { children: React.ReactNode }) {
+export function CreditProvider({ children }: { children: React.ReactNode }) {
   const { user } = useAuth();
-  const [balance, setBalance] = useState(0);
-  const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [creditBalance, setCreditBalance] = useState(0);
+  const [movimientos, setMovimientos] = useState<LedgerMovimiento[]>([]);
   const [loading, setLoading] = useState(true);
-  const [walletId, setWalletId] = useState<string | null>(null);
   const refreshTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     if (user) {
-      refreshWallet();
+      refreshCredit();
     } else {
-      setWalletId(null);
-      setBalance(0);
-      setTransactions([]);
+      setCreditBalance(0);
+      setMovimientos([]);
       setLoading(false);
       if (refreshTimeoutRef.current) {
         clearTimeout(refreshTimeoutRef.current);
@@ -62,50 +59,43 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     }
   }, [user]);
 
-  const refreshWallet = useCallback(async () => {
+  const refreshCredit = useCallback(async () => {
     if (!user) return;
     try {
-      // 1. Get Wallet
-      let { data: wallet, error } = await supabase
-        .from('wallets')
-        .select('*')
-        .eq('user_id', user.id)
+      let { data: credito, error: creditoError } = await supabase
+        .from('creditos_usuario')
+        .select('id, usuario_id, saldo_credito')
+        .eq('usuario_id', user.id)
         .maybeSingle();
 
-      if (!wallet && !error) {
-        // Create wallet if not exists
-        const { data: newWallet, error: createError } = await supabase.rpc('ensure_wallet_exists', { p_user_id: user.id });
-        if (createError) throw createError;
-        // Fetch again or use default
-        wallet = { balance: 0, id: newWallet.wallet_id };
+      if (!credito && !creditoError) {
+        const insertRes = await supabase.from('creditos_usuario').insert({ usuario_id: user.id, saldo_credito: 0 }).select('id, usuario_id, saldo_credito').maybeSingle();
+        credito = insertRes.data as any;
       }
 
-      if (wallet) {
-        setWalletId((wallet as any).id ?? null);
-        const rawBalance = (wallet as any).balance;
-        const parsedBalance = typeof rawBalance === 'string' ? Number(rawBalance) : rawBalance;
-        setBalance(typeof parsedBalance === 'number' && Number.isFinite(parsedBalance) ? parsedBalance : 0);
-        
-        // 2. Get Transactions
-        const { data: txs } = await supabase
-          .from('wallet_transactions')
-          .select('*')
-          .eq('wallet_id', wallet.id)
-          .order('created_at', { ascending: false });
-          
-        setTransactions(
-          (txs || []).map((t: any) => {
-            const rawAmount = t?.amount;
-            const parsedAmount = typeof rawAmount === 'string' ? Number(rawAmount) : rawAmount;
-            return {
-              ...t,
-              amount: typeof parsedAmount === 'number' && Number.isFinite(parsedAmount) ? parsedAmount : 0,
-            };
-          })
-        );
-      }
+      const rawSaldo = (credito as any)?.saldo_credito;
+      const parsedSaldo = typeof rawSaldo === 'string' ? Number(rawSaldo) : rawSaldo;
+      setCreditBalance(typeof parsedSaldo === 'number' && Number.isFinite(parsedSaldo) ? parsedSaldo : 0);
+
+      const { data: rows } = await supabase
+        .from('ledger_movimientos')
+        .select('id, tipo, importe, referencia_id, descripcion, created_at')
+        .eq('usuario_id', user.id)
+        .order('created_at', { ascending: false })
+        .limit(100);
+
+      setMovimientos(
+        (rows || []).map((m: any) => {
+          const rawImporte = m?.importe;
+          const parsedImporte = typeof rawImporte === 'string' ? Number(rawImporte) : rawImporte;
+          return {
+            ...m,
+            importe: typeof parsedImporte === 'number' && Number.isFinite(parsedImporte) ? parsedImporte : 0,
+          };
+        })
+      );
     } catch (error) {
-      console.error('Error fetching wallet:', error);
+      console.error('Error fetching credit:', error);
     } finally {
       setLoading(false);
     }
@@ -115,25 +105,21 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     if (!user) return;
     if (refreshTimeoutRef.current) clearTimeout(refreshTimeoutRef.current);
     refreshTimeoutRef.current = setTimeout(() => {
-      refreshWallet();
+      refreshCredit();
     }, 250);
-  }, [refreshWallet, user]);
+  }, [refreshCredit, user]);
 
   useEffect(() => {
-    if (!user || !walletId) return;
+    if (!user) return;
 
     const channel = supabase
-      .channel(`wallet_${user.id}`)
+      .channel(`credito_${user.id}`)
       .on(
         'postgres_changes',
-        { event: '*', schema: 'public', table: 'wallets', filter: `user_id=eq.${user.id}` },
+        { event: '*', schema: 'public', table: 'creditos_usuario', filter: `usuario_id=eq.${user.id}` },
         () => scheduleRefresh()
       )
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'wallet_transactions', filter: `wallet_id=eq.${walletId}` },
-        () => scheduleRefresh()
-      )
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'ledger_movimientos', filter: `usuario_id=eq.${user.id}` }, () => scheduleRefresh())
       .subscribe();
 
     return () => {
@@ -143,7 +129,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
         refreshTimeoutRef.current = null;
       }
     };
-  }, [scheduleRefresh, user, walletId]);
+  }, [scheduleRefresh, user]);
 
   const createResaleListing = async (ticketId: string, price: number) => {
     if (!user) throw new Error('Usuario no autenticado');
@@ -185,8 +171,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
 
       if (error) throw error;
 
-      // Update local wallet state optimistically or silently in background
-      refreshWallet().catch(console.error);
+      refreshCredit().catch(console.error);
     } catch (error: any) {
       console.error('Error creating resale listing:', error);
       throw error;
@@ -217,55 +202,47 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
         if (ticketUpdateError) throw ticketUpdateError;
       }
 
-      await refreshWallet();
+      await refreshCredit();
     } catch (error) {
       console.error('Error canceling resale listing:', error);
       throw error;
     }
   };
 
-  const buyResaleTicket = async (listingId: string, price: number) => {
-    if (!user) throw new Error('User not logged in');
-    
-    // Check local balance check (optimization)
-    if (balance < price) {
-      throw new Error('Insufficient funds');
-    }
+  const buyResaleTicketWithCredit = async (listingId: string) => {
+    if (!user) throw new Error('Usuario no autenticado');
 
     try {
-      const { data, error } = await supabase.rpc('buy_resale_ticket', {
+      const { error } = await supabase.rpc('buy_resale_ticket_with_credito', {
+        p_listing_id: listingId,
         p_buyer_id: user.id,
-        p_listing_id: listingId
       });
 
       if (error) throw error;
-      
-      await refreshWallet();
+
+      await refreshCredit();
+      scheduleRefresh();
       try {
         await invokeEdgeFunction('send-push', { limit: 25 });
       } catch {}
     } catch (error) {
-      console.error('Error buying resale ticket:', error);
+      console.error('Error buying resale ticket with credit:', error);
       throw error;
     }
   };
 
-  const buyTicketWithWallet = async (params: any) => {
+  const buyTicketWithCredit = async (params: any) => {
     if (!user) throw new Error('User not logged in');
-    
-    if (balance < params.p_total_price) {
-      throw new Error('Saldo insuficiente en la cartera');
-    }
 
     try {
-      const { data, error } = await supabase.rpc('buy_ticket_with_wallet', {
+      const { data, error } = await supabase.rpc('buy_ticket_with_credito', {
         ...params,
         p_user_id: user.id
       });
 
       if (error) throw error;
       
-      await refreshWallet();
+      await refreshCredit();
       scheduleRefresh();
 
       try {
@@ -273,41 +250,39 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
       } catch {}
       return data;
     } catch (error) {
-      console.error('Error buying ticket with wallet:', error);
+      console.error('Error buying ticket with credit:', error);
       throw error;
     }
   };
 
-  const buyVipWithWallet = async (params: { p_vip_reservado_id: string; p_buyer_name: string; p_buyer_email: string }) => {
+  const buyVipWithCredit = async (params: { p_vip_reservado_id: string; p_buyer_name: string; p_buyer_email: string }) => {
     if (!user) throw new Error('User not logged in');
 
     try {
-      const { data, error } = await supabase.rpc('buy_vip_with_wallet', {
-        ...params,
+      const { data, error } = await supabase.rpc('buy_vip_with_credito', {
+        p_vip_reservado_id: params.p_vip_reservado_id,
         p_user_id: user.id,
+        p_buyer_name: params.p_buyer_name,
+        p_buyer_email: params.p_buyer_email,
       });
 
       if (error) throw error;
 
-      await refreshWallet();
+      await refreshCredit();
       scheduleRefresh();
       try {
         await invokeEdgeFunction('send-push', { limit: 25 });
       } catch {}
       return data;
     } catch (error) {
-      console.error('Error buying VIP with wallet:', error);
+      console.error('Error buying VIP with credit:', error);
       throw error;
     }
   };
 
-  const addFunds = async (amount: number) => {
-    throw new Error('La recarga de cartera no está disponible.');
-  };
-
   return (
-    <WalletContext.Provider value={{ balance, transactions, loading, refreshWallet, createResaleListing, cancelResaleListing, buyResaleTicket, buyTicketWithWallet, buyVipWithWallet, addFunds }}>
+    <CreditContext.Provider value={{ creditBalance, movimientos, loading, refreshCredit, createResaleListing, cancelResaleListing, buyResaleTicketWithCredit, buyTicketWithCredit, buyVipWithCredit }}>
       {children}
-    </WalletContext.Provider>
+    </CreditContext.Provider>
   );
 }
