@@ -245,17 +245,17 @@ Deno.serve(async (req) => {
       const originalTotalCents = Math.round(price * 100) * quantity;
       if (!Number.isFinite(originalTotalCents) || originalTotalCents <= 0) return jsonResponse({ ok: false, error: "Invalid price" });
 
-      const walletDebitRaw = body?.wallet_debit_eur;
-      let walletDebitCents = 0;
-      if (typeof walletDebitRaw === "number" && Number.isFinite(walletDebitRaw)) walletDebitCents = Math.round(walletDebitRaw * 100);
-      if (typeof walletDebitRaw === "string" && walletDebitRaw.trim()) {
-        const n = Number(walletDebitRaw);
-        if (Number.isFinite(n)) walletDebitCents = Math.round(n * 100);
+      const creditDebitRaw = body?.credit_debit_eur ?? body?.wallet_debit_eur;
+      let creditDebitCents = 0;
+      if (typeof creditDebitRaw === "number" && Number.isFinite(creditDebitRaw)) creditDebitCents = Math.round(creditDebitRaw * 100);
+      if (typeof creditDebitRaw === "string" && creditDebitRaw.trim()) {
+        const n = Number(creditDebitRaw);
+        if (Number.isFinite(n)) creditDebitCents = Math.round(n * 100);
       }
-      if (!Number.isFinite(walletDebitCents) || walletDebitCents < 0) walletDebitCents = 0;
-      if (walletDebitCents > originalTotalCents) walletDebitCents = originalTotalCents;
+      if (!Number.isFinite(creditDebitCents) || creditDebitCents < 0) creditDebitCents = 0;
+      if (creditDebitCents > originalTotalCents) creditDebitCents = originalTotalCents;
 
-      const amountCents = originalTotalCents - walletDebitCents;
+      const amountCents = originalTotalCents - creditDebitCents;
       if (!Number.isFinite(amountCents) || amountCents <= 0) return jsonResponse({ ok: false, error: "Invalid price" });
 
       const organizerId = eventRow.creator_id ? String(eventRow.creator_id) : "";
@@ -302,7 +302,7 @@ Deno.serve(async (req) => {
         ...(ticketTypeId ? { "metadata[ticket_type_id]": ticketTypeId } : {}),
         "metadata[quantity]": String(quantity),
         "metadata[original_total_cents]": String(originalTotalCents),
-        "metadata[wallet_debit_cents]": String(walletDebitCents),
+        "metadata[credit_debit_cents]": String(creditDebitCents),
       };
       if (hasConnect) {
         intentParams["transfer_data[destination]"] = rawStripeAccountId;
@@ -352,7 +352,7 @@ Deno.serve(async (req) => {
         buyer_name: buyerName,
         buyer_email: buyerEmail,
         original_total_cents: originalTotalCents,
-        wallet_debit_cents: walletDebitCents,
+        credit_debit_cents: creditDebitCents,
         event_title: String(eventRow.title || ""),
         platform_fee_cents: platformFeeCents,
         destination_amount_cents: destinationAmountCents,
@@ -448,7 +448,7 @@ Deno.serve(async (req) => {
         "metadata[ticket_id]": ticketId,
         "metadata[seller_id]": String(listing.seller_id || ""),
         "metadata[original_total_cents]": String(amountCents),
-        "metadata[wallet_debit_cents]": "0",
+        "metadata[credit_debit_cents]": "0",
       };
 
       const intent = await stripeCreatePaymentIntent(intentParams);
@@ -460,7 +460,7 @@ Deno.serve(async (req) => {
         ticket_id: ticketId,
         seller_id: String(listing.seller_id || ""),
         original_total_cents: amountCents,
-        wallet_debit_cents: 0,
+        credit_debit_cents: 0,
       };
 
       const txInsert = await restPost(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, "payment_transactions", {
@@ -522,17 +522,17 @@ Deno.serve(async (req) => {
       const originalTotalCents = Math.round(basePrice * 100);
       if (!Number.isFinite(originalTotalCents) || originalTotalCents <= 0) return jsonResponse({ ok: false, error: "Invalid price" });
 
-      const walletDebitRaw = body?.wallet_debit_eur;
-      let walletDebitCents = 0;
-      if (typeof walletDebitRaw === "number" && Number.isFinite(walletDebitRaw)) walletDebitCents = Math.round(walletDebitRaw * 100);
-      if (typeof walletDebitRaw === "string" && walletDebitRaw.trim()) {
-        const n = Number(walletDebitRaw);
-        if (Number.isFinite(n)) walletDebitCents = Math.round(n * 100);
+      const creditDebitRaw = body?.credit_debit_eur ?? body?.wallet_debit_eur;
+      let creditDebitCents = 0;
+      if (typeof creditDebitRaw === "number" && Number.isFinite(creditDebitRaw)) creditDebitCents = Math.round(creditDebitRaw * 100);
+      if (typeof creditDebitRaw === "string" && creditDebitRaw.trim()) {
+        const n = Number(creditDebitRaw);
+        if (Number.isFinite(n)) creditDebitCents = Math.round(n * 100);
       }
-      if (!Number.isFinite(walletDebitCents) || walletDebitCents < 0) walletDebitCents = 0;
-      if (walletDebitCents > originalTotalCents) walletDebitCents = originalTotalCents;
+      if (!Number.isFinite(creditDebitCents) || creditDebitCents < 0) creditDebitCents = 0;
+      if (creditDebitCents > originalTotalCents) creditDebitCents = originalTotalCents;
 
-      const amountCents = originalTotalCents - walletDebitCents;
+      const amountCents = originalTotalCents - creditDebitCents;
       if (!Number.isFinite(amountCents) || amountCents <= 0) return jsonResponse({ ok: false, error: "Invalid price" });
 
       const organizerId = eventRow.creator_id ? String(eventRow.creator_id) : "";
@@ -577,7 +577,7 @@ Deno.serve(async (req) => {
         "metadata[reference_id]": vipId,
         "metadata[vip_reservado_id]": vipId,
         "metadata[original_total_cents]": String(originalTotalCents),
-        "metadata[wallet_debit_cents]": String(walletDebitCents),
+        "metadata[credit_debit_cents]": String(creditDebitCents),
       };
       if (hasConnect) {
         intentParams["transfer_data[destination]"] = rawStripeAccountId;
@@ -625,7 +625,7 @@ Deno.serve(async (req) => {
         buyer_name: buyerName,
         buyer_email: buyerEmail,
         original_total_cents: originalTotalCents,
-        wallet_debit_cents: walletDebitCents,
+        credit_debit_cents: creditDebitCents,
         event_title: String(eventRow.title || ""),
         vip_name: String(vip.name || ""),
         platform_fee_cents: platformFeeCents,
