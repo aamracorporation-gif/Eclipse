@@ -16,6 +16,7 @@ import { createSignedUrlDetailed, uploadOrganizerVerificationFile } from '@/lib/
 import { useResponsive } from '@/lib/responsive';
 import * as ExpoLinking from 'expo-linking';
 import { createStripeConnectAccount, createStripeConnectOnboardingLink, refreshStripeConnectStatus } from '@/lib/payments/api';
+import { useTranslation } from 'react-i18next';
 
 type VerificationStatus = 'pending_verification' | 'verified' | 'rejected' | 'needs_correction' | null;
 
@@ -44,6 +45,7 @@ export default function OrganizerVerificationScreen() {
   const router = useRouter();
   const { user, signOut } = useAuth();
   const { horizontalPadding, maxContentWidth, scaleFont } = useResponsive();
+  const { t } = useTranslation();
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -71,10 +73,10 @@ export default function OrganizerVerificationScreen() {
   );
 
   const statusLabel = useMemo(() => {
-    if (verificationStatus === 'verified') return 'VERIFICADO';
-    if (verificationStatus === 'needs_correction') return 'CORRECCIÓN';
-    if (verificationStatus === 'rejected') return 'RECHAZADO';
-    return 'PENDIENTE';
+    if (verificationStatus === 'verified') return t('creator.verification.status.verified');
+    if (verificationStatus === 'needs_correction') return t('creator.verification.status.needs_correction');
+    if (verificationStatus === 'rejected') return t('creator.verification.status.rejected');
+    return t('creator.verification.status.pending');
   }, [verificationStatus]);
 
   const statusColor = useMemo(() => {
@@ -170,7 +172,7 @@ export default function OrganizerVerificationScreen() {
   const connectStripe = async () => {
     if (!user?.id) return;
     if (verificationStatus !== 'verified') {
-      Alert.alert('Verificación requerida', 'Primero debes tener verificados los documentos para poder conectar Stripe.');
+      Alert.alert(t('creator.verification.stripe.required_title'), t('creator.verification.stripe.required_body'));
       return;
     }
     setStripeLoading(true);
@@ -181,15 +183,15 @@ export default function OrganizerVerificationScreen() {
       const { url } = await createStripeConnectOnboardingLink({ return_url, refresh_url });
       setStripeStatus((prev) => ({ ...prev, stripe_account_id }));
       if (!url || typeof url !== 'string') {
-        throw new Error('Stripe no devolvió el enlace de onboarding.');
+        throw new Error(t('creator.verification.stripe.no_url'));
       }
       const can = await Linking.canOpenURL(url);
       if (!can) {
-        throw new Error('No se pudo abrir el enlace de Stripe en este dispositivo.');
+        throw new Error(t('creator.verification.stripe.cannot_open'));
       }
       await Linking.openURL(url);
     } catch (e: any) {
-      Alert.alert('Error', e?.message || 'No se pudo iniciar la conexión con Stripe.');
+      Alert.alert(t('common.error'), e?.message || t('creator.verification.stripe.start_failed'));
     } finally {
       setStripeLoading(false);
     }
@@ -209,7 +211,7 @@ export default function OrganizerVerificationScreen() {
       });
       await fetchData();
     } catch (e: any) {
-      Alert.alert('Error', e?.message || 'No se pudo actualizar el estado de Stripe.');
+      Alert.alert(t('common.error'), e?.message || t('creator.verification.stripe.refresh_failed'));
     } finally {
       setStripeLoading(false);
     }
@@ -225,7 +227,7 @@ export default function OrganizerVerificationScreen() {
 
   const pickBusinessDoc = async (kind: 'business_license' | 'tax_id') => {
     if (!canUpload) {
-      Alert.alert('Envío deshabilitado', 'Tu estado actual no permite volver a enviar documentos.');
+      Alert.alert(t('creator.verification.upload_disabled_title'), t('creator.verification.upload_disabled_body_docs'));
       return;
     }
     const res = await DocumentPicker.getDocumentAsync({
@@ -250,12 +252,12 @@ export default function OrganizerVerificationScreen() {
 
   const pickVenuePhoto = async () => {
     if (!canUpload) {
-      Alert.alert('Envío deshabilitado', 'Tu estado actual no permite volver a enviar documentos.');
+      Alert.alert(t('creator.verification.upload_disabled_title'), t('creator.verification.upload_disabled_body_docs'));
       return;
     }
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!permission.granted) {
-      Alert.alert('Permiso requerido', 'Necesitamos acceso a tu galería para subir una foto del local.');
+      Alert.alert(t('creator.verification.permission_required_title'), t('creator.verification.permission_required_body'));
       return;
     }
 
@@ -278,7 +280,7 @@ export default function OrganizerVerificationScreen() {
   const openDoc = async (path: string) => {
     const { url, error } = await createSignedUrlDetailed({ bucket: 'organizer_verification', path, expiresInSeconds: 60 * 10 });
     if (!url) {
-      Alert.alert('Error', error ? `No se pudo generar el enlace del documento.\n\n${error}` : 'No se pudo generar el enlace del documento.');
+      Alert.alert(t('common.error'), error ? t('creator.verification.link_failed_with_error', { error }) : t('creator.verification.link_failed'));
       return;
     }
     setPreviewUrl(url);
@@ -287,7 +289,7 @@ export default function OrganizerVerificationScreen() {
   const openExternal = async (path: string) => {
     const { url, error } = await createSignedUrlDetailed({ bucket: 'organizer_verification', path, expiresInSeconds: 60 * 10 });
     if (!url) {
-      Alert.alert('Error', error ? `No se pudo generar el enlace del documento.\n\n${error}` : 'No se pudo generar el enlace del documento.');
+      Alert.alert(t('common.error'), error ? t('creator.verification.link_failed_with_error', { error }) : t('creator.verification.link_failed'));
       return;
     }
     Linking.openURL(url);
@@ -296,12 +298,12 @@ export default function OrganizerVerificationScreen() {
   const save = async () => {
     if (!user?.id) return;
     if (!canUpload) {
-      Alert.alert('Envío deshabilitado', 'Tu estado actual no permite volver a enviar la solicitud.');
+      Alert.alert(t('creator.verification.upload_disabled_title'), t('creator.verification.upload_disabled_body_request'));
       return;
     }
 
     if (!pickedBusinessLicense && !pickedTaxId && !pickedVenuePhoto) {
-      Alert.alert('Sin cambios', 'Selecciona al menos un documento o foto para subir.');
+      Alert.alert(t('creator.verification.no_changes_title'), t('creator.verification.no_changes_body'));
       return;
     }
 
@@ -317,7 +319,7 @@ export default function OrganizerVerificationScreen() {
           fileName: pickedBusinessLicense.name,
           mimeType: pickedBusinessLicense.mimeType,
         });
-        if (!upload) throw new Error('El documento de licencia no es válido o supera el tamaño permitido.');
+        if (!upload) throw new Error(t('creator.verification.errors.invalid_business_license'));
         updates.business_license_path = upload.path;
       }
 
@@ -329,7 +331,7 @@ export default function OrganizerVerificationScreen() {
           fileName: pickedTaxId.name,
           mimeType: pickedTaxId.mimeType,
         });
-        if (!upload) throw new Error('El documento CIF/NIF no es válido o supera el tamaño permitido.');
+        if (!upload) throw new Error(t('creator.verification.errors.invalid_tax_id'));
         updates.tax_id_path = upload.path;
       }
 
@@ -341,7 +343,7 @@ export default function OrganizerVerificationScreen() {
           fileName: pickedVenuePhoto.name,
           mimeType: pickedVenuePhoto.mimeType,
         });
-        if (!upload) throw new Error('La foto del local no es válida o supera el tamaño permitido.');
+        if (!upload) throw new Error(t('creator.verification.errors.invalid_venue_photo'));
         updates.venue_photo_path = upload.path;
       }
 
@@ -356,9 +358,9 @@ export default function OrganizerVerificationScreen() {
       setPickedVenuePhoto(null);
       await fetchData();
 
-      Alert.alert('Enviado', 'Documentos subidos. Nuestro equipo revisará tu solicitud.');
+      Alert.alert(t('creator.verification.submitted_title'), t('creator.verification.submitted_body'));
     } catch (e: any) {
-      Alert.alert('Error', e?.message || 'No se pudieron subir los documentos.');
+      Alert.alert(t('common.error'), e?.message || t('creator.verification.submit_failed'));
     } finally {
       setSaving(false);
     }
@@ -367,7 +369,7 @@ export default function OrganizerVerificationScreen() {
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
-        <DiscoLoader size={150} label="Cargando verificación…" />
+        <DiscoLoader size={150} label={t('creator.verification.loading')} />
       </View>
     );
   }
@@ -380,8 +382,8 @@ export default function OrganizerVerificationScreen() {
         <View style={[styles.header, { paddingHorizontal: horizontalPadding }]}>
           <View style={styles.headerTopRow}>
             <View style={{ flex: 1 }}>
-              <Text style={[styles.headerTitle, { fontSize: scaleFont(22) }]}>Verificación</Text>
-              <Text style={styles.headerSubtitle}>Identidad de organizador</Text>
+              <Text style={[styles.headerTitle, { fontSize: scaleFont(22) }]}>{t('creator.verification.title')}</Text>
+              <Text style={styles.headerSubtitle}>{t('creator.verification.subtitle')}</Text>
             </View>
 
             <TouchableOpacity onPress={handleSignOut} style={styles.logoutButton}>
@@ -396,19 +398,23 @@ export default function OrganizerVerificationScreen() {
               <Text style={[styles.statusText, { color: statusColor }]}>{statusLabel}</Text>
             </View>
             {verificationStatus === 'pending_verification' && (
-              <Text style={styles.pendingText}>Sube tus documentos. Revisamos tu solicitud lo antes posible.</Text>
+              <Text style={styles.pendingText}>{t('creator.verification.status_messages.pending')}</Text>
             )}
             {verificationStatus === 'needs_correction' && (
               <Text style={styles.correctionText}>
-                {rejectionReason ? `Corrección: ${rejectionReason}` : 'Tu solicitud requiere correcciones. Sube los documentos corregidos y envía de nuevo.'}
+                {rejectionReason
+                  ? t('creator.verification.status_messages.correction_with_reason', { reason: rejectionReason })
+                  : t('creator.verification.status_messages.correction')}
               </Text>
             )}
             {verificationStatus === 'rejected' && (
               <Text style={styles.rejectedText}>
-                {rejectionReason ? `Motivo: ${rejectionReason}` : 'Tu verificación fue rechazada.'} No puedes volver a enviar la solicitud.
+                {rejectionReason
+                  ? t('creator.verification.status_messages.rejected_with_reason', { reason: rejectionReason })
+                  : t('creator.verification.status_messages.rejected')}
               </Text>
             )}
-            {verificationStatus === 'verified' && <Text style={styles.verifiedText}>Cuenta lista. Configura Stripe para empezar a cobrar.</Text>}
+            {verificationStatus === 'verified' && <Text style={styles.verifiedText}>{t('creator.verification.status_messages.verified')}</Text>}
           </View>
         </View>
 
@@ -418,15 +424,15 @@ export default function OrganizerVerificationScreen() {
         >
           <View style={{ width: '100%', maxWidth: maxContentWidth }}>
             <GlassView intensity={10} style={styles.card}>
-              <Text style={[styles.sectionTitle, { fontSize: scaleFont(16) }]}>Documentos</Text>
+              <Text style={[styles.sectionTitle, { fontSize: scaleFont(16) }]}>{t('creator.verification.documents.title')}</Text>
 
               <View style={styles.itemRow}>
                 <View style={styles.itemLeft}>
                   <FileText size={18} color={Colors.dark.text} />
                   <View>
-                    <Text style={styles.itemTitle}>Licencia de actividad</Text>
+                    <Text style={styles.itemTitle}>{t('creator.verification.documents.business_license')}</Text>
                     <Text style={styles.itemSubtitle}>
-                      {pickedBusinessLicense?.name || (docs?.business_license_path ? 'Subido' : 'PDF o imagen')}
+                      {pickedBusinessLicense?.name || (docs?.business_license_path ? t('creator.verification.documents.uploaded') : t('creator.verification.documents.pdf_or_image'))}
                     </Text>
                   </View>
                 </View>
@@ -440,7 +446,7 @@ export default function OrganizerVerificationScreen() {
                   </TouchableOpacity>
                   {docs?.business_license_path && (
                     <TouchableOpacity onPress={() => openExternal(docs.business_license_path!)} style={styles.smallButtonOutline}>
-                      <Text style={styles.smallButtonText}>Ver</Text>
+                      <Text style={styles.smallButtonText}>{t('creator.verification.documents.view')}</Text>
                     </TouchableOpacity>
                   )}
                 </View>
@@ -452,7 +458,7 @@ export default function OrganizerVerificationScreen() {
                   <View>
                     <Text style={styles.itemTitle}>CIF / NIF</Text>
                     <Text style={styles.itemSubtitle}>
-                      {pickedTaxId?.name || (docs?.tax_id_path ? 'Subido' : 'PDF o imagen')}
+                      {pickedTaxId?.name || (docs?.tax_id_path ? t('creator.verification.documents.uploaded') : t('creator.verification.documents.pdf_or_image'))}
                     </Text>
                   </View>
                 </View>
@@ -466,7 +472,7 @@ export default function OrganizerVerificationScreen() {
                   </TouchableOpacity>
                   {docs?.tax_id_path && (
                     <TouchableOpacity onPress={() => openExternal(docs.tax_id_path!)} style={styles.smallButtonOutline}>
-                      <Text style={styles.smallButtonText}>Ver</Text>
+                      <Text style={styles.smallButtonText}>{t('creator.verification.documents.view')}</Text>
                     </TouchableOpacity>
                   )}
                 </View>
@@ -476,9 +482,9 @@ export default function OrganizerVerificationScreen() {
                 <View style={styles.itemLeft}>
                   <ImageIcon size={18} color={Colors.dark.text} />
                   <View>
-                    <Text style={styles.itemTitle}>Foto del local</Text>
+                    <Text style={styles.itemTitle}>{t('creator.verification.documents.venue_photo')}</Text>
                     <Text style={styles.itemSubtitle}>
-                      {pickedVenuePhoto?.name || (docs?.venue_photo_path ? 'Subido' : 'Imagen')}
+                      {pickedVenuePhoto?.name || (docs?.venue_photo_path ? t('creator.verification.documents.uploaded') : t('creator.verification.documents.image'))}
                     </Text>
                   </View>
                 </View>
@@ -492,7 +498,7 @@ export default function OrganizerVerificationScreen() {
                   </TouchableOpacity>
                   {docs?.venue_photo_path && (
                     <TouchableOpacity onPress={() => openDoc(docs.venue_photo_path!)} style={styles.smallButtonOutline}>
-                      <Text style={styles.smallButtonText}>Ver</Text>
+                      <Text style={styles.smallButtonText}>{t('creator.verification.documents.view')}</Text>
                     </TouchableOpacity>
                   )}
                 </View>
@@ -500,7 +506,13 @@ export default function OrganizerVerificationScreen() {
 
               <View style={{ marginTop: 16 }}>
                 <ThemedButton
-                  title={saving ? 'Subiendo...' : canUpload ? 'Guardar y enviar' : 'Envío deshabilitado'}
+                  title={
+                    saving
+                      ? t('creator.verification.actions.uploading')
+                      : canUpload
+                        ? t('creator.verification.actions.save_and_submit')
+                        : t('creator.verification.actions.upload_disabled')
+                  }
                   onPress={save}
                   disabled={saving || !canUpload}
                   icon={<Upload size={18} color="white" />}
@@ -510,18 +522,18 @@ export default function OrganizerVerificationScreen() {
 
             {verificationStatus === 'verified' && (
               <GlassView intensity={10} style={[styles.card, { marginTop: 14 }]}>
-                <Text style={[styles.sectionTitle, { fontSize: scaleFont(16) }]}>Pagos (Stripe)</Text>
+                <Text style={[styles.sectionTitle, { fontSize: scaleFont(16) }]}>{t('creator.verification.stripe.title')}</Text>
 
                 <View style={[styles.itemRow, { borderTopWidth: 0 }]}>
                   <View style={styles.itemLeft}>
                     <View>
-                      <Text style={styles.itemTitle}>Estado</Text>
+                      <Text style={styles.itemTitle}>{t('creator.verification.stripe.status_label')}</Text>
                       <Text style={styles.itemSubtitle}>
                         {stripeStatus.stripe_onboarding_completed
-                          ? 'Listo para recibir pagos'
+                          ? t('creator.verification.stripe.status_ready')
                           : stripeStatus.stripe_account_id
-                            ? 'Conexión pendiente'
-                            : 'No conectado'}
+                            ? t('creator.verification.stripe.status_pending')
+                            : t('creator.verification.stripe.status_not_connected')}
                       </Text>
                     </View>
                   </View>
@@ -531,7 +543,7 @@ export default function OrganizerVerificationScreen() {
                       style={styles.smallButtonOutline}
                       disabled={stripeLoading || !stripeStatus.stripe_account_id}
                     >
-                      <Text style={styles.smallButtonText}>Actualizar</Text>
+                      <Text style={styles.smallButtonText}>{t('creator.verification.stripe.refresh')}</Text>
                     </TouchableOpacity>
                   </View>
                 </View>
@@ -540,12 +552,12 @@ export default function OrganizerVerificationScreen() {
                   <ThemedButton
                     title={
                       stripeLoading
-                        ? 'Cargando...'
+                        ? t('creator.verification.stripe.loading')
                         : stripeStatus.stripe_onboarding_completed
-                          ? 'Stripe conectado'
+                          ? t('creator.verification.stripe.connected')
                           : stripeStatus.stripe_account_id
-                            ? 'Completar onboarding'
-                            : 'Conectar Stripe'
+                            ? t('creator.verification.stripe.complete_onboarding')
+                            : t('creator.verification.stripe.connect')
                     }
                     onPress={connectStripe}
                     disabled={stripeLoading || stripeStatus.stripe_onboarding_completed}
