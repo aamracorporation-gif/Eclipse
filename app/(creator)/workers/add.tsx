@@ -58,7 +58,7 @@ export default function AddWorker() {
 
       if (error) {
         if (error.code === 'PGRST205' || error.message?.includes('does not exist')) {
-          Alert.alert('Error de Sistema', 'Falta la tabla de trabajadores. Ejecuta el SQL de migración.');
+          Alert.alert(t('common.error'), t('creator.workers.system_not_initialized_body'));
           return;
         }
         throw error;
@@ -66,25 +66,25 @@ export default function AddWorker() {
 
       if (data.status === 'active') {
         Alert.alert(
-          'Trabajador Vinculado',
-          `El usuario ${formData.name} ya tiene cuenta y ha sido vinculado automáticamente.`,
-          [{ text: 'OK', onPress: safeBack }]
+          t('creator.workers.linked_title'),
+          t('creator.workers.linked_body', { name: formData.name }),
+          [{ text: t('common.ok'), onPress: safeBack }]
         );
         return;
       }
 
       Alert.alert(
-        'Trabajador Añadido',
-        `Se ha creado el perfil para ${formData.name}.`,
+        t('creator.workers.added_title'),
+        t('creator.workers.added_body', { name: formData.name }),
         [
           {
-            text: 'Compartir Invitación',
+            text: t('creator.workers.share_invite'),
             onPress: async () => {
               try {
-                const message = `Hola ${formData.name}, te invito a unirte a mi equipo en la app. Descárgala y regístrate con este correo: ${formData.email}`;
+                const message = t('creator.workers.invite_message', { name: formData.name, email: formData.email });
                 await Share.share({
                   message,
-                  title: 'Invitación al Staff'
+                  title: t('creator.workers.invite_share_title')
                 });
                 safeBack();
               } catch (error) {
@@ -92,12 +92,12 @@ export default function AddWorker() {
               }
             }
           },
-          { text: 'OK', onPress: safeBack }
+          { text: t('common.ok'), onPress: safeBack }
         ]
       );
     } catch (error: any) {
       console.error('Error adding worker:', error);
-      Alert.alert('Error', error.message || 'No se pudo añadir al trabajador');
+      Alert.alert(t('common.error'), error.message || t('creator.workers.add_failed'));
     } finally {
       setLoading(false);
     }
@@ -114,25 +114,25 @@ export default function AddWorker() {
           <TouchableOpacity onPress={safeBack} style={styles.backButton}>
             <ChevronLeft size={24} color="white" />
           </TouchableOpacity>
-          <Text style={styles.title}>Añadir Trabajador</Text>
+          <Text style={styles.title}>{t('creator.workers.add_button')}</Text>
           <View style={{ width: 24 }} />
         </View>
 
         <ScrollView contentContainerStyle={styles.content}>
           <GlassView intensity={10} style={styles.card}>
-            <Text style={styles.sectionTitle}>Información Personal</Text>
+            <Text style={styles.sectionTitle}>{t('creator.workers.personal_info_title')}</Text>
             
             <ThemedInput
-              label="Nombre Completo"
-              placeholder="Ej: Juan Pérez"
+              label={t('creator.workers.full_name_label')}
+              placeholder={t('creator.workers.full_name_placeholder')}
               value={formData.name}
               onChangeText={(text) => setFormData({ ...formData, name: text })}
               icon={<User size={20} color={Colors.dark.textSecondary} />}
             />
 
             <ThemedInput
-              label="Correo Electrónico"
-              placeholder="juan@ejemplo.com"
+              label={t('auth.email')}
+              placeholder={t('creator.workers.email_placeholder')}
               value={formData.email}
               onChangeText={(text) => setFormData({ ...formData, email: text })}
               keyboardType="email-address"
@@ -189,7 +189,7 @@ export default function AddWorker() {
 
         <View style={styles.footer}>
           <ThemedButton
-            title={loading ? "Enviando..." : "Enviar Invitación"}
+            title={loading ? t('creator.workers.sending') : t('creator.workers.send_invite')}
             onPress={handleSubmit}
             disabled={loading}
           />
