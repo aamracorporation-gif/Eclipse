@@ -1,5 +1,6 @@
 import { Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { GlassView } from '@/components/ui/GlassView';
+import { useTranslation } from 'react-i18next';
 
 export type TimeRange = 'day' | 'week' | 'month';
 
@@ -9,10 +10,11 @@ interface TimeFilterProps {
 }
 
 export function TimeFilter({ value, onChange }: TimeFilterProps) {
+  const { t } = useTranslation();
   const options: { label: string; value: TimeRange }[] = [
-    { label: 'Mes', value: 'month' },
-    { label: 'Semana', value: 'week' },
-    { label: 'Hoy', value: 'day' },
+    { label: t('creator.stats.filters.month'), value: 'month' },
+    { label: t('creator.stats.filters.week'), value: 'week' },
+    { label: t('creator.stats.filters.today'), value: 'day' },
   ];
 
   return (
