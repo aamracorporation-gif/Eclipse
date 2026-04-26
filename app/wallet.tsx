@@ -1,5 +1,5 @@
 import { View, Text, StyleSheet, FlatList, RefreshControl } from 'react-native';
-import { useWallet } from '@/lib/WalletContext';
+import { useCredit } from '@/lib/WalletContext';
 import { Colors } from '@/constants/Colors';
 import { LinearGradient } from 'expo-linear-gradient';
 import { GlassView } from '@/components/ui/GlassView';
@@ -10,15 +10,19 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useResponsive } from '@/lib/responsive';
 
 export default function WalletScreen() {
-  const { balance, transactions, refreshWallet, loading } = useWallet();
+  const { creditBalance, movimientos, refreshCredit, loading } = useCredit();
   const insets = useSafeAreaInsets();
   const { horizontalPadding, maxContentWidth, scaleFont } = useResponsive();
+
+  const isCreditMovimiento = (tipo: string) => {
+    return tipo === 'generacion_credito_reventa';
+  };
 
   const renderTransaction = ({ item }: { item: any }) => (
     <View style={[styles.rowWrap, { maxWidth: maxContentWidth }]}>
       <GlassView intensity={12} style={styles.transactionCard}>
         <View style={styles.iconBox}>
-          {item.type === 'credit' ? (
+          {isCreditMovimiento(String(item.tipo || '')) ? (
             <ArrowDownLeft size={20} color={Colors.dark.success} />
           ) : (
             <ArrowUpRight size={20} color={Colors.dark.error} />
@@ -26,7 +30,7 @@ export default function WalletScreen() {
         </View>
         <View style={styles.transactionInfo}>
           <Text style={styles.transactionTitle} numberOfLines={1}>
-            {item.description}
+            {item.descripcion || item.tipo}
           </Text>
           <Text style={styles.transactionDate} numberOfLines={1}>
             {new Date(item.created_at).toLocaleDateString()}
@@ -35,12 +39,12 @@ export default function WalletScreen() {
         <Text
           style={[
             styles.transactionAmount,
-            { color: item.type === 'credit' ? Colors.dark.success : Colors.dark.text },
+            { color: isCreditMovimiento(String(item.tipo || '')) ? Colors.dark.success : Colors.dark.text },
           ]}
           numberOfLines={1}
         >
-          {item.type === 'credit' ? '+' : '-'}
-          {Number(item.amount).toFixed(2)}€
+          {isCreditMovimiento(String(item.tipo || '')) ? '+' : '-'}
+          {Math.abs(Number(item.importe)).toFixed(2)}€
         </Text>
       </GlassView>
     </View>
@@ -48,14 +52,14 @@ export default function WalletScreen() {
 
   return (
     <View style={styles.container}>
-      <Stack.Screen options={{ title: 'Mi Cartera', headerTransparent: true, headerTintColor: 'white' }} />
+      <Stack.Screen options={{ title: 'Crédito Eclipse', headerTransparent: true, headerTintColor: 'white' }} />
       <LinearGradient
         colors={[Colors.dark.background, '#1e1b4b']}
         style={StyleSheet.absoluteFill}
       />
 
       <FlatList
-        data={transactions}
+        data={movimientos}
         renderItem={renderTransaction}
         keyExtractor={(item) => item.id}
         contentContainerStyle={[
@@ -65,7 +69,7 @@ export default function WalletScreen() {
         refreshControl={
           <RefreshControl
             refreshing={false}
-            onRefresh={refreshWallet}
+            onRefresh={refreshCredit}
             tintColor="transparent"
             colors={['transparent']}
             progressBackgroundColor="transparent"
@@ -77,14 +81,14 @@ export default function WalletScreen() {
         ListHeaderComponent={
           <View style={[styles.headerWrap, { maxWidth: maxContentWidth }]}>
             <GlassView intensity={16} style={styles.balanceCard}>
-              <Text style={[styles.balanceLabel, { fontSize: scaleFont(14) }]}>Saldo disponible</Text>
+              <Text style={[styles.balanceLabel, { fontSize: scaleFont(14) }]}>Crédito Eclipse (solo usable en la app)</Text>
               <Text
                 style={[styles.balanceValue, { fontSize: scaleFont(44) }]}
                 numberOfLines={1}
                 adjustsFontSizeToFit
                 minimumFontScale={0.7}
               >
-                {balance.toFixed(2)}€
+                {creditBalance.toFixed(2)}€
               </Text>
               <Text style={[styles.balanceHint, { fontSize: scaleFont(13) }]}>
                 El crédito solo se consigue mediante la reventa de entradas y solo se puede usar para comprar en la app. No se puede recargar ni retirar.
