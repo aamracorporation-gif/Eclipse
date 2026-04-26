@@ -3,6 +3,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Colors } from '@/constants/Colors';
 import React from 'react';
 import { DiscoLoader } from '@/components/ui/DiscoLoader';
+import { shadow, theme } from '@/theme/styles';
 
 interface ThemedButtonProps {
   title: string;
@@ -35,6 +36,7 @@ export function ThemedButton({
         disabled={disabled || loading}
         style={[styles.outlineButton, disabled && styles.disabled, style]}
         activeOpacity={0.7}
+        hitSlop={theme.layout.minTapSize >= 44 ? 6 : 0}
       >
         {loading ? (
           <DiscoLoader size={18} />
@@ -51,13 +53,11 @@ export function ThemedButton({
 
   return (
     <TouchableOpacity
-      onPress={(e) => {
-        console.log('ThemedButton pressed:', title);
-        if (onPress) onPress();
-      }}
+      onPress={onPress}
       disabled={disabled || loading}
       activeOpacity={0.8}
       style={[styles.container, disabled && styles.disabled, style]}
+      hitSlop={theme.layout.minTapSize >= 44 ? 6 : 0}
     >
       <LinearGradient
         colors={
@@ -88,12 +88,12 @@ export function ThemedButton({
 
 const styles = StyleSheet.create({
   container: {
-    borderRadius: 16,
+    borderRadius: theme.components.button.borderRadius,
     overflow: 'hidden',
     width: '100%',
-    height: 50,
-    // Removed zIndex and elevation to prevent touch issues
-    backgroundColor: '#4C1D95', 
+    minHeight: theme.components.button.height,
+    backgroundColor: '#4C1D95',
+    ...(shadow('sm') as any),
   },
   gradient: {
     flex: 1,
@@ -101,27 +101,29 @@ const styles = StyleSheet.create({
     height: '100%',
     justifyContent: 'center',
     alignItems: 'center',
+    paddingHorizontal: theme.space[4],
   },
   // Removed contentContainer as it is no longer needed
   text: {
     color: 'white',
-    fontSize: 16,
-    fontWeight: 'bold',
+    fontSize: theme.typography.size.md,
+    fontWeight: theme.typography.weight.bold,
     letterSpacing: 0.5,
   },
   outlineButton: {
     width: '100%',
-    height: 50,
+    minHeight: theme.components.button.height,
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 1,
     borderColor: Colors.dark.border,
-    borderRadius: 16,
+    borderRadius: theme.components.button.borderRadius,
+    backgroundColor: 'rgba(255,255,255,0.04)',
   },
   outlineText: {
     color: Colors.dark.text,
-    fontSize: 16,
-    fontWeight: '600',
+    fontSize: theme.typography.size.md,
+    fontWeight: theme.typography.weight.semibold,
   },
   disabled: {
     opacity: 0.6,
