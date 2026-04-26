@@ -4,9 +4,11 @@ import { Colors } from '@/constants/Colors';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { ChevronLeft, ChevronRight, FileText } from 'lucide-react-native';
+import { useTranslation } from 'react-i18next';
 
 export default function LegalIndexScreen() {
   const insets = useSafeAreaInsets();
+  const { t } = useTranslation();
 
   return (
     <View style={styles.container}>
@@ -15,7 +17,7 @@ export default function LegalIndexScreen() {
         <TouchableOpacity onPress={() => router.back()} activeOpacity={0.8} style={styles.backBtn}>
           <ChevronLeft size={22} color="#fff" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Información legal</Text>
+        <Text style={styles.headerTitle}>{t('legal.index_title')}</Text>
         <View style={{ width: 42 }} />
       </View>
 
@@ -24,7 +26,7 @@ export default function LegalIndexScreen() {
           <View style={styles.iconWrap}>
             <FileText size={18} color="#fff" />
           </View>
-          <Text style={styles.rowText}>Aviso Legal</Text>
+          <Text style={styles.rowText}>{t('legal.items.legal_notice')}</Text>
           <ChevronRight size={18} color="rgba(255,255,255,0.6)" />
         </TouchableOpacity>
         <View style={styles.divider} />
@@ -32,7 +34,7 @@ export default function LegalIndexScreen() {
           <View style={styles.iconWrap}>
             <FileText size={18} color="#fff" />
           </View>
-          <Text style={styles.rowText}>Política de Privacidad</Text>
+          <Text style={styles.rowText}>{t('legal.items.privacy_policy')}</Text>
           <ChevronRight size={18} color="rgba(255,255,255,0.6)" />
         </TouchableOpacity>
         <View style={styles.divider} />
@@ -40,7 +42,7 @@ export default function LegalIndexScreen() {
           <View style={styles.iconWrap}>
             <FileText size={18} color="#fff" />
           </View>
-          <Text style={styles.rowText}>Términos y Condiciones</Text>
+          <Text style={styles.rowText}>{t('legal.items.terms')}</Text>
           <ChevronRight size={18} color="rgba(255,255,255,0.6)" />
         </TouchableOpacity>
       </View>
@@ -95,4 +97,3 @@ const styles = StyleSheet.create({
   rowText: { flex: 1, color: '#fff', fontSize: 15, fontWeight: '600' },
   divider: { height: 1, backgroundColor: 'rgba(255,255,255,0.08)' },
 });
-
