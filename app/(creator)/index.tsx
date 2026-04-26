@@ -22,10 +22,13 @@ import { scheduleLocalNotification, registerForPushNotifications } from '@/lib/n
 
 import { getStripeAccountStats, StripeAccountStats, createStripeConnectOnboardingLink, createStripeConnectAccount } from '@/lib/payments/api';
 import { invokeEdgeFunction } from '@/lib/edgeFunctions';
+import { useTranslation } from 'react-i18next';
 
 export default function CreatorDashboard() {
   const { signOut, user } = useAuth();
   const { events, refreshEvents } = useEvents();
+  const { t, i18n } = useTranslation();
+  const localeTag = i18n.language === 'en' ? 'en-US' : i18n.language === 'fr' ? 'fr-FR' : 'es-ES';
   const {
     horizontalPadding,
     maxContentWidth,
@@ -209,7 +212,7 @@ export default function CreatorDashboard() {
       if (!stripeAccountId) {
         const created = await createStripeConnectAccount();
         if (!created?.stripe_account_id) {
-          throw new Error('No se pudo crear la cuenta de Stripe para este organizador.');
+          throw new Error(t('creator.stripe.create_account_failed'));
         }
         setStripeAccountId(created.stripe_account_id);
       }
@@ -226,17 +229,17 @@ export default function CreatorDashboard() {
       console.log('[DEBUG] Stripe response:', res);
       
       if (!res?.url) {
-        throw new Error('No se recibió una URL válida de Stripe');
+        throw new Error(t('creator.stripe.invalid_url'));
       }
 
       console.log('[DEBUG] Opening browser with URL:', res.url);
       pendingStripeReturnRef.current = true;
       const can = await Linking.canOpenURL(res.url);
-      if (!can) throw new Error('No se pudo abrir el enlace de Stripe en este dispositivo.');
+      if (!can) throw new Error(t('creator.stripe.cannot_open_link'));
       await Linking.openURL(res.url);
     } catch (e: any) {
       console.error('[DEBUG] Onboarding error:', e);
-      Alert.alert('Error', e.message || 'No se pudo generar el enlace de Stripe');
+      Alert.alert(t('common.error'), e.message || t('creator.stripe.link_failed'));
     } finally {
       setLoadingOnboarding(false);
     }
@@ -250,9 +253,9 @@ export default function CreatorDashboard() {
       const { error } = await supabase.rpc('bootstrap_set_me_admin', { p_admin_email: adminEmail });
       if (error) throw error;
       await fetchMyProfile();
-      Alert.alert('Listo', 'Permisos de administrador activados.');
+      Alert.alert(t('common.ok'), t('creator.admin.admin_enabled'));
     } catch {
-      Alert.alert('Error', 'No se pudo activar el rol de administrador.');
+      Alert.alert(t('common.error'), t('creator.admin.admin_enable_failed'));
     } finally {
       setBootstrappingAdmin(false);
     }
@@ -389,22 +392,22 @@ export default function CreatorDashboard() {
   const handleDeleteAccount = () => {
     if (deletingAccount) return;
     Alert.alert(
-      'Eliminar cuenta',
-      'Esto eliminará tu cuenta y tus datos. Esta acción no se puede deshacer.',
+      t('profile.delete_account_title'),
+      t('profile.delete_account_body'),
       [
-        { text: 'Cancelar', style: 'cancel' },
+        { text: t('common.cancel'), style: 'cancel' },
         {
-          text: 'Eliminar',
+          text: t('profile.delete_account_confirm'),
           style: 'destructive',
           onPress: async () => {
             try {
               setDeletingAccount(true);
               const { error } = await invokeEdgeFunction('delete-account', {});
-              if (error) throw new Error(String(error.message || 'No se pudo eliminar la cuenta.'));
+              if (error) throw new Error(String(error.message || t('profile.delete_account_failed')));
               await signOut();
               router.replace('/(auth)/login');
             } catch (e: any) {
-              Alert.alert('Error', String(e?.message || 'No se pudo eliminar la cuenta.'));
+              Alert.alert(t('common.error'), String(e?.message || t('profile.delete_account_failed')));
             } finally {
               setDeletingAccount(false);
             }
@@ -417,16 +420,16 @@ export default function CreatorDashboard() {
   const runSystemCleanup = async () => {
     if (cleaningSystem) return;
     if (isAdminEmail && profileRole !== 'admin') {
-      Alert.alert('Permisos insuficientes', 'Activa el rol de admin para poder ejecutar limpieza.');
+      Alert.alert(t('creator.admin.insufficient_permissions_title'), t('creator.admin.insufficient_permissions_body'));
       return;
     }
     Alert.alert(
-      'Limpieza del sistema',
-      'Esto eliminará eventos antiguos y datos asociados. ¿Quieres continuar?',
+      t('creator.admin.cleanup_title'),
+      t('creator.admin.cleanup_body'),
       [
-        { text: 'Cancelar', style: 'cancel' },
+        { text: t('common.cancel'), style: 'cancel' },
         {
-          text: 'Ejecutar',
+          text: t('creator.admin.cleanup_confirm'),
           style: 'destructive',
           onPress: async () => {
             try {
@@ -434,9 +437,9 @@ export default function CreatorDashboard() {
               const { error } = await supabase.rpc('cleanup_old_events');
               if (error) throw error;
               await Promise.all([fetchAdminOverview(), refreshEvents()]);
-              Alert.alert('Listo', 'Limpieza completada.');
+              Alert.alert(t('common.ok'), t('creator.admin.cleanup_done'));
             } catch {
-              Alert.alert('Error', 'No se pudo ejecutar la limpieza.');
+              Alert.alert(t('common.error'), t('creator.admin.cleanup_failed'));
             } finally {
               setCleaningSystem(false);
             }
@@ -532,8 +535,8 @@ export default function CreatorDashboard() {
                const totalRevenue = salesData.reduce((acc, curr) => acc + curr.amount, 0) + revenue;
                if (totalRevenue >= 1000 && totalRevenue - revenue < 1000) {
                  await scheduleLocalNotification(
-                   "¡Hito Alcanzado! 🚀",
-                   "Has superado los 1.000€ en ventas. ¡Sigue así!",
+                  t('creator.notifications.milestone_title'),
+                  t('creator.notifications.milestone_body', { amount: 1000 }),
                    { type: 'milestone', amount: 1000 },
                    2
                  );
@@ -565,7 +568,7 @@ export default function CreatorDashboard() {
         async (payload) => {
           const n = payload.new as any;
           if (!n || n.role !== 'organizer' || (n.type !== 'organizer_realtime_sale' && n.type !== 'NEW_SALE')) return;
-          const title = String(n.title || '💰 Nueva venta');
+          const title = String(n.title || t('creator.notifications.new_sale_title'));
           const body = String(n.body || n.message || '');
           await scheduleLocalNotification(title, body, n.data || {}, 1);
         }
@@ -750,9 +753,15 @@ export default function CreatorDashboard() {
           <View style={styles.header}>
             <View>
                 <Text style={styles.dateText}>
-                    {new Date().toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' })}
+                    {new Date().toLocaleDateString(localeTag, { weekday: 'long', day: 'numeric', month: 'long' })}
                 </Text>
-                <Text style={styles.greeting}>Hola, {user?.user_metadata?.full_name?.split(' ')[0] || (isAdmin ? 'Administrador' : 'Organizador')}</Text>
+                <Text style={styles.greeting}>
+                  {t('creator.dashboard.hello', {
+                    name:
+                      user?.user_metadata?.full_name?.split(' ')[0] ||
+                      (isAdmin ? t('creator.dashboard.role_admin') : t('creator.dashboard.role_organizer')),
+                  })}
+                </Text>
             </View>
             <TouchableOpacity onPress={handleLogout} style={styles.profileButton}>
                 <LinearGradient
@@ -774,15 +783,15 @@ export default function CreatorDashboard() {
                 </View>
                 
                 <Text style={{ color: 'white', fontSize: 26, fontWeight: '900', textAlign: 'center', marginBottom: 12, letterSpacing: -0.5 }}>
-                  Configuración Requerida
+                  {t('creator.stripe.blocker_title')}
                 </Text>
                 
                 <Text style={{ color: Colors.dark.textSecondary, fontSize: 16, textAlign: 'center', lineHeight: 24, marginBottom: 32 }}>
-                  Para garantizar la seguridad en Eclipse y poder gestionar tus eventos, debes activar tu cuenta de cobros en Stripe.
+                  {t('creator.stripe.blocker_body')}
                 </Text>
 
                 <ThemedButton 
-                  title={loadingOnboarding ? "Generando enlace seguro..." : "Configurar Stripe ahora"} 
+                  title={loadingOnboarding ? t('creator.stripe.generating_link') : t('creator.stripe.configure_now')}
                   onPress={handleStripeOnboarding} 
                   disabled={loadingOnboarding}
                   style={{ width: '100%', height: 64, borderRadius: 20 }}
@@ -794,7 +803,7 @@ export default function CreatorDashboard() {
                   onPress={handleLogout}
                   style={{ marginTop: 24, padding: 12 }}
                 >
-                  <Text style={{ color: 'rgba(255,255,255,0.4)', fontWeight: '600' }}>Cerrar sesión</Text>
+                  <Text style={{ color: 'rgba(255,255,255,0.4)', fontWeight: '600' }}>{t('profile.logout')}</Text>
                 </TouchableOpacity>
               </GlassView>
               
@@ -805,7 +814,7 @@ export default function CreatorDashboard() {
           ) : isAdmin ? (
             <>
               <View style={[styles.adminHeader, { marginTop: 6 }]}>
-                <Text style={[styles.adminTitle, { fontSize: scaleFont(28) }]}>Administración</Text>
+                <Text style={[styles.adminTitle, { fontSize: scaleFont(28) }]}>{t('creator.admin.title')}</Text>
                 <View style={styles.adminHeaderRight}>
                   <TouchableOpacity
                     activeOpacity={0.8}
@@ -817,7 +826,7 @@ export default function CreatorDashboard() {
                   >
                     <GlassView intensity={22} style={styles.adminRefreshInner}>
                       <Text style={styles.adminRefreshText}>
-                        {(loadingAdminSummary || loadingAdminOverview) ? 'Actualizando…' : 'Actualizar'}
+                        {(loadingAdminSummary || loadingAdminOverview) ? t('creator.admin.refreshing') : t('creator.admin.refresh')}
                       </Text>
                     </GlassView>
                   </TouchableOpacity>
@@ -825,18 +834,18 @@ export default function CreatorDashboard() {
               </View>
 
               <Text style={styles.adminSubtitle}>
-                Estado del sistema, verificación de organizadores y control operativo.
+                {t('creator.admin.subtitle')}
               </Text>
 
               {isAdminEmail && profileRole !== 'admin' && (
                 <GlassView intensity={18} style={{ padding: 16, borderRadius: 18, marginTop: 14, borderWidth: 1, borderColor: 'rgba(96, 165, 250, 0.28)' }}>
-                  <Text style={{ color: 'white', fontSize: 14, fontWeight: '800' }}>Permisos de administrador pendientes</Text>
+                  <Text style={{ color: 'white', fontSize: 14, fontWeight: '800' }}>{t('creator.admin.pending_permissions_title')}</Text>
                   <Text style={{ color: Colors.dark.textSecondary, marginTop: 6, fontSize: 13, lineHeight: 18 }}>
-                    Activa tu rol de admin en la base de datos para poder moderar y administrar.
+                    {t('creator.admin.pending_permissions_body')}
                   </Text>
                   <View style={{ marginTop: 12 }}>
                     <ThemedButton
-                      title={bootstrappingAdmin ? 'Activando...' : 'Activar rol admin'}
+                      title={bootstrappingAdmin ? t('creator.admin.activating') : t('creator.admin.activate')}
                       onPress={bootstrapAdminRole}
                       disabled={bootstrappingAdmin}
                     />
@@ -845,42 +854,42 @@ export default function CreatorDashboard() {
               )}
 
               <View style={styles.adminKpiGrid}>
-                <AdminKpiCard label="Usuarios" value={adminOverview.users} tint="#60a5fa" icon={Users} />
-                <AdminKpiCard label="Organizadores" value={adminOverview.organizers} tint="#a78bfa" icon={Users} />
-                <AdminKpiCard label="Pendientes" value={adminOverview.pending} tint="#f59e0b" icon={Activity} />
-                <AdminKpiCard label="Correcciones" value={adminOverview.needsCorrection} tint="#fb7185" icon={Activity} />
-                <AdminKpiCard label="Suspendidos" value={adminOverview.suspended} tint="#ef4444" icon={Activity} />
-                <AdminKpiCard label="Eventos" value={adminOverview.eventsTotal} tint="#22c55e" icon={Calendar} />
-                <AdminKpiCard label="Próximos" value={adminOverview.upcomingEvents} tint="#38bdf8" icon={Calendar} />
-                <AdminKpiCard label="Ventas 30d" value={adminOverview.ticketsSold30d} tint="#f472b6" icon={Ticket} />
+                <AdminKpiCard label={t('creator.admin.kpi.users')} value={adminOverview.users} tint="#60a5fa" icon={Users} />
+                <AdminKpiCard label={t('creator.admin.kpi.organizers')} value={adminOverview.organizers} tint="#a78bfa" icon={Users} />
+                <AdminKpiCard label={t('creator.admin.kpi.pending')} value={adminOverview.pending} tint="#f59e0b" icon={Activity} />
+                <AdminKpiCard label={t('creator.admin.kpi.needs_correction')} value={adminOverview.needsCorrection} tint="#fb7185" icon={Activity} />
+                <AdminKpiCard label={t('creator.admin.kpi.suspended')} value={adminOverview.suspended} tint="#ef4444" icon={Activity} />
+                <AdminKpiCard label={t('creator.admin.kpi.events')} value={adminOverview.eventsTotal} tint="#22c55e" icon={Calendar} />
+                <AdminKpiCard label={t('creator.admin.kpi.upcoming')} value={adminOverview.upcomingEvents} tint="#38bdf8" icon={Calendar} />
+                <AdminKpiCard label={t('creator.admin.kpi.sales_30d')} value={adminOverview.ticketsSold30d} tint="#f472b6" icon={Ticket} />
                 <AdminKpiCard
-                  label="Ingresos 30d"
-                  value={adminOverview.estRevenue30d.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}
+                  label={t('creator.admin.kpi.revenue_30d')}
+                  value={adminOverview.estRevenue30d.toLocaleString(localeTag, { style: 'currency', currency: 'EUR' })}
                   tint="#34d399"
                   icon={CreditCard}
                   style={{ flexBasis: '100%' }}
                 />
-                <AdminKpiCard label="Reventa activa" value={adminOverview.activeResales} tint="#eab308" icon={CreditCard} />
-                <AdminKpiCard label="Auditoría 7d" value={adminOverview.auditActions7d} tint="#94a3b8" icon={Activity} />
+                <AdminKpiCard label={t('creator.admin.kpi.active_resale')} value={adminOverview.activeResales} tint="#eab308" icon={CreditCard} />
+                <AdminKpiCard label={t('creator.admin.kpi.audit_7d')} value={adminOverview.auditActions7d} tint="#94a3b8" icon={Activity} />
                 {adminOverview.reports7d !== null && (
-                  <AdminKpiCard label="Reportes 7d" value={adminOverview.reports7d} tint="#f97316" icon={Activity} />
+                  <AdminKpiCard label={t('creator.admin.kpi.reports_7d')} value={adminOverview.reports7d} tint="#f97316" icon={Activity} />
                 )}
               </View>
 
               <View style={styles.sectionContainer}>
-                <Text style={styles.sectionTitle}>Acciones</Text>
+                <Text style={styles.sectionTitle}>{t('creator.admin.actions_title')}</Text>
                 <View style={styles.gridRow}>
                   <ActionCard
-                    title="Revisar Organizadores"
-                    description="Aprobar, rechazar o suspender"
+                    title={t('creator.admin.actions.review_organizers_title')}
+                    description={t('creator.admin.actions.review_organizers_desc')}
                     icon={Activity}
                     color="#f59e0b"
                     onPress={() => router.push('/(creator)/admin-verification')}
                     style={{ flex: 1 }}
                   />
                   <ActionCard
-                    title="Eventos"
-                    description="Moderación y control"
+                    title={t('creator.admin.actions.events_title')}
+                    description={t('creator.admin.actions.events_desc')}
                     icon={Calendar}
                     color="#22c55e"
                     onPress={() => router.push('/(creator)/manage-events')}
@@ -889,8 +898,8 @@ export default function CreatorDashboard() {
                 </View>
                 <View style={styles.gridRow}>
                   <ActionCard
-                    title="Limpieza"
-                    description={cleaningSystem ? 'Ejecutando…' : 'Eliminar eventos antiguos'}
+                    title={t('creator.admin.actions.cleanup_title')}
+                    description={cleaningSystem ? t('creator.admin.actions.cleanup_running') : t('creator.admin.actions.cleanup_desc')}
                     icon={Trash2}
                     color="#ef4444"
                     onPress={runSystemCleanup}
@@ -907,21 +916,21 @@ export default function CreatorDashboard() {
                     <GlassView intensity={15} style={{ padding: 16, borderRadius: 18 }}>
                       <Text style={{ color: 'white', fontSize: 14, fontWeight: '700' }}>
                         {verificationStatus === 'needs_correction'
-                          ? 'Tu verificación requiere correcciones'
+                          ? t('creator.organizer.verification.needs_correction_title')
                           : verificationStatus === 'rejected'
-                            ? 'Tu verificación fue rechazada'
-                            : 'Tu cuenta de organizador está pendiente de verificación'}
+                            ? t('creator.organizer.verification.rejected_title')
+                            : t('creator.organizer.verification.pending_title')}
                       </Text>
                       <Text style={{ color: Colors.dark.textSecondary, marginTop: 6, fontSize: 13, lineHeight: 18 }}>
                         {verificationStatus === 'needs_correction'
-                          ? 'Revisa la nota y sube los documentos corregidos.'
+                          ? t('creator.organizer.verification.needs_correction_body')
                           : verificationStatus === 'rejected'
-                            ? 'No puedes volver a enviar la solicitud desde la app.'
-                            : 'Nuestro equipo revisará tus documentos. Mientras tanto, no podrás publicar eventos.'}
+                            ? t('creator.organizer.verification.rejected_body')
+                            : t('creator.organizer.verification.pending_body')}
                       </Text>
                       {(verificationStatus === 'pending_verification' || verificationStatus === 'needs_correction') && (
                         <View style={{ marginTop: 12 }}>
-                          <ThemedButton title="Completar verificación" onPress={() => router.push('/(creator)/verification')} />
+                          <ThemedButton title={t('creator.organizer.verification.complete_button')} onPress={() => router.push('/(creator)/verification')} />
                         </View>
                       )}
                     </GlassView>
@@ -934,16 +943,16 @@ export default function CreatorDashboard() {
                   colors={['rgba(255,255,255,0.08)', 'rgba(48, 209, 88, 0.16)', 'transparent']}
                   style={StyleSheet.absoluteFill}
                 />
-                <Text style={styles.totalHeroLabel}>Saldo disponible (Stripe)</Text>
+                <Text style={styles.totalHeroLabel}>{t('creator.organizer.balance_available')}</Text>
                 <Text style={[styles.totalHeroValue, isSmallPhone && { fontSize: 30 }]} numberOfLines={1} adjustsFontSizeToFit>
                   {stripeStats 
-                    ? (stripeStats.available_balance / 100).toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })
-                    : (0).toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })
+                    ? (stripeStats.available_balance / 100).toLocaleString(localeTag, { style: 'currency', currency: 'EUR' })
+                    : (0).toLocaleString(localeTag, { style: 'currency', currency: 'EUR' })
                   }
                 </Text>
                 {stripeStats && stripeStats.pending_balance > 0 && (
                   <Text style={{ color: 'rgba(255,255,255,0.5)', fontSize: 12, marginTop: 4 }}>
-                    + {(stripeStats.pending_balance / 100).toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })} pendientes
+                    {t('creator.organizer.pending_payouts', { amount: (stripeStats.pending_balance / 100).toLocaleString(localeTag, { style: 'currency', currency: 'EUR' }) })}
                   </Text>
                 )}
               </GlassView>
@@ -953,11 +962,11 @@ export default function CreatorDashboard() {
               <GlassView intensity={15} style={styles.chartSection}>
                 <View style={styles.chartHeader}>
                     <View>
-                        <Text style={styles.chartLabel}>Ingresos reales (Stripe 30d)</Text>
+                        <Text style={styles.chartLabel}>{t('creator.organizer.revenue_real_30d')}</Text>
                         <Text style={[styles.chartValue, isSmallPhone && { fontSize: 28 }]}>
                           {stripeStats 
-                            ? (stripeStats.revenue_30d / 100).toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })
-                            : (0).toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })
+                            ? (stripeStats.revenue_30d / 100).toLocaleString(localeTag, { style: 'currency', currency: 'EUR' })
+                            : (0).toLocaleString(localeTag, { style: 'currency', currency: 'EUR' })
                           }
                         </Text>
                     </View>
@@ -983,50 +992,50 @@ export default function CreatorDashboard() {
                 style={styles.metricsContainer}
               >
                 <MetricCard 
-                    title="Entradas Vendidas" 
+                    title={t('creator.organizer.metrics.tickets_sold')} 
                     value={stats.tickets.toString()} 
                     icon={Ticket} 
                     color="#ec4899" 
                     gradientColors={['#ec4899', '#db2777']}
                 />
                 <MetricCard 
-                    title="Eventos Activos" 
+                    title={t('creator.organizer.metrics.active_events')} 
                     value={myEvents.length.toString()} 
                     icon={Calendar} 
                     color="#3b82f6" 
-                    subtext="Total"
+                    subtext={t('creator.organizer.metrics.total')}
                     gradientColors={['#3b82f6', '#2563eb']}
                 />
                  <MetricCard 
-                    title="Evento Top" 
-                    value={topEvent?.title || "N/A"} 
+                    title={t('creator.organizer.metrics.top_event')} 
+                    value={topEvent?.title || t('creator.organizer.metrics.na')} 
                     icon={Flame} 
                     color="#f97316" 
-                    subtext={topEvent ? `${topEvent.sold} ventas` : ''}
+                    subtext={topEvent ? t('creator.organizer.metrics.sales_count', { count: topEvent.sold }) : ''}
                     gradientColors={['#f97316', '#ea580c']}
                 />
               </ScrollView>
 
               <View style={styles.sectionContainer}>
-                <Text style={styles.sectionTitle}>Centro de Control</Text>
+                <Text style={styles.sectionTitle}>{t('creator.organizer.control_center_title')}</Text>
                 
                 <View style={styles.gridRow}>
                   <ActionCard 
-                      title="Crear Evento" 
-                      description="Nueva fiesta"
+                      title={t('creator.organizer.actions.create_event_title')} 
+                      description={t('creator.organizer.actions.create_event_desc')}
                       icon={Plus} 
                       color="#8b5cf6" 
                       onPress={() => {
                         if (!canCreateEvents) {
-                          let alertTitle = 'Verificación pendiente';
-                          let alertMsg = 'Tu cuenta de organizador está pendiente de verificación. Nuestro equipo revisará tus documentos en breve.';
+                          let alertTitle = t('creator.organizer.verification.pending_title');
+                          let alertMsg = t('creator.organizer.verification.pending_body');
                           
                           if (verificationStatus === 'needs_correction') {
-                            alertTitle = 'Acción requerida';
-                            alertMsg = 'Tu verificación requiere correcciones. Por favor, revisa la sección de verificación.';
+                            alertTitle = t('creator.organizer.verification.needs_correction_title');
+                            alertMsg = t('creator.organizer.verification.needs_correction_body');
                           } else if (verificationStatus === 'rejected') {
-                            alertTitle = 'Cuenta rechazada';
-                            alertMsg = 'Lo sentimos, tu solicitud de organizador ha sido rechazada.';
+                            alertTitle = t('creator.organizer.verification.rejected_title');
+                            alertMsg = t('creator.organizer.verification.rejected_create_event_body');
                           }
                           
                           Alert.alert(alertTitle, alertMsg);
@@ -1038,8 +1047,8 @@ export default function CreatorDashboard() {
                       style={{ flex: 1 }}
                   />
                    <ActionCard 
-                      title="Validar" 
-                      description="Escanear QR"
+                      title={t('creator.organizer.actions.validate_title')} 
+                      description={t('creator.organizer.actions.validate_desc')}
                       icon={ScanLine} 
                       color="#4ade80" 
                       onPress={() => router.push('/(creator)/scan')}
@@ -1049,16 +1058,16 @@ export default function CreatorDashboard() {
 
                 <View style={styles.gridRow}>
                   <ActionCard 
-                      title="Staff" 
-                      description="Gestionar equipo"
+                      title={t('creator.organizer.actions.staff_title')} 
+                      description={t('creator.organizer.actions.staff_desc')}
                       icon={Users} 
                       color="#3b82f6" 
                       onPress={() => router.push('/(creator)/workers')}
                       style={{ flex: 1 }}
                   />
                    <ActionCard 
-                      title="Mis Eventos" 
-                      description="Ver listado"
+                      title={t('creator.organizer.actions.my_events_title')} 
+                      description={t('creator.organizer.actions.my_events_desc')}
                       icon={Calendar} 
                       color="#f43f5e" 
                       onPress={() => router.push('/(creator)/manage-events')}
@@ -1069,19 +1078,19 @@ export default function CreatorDashboard() {
               </View>
 
               <View style={styles.sectionContainer}>
-                <Text style={styles.sectionTitle}>Legal y cuenta</Text>
+                <Text style={styles.sectionTitle}>{t('creator.organizer.account_section_title')}</Text>
                 <View style={styles.gridRow}>
                   <ActionCard
-                    title="Información legal"
-                    description="Aviso legal, privacidad y términos"
+                    title={t('profile.legal_info')}
+                    description={t('creator.organizer.legal_desc')}
                     icon={FileText}
                     color="#34d399"
                     onPress={() => router.push('/legal')}
                     style={{ flex: 1 }}
                   />
                   <ActionCard
-                    title={deletingAccount ? 'Eliminando…' : 'Eliminar mi cuenta'}
-                    description="Eliminar mi cuenta y mis datos"
+                    title={deletingAccount ? t('profile.deleting') : t('profile.delete_my_account')}
+                    description={t('profile.delete_my_account')}
                     icon={Trash2}
                     color="#ef4444"
                     onPress={handleDeleteAccount}
