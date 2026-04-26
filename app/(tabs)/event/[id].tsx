@@ -4,7 +4,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { supabase, Event } from '@/lib/supabase';
 import { useAuth } from '@/lib/AuthContext';
 import { useEvents } from '@/lib/EventContext';
-import { useWallet } from '@/lib/WalletContext';
+import { useCredit } from '@/lib/WalletContext';
 import { getErrorMessage } from '@/lib/errorHelpers';
 import { MapPin, Calendar, Ticket, ArrowLeft, Navigation, TrendingUp, User as UserIcon, Shirt, Users, Music, PartyPopper, Clock, Euro, Image as ImageIcon, X, CreditCard, Minus, Plus, Sparkles, Wallet, Share2, Mail } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -27,7 +27,7 @@ export default function EventDetailScreen() {
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
   const { refreshEvents } = useEvents();
-  const { balance, loading: walletLoading, buyTicketWithWallet, buyVipWithWallet, refreshWallet } = useWallet();
+  const { creditBalance, loading: creditLoading, buyTicketWithCredit, buyVipWithCredit, refreshCredit } = useCredit();
   const { present, loading: stripeLoading } = usePaymentSheetHandler();
   const { t } = useTranslation();
   const [event, setEvent] = useState<Event | null>(null);
@@ -300,7 +300,7 @@ export default function EventDetailScreen() {
     }
 
     try {
-      if (payWithWallet && walletLoading) {
+      if (payWithWallet && creditLoading) {
         Alert.alert(t('common.wallet'), t('event.purchase.wallet_loading'));
         return;
       }
@@ -336,7 +336,7 @@ export default function EventDetailScreen() {
       const pricePerTicket = selectedType ? selectedType.price : event.ticket_price;
       const totalPrice = pricePerTicket * qty;
 
-      const payTicketsWithCard = async (walletDebitEur?: number) => {
+      const payTicketsWithCard = async (creditDebitEur?: number) => {
         const result = await present({
           kind: 'event_ticket',
           event_id: event.id,
@@ -344,8 +344,8 @@ export default function EventDetailScreen() {
           quantity: qty,
           buyer_name: buyerName,
           buyer_email: buyerEmail || user.email || '',
-          ...(typeof walletDebitEur === 'number' && Number.isFinite(walletDebitEur) && walletDebitEur > 0
-            ? { wallet_debit_eur: walletDebitEur }
+          ...(typeof creditDebitEur === 'number' && Number.isFinite(creditDebitEur) && creditDebitEur > 0
+            ? { credit_debit_eur: creditDebitEur }
             : {}),
         });
 
@@ -365,9 +365,8 @@ export default function EventDetailScreen() {
           return v.toString(16);
         });
 
-        await buyTicketWithWallet({
+        await buyTicketWithCredit({
           p_event_id: event.id,
-          p_user_id: user.id,
           p_buyer_name: buyerName,
           p_buyer_email: buyerEmail || user.email || '',
           p_quantity: qty,
@@ -381,7 +380,7 @@ export default function EventDetailScreen() {
         const r = await payTicketsWithCard();
         if (!r.paid) return;
       } else {
-        const walletDebit = Math.min(Math.max(balance, 0), totalPrice);
+        const walletDebit = Math.min(Math.max(creditBalance, 0), totalPrice);
 
         if (walletDebit >= totalPrice) {
           await payTicketsWithWalletOnly();
@@ -403,7 +402,7 @@ export default function EventDetailScreen() {
           if (decision === 'cancel') return;
           const r = await payTicketsWithCard(walletDebit);
           if (!r.paid) return;
-          await refreshWallet();
+          await refreshCredit();
         }
       }
 
@@ -480,14 +479,14 @@ export default function EventDetailScreen() {
 
     setVipPurchasing(true);
     try {
-      if (payVipWithWallet && walletLoading) {
+      if (payVipWithWallet && creditLoading) {
         Alert.alert('Cartera', 'Estamos cargando tu saldo. Espera un momento y vuelve a intentarlo.');
         return;
       }
       if (payVipWithWallet) {
-        const walletDebit = Math.min(Math.max(balance, 0), vip.base_price);
+        const walletDebit = Math.min(Math.max(creditBalance, 0), vip.base_price);
         if (walletDebit >= vip.base_price) {
-          await buyVipWithWallet({
+          await buyVipWithCredit({
             p_vip_reservado_id: vip.id,
             p_buyer_name: buyerName,
             p_buyer_email: buyerEmail || user.email || '',
@@ -515,7 +514,7 @@ export default function EventDetailScreen() {
           const result = await present({
             kind: 'vip_table',
             reference_id: vip.id,
-            wallet_debit_eur: walletDebit,
+            credit_debit_eur: walletDebit,
             buyer_name: buyerName,
             buyer_email: buyerEmail || user.email || '',
           });
@@ -523,7 +522,7 @@ export default function EventDetailScreen() {
           if (result.status !== 'succeeded') {
             throw new Error(result.message || 'El pago no se pudo completar.');
           }
-          await refreshWallet();
+          await refreshCredit();
         }
       } else {
         const result = await present({ kind: 'vip_table', reference_id: vip.id, buyer_name: buyerName, buyer_email: buyerEmail || user.email || '' });
@@ -1042,20 +1041,20 @@ export default function EventDetailScreen() {
                         <Switch
                           value={payVipWithWallet}
                           onValueChange={setPayVipWithWallet}
-                          disabled={walletLoading}
+                          disabled={creditLoading}
                           trackColor={{ false: '#767577', true: '#fbbf24' }}
                           thumbColor={payVipWithWallet ? '#ffffff' : '#f4f3f4'}
                         />
                       </View>
                       <Text style={styles.walletBalanceText}>
-                        {walletLoading ? t('event.purchase.balance_loading') : t('event.purchase.balance', { amount: balance.toFixed(2) })}
+                        {creditLoading ? t('event.purchase.balance_loading') : t('event.purchase.balance', { amount: creditBalance.toFixed(2) })}
                       </Text>
-                      {payVipWithWallet && balance <= 0 && (
+                      {payVipWithWallet && creditBalance <= 0 && (
                         <Text style={styles.insufficientFundsText}>{t('event.purchase.no_wallet_balance')}</Text>
                       )}
-                      {payVipWithWallet && balance > 0 && balance < selectedVip.base_price && (
+                      {payVipWithWallet && creditBalance > 0 && creditBalance < selectedVip.base_price && (
                         <Text style={styles.insufficientFundsText}>
-                          {t('event.purchase.wallet_split', { wallet: balance.toFixed(2), card: (selectedVip.base_price - balance).toFixed(2) })}
+                          {t('event.purchase.wallet_split', { wallet: creditBalance.toFixed(2), card: (selectedVip.base_price - creditBalance).toFixed(2) })}
                         </Text>
                       )}
                     </View>
@@ -1067,7 +1066,7 @@ export default function EventDetailScreen() {
                         ? t('event.tickets.sold_out')
                         : user
                           ? payVipWithWallet
-                            ? selectedVip && balance > 0 && balance < selectedVip.base_price
+                            ? selectedVip && creditBalance > 0 && creditBalance < selectedVip.base_price
                               ? t('event.purchase.pay_split')
                               : t('event.purchase.pay_wallet')
                             : t('event.purchase.pay_card')
@@ -1226,20 +1225,20 @@ export default function EventDetailScreen() {
                         <Switch
                           value={payWithWallet}
                           onValueChange={setPayWithWallet}
-                          disabled={walletLoading}
+                          disabled={creditLoading}
                           trackColor={{ false: '#767577', true: Colors.dark.primary }}
                           thumbColor={payWithWallet ? '#ffffff' : '#f4f3f4'}
                         />
                       </View>
                       <Text style={styles.walletBalanceText}>
-                        {walletLoading ? t('event.purchase.balance_loading') : t('event.purchase.balance', { amount: balance.toFixed(2) })}
+                        {creditLoading ? t('event.purchase.balance_loading') : t('event.purchase.balance', { amount: creditBalance.toFixed(2) })}
                       </Text>
-                      {payWithWallet && balance <= 0 && (
+                      {payWithWallet && creditBalance <= 0 && (
                         <Text style={styles.insufficientFundsText}>{t('event.purchase.no_wallet_balance')}</Text>
                       )}
-                      {payWithWallet && balance > 0 && balance < total && (
+                      {payWithWallet && creditBalance > 0 && creditBalance < total && (
                         <Text style={styles.insufficientFundsText}>
-                          {t('event.purchase.wallet_split', { wallet: balance.toFixed(2), card: (total - balance).toFixed(2) })}
+                          {t('event.purchase.wallet_split', { wallet: creditBalance.toFixed(2), card: (total - creditBalance).toFixed(2) })}
                         </Text>
                       )}
                     </View>
@@ -1256,7 +1255,7 @@ export default function EventDetailScreen() {
                         ? t('event.tickets.sold_out')
                         : user
                           ? payWithWallet
-                            ? balance > 0 && balance < total
+                            ? creditBalance > 0 && creditBalance < total
                               ? t('event.purchase.pay_split')
                               : t('event.purchase.pay_wallet')
                             : t('event.purchase.pay_card')
@@ -1264,7 +1263,7 @@ export default function EventDetailScreen() {
                     }
                     onPress={handlePurchase}
                     loading={purchasing || stripeLoading}
-                    disabled={purchasing || stripeLoading || currentAvailable <= 0 || (payWithWallet && walletLoading)}
+                    disabled={purchasing || stripeLoading || currentAvailable <= 0 || (payWithWallet && creditLoading)}
                     style={[styles.confirmButton, currentAvailable <= 0 && { opacity: 0.5 }]}
                     variant={user ? 'secondary' : 'primary'}
                   />
