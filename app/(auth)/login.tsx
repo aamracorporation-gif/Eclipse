@@ -1,7 +1,6 @@
-import { View, Text, StyleSheet, KeyboardAvoidingView, Platform, ScrollView, Alert, TouchableOpacity, TextInput, Keyboard } from 'react-native';
+import { View, Text, StyleSheet, Alert, TouchableOpacity, TextInput, Keyboard, ScrollView, KeyboardAvoidingView, Platform } from 'react-native';
 import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'expo-router';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '@/lib/AuthContext';
 import { getErrorMessage } from '@/lib/errorHelpers';
 import { Mail, Lock, Sparkles, Eye, EyeOff } from 'lucide-react-native';
@@ -12,6 +11,9 @@ import { ThemedInput } from '@/components/ui/ThemedInput';
 import { GlassView } from '@/components/ui/GlassView';
 import { scheduleLocalNotification } from '@/lib/notifications';
 import { supabase } from '@/lib/supabase';
+import { useTranslation } from 'react-i18next';
+import { theme } from '@/theme/styles';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 async function fetchWithTimeout(input: RequestInfo | URL, init: RequestInit, ms: number): Promise<Response> {
   const controller = new AbortController();
@@ -29,8 +31,8 @@ export default function LoginScreen() {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const { signIn, resetPassword } = useAuth();
+  const { t } = useTranslation();
   const router = useRouter();
-  const insets = useSafeAreaInsets();
   
   const passwordInputRef = useRef<TextInput>(null);
 
@@ -41,7 +43,7 @@ export default function LoginScreen() {
 
   const handleResetPassword = async () => {
     if (!email) {
-      Alert.alert('Email requerido', 'Por favor introduce tu correo electrónico para restablecer la contraseña.');
+      Alert.alert(t('auth.reset_password.email_required_title'), t('auth.reset_password.email_required_body'));
       return;
     }
     
@@ -49,12 +51,12 @@ export default function LoginScreen() {
       setLoading(true);
       const { error } = await resetPassword(email);
       if (error) {
-        Alert.alert('Error', getErrorMessage(error));
+        Alert.alert(t('common.error'), getErrorMessage(error));
       } else {
-        Alert.alert('Correo enviado', 'Revisa tu bandeja de entrada para restablecer tu contraseña.');
+        Alert.alert(t('auth.reset_password.sent_title'), t('auth.reset_password.sent_body'));
       }
     } catch {
-      Alert.alert('Error', 'No se pudo enviar el correo.');
+      Alert.alert(t('common.error'), t('auth.reset_password.failed'));
     } finally {
       setLoading(false);
     }
@@ -63,17 +65,16 @@ export default function LoginScreen() {
   const handleLogin = async () => {
     // 1. Dismiss Keyboard & Debug
     Keyboard.dismiss();
-    console.log('BOTON PRESIONADO: handleLogin disparado');
     
     // 2. Configuration Check
     const sbUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
     const sbAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
     if (!sbUrl || sbUrl.includes('placeholder')) {
-       Alert.alert('Error de Configuración', 'Falta la URL de Supabase en las variables de entorno (.env).');
+      Alert.alert(t('auth.login_screen.config_error_title'), t('auth.login_screen.config_error_missing_url'));
        return;
     }
     if (!sbAnonKey || sbAnonKey.includes('placeholder')) {
-       Alert.alert('Error de Configuración', 'Falta la ANON KEY de Supabase en las variables de entorno (.env).');
+       Alert.alert(t('auth.login_screen.config_error_title'), t('auth.login_screen.config_error_missing_anon'));
        return;
     }
 
@@ -82,7 +83,7 @@ export default function LoginScreen() {
     const cleanPassword = password.trim();
 
     if (!cleanEmail || !cleanPassword) {
-      Alert.alert('Faltan datos', 'Por favor introduce tu email y contraseña.');
+      Alert.alert(t('auth.login_screen.missing_fields_title'), t('auth.login_screen.missing_fields_body'));
       return;
     }
 
@@ -105,10 +106,10 @@ export default function LoginScreen() {
         const msg = String(e?.message || e || '');
         const isAbort = msg.includes('aborted') || msg.includes('AbortError');
         Alert.alert(
-          'Error de Conexión',
+          t('errors.network'),
           isAbort
-            ? 'No se pudo conectar con Supabase (timeout). Revisa tu conexión y que no haya VPN/proxy bloqueando.'
-            : 'No se pudo conectar con Supabase. Revisa tu conexión y que la URL/clave sean correctas.'
+            ? t('auth.login_screen.supabase_timeout')
+            : t('auth.login_screen.supabase_unreachable')
         );
         setLoading(false);
         return;
@@ -125,14 +126,14 @@ export default function LoginScreen() {
         // Handle specific error cases
         if (error.message?.includes('Email not confirmed')) {
           Alert.alert(
-            'Verificación Pendiente', 
-            'Tu cuenta ha sido creada pero aún no has verificado tu correo electrónico. Por favor revisa tu bandeja de entrada.'
+            t('auth.login_screen.email_not_confirmed_title'),
+            t('auth.login_screen.email_not_confirmed_body')
           );
         } else if (error.message?.includes('Invalid login credentials')) {
-           Alert.alert('Credenciales Incorrectas', 'El correo o la contraseña no coinciden. Asegúrate de no tener espacios extra.');
+           Alert.alert(t('auth.login_screen.invalid_credentials_title'), t('auth.login_screen.invalid_credentials_body'));
         } else {
            // Fallback showing the RAW error to help debug
-           Alert.alert('Error de acceso', `Detalle: ${error.message}`);
+           Alert.alert(t('auth.login_screen.access_error_title'), t('auth.login_screen.access_error_body', { detail: error.message }));
         }
         
         setLoading(false);
@@ -153,8 +154,8 @@ export default function LoginScreen() {
 
         // Schedule welcome notification
         await scheduleLocalNotification(
-          "¡Bienvenido de nuevo! 👋",
-          "Que tengas una noche increíble. Explora los mejores eventos cerca de ti.",
+          t('auth.login_screen.welcome_notification_title'),
+          t('auth.login_screen.welcome_notification_body'),
           { type: 'welcome' },
           2 // 2 seconds delay
         );
@@ -173,8 +174,8 @@ export default function LoginScreen() {
       } else {
         setLoading(false);
         Alert.alert(
-          'Verificación requerida',
-          'Por favor verifica tu correo electrónico para poder acceder.'
+          t('auth.login_screen.verification_required_title'),
+          t('auth.login_screen.verification_required_body')
         );
       }
     } catch (err: any) {
@@ -182,9 +183,9 @@ export default function LoginScreen() {
       const errorMsg = err.message || 'Ha ocurrido un error inesperado.';
       
       if (errorMsg.includes('Failed to fetch') || errorMsg.includes('Network request failed')) {
-         Alert.alert('Error de Conexión', 'No se pudo conectar. Verifica internet y URL de Supabase.');
+         Alert.alert(t('errors.network'), t('auth.login_screen.network_failed'));
       } else {
-         Alert.alert('Error', errorMsg);
+         Alert.alert(t('common.error'), errorMsg);
       }
       setLoading(false);
     }
@@ -196,84 +197,82 @@ export default function LoginScreen() {
         colors={[Colors.dark.background, '#1e1b4b']}
         style={StyleSheet.absoluteFill}
       />
-      
-      <KeyboardAvoidingView
-        style={styles.content}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      >
-        <ScrollView 
-          contentContainerStyle={[styles.scrollContent, { paddingTop: insets.top + 20 }]} 
-          showsVerticalScrollIndicator={false} 
-          keyboardShouldPersistTaps="handled"
-        >
-          <View style={styles.header}>
-            <View style={styles.iconContainer}>
-              <Sparkles size={40} color={Colors.dark.primary} />
+      <SafeAreaView style={styles.safeArea}>
+        <KeyboardAvoidingView style={styles.keyboard} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+          <ScrollView
+            contentContainerStyle={styles.scrollContent}
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
+          >
+            <View style={styles.header}>
+              <View style={styles.iconContainer}>
+                <Sparkles size={40} color={Colors.dark.primary} />
+              </View>
+              <Text style={styles.title}>{t('auth.login_screen.welcome_title')}</Text>
+              <Text style={styles.subtitle}>{t('auth.login_screen.welcome_subtitle')}</Text>
             </View>
-            <Text style={styles.title}>Bienvenido de nuevo</Text>
-            <Text style={styles.subtitle}>La noche te espera.</Text>
-          </View>
 
-          <GlassView intensity={30} style={styles.formCard}>
-            <ThemedInput
-              placeholder="Correo electrónico"
-              value={email}
-              onChangeText={setEmail}
-              keyboardType="email-address"
-              autoCapitalize="none"
-              autoComplete="email"
-              returnKeyType="next"
-              onSubmitEditing={() => passwordInputRef.current?.focus()}
-              blurOnSubmit={false}
-              icon={Mail}
-            />
+            <GlassView intensity={30} style={styles.formCard}>
+              <ThemedInput
+                placeholder={t('auth.email')}
+                value={email}
+                onChangeText={setEmail}
+                keyboardType="email-address"
+                autoCapitalize="none"
+                autoComplete="email"
+                returnKeyType="next"
+                onSubmitEditing={() => passwordInputRef.current?.focus()}
+                blurOnSubmit={false}
+                icon={Mail}
+              />
 
-            <ThemedInput
-              ref={passwordInputRef}
-              placeholder="Contraseña"
-              value={password}
-              onChangeText={setPassword}
-              secureTextEntry={!showPassword}
-              autoComplete="password"
-              returnKeyType="done"
-              onSubmitEditing={handleLogin}
-              icon={Lock}
-              rightIcon={
-                <TouchableOpacity onPress={() => setShowPassword(!showPassword)}>
-                  {showPassword ? (
-                    <EyeOff size={20} color={Colors.dark.textSecondary} />
-                  ) : (
-                    <Eye size={20} color={Colors.dark.textSecondary} />
-                  )}
-                </TouchableOpacity>
-              }
-            />
+              <ThemedInput
+                ref={passwordInputRef}
+                placeholder={t('auth.password')}
+                value={password}
+                onChangeText={setPassword}
+                secureTextEntry={!showPassword}
+                autoComplete="password"
+                returnKeyType="done"
+                onSubmitEditing={handleLogin}
+                icon={Lock}
+                rightIcon={
+                  <TouchableOpacity onPress={() => setShowPassword(!showPassword)}>
+                    {showPassword ? (
+                      <EyeOff size={20} color={Colors.dark.textSecondary} />
+                    ) : (
+                      <Eye size={20} color={Colors.dark.textSecondary} />
+                    )}
+                  </TouchableOpacity>
+                }
+              />
 
-            <TouchableOpacity 
-              style={styles.forgotPassword}
-              onPress={handleResetPassword}
-              disabled={loading}
-              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-            >
-              <Text style={styles.forgotPasswordText}>¿Olvidaste tu contraseña?</Text>
-            </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.forgotPassword}
+                onPress={handleResetPassword}
+                disabled={loading}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              >
+                <Text style={styles.forgotPasswordText}>{t('auth.forgot_password')}</Text>
+              </TouchableOpacity>
 
-            <ThemedButton 
-              title={loading ? 'Iniciando sesión...' : 'Iniciar Sesión'}
-              onPress={handleLogin}
-              disabled={loading}
-              style={styles.button}
-            />
-          </GlassView>
+              <ThemedButton
+                title={loading ? t('auth.login_screen.signing_in') : t('auth.login')}
+                onPress={handleLogin}
+                disabled={loading}
+                style={styles.button}
+              />
+            </GlassView>
 
-          <View style={styles.footer}>
-            <Text style={styles.footerText}>¿No tienes cuenta?</Text>
-            <TouchableOpacity onPress={() => router.push('/(auth)/register')}>
-              <Text style={styles.linkText}>Regístrate</Text>
-            </TouchableOpacity>
-          </View>
-        </ScrollView>
-      </KeyboardAvoidingView>
+            <View style={styles.footer}>
+              <Text style={styles.footerText}>{t('auth.login_screen.no_account')}</Text>
+              <TouchableOpacity onPress={() => router.push('/(auth)/register')}>
+                <Text style={styles.linkText}>{t('auth.register')}</Text>
+              </TouchableOpacity>
+            </View>
+          </ScrollView>
+        </KeyboardAvoidingView>
+      </SafeAreaView>
     </View>
   );
 }
@@ -283,18 +282,21 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: Colors.dark.background,
   },
-  content: {
+  safeArea: {
+    flex: 1,
+  },
+  keyboard: {
     flex: 1,
   },
   scrollContent: {
     flexGrow: 1,
     justifyContent: 'center',
-    padding: 24,
-    paddingBottom: 40,
+    paddingHorizontal: theme.space[6],
+    paddingVertical: theme.space[6],
   },
   header: {
     alignItems: 'center',
-    marginBottom: 40,
+    marginBottom: theme.space[8],
   },
   iconContainer: {
     width: 80,
@@ -303,31 +305,31 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(124, 58, 237, 0.1)',
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 20,
+    marginBottom: theme.space[5],
     borderWidth: 1,
     borderColor: 'rgba(124, 58, 237, 0.3)',
   },
   title: {
-    fontSize: 32,
-    fontWeight: 'bold',
+    fontSize: theme.typography.size['3xl'],
+    fontWeight: theme.typography.weight.black,
     color: Colors.dark.text,
-    marginBottom: 8,
-    fontFamily: Platform.OS === 'ios' ? 'System' : 'sans-serif',
+    marginBottom: theme.space[2],
+    fontFamily: theme.typography.fontFamily.display,
   },
   subtitle: {
-    fontSize: 16,
+    fontSize: theme.typography.size.md,
     color: Colors.dark.textSecondary,
   },
   formCard: {
-    marginBottom: 32,
+    marginBottom: theme.space[8],
   },
   forgotPassword: {
     alignSelf: 'flex-end',
-    marginBottom: 24,
+    marginBottom: theme.space[6],
   },
   forgotPasswordText: {
     color: Colors.dark.textSecondary,
-    fontSize: 14,
+    fontSize: theme.typography.size.sm,
   },
   footer: {
     flexDirection: 'row',
@@ -337,38 +339,14 @@ const styles = StyleSheet.create({
   },
   footerText: {
     color: Colors.dark.textSecondary,
-    fontSize: 16,
+    fontSize: theme.typography.size.md,
   },
   linkText: {
     color: Colors.dark.primary,
-    fontSize: 16,
-    fontWeight: 'bold',
-  },
-  localButton: {
-    width: '100%',
-    height: 56,
-    borderRadius: 12,
-    overflow: 'hidden',
-    marginTop: 8,
-    elevation: 4,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 3.84,
-  },
-  localButtonGradient: {
-    width: '100%',
-    height: '100%',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  localButtonText: {
-    color: 'white',
-    fontSize: 16,
-    fontWeight: 'bold',
-    letterSpacing: 0.5,
+    fontSize: theme.typography.size.md,
+    fontWeight: theme.typography.weight.bold,
   },
   button: {
-    marginTop: 16,
+    marginTop: theme.space[4],
   }
 });
