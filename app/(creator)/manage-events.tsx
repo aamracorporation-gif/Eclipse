@@ -10,11 +10,13 @@ import { GlassView } from '@/components/ui/GlassView';
 import { ThemedButton } from '@/components/ui/ThemedButton';
 import { useEffect, useMemo, useState } from 'react';
 import { supabase } from '@/lib/supabase';
+import { useTranslation } from 'react-i18next';
 
 export default function ManageEventsScreen() {
   const router = useRouter();
   const { events, deleteEvent } = useEvents();
   const { user } = useAuth();
+  const { t } = useTranslation();
 
   const [profileRole, setProfileRole] = useState<'organizer' | 'admin' | 'attendee' | null>(null);
   const [filter, setFilter] = useState<'all' | 'upcoming' | 'past'>('upcoming');
@@ -77,16 +79,16 @@ export default function ManageEventsScreen() {
 
   const handleDelete = (id: string) => {
     if (isAdminEmail && !isAdminDb) {
-      Alert.alert('Permisos insuficientes', 'Activa el rol de admin para poder moderar eventos.');
+      Alert.alert(t('creator.manage_events.insufficient_permissions_title'), t('creator.manage_events.insufficient_permissions_body'));
       return;
     }
     Alert.alert(
-      'Eliminar Evento',
-      '¿Estás seguro de que quieres cancelar este evento? Esta acción no se puede deshacer.',
+      t('creator.manage_events.delete_title'),
+      t('creator.manage_events.delete_body'),
       [
-        { text: 'Cancelar', style: 'cancel' },
+        { text: t('common.cancel'), style: 'cancel' },
         {
-          text: 'Eliminar',
+          text: t('profile.delete_account_confirm'),
           style: 'destructive',
           onPress: () => {
             deleteEvent(id);
@@ -108,7 +110,7 @@ export default function ManageEventsScreen() {
           <Text style={styles.cardTitle} numberOfLines={1}>{item.title}</Text>
           <View style={[styles.statusBadge, { backgroundColor: item.sold >= item.capacity ? Colors.dark.error : Colors.dark.success }]}>
             <Text style={styles.statusText}>
-              {item.sold >= item.capacity ? 'SOLD OUT' : 'ACTIVO'}
+              {item.sold >= item.capacity ? t('creator.manage_events.status_sold_out') : t('creator.manage_events.status_active')}
             </Text>
           </View>
         </View>
@@ -146,7 +148,7 @@ export default function ManageEventsScreen() {
                 }
               })}>
               <Edit size={18} color={Colors.dark.secondary} />
-              <Text style={[styles.actionText, { color: Colors.dark.secondary }]}>Editar</Text>
+              <Text style={[styles.actionText, { color: Colors.dark.secondary }]}>{t('creator.manage_events.actions.edit')}</Text>
             </TouchableOpacity>
           )}
           
@@ -157,7 +159,7 @@ export default function ManageEventsScreen() {
               params: { id: item.id }
             })}>
             <BarChart2 size={18} color={Colors.dark.primary} />
-            <Text style={[styles.actionText, { color: Colors.dark.primary }]}>Stats</Text>
+            <Text style={[styles.actionText, { color: Colors.dark.primary }]}>{t('creator.manage_events.actions.stats')}</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
@@ -165,7 +167,7 @@ export default function ManageEventsScreen() {
             onPress={() => handleDelete(item.id)}
           >
             <Trash2 size={18} color={Colors.dark.error} />
-            <Text style={[styles.actionText, { color: Colors.dark.error }]}>Eliminar</Text>
+            <Text style={[styles.actionText, { color: Colors.dark.error }]}>{t('creator.manage_events.actions.delete')}</Text>
           </TouchableOpacity>
 
         </View>
@@ -188,11 +190,11 @@ export default function ManageEventsScreen() {
             </GlassView>
           </TouchableOpacity>
           <View style={{ flex: 1 }}>
-            <Text style={styles.headerTitle}>{isAdmin ? 'Eventos' : 'Mis Eventos'}</Text>
+            <Text style={styles.headerTitle}>{isAdmin ? t('creator.manage_events.title_admin') : t('creator.manage_events.title_organizer')}</Text>
             {isAdmin && (
               <View style={styles.adminPill}>
                 <ShieldCheck size={12} color="#4ade80" />
-                <Text style={styles.adminPillText}>ADMIN</Text>
+                <Text style={styles.adminPillText}>{t('creator.manage_events.admin_badge')}</Text>
               </View>
             )}
           </View>
@@ -200,12 +202,12 @@ export default function ManageEventsScreen() {
 
         {isAdminEmail && !isAdminDb && (
           <GlassView intensity={16} style={{ marginHorizontal: 16, marginBottom: 14, padding: 14, borderRadius: 16, borderWidth: 1, borderColor: 'rgba(96, 165, 250, 0.28)' }}>
-            <Text style={{ color: 'white', fontWeight: '800' }}>Permisos de administrador pendientes</Text>
+            <Text style={{ color: 'white', fontWeight: '800' }}>{t('creator.manage_events.admin_pending_title')}</Text>
             <Text style={{ color: 'rgba(255,255,255,0.65)', marginTop: 6 }}>
-              Activa el rol de admin en el panel para poder moderar eventos.
+              {t('creator.manage_events.admin_pending_body')}
             </Text>
             <View style={{ marginTop: 12 }}>
-              <ThemedButton title="Ir a administración" onPress={() => router.push('/(creator)/admin-verification')} />
+              <ThemedButton title={t('creator.manage_events.admin_pending_cta')} onPress={() => router.push('/(creator)/admin-verification')} />
             </View>
           </GlassView>
         )}
@@ -218,7 +220,7 @@ export default function ManageEventsScreen() {
             <TextInput
               value={query}
               onChangeText={setQuery}
-              placeholder={isAdmin ? 'Buscar por evento o club…' : 'Buscar por evento…'}
+              placeholder={isAdmin ? t('creator.manage_events.search_placeholder_admin') : t('creator.manage_events.search_placeholder')}
               placeholderTextColor="rgba(255,255,255,0.45)"
               style={styles.searchInput}
             />
@@ -232,7 +234,7 @@ export default function ManageEventsScreen() {
                 style={[styles.filterChip, filter === k && styles.filterChipActive]}
               >
                 <Text style={[styles.filterChipText, filter === k && styles.filterChipTextActive]}>
-                  {k === 'upcoming' ? 'Próximos' : k === 'past' ? 'Pasados' : 'Todos'}
+                  {k === 'upcoming' ? t('creator.manage_events.filters.upcoming') : k === 'past' ? t('creator.manage_events.filters.past') : t('creator.manage_events.filters.all')}
                 </Text>
               </TouchableOpacity>
             ))}
@@ -246,10 +248,10 @@ export default function ManageEventsScreen() {
           contentContainerStyle={styles.listContent}
           ListEmptyComponent={
             <GlassView intensity={10} style={styles.emptyContainer}>
-              <Text style={styles.emptyText}>{isAdmin ? 'No hay eventos que coincidan con el filtro.' : 'No has creado ningún evento aún.'}</Text>
+              <Text style={styles.emptyText}>{isAdmin ? t('creator.manage_events.empty_admin') : t('creator.manage_events.empty_organizer')}</Text>
               {!isAdmin && (
                 <ThemedButton 
-                  title="Crear mi primer evento"
+                  title={t('creator.manage_events.create_first')}
                   onPress={() => router.push('/(creator)/create-event')}
                   icon={<Plus size={20} color={Colors.dark.text} />}
                   style={styles.createButton}
