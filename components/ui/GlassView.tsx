@@ -1,6 +1,7 @@
 import { View, StyleSheet, ViewProps, Platform } from 'react-native';
 import { BlurView } from 'expo-blur';
 import { Colors } from '@/constants/Colors';
+import { theme } from '@/theme/styles';
 
 interface GlassViewProps extends ViewProps {
   intensity?: number;
@@ -43,13 +44,13 @@ export function GlassView({ style, contentContainerStyle, intensity = 30, childr
 const styles = StyleSheet.create({
   container: {
     backgroundColor: Platform.OS === 'android' ? 'rgba(30, 30, 40, 0.85)' : Colors.dark.surface,
-    borderRadius: 16,
+    borderRadius: theme.radius.lg,
     overflow: 'hidden',
-    borderWidth: 1,
+    borderWidth: theme.components.card.borderWidth,
     borderColor: Colors.dark.border,
   },
   content: {
-    padding: 16,
+    padding: theme.components.card.padding,
     // Ensure content is clickable
     zIndex: 1, 
   }
