@@ -10,10 +10,12 @@ import { GlassView } from '@/components/ui/GlassView';
 import { ThemedButton } from '@/components/ui/ThemedButton';
 import { DiscoLoader } from '@/components/ui/DiscoLoader';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useTranslation } from 'react-i18next';
 
 export default function ManageWorkers() {
   const { user } = useAuth();
   const router = useRouter();
+  const { t } = useTranslation();
   const [workers, setWorkers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -43,9 +45,9 @@ export default function ManageWorkers() {
         // Handle missing table error specifically
         if (error.code === 'PGRST205' || error.message?.includes('does not exist')) {
           Alert.alert(
-            'Sistema no inicializado',
-            'La base de datos no tiene la tabla de trabajadores. Por favor ejecuta el script de migración SQL en Supabase.',
-            [{ text: 'OK' }]
+            t('creator.workers.system_not_initialized_title'),
+            t('creator.workers.system_not_initialized_body'),
+            [{ text: t('common.ok') }]
           );
           return;
         }
@@ -54,7 +56,7 @@ export default function ManageWorkers() {
       setWorkers(data || []);
     } catch (error) {
       console.error('Error fetching workers:', error);
-      Alert.alert('Error', 'No se pudieron cargar los trabajadores');
+      Alert.alert(t('common.error'), t('creator.workers.load_failed'));
     } finally {
       setLoading(false);
     }
@@ -62,12 +64,12 @@ export default function ManageWorkers() {
 
   const handleDeleteWorker = (id: string, name: string) => {
     Alert.alert(
-      'Eliminar Trabajador',
-      `¿Estás seguro de que quieres eliminar a ${name}?`,
+      t('creator.workers.delete_title'),
+      t('creator.workers.delete_body', { name }),
       [
-        { text: 'Cancelar', style: 'cancel' },
+        { text: t('common.cancel'), style: 'cancel' },
         { 
-          text: 'Eliminar', 
+          text: t('profile.delete_account_confirm'), 
           style: 'destructive',
           onPress: async () => {
             try {
@@ -75,7 +77,7 @@ export default function ManageWorkers() {
               if (error) throw error;
               fetchWorkers();
             } catch (error) {
-              Alert.alert('Error', 'No se pudo eliminar al trabajador');
+              Alert.alert(t('common.error'), t('creator.workers.delete_failed'));
             }
           }
         }
@@ -93,7 +95,7 @@ export default function ManageWorkers() {
             item.status === 'active' ? styles.statusActive : styles.statusPending
           ]}>
             <Text style={styles.statusText}>
-              {item.status === 'active' ? 'ACTIVO' : 'PENDIENTE'}
+              {item.status === 'active' ? t('creator.workers.status_active') : t('creator.workers.status_pending')}
             </Text>
           </View>
           <Text style={styles.dateText}>
@@ -121,7 +123,7 @@ export default function ManageWorkers() {
           <TouchableOpacity onPress={safeBack} style={styles.backButton}>
             <ChevronLeft size={24} color="white" />
           </TouchableOpacity>
-          <Text style={styles.title}>Gestionar Staff</Text>
+          <Text style={styles.title}>{t('creator.workers.manage_title')}</Text>
           <View style={{ width: 24 }} />
         </View>
 
@@ -138,8 +140,8 @@ export default function ManageWorkers() {
             ListEmptyComponent={
               <View style={styles.emptyState}>
                 <Users size={48} color={Colors.dark.textSecondary} />
-                <Text style={styles.emptyText}>No tienes trabajadores aún</Text>
-                <Text style={styles.emptySubtext}>Añade staff para ayudarte a gestionar tus eventos</Text>
+                <Text style={styles.emptyText}>{t('creator.workers.empty_title')}</Text>
+                <Text style={styles.emptySubtext}>{t('creator.workers.empty_body')}</Text>
               </View>
             }
           />
@@ -147,7 +149,7 @@ export default function ManageWorkers() {
 
         <View style={styles.footer}>
           <ThemedButton
-            title="Añadir Trabajador"
+            title={t('creator.workers.add_button')}
             onPress={() => router.push('/(creator)/workers/add')}
             icon={<Plus size={20} color="white" />}
           />
