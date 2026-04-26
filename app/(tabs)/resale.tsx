@@ -7,7 +7,7 @@ import { GlassView } from '@/components/ui/GlassView';
 import { ThemedButton } from '@/components/ui/ThemedButton';
 import { ThemedInput } from '@/components/ui/ThemedInput';
 import { DiscoLoader } from '@/components/ui/DiscoLoader';
-import { useWallet } from '@/lib/WalletContext';
+import { useCredit } from '@/lib/WalletContext';
 import { Calendar, MapPin, Tag, Filter, X, Search, User, Clock, ChevronDown, SlidersHorizontal, ChevronRight, Users, Sparkles } from 'lucide-react-native';
 import { useAuth } from '@/lib/AuthContext';
 import { useRouter } from 'expo-router';
@@ -83,7 +83,7 @@ export default function ResaleScreen() {
   });
   const hasActiveFilters = !!(filters.event || filters.minPrice || filters.maxPrice || filters.date || filters.type);
 
-  const { buyResaleTicket, balance } = useWallet();
+  const { creditBalance, buyResaleTicketWithCredit } = useCredit();
   const { user } = useAuth();
   const router = useRouter();
   const { present } = usePaymentSheetHandler();
@@ -417,10 +417,10 @@ export default function ResaleScreen() {
           text: t('resale.pay_wallet'),
           onPress: async () => {
             try {
-              if (balance < listing.price) {
+              if (creditBalance < listing.price) {
                 throw new Error(t('resale.wallet_insufficient'));
               }
-              await buyResaleTicket(listing.id, listing.price);
+              await buyResaleTicketWithCredit(listing.id);
               Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
               setPurchaseSuccess({
                 title: t('resale.purchase_success_title'),
@@ -431,8 +431,8 @@ export default function ResaleScreen() {
               Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
               Alert.alert(t('common.error'), error.message || t('errors.generic'));
             }
-          }
-        }
+          },
+        },
       ]
     );
   };
