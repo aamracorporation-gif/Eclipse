@@ -2,6 +2,7 @@ import { TextInput, View, StyleSheet, TextInputProps, Text, StyleProp, ViewStyle
 import { Colors } from '@/constants/Colors';
 import { LucideIcon } from 'lucide-react-native';
 import React, { forwardRef, isValidElement } from 'react';
+import { theme } from '@/theme/styles';
 
 interface ThemedInputProps extends Omit<TextInputProps, 'style'> {
   icon?: LucideIcon | React.ReactNode;
@@ -49,57 +50,57 @@ ThemedInput.displayName = 'ThemedInput';
 
 const styles = StyleSheet.create({
   wrapper: {
-    marginBottom: 16,
+    marginBottom: theme.space[4],
     width: '100%',
   },
   label: {
     color: 'white',
-    fontSize: 16,
-    fontWeight: 'bold',
-    marginBottom: 8,
+    fontSize: theme.typography.size.md,
+    fontWeight: theme.typography.weight.semibold,
+    marginBottom: theme.space[2],
   },
   container: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: 'rgba(255, 255, 255, 0.05)',
-    borderRadius: 12,
-    borderWidth: 1,
+    borderRadius: theme.radius.md,
+    borderWidth: theme.components.input.borderWidth,
     borderColor: Colors.dark.border,
-    minHeight: 56,
+    minHeight: theme.components.input.minHeight,
   },
   errorBorder: {
     borderColor: Colors.dark.error,
   },
   iconContainer: {
-    paddingLeft: 16,
-    paddingRight: 12,
-    height: 56,
+    paddingLeft: theme.space[4],
+    paddingRight: theme.space[3],
+    height: theme.components.input.minHeight,
     justifyContent: 'center',
   },
   rightIconContainer: {
-    paddingRight: 16,
-    paddingLeft: 12,
-    height: 56,
+    paddingRight: theme.space[4],
+    paddingLeft: theme.space[3],
+    height: theme.components.input.minHeight,
     justifyContent: 'center',
   },
   input: {
     flex: 1,
     color: '#FFFFFF',
-    fontSize: 16,
-    minHeight: 56,
-    paddingRight: 16,
-    paddingVertical: 12, 
+    fontSize: theme.typography.size.md,
+    minHeight: theme.components.input.minHeight,
+    paddingRight: theme.space[4],
+    paddingVertical: theme.space[3],
   },
   noIconInput: {
-    paddingLeft: 16,
+    paddingLeft: theme.space[4],
   },
   inputWithRightIcon: {
     paddingRight: 0,
   },
   errorText: {
     color: Colors.dark.error,
-    fontSize: 12,
-    marginTop: 4,
-    marginLeft: 4,
+    fontSize: theme.typography.size.xs,
+    marginTop: theme.space[1],
+    marginLeft: theme.space[1],
   }
 });
