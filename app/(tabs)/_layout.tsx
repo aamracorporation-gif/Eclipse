@@ -1,11 +1,14 @@
 import { Tabs } from 'expo-router';
 import { Home, Ticket, User, Repeat, Map as MapIcon } from 'lucide-react-native';
 import { Colors } from '@/constants/Colors';
-import { Platform, View } from 'react-native';
+import { Platform, StyleSheet, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { theme } from '@/theme/styles';
 
 export default function TabLayout() {
   const { t } = useTranslation();
+  const insets = useSafeAreaInsets();
   return (
     <Tabs
       screenOptions={{
@@ -17,24 +20,13 @@ export default function TabLayout() {
           bottom: 0,
           left: 0,
           right: 0,
-          height: 85,
+          height: 64 + insets.bottom,
           elevation: 0,
           backgroundColor: 'transparent',
           borderTopWidth: 0,
         },
         tabBarBackground: () => (
-          <View 
-            style={{
-              position: 'absolute',
-              top: 0,
-              left: 0,
-              right: 0,
-              bottom: 0,
-              backgroundColor: 'rgba(10, 10, 15, 0.95)', // Deep dark almost opaque
-              borderTopWidth: 1,
-              borderTopColor: 'rgba(255, 255, 255, 0.1)',
-            }} 
-          />
+          <View style={[StyleSheet.absoluteFill, styles.tabBarBg]} />
         ),
       }}>
       <Tabs.Screen
@@ -92,3 +84,11 @@ export default function TabLayout() {
     </Tabs>
   );
 }
+
+const styles = StyleSheet.create({
+  tabBarBg: {
+    backgroundColor: 'rgba(10, 10, 15, 0.92)',
+    borderTopWidth: 1,
+    borderTopColor: theme.colors.border,
+  },
+});
