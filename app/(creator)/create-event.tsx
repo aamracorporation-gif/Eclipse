@@ -19,6 +19,7 @@ import MapView, { Marker, Region } from '@/components/ui/Map';
 import { uploadImage } from '@/lib/storage';
 import { supabase } from '@/lib/supabase';
 import { useI18n } from '@/lib/I18nContext';
+import { useTranslation } from 'react-i18next';
 
 type VipReservadoDraft = {
   id: string;
@@ -37,6 +38,7 @@ export default function CreateEventScreen() {
   const { addEvent, updateEvent, getEventById } = useEvents();
   const { user } = useAuth();
   const { language } = useI18n();
+  const { t } = useTranslation();
   const localeTag = language === 'en' ? 'en-US' : language === 'fr' ? 'fr-FR' : 'es-ES';
   const isEditing = isEditingParam === 'true';
   const eventId = id;
@@ -99,9 +101,9 @@ export default function CreateEventScreen() {
       
       if (data && data.role === 'organizer' && !data.stripe_onboarding_completed) {
         Alert.alert(
-          'Configuración requerida',
-          'Debes completar la configuración de Stripe antes de crear o editar eventos.',
-          [{ text: 'Ir al panel', onPress: () => router.replace('/(creator)') }]
+          t('creator.create_event.stripe_required_title'),
+          t('creator.create_event.stripe_required_body'),
+          [{ text: t('creator.create_event.go_to_dashboard'), onPress: () => router.replace('/(creator)') }]
         );
       }
     };
@@ -370,7 +372,7 @@ export default function CreateEventScreen() {
   };
 
   const pickImage = async () => {
-    const options = ['Hacer Foto', 'Elegir de Galería', 'Cancelar'];
+    const options = [t('creator.create_event.photo.camera'), t('creator.create_event.photo.gallery'), t('common.cancel')];
     const cancelButtonIndex = 2;
 
     const handleSelection = async (index: number) => {
@@ -382,7 +384,7 @@ export default function CreateEventScreen() {
           // Camera
           const { status } = await ImagePicker.requestCameraPermissionsAsync();
           if (status !== 'granted') {
-            Alert.alert('Permiso denegado', 'Necesitamos acceso a la cámara para hacer fotos.');
+            Alert.alert(t('common.error'), t('creator.create_event.photo.permission_camera'));
             return;
           }
           result = await ImagePicker.launchCameraAsync({
@@ -395,7 +397,7 @@ export default function CreateEventScreen() {
           // Gallery
           const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
           if (status !== 'granted') {
-            Alert.alert('Permiso denegado', 'Necesitamos acceso a la galería para subir fotos.');
+            Alert.alert(t('common.error'), t('creator.create_event.photo.permission_gallery'));
             return;
           }
           result = await ImagePicker.launchImageLibraryAsync({
@@ -411,7 +413,7 @@ export default function CreateEventScreen() {
         }
       } catch (error) {
         console.error('Error picking image:', error);
-        Alert.alert('Error', 'No se pudo cargar la imagen');
+        Alert.alert(t('common.error'), t('creator.create_event.photo.upload_failed'));
       }
     };
 
@@ -425,19 +427,19 @@ export default function CreateEventScreen() {
       );
     } else {
       Alert.alert(
-        'Subir Imagen',
-        'Elige una opción',
+        t('creator.create_event.photo.upload_title'),
+        t('creator.create_event.photo.choose_option'),
         [
-          { text: 'Hacer Foto', onPress: () => handleSelection(0) },
-          { text: 'Elegir de Galería', onPress: () => handleSelection(1) },
-          { text: 'Cancelar', style: 'cancel' },
+          { text: t('creator.create_event.photo.camera'), onPress: () => handleSelection(0) },
+          { text: t('creator.create_event.photo.gallery'), onPress: () => handleSelection(1) },
+          { text: t('common.cancel'), style: 'cancel' },
         ]
       );
     }
   };
 
   const pickVenuePlanImage = async () => {
-    const options = ['Hacer Foto', 'Elegir de Galería', 'Cancelar'];
+    const options = [t('creator.create_event.photo.camera'), t('creator.create_event.photo.gallery'), t('common.cancel')];
     const cancelButtonIndex = 2;
 
     const handleSelection = async (index: number) => {
@@ -449,7 +451,7 @@ export default function CreateEventScreen() {
           // Camera
           const { status } = await ImagePicker.requestCameraPermissionsAsync();
           if (status !== 'granted') {
-            Alert.alert('Permiso denegado', 'Necesitamos acceso a la cámara para hacer fotos.');
+            Alert.alert(t('common.error'), t('creator.create_event.photo.permission_camera'));
             return;
           }
           result = await ImagePicker.launchCameraAsync({
@@ -462,7 +464,7 @@ export default function CreateEventScreen() {
           // Gallery
           const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
           if (status !== 'granted') {
-            Alert.alert('Permiso denegado', 'Necesitamos acceso a la galería para subir fotos.');
+            Alert.alert(t('common.error'), t('creator.create_event.photo.permission_gallery'));
             return;
           }
           result = await ImagePicker.launchImageLibraryAsync({
@@ -478,7 +480,7 @@ export default function CreateEventScreen() {
         }
       } catch (error) {
         console.error('Error picking venue plan image:', error);
-        Alert.alert('Error', 'No se pudo cargar la imagen del plano');
+        Alert.alert(t('common.error'), t('creator.create_event.photo.plan_upload_failed'));
       }
     };
 
@@ -492,12 +494,12 @@ export default function CreateEventScreen() {
       );
     } else {
       Alert.alert(
-        'Subir Plano',
-        'Elige una opción',
+        t('creator.create_event.photo.plan_upload_title'),
+        t('creator.create_event.photo.choose_option'),
         [
-          { text: 'Hacer Foto', onPress: () => handleSelection(0) },
-          { text: 'Elegir de Galería', onPress: () => handleSelection(1) },
-          { text: 'Cancelar', style: 'cancel' },
+          { text: t('creator.create_event.photo.camera'), onPress: () => handleSelection(0) },
+          { text: t('creator.create_event.photo.gallery'), onPress: () => handleSelection(1) },
+          { text: t('common.cancel'), style: 'cancel' },
         ]
       );
     }
@@ -505,7 +507,7 @@ export default function CreateEventScreen() {
 
   const handleAddTicket = () => {
     if (!newTicket.name || !newTicket.price || !newTicket.quantity) {
-      Alert.alert('Error', 'Completa los datos de la entrada');
+      Alert.alert(t('common.error'), t('creator.create_event.tickets.fill_fields'));
       return;
     }
 
@@ -513,7 +515,7 @@ export default function CreateEventScreen() {
     const quantity = parseInt(newTicket.quantity, 10);
 
     if (isNaN(price) || isNaN(quantity)) {
-      Alert.alert('Error', 'El precio y la cantidad deben ser números válidos');
+      Alert.alert(t('common.error'), t('creator.create_event.tickets.invalid_numbers'));
       return;
     }
 
@@ -830,7 +832,9 @@ export default function CreateEventScreen() {
               <ArrowLeft size={24} color={Colors.dark.text} />
             </GlassView>
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>{isEditing ? 'Editar Fiesta' : 'Crear Nueva Fiesta'}</Text>
+          <Text style={styles.headerTitle}>
+            {isEditing ? t('creator.create_event.edit_title') : t('creator.create_event.create_title')}
+          </Text>
         </View>
 
         <View style={{ flex: 1 }}>
@@ -852,22 +856,22 @@ export default function CreateEventScreen() {
                   </LinearGradient>
                 </View>
                 <View style={{ flex: 1 }}>
-                  <Text style={styles.premiumTitle}>Información Básica</Text>
-                  <Text style={styles.premiumSubtitle}>Datos principales del evento.</Text>
+                  <Text style={styles.premiumTitle}>{t('creator.create_event.basic_info_title')}</Text>
+                  <Text style={styles.premiumSubtitle}>{t('creator.create_event.basic_info_subtitle')}</Text>
                 </View>
               </View>
               
               <ThemedInput
-                label="Nombre del Evento"
-                placeholder="Ej: Noche de Verano"
+                label={t('creator.create_event.event_name_label')}
+                placeholder={t('creator.create_event.event_name_placeholder')}
                 value={formData.title}
                 onChangeText={(text) => setFormData({ ...formData, title: text })}
                 icon={<Tag size={20} color={Colors.dark.textSecondary} />}
               />
 
               <ThemedInput
-                label="Descripción"
-                placeholder="¿De qué va la fiesta?"
+                label={t('creator.create_event.description_label')}
+                placeholder={t('creator.create_event.description_placeholder')}
                 value={formData.description}
                 onChangeText={(text) => setFormData({ ...formData, description: text })}
                 multiline
@@ -876,14 +880,14 @@ export default function CreateEventScreen() {
               />
 
               <View style={{ marginBottom: 16 }}>
-                <Text style={styles.inputLabel}>Fecha</Text>
+                <Text style={styles.inputLabel}>{t('event.details.date')}</Text>
                 <TouchableOpacity onPress={() => setShowDatePicker(true)} activeOpacity={0.8}>
                   <View pointerEvents="none">
                     <ThemedInput
                       value={dateText}
                       onChangeText={() => {}}
                       editable={false}
-                      placeholder="Selecciona fecha"
+                      placeholder={t('creator.create_event.select_date')}
                       icon={<Calendar size={20} color={Colors.dark.textSecondary} />}
                     />
                   </View>
@@ -891,14 +895,14 @@ export default function CreateEventScreen() {
               </View>
 
               <View style={{ marginBottom: 16 }}>
-                <Text style={styles.inputLabel}>Hora</Text>
+                <Text style={styles.inputLabel}>{t('event.details.time')}</Text>
                 <TouchableOpacity onPress={() => setShowTimePicker(true)} activeOpacity={0.8}>
                   <View pointerEvents="none">
                     <ThemedInput
                       value={timeText}
                       onChangeText={() => {}}
                       editable={false}
-                      placeholder="Selecciona hora"
+                      placeholder={t('creator.create_event.select_time')}
                       icon={<Clock size={20} color={Colors.dark.textSecondary} />}
                     />
                   </View>
@@ -934,7 +938,7 @@ export default function CreateEventScreen() {
                     <View style={styles.modalContent}>
                       <View style={styles.modalHeader}>
                         <TouchableOpacity onPress={confirmIOSDate}>
-                          <Text style={styles.modalDoneButton}>Listo</Text>
+                          <Text style={styles.modalDoneButton}>{t('creator.create_event.done')}</Text>
                         </TouchableOpacity>
                       </View>
                       <DateTimePicker
@@ -956,8 +960,8 @@ export default function CreateEventScreen() {
                     <TouchableOpacity onPress={() => setShowMapModal(true)} activeOpacity={0.8}>
                         <View pointerEvents="none">
                             <ThemedInput
-                            label="Ubicación"
-                            placeholder="Toca para buscar en el mapa"
+                            label={t('creator.create_event.location_label')}
+                            placeholder={t('creator.create_event.location_placeholder')}
                             value={formData.location}
                             onChangeText={(text) => setFormData({ ...formData, location: text })}
                             icon={<MapPin size={20} color={Colors.dark.textSecondary} />}
@@ -987,7 +991,7 @@ export default function CreateEventScreen() {
                 {coordinates && (
                   <View style={{ marginTop: 8, marginBottom: 16 }}>
                     <Text style={{ color: Colors.dark.success, fontSize: 12, marginBottom: 8, marginLeft: 4 }}>
-                        ✓ Ubicación verificada:
+                        {t('creator.create_event.location_verified')}
                     </Text>
                     <View style={{ height: 150, borderRadius: 12, overflow: 'hidden', borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)' }}>
                       <MapView
@@ -1037,7 +1041,7 @@ export default function CreateEventScreen() {
                                 <ThemedInput 
                                     value={searchQuery}
                                     onChangeText={setSearchQuery}
-                                    placeholder="Buscar ciudad, calle..."
+                                    placeholder={t('creator.create_event.map_search_placeholder')}
                                     placeholderTextColor="#999"
                                     style={{ height: 44, marginBottom: 0, paddingHorizontal: 8, backgroundColor: 'transparent', borderWidth: 0 }}
                                     inputStyle={{ color: 'black' }}
@@ -1066,7 +1070,7 @@ export default function CreateEventScreen() {
                             
                             <View style={{ position: 'absolute', bottom: 30, left: 20, right: 20 }}>
                                 <ThemedButton 
-                                    title="Confirmar Ubicación"
+                                    title={t('creator.create_event.confirm_location')}
                                     onPress={confirmMapLocation}
                                     icon={<Check size={20} color="white" />}
                                 />
@@ -1077,16 +1081,16 @@ export default function CreateEventScreen() {
               </Modal>
 
               <ThemedInput
-                label="Tipo de Música"
-                placeholder="Ej: Reggaeton, Techno, Comercial"
+                label={t('event.details.music')}
+                placeholder={t('creator.create_event.music_placeholder')}
                 value={formData.theme}
                 onChangeText={(text) => setFormData({ ...formData, theme: text })}
                 icon={<Tag size={20} color={Colors.dark.textSecondary} />}
               />
 
               <ThemedInput
-                label="Edad Mínima"
-                placeholder="Ej: 18"
+                label={t('creator.create_event.min_age_label')}
+                placeholder={t('creator.create_event.min_age_placeholder')}
                 value={formData.ageRestriction}
                 onChangeText={(text) => setFormData({ ...formData, ageRestriction: text })}
                 keyboardType="numeric"
@@ -1094,15 +1098,15 @@ export default function CreateEventScreen() {
               />
 
               <ThemedInput
-                label="Dress Code"
-                placeholder="Ej: Elegante, Casual"
+                label={t('event.details.dress_code')}
+                placeholder={t('creator.create_event.dress_code_placeholder')}
                 value={formData.dressCode}
                 onChangeText={(text) => setFormData({ ...formData, dressCode: text })}
                 icon={<Tag size={20} color={Colors.dark.textSecondary} />}
               />
 
               <View style={{ marginBottom: 16 }}>
-                <Text style={styles.inputLabel}>Imagen del Evento</Text>
+                <Text style={styles.inputLabel}>{t('creator.create_event.event_image_label')}</Text>
                 {formData.imageUrl ? (
                   <View style={styles.imagePreviewContainer}>
                     <Image source={{ uri: formData.imageUrl }} style={styles.imagePreview} resizeMode="cover" />
@@ -1116,15 +1120,15 @@ export default function CreateEventScreen() {
                   <TouchableOpacity onPress={pickImage} activeOpacity={0.8}>
                      <GlassView intensity={10} style={styles.uploadPlaceholder}>
                         <Camera size={32} color={Colors.dark.textSecondary} />
-                        <Text style={styles.uploadText}>Subir foto o hacer foto</Text>
+                        <Text style={styles.uploadText}>{t('creator.create_event.event_image_cta')}</Text>
                      </GlassView>
                   </TouchableOpacity>
                 )}
               </View>
 
               <View style={{ marginBottom: 16 }}>
-                <Text style={styles.inputLabel}>Plano de la Discoteca (Opcional)</Text>
-                <Text style={styles.inputDescription}>Ayuda a tus clientes a ubicar las mesas VIP</Text>
+                <Text style={styles.inputLabel}>{t('creator.create_event.venue_plan_label')}</Text>
+                <Text style={styles.inputDescription}>{t('creator.create_event.venue_plan_desc')}</Text>
                 {formData.venuePlanUrl ? (
                   <View style={styles.imagePreviewContainer}>
                     <Image source={{ uri: formData.venuePlanUrl }} style={styles.imagePreview} resizeMode="contain" />
@@ -1138,7 +1142,7 @@ export default function CreateEventScreen() {
                   <TouchableOpacity onPress={pickVenuePlanImage} activeOpacity={0.8}>
                      <GlassView intensity={10} style={styles.uploadPlaceholder}>
                         <ImageIcon size={32} color={Colors.dark.textSecondary} />
-                        <Text style={styles.uploadText}>Subir plano del local</Text>
+                        <Text style={styles.uploadText}>{t('creator.create_event.venue_plan_cta')}</Text>
                      </GlassView>
                   </TouchableOpacity>
                 )}
@@ -1158,14 +1162,14 @@ export default function CreateEventScreen() {
                   </LinearGradient>
                 </View>
                 <View style={{ flex: 1 }}>
-                  <Text style={styles.premiumTitle}>Entradas</Text>
-                  <Text style={styles.premiumSubtitle}>Configura tipos de entrada y stock.</Text>
+                  <Text style={styles.premiumTitle}>{t('creator.create_event.tickets.section_title')}</Text>
+                  <Text style={styles.premiumSubtitle}>{t('creator.create_event.tickets.section_subtitle')}</Text>
                 </View>
               </View>
               
               <View style={styles.ticketForm}>
                 <ThemedInput
-                  placeholder="Nombre (ej: General)"
+                  placeholder={t('creator.create_event.tickets.name_placeholder')}
                   value={newTicket.name}
                   onChangeText={(text) => setNewTicket({ ...newTicket, name: text })}
                   containerStyle={{ marginBottom: 12 }}
@@ -1173,7 +1177,7 @@ export default function CreateEventScreen() {
                 <View style={styles.row}>
                   <View style={styles.halfWidth}>
                     <ThemedInput
-                      placeholder="Precio (€)"
+                      placeholder={t('creator.create_event.tickets.price_placeholder')}
                       value={newTicket.price}
                       onChangeText={(text) => setNewTicket({ ...newTicket, price: text })}
                       keyboardType="numeric"
@@ -1182,7 +1186,7 @@ export default function CreateEventScreen() {
                   </View>
                   <View style={styles.halfWidth}>
                     <ThemedInput
-                      placeholder="Cantidad"
+                      placeholder={t('creator.create_event.tickets.quantity_placeholder')}
                       value={newTicket.quantity}
                       onChangeText={(text) => setNewTicket({ ...newTicket, quantity: text })}
                       keyboardType="numeric"
@@ -1191,7 +1195,7 @@ export default function CreateEventScreen() {
                 </View>
                 
                 <ThemedButton
-                  title="Añadir Entrada"
+                  title={t('creator.create_event.tickets.add_button')}
                   onPress={handleAddTicket}
                   variant="outline"
                   style={styles.addTicketButton}
@@ -1203,7 +1207,9 @@ export default function CreateEventScreen() {
                 <View key={ticket.id} style={styles.ticketItem}>
                   <View style={styles.ticketInfo}>
                     <Text style={styles.ticketName}>{ticket.name}</Text>
-                    <Text style={styles.ticketDetails}>{ticket.price}€ • {ticket.quantity} uds</Text>
+                    <Text style={styles.ticketDetails}>
+                      {ticket.price}€ • {ticket.quantity} {t('creator.create_event.tickets.units')}
+                    </Text>
                   </View>
                   <TouchableOpacity onPress={() => removeTicket(ticket.id)} style={styles.deleteButton}>
                     <Trash2 size={20} color={Colors.dark.error} />
@@ -1226,8 +1232,8 @@ export default function CreateEventScreen() {
                     </LinearGradient>
                   </View>
                   <View style={{ flex: 1 }}>
-                    <Text style={styles.vipSectionTitle}>Reservados VIP (Opcional)</Text>
-                    <Text style={styles.vipSubtitle}>Se guardan aparte y no afectan a las entradas.</Text>
+                    <Text style={styles.vipSectionTitle}>{t('creator.create_event.vip.section_title')}</Text>
+                    <Text style={styles.vipSubtitle}>{t('creator.create_event.vip.section_subtitle')}</Text>
                   </View>
                   <View style={styles.vipBadge}>
                     <Text style={styles.vipBadgeText}>VIP</Text>
@@ -1236,7 +1242,7 @@ export default function CreateEventScreen() {
               </View>
 
               <ThemedButton
-                title="+ Añadir reservado VIP"
+                title={t('creator.create_event.vip.add_button')}
                 onPress={addVipReservado}
                 variant="outline"
                 style={styles.vipAddButton}
@@ -1254,22 +1260,22 @@ export default function CreateEventScreen() {
                   />
 
                   <View style={styles.vipCardHeader}>
-                    <Text style={styles.vipCardTitle}>Reservado VIP #{index + 1}</Text>
+                    <Text style={styles.vipCardTitle}>{t('creator.create_event.vip.card_title', { index: index + 1 })}</Text>
                     <TouchableOpacity onPress={() => removeVipReservado(vip.id)} style={styles.vipRemoveButton}>
                       <Trash2 size={18} color={Colors.dark.error} />
                     </TouchableOpacity>
                   </View>
 
                   <ThemedInput
-                    label="Nombre del reservado"
-                    placeholder="Ej: Mesa Oro"
+                    label={t('creator.create_event.vip.name_label')}
+                    placeholder={t('creator.create_event.vip.name_placeholder')}
                     value={vip.name}
                     onChangeText={(text) => updateVipReservado(vip.id, { name: text })}
                   />
 
                   <ThemedInput
-                    label="Descripción"
-                    placeholder="Detalles, ubicación, condiciones…"
+                    label={t('creator.create_event.vip.description_label')}
+                    placeholder={t('creator.create_event.vip.description_placeholder')}
                     value={vip.description}
                     onChangeText={(text) => updateVipReservado(vip.id, { description: text })}
                     multiline
@@ -1280,8 +1286,8 @@ export default function CreateEventScreen() {
                   <View style={styles.row}>
                     <View style={styles.halfWidth}>
                       <ThemedInput
-                        label="Precio base (€)"
-                        placeholder="Ej: 200"
+                        label={t('creator.create_event.vip.base_price_label')}
+                        placeholder={t('creator.create_event.vip.base_price_placeholder')}
                         value={vip.basePrice}
                         onChangeText={(text) => updateVipReservado(vip.id, { basePrice: text })}
                         keyboardType="numeric"
@@ -1290,8 +1296,8 @@ export default function CreateEventScreen() {
                     </View>
                     <View style={styles.halfWidth}>
                       <ThemedInput
-                        label="Capacidad"
-                        placeholder="Ej: 6"
+                        label={t('creator.create_event.vip.capacity_label')}
+                        placeholder={t('creator.create_event.vip.capacity_placeholder')}
                         value={vip.capacityPeople}
                         onChangeText={(text) => updateVipReservado(vip.id, { capacityPeople: text })}
                         keyboardType="numeric"
@@ -1302,8 +1308,8 @@ export default function CreateEventScreen() {
                   <View style={styles.row}>
                     <View style={styles.halfWidth}>
                       <ThemedInput
-                        label="Botellas incluidas"
-                        placeholder="Ej: 1"
+                        label={t('creator.create_event.vip.included_bottles_label')}
+                        placeholder={t('creator.create_event.vip.included_bottles_placeholder')}
                         value={vip.includedBottles}
                         onChangeText={(text) => updateVipReservado(vip.id, { includedBottles: text })}
                         keyboardType="numeric"
@@ -1311,8 +1317,8 @@ export default function CreateEventScreen() {
                     </View>
                     <View style={styles.halfWidth}>
                       <ThemedInput
-                        label="Cantidad"
-                        placeholder="Ej: 3"
+                        label={t('creator.create_event.vip.quantity_label')}
+                        placeholder={t('creator.create_event.vip.quantity_placeholder')}
                         value={vip.quantityAvailable}
                         onChangeText={(text) => updateVipReservado(vip.id, { quantityAvailable: text })}
                         keyboardType="numeric"
@@ -1321,8 +1327,8 @@ export default function CreateEventScreen() {
                   </View>
 
                   <ThemedInput
-                    label="Precio botella extra (€)"
-                    placeholder="Opcional (ej: 120)"
+                    label={t('creator.create_event.vip.extra_bottle_price_label')}
+                    placeholder={t('creator.create_event.vip.extra_bottle_price_placeholder')}
                     value={vip.extraBottlePrice}
                     onChangeText={(text) => updateVipReservado(vip.id, { extraBottlePrice: text })}
                     keyboardType="numeric"
@@ -1346,7 +1352,7 @@ export default function CreateEventScreen() {
                   pointerEvents="none"
                 >
                   <Text style={styles.buttonText}>
-                    {isEditing ? 'Guardar Cambios' : 'Publicar Evento'}
+                    {isEditing ? t('creator.create_event.save_changes') : t('creator.create_event.publish')}
                   </Text>
                 </LinearGradient>
             </TouchableOpacity>
