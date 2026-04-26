@@ -87,10 +87,10 @@ export default function ProfileScreen() {
 
   const openLanguagePicker = () => {
     Alert.alert(t('profile.change_language'), undefined, [
-      { text: 'Idioma del dispositivo', onPress: () => void setDeviceLanguage() },
-      { text: 'Español', onPress: () => void setLanguage('es') },
-      { text: 'English', onPress: () => void setLanguage('en') },
-      { text: 'Français', onPress: () => void setLanguage('fr') },
+      { text: t('profile.language.device'), onPress: () => void setDeviceLanguage() },
+      { text: t('profile.language.es'), onPress: () => void setLanguage('es') },
+      { text: t('profile.language.en'), onPress: () => void setLanguage('en') },
+      { text: t('profile.language.fr'), onPress: () => void setLanguage('fr') },
       { text: t('common.cancel'), style: 'cancel' },
     ]);
   };
@@ -425,7 +425,7 @@ export default function ProfileScreen() {
       setEditOpen(false);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch (e: any) {
-      Alert.alert('Error', e?.message ? String(e.message) : 'No se pudo guardar el perfil.');
+      Alert.alert(t('common.error'), e?.message ? String(e.message) : t('profile.organizer.edit_save_failed'));
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
     } finally {
       setSavingEdit(false);
@@ -435,17 +435,17 @@ export default function ProfileScreen() {
   const handleCancelResale = async (_listingId: string, ticketId: string) => {
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
     Alert.alert(
-      'Cancelar Venta',
-      '¿Estás seguro de que quieres retirar esta entrada de la reventa? Volverá a estar disponible en tus entradas.',
+      t('tickets.cancel_sale_title'),
+      t('tickets.cancel_sale_body'),
       [
-        { text: 'No', style: 'cancel' },
+        { text: t('common.no'), style: 'cancel' },
         {
-          text: 'Sí, retirar',
+          text: t('tickets.cancel_sale_confirm'),
           onPress: async () => {
             try {
               setIsCancelling(true);
               
-              if (!ticketId) throw new Error('Ticket inválido');
+              if (!ticketId) throw new Error(t('profile.resale.invalid_ticket'));
 
               const { error } = await supabase.rpc('cancel_resale_listing_secure', {
                 p_ticket_id: ticketId,
@@ -458,7 +458,7 @@ export default function ProfileScreen() {
             } catch (error: any) {
               console.error('Cancel Resale Error:', error);
               Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-              Alert.alert('Error', 'No se pudo cancelar la venta: ' + error.message);
+              Alert.alert(t('common.error'), t('tickets.cancel_sale_error'));
             } finally {
               setIsCancelling(false);
             }
@@ -480,19 +480,19 @@ export default function ProfileScreen() {
       }
     } else {
       Alert.alert(
-        'Cerrar Sesión',
-        '¿Estás seguro que deseas cerrar sesión?',
+        t('profile.logout'),
+        t('profile.logout_confirm'),
         [
-          { text: 'Cancelar', style: 'cancel' },
+          { text: t('common.cancel'), style: 'cancel' },
           {
-            text: 'Cerrar Sesión',
+            text: t('profile.logout'),
             style: 'destructive',
             onPress: async () => {
               try {
                 await signOut();
                 router.replace('/(auth)/login');
               } catch (error) {
-                Alert.alert('Error', 'No se pudo cerrar sesión');
+                Alert.alert(t('common.error'), t('profile.logout_failed'));
               }
             },
           },
@@ -504,22 +504,22 @@ export default function ProfileScreen() {
   const handleDeleteAccount = () => {
     if (deletingAccount) return;
     Alert.alert(
-      'Eliminar cuenta',
-      'Esto eliminará tu cuenta y tus datos. Esta acción no se puede deshacer.',
+      t('profile.delete_account_title'),
+      t('profile.delete_account_body'),
       [
-        { text: 'Cancelar', style: 'cancel' },
+        { text: t('common.cancel'), style: 'cancel' },
         {
-          text: 'Eliminar',
+          text: t('profile.delete_account_confirm'),
           style: 'destructive',
           onPress: async () => {
             try {
               setDeletingAccount(true);
               const { error } = await invokeEdgeFunction('delete-account', {});
-              if (error) throw new Error(String(error.message || 'No se pudo eliminar la cuenta.'));
+              if (error) throw new Error(String(error.message || t('profile.delete_account_failed')));
               await signOut();
               router.replace('/(auth)/login');
             } catch (e: any) {
-              Alert.alert('Error', String(e?.message || 'No se pudo eliminar la cuenta.'));
+              Alert.alert(t('common.error'), String(e?.message || t('profile.delete_account_failed')));
             } finally {
               setDeletingAccount(false);
             }
@@ -557,19 +557,19 @@ export default function ProfileScreen() {
             <View style={styles.iconContainer}>
               <User size={48} color={Colors.dark.primary} />
             </View>
-            <Text style={styles.authPromptTitle}>Mi Perfil</Text>
+            <Text style={styles.authPromptTitle}>{t('tabs.profile')}</Text>
             <Text style={styles.authPromptText}>
-              Inicia sesión para acceder a tu perfil y gestionar tus entradas
+              {t('profile.sign_in_prompt')}
             </Text>
             
             <ThemedButton 
-              title="Iniciar Sesión" 
+              title={t('auth.login')} 
               onPress={() => router.push('/(auth)/login')} 
               style={styles.authButton}
             />
             
             <ThemedButton 
-              title="Crear Cuenta" 
+              title={t('auth.register')} 
               onPress={() => router.push('/(auth)/register')} 
               variant="outline"
               style={styles.authButton}
@@ -660,14 +660,17 @@ export default function ProfileScreen() {
                   <TouchableOpacity
                     activeOpacity={0.85}
                     onPress={() => {
-                      Alert.alert('Cuenta suspendida', organizerMeta?.suspended_reason ? organizerMeta.suspended_reason : 'Esta cuenta está suspendida.');
+                      Alert.alert(
+                        t('profile.organizer.suspended_title'),
+                        organizerMeta?.suspended_reason ? organizerMeta.suspended_reason : t('profile.organizer.suspended_body')
+                      );
                     }}
                     style={{ marginTop: 10, alignSelf: 'stretch', maxWidth: '100%' }}
                   >
                     <View style={[styles.verificationPill, { backgroundColor: 'rgba(239,68,68,0.12)', borderColor: 'rgba(239,68,68,0.35)' }]}>
                       <ShieldCheck size={14} color="#ef4444" />
                       <Text style={[styles.verificationPillText, { color: '#ef4444' }]} numberOfLines={1}>
-                        Cuenta suspendida
+                        {t('profile.organizer.suspended_title')}
                       </Text>
                       <ChevronRight size={14} color="rgba(255,255,255,0.55)" />
                     </View>
@@ -682,17 +685,19 @@ export default function ProfileScreen() {
                       if (verificationStatus === 'rejected') {
                         const reason = organizerMeta?.verification_rejection_reason?.toString().trim();
                         Alert.alert(
-                          'Verificación rechazada',
-                          reason ? `Motivo: ${reason}\n\nNo puedes volver a enviar la solicitud.` : 'No puedes volver a enviar la solicitud.'
+                          t('profile.organizer.verification.rejected_title'),
+                          reason
+                            ? t('profile.organizer.verification.rejected_body_with_reason', { reason })
+                            : t('profile.organizer.verification.rejected_body')
                         );
                         return;
                       }
                       if (verificationStatus === 'needs_correction') {
                         const note = organizerMeta?.verification_rejection_reason?.toString().trim();
                         if (note) {
-                          Alert.alert('Corrección requerida', note, [
-                            { text: 'Ir a verificación', onPress: () => router.push('/(creator)/verification') },
-                            { text: 'Cerrar', style: 'cancel' },
+                          Alert.alert(t('profile.organizer.verification.needs_correction_title'), note, [
+                            { text: t('profile.organizer.verification.go_to_verification'), onPress: () => router.push('/(creator)/verification') },
+                            { text: t('common.cancel'), style: 'cancel' },
                           ]);
                           return;
                         }
@@ -721,12 +726,12 @@ export default function ProfileScreen() {
                         numberOfLines={1}
                       >
                         {verificationStatus === 'verified'
-                          ? 'Verificado'
+                          ? t('profile.organizer.verification.status.verified')
                           : verificationStatus === 'needs_correction'
-                            ? 'Corrección requerida'
+                            ? t('profile.organizer.verification.status.needs_correction')
                             : verificationStatus === 'rejected'
-                              ? 'Verificación rechazada'
-                              : 'Verificación pendiente'}
+                              ? t('profile.organizer.verification.status.rejected')
+                              : t('profile.organizer.verification.status.pending')}
                       </Text>
                       {verificationStatus !== 'verified' && <ChevronRight size={14} color="rgba(255,255,255,0.55)" />}
                     </View>
@@ -828,17 +833,19 @@ export default function ProfileScreen() {
                     <>
                       {isOrganizerSuspended && (
                         <GlassView intensity={14} style={[styles.alertCard, styles.premiumCard, { borderColor: 'rgba(239,68,68,0.35)' }]}>
-                          <Text style={styles.alertTitle}>Cuenta suspendida</Text>
-                          <Text style={styles.alertText}>{organizerMeta?.suspended_reason ? organizerMeta.suspended_reason : 'Esta cuenta está suspendida.'}</Text>
+                          <Text style={styles.alertTitle}>{t('profile.organizer.suspended_title')}</Text>
+                          <Text style={styles.alertText}>
+                            {organizerMeta?.suspended_reason ? organizerMeta.suspended_reason : t('profile.organizer.suspended_body')}
+                          </Text>
                         </GlassView>
                       )}
 
                       {!isOrganizerSuspended && verificationStatus !== 'verified' && (
                         <GlassView intensity={14} style={[styles.alertCard, styles.premiumCard, { borderColor: 'rgba(245,158,11,0.35)' }]}>
-                          <Text style={styles.alertTitle}>Verificación pendiente</Text>
-                          <Text style={styles.alertText}>Completa la verificación para publicar y editar eventos.</Text>
+                          <Text style={styles.alertTitle}>{t('profile.organizer.verification.pending_title')}</Text>
+                          <Text style={styles.alertText}>{t('profile.organizer.verification.pending_body')}</Text>
                           <View style={{ marginTop: 12 }}>
-                            <ThemedButton title="Ir a verificación" onPress={() => router.push('/(creator)/verification')} />
+                            <ThemedButton title={t('profile.organizer.verification.go_to_verification')} onPress={() => router.push('/(creator)/verification')} />
                           </View>
                         </GlassView>
                       )}
@@ -848,7 +855,7 @@ export default function ProfileScreen() {
                           colors={['rgba(255,255,255,0.08)', 'rgba(48, 209, 88, 0.16)', 'transparent']}
                           style={StyleSheet.absoluteFill}
                         />
-                        <Text style={styles.organizerHeroLabel}>Total generado</Text>
+                        <Text style={styles.organizerHeroLabel}>{t('profile.organizer.total_generated')}</Text>
                         <Text style={styles.organizerHeroValue} numberOfLines={1} adjustsFontSizeToFit>
                           {new Intl.NumberFormat(localeTag, { style: 'currency', currency: 'EUR' }).format(Number(organizerStats.revenue) || 0)}
                         </Text>
@@ -866,8 +873,8 @@ export default function ProfileScreen() {
                           </LinearGradient>
                         </View>
                         <View style={{ flex: 1 }}>
-                          <Text style={styles.premiumTitle}>Acciones</Text>
-                          <Text style={styles.premiumSubtitle}>Atajos rápidos para gestionar.</Text>
+                          <Text style={styles.premiumTitle}>{t('profile.organizer.actions_title')}</Text>
+                          <Text style={styles.premiumSubtitle}>{t('profile.organizer.actions_subtitle')}</Text>
                         </View>
                       </View>
                       <View style={styles.iosGroup}>
@@ -877,10 +884,10 @@ export default function ProfileScreen() {
                             onPress={() => {
                               if (!canOrganizerPublish) {
                                 Alert.alert(
-                                  'Acción no disponible',
+                                  t('profile.organizer.action_unavailable_title'),
                                   isOrganizerSuspended
-                                    ? 'Tu cuenta está suspendida.'
-                                    : 'Completa la verificación para poder publicar eventos.'
+                                    ? t('profile.organizer.action_unavailable_suspended')
+                                    : t('profile.organizer.action_unavailable_needs_verification')
                                 );
                                 router.push('/(creator)/verification');
                                 return;
@@ -892,7 +899,7 @@ export default function ProfileScreen() {
                             <View style={[styles.iosIcon, { backgroundColor: '#22c55e' }]}>
                               <Calendar size={16} color="#0B0B0F" />
                             </View>
-                            <Text style={styles.iosButtonText}>Crear evento</Text>
+                            <Text style={styles.iosButtonText}>{t('profile.organizer.menu.create_event')}</Text>
                             <ChevronRight size={16} color="#8E8E93" />
                           </TouchableOpacity>
                           <View style={styles.iosDivider} />
@@ -900,7 +907,7 @@ export default function ProfileScreen() {
                             <View style={[styles.iosIcon, { backgroundColor: '#38bdf8' }]}>
                               <MapPin size={16} color="#0B0B0F" />
                             </View>
-                            <Text style={styles.iosButtonText}>Mis eventos</Text>
+                            <Text style={styles.iosButtonText}>{t('profile.organizer.menu.my_events')}</Text>
                             <ChevronRight size={16} color="#8E8E93" />
                           </TouchableOpacity>
                           <View style={styles.iosDivider} />
@@ -908,7 +915,7 @@ export default function ProfileScreen() {
                             <View style={[styles.iosIcon, { backgroundColor: '#0A84FF' }]}>
                               <QrCode size={16} color="#FFF" />
                             </View>
-                            <Text style={styles.iosButtonText}>Escanear</Text>
+                            <Text style={styles.iosButtonText}>{t('profile.organizer.menu.scan')}</Text>
                             <ChevronRight size={16} color="#8E8E93" />
                           </TouchableOpacity>
                           <View style={styles.iosDivider} />
@@ -916,7 +923,7 @@ export default function ProfileScreen() {
                             <View style={[styles.iosIcon, { backgroundColor: '#a855f7' }]}>
                               <UserPlus size={16} color="#FFF" />
                             </View>
-                            <Text style={styles.iosButtonText}>Personal</Text>
+                            <Text style={styles.iosButtonText}>{t('profile.organizer.menu.staff')}</Text>
                             <ChevronRight size={16} color="#8E8E93" />
                           </TouchableOpacity>
                           <View style={styles.iosDivider} />
@@ -924,7 +931,7 @@ export default function ProfileScreen() {
                             <View style={[styles.iosIcon, { backgroundColor: '#30D158' }]}>
                               <TrendingUp size={16} color="#0B0B0F" />
                             </View>
-                            <Text style={styles.iosButtonText}>Estadísticas</Text>
+                            <Text style={styles.iosButtonText}>{t('profile.organizer.menu.stats')}</Text>
                             <ChevronRight size={16} color="#8E8E93" />
                           </TouchableOpacity>
                         </GlassView>
@@ -942,8 +949,8 @@ export default function ProfileScreen() {
                           </LinearGradient>
                         </View>
                         <View style={{ flex: 1 }}>
-                          <Text style={styles.premiumTitle}>Próximos eventos</Text>
-                          <Text style={styles.premiumSubtitle}>Resumen de tus eventos más cercanos.</Text>
+                          <Text style={styles.premiumTitle}>{t('profile.organizer.upcoming_title')}</Text>
+                          <Text style={styles.premiumSubtitle}>{t('profile.organizer.upcoming_subtitle')}</Text>
                         </View>
                       </View>
                       <View style={styles.iosGroup}>
@@ -963,7 +970,7 @@ export default function ProfileScreen() {
                                     <View style={{ flex: 1 }}>
                                       <Text style={styles.eventTitle} numberOfLines={1}>{e.title}</Text>
                                       <Text style={styles.eventMeta}>
-                                        {e.date} · {e.time} · {pct}% vendido
+                                        {e.date} · {e.time} · {t('profile.organizer.sold_pct', { pct })}
                                       </Text>
                                     </View>
                                     <ChevronRight size={16} color="#8E8E93" />
@@ -974,9 +981,9 @@ export default function ProfileScreen() {
                             })
                           ) : (
                             <View style={{ paddingVertical: 6 }}>
-                              <Text style={{ color: 'rgba(255,255,255,0.70)', fontWeight: '700' }}>Sin próximos eventos</Text>
+                              <Text style={{ color: 'rgba(255,255,255,0.70)', fontWeight: '700' }}>{t('profile.organizer.no_upcoming_title')}</Text>
                               <Text style={{ color: 'rgba(255,255,255,0.55)', marginTop: 4 }}>
-                                Crea un evento para empezar a vender entradas.
+                                {t('profile.organizer.no_upcoming_body')}
                               </Text>
                             </View>
                           )}
@@ -991,7 +998,7 @@ export default function ProfileScreen() {
                             <View style={[styles.iosIcon, { backgroundColor: '#0A84FF' }]}>
                               <Pencil size={16} color="#FFF" />
                             </View>
-                            <Text style={styles.iosButtonText}>Editar perfil del club</Text>
+                            <Text style={styles.iosButtonText}>{t('profile.organizer.settings.edit_club_profile')}</Text>
                             <ChevronRight size={16} color="#8E8E93" />
                           </TouchableOpacity>
                           <View style={styles.iosDivider} />
@@ -999,7 +1006,7 @@ export default function ProfileScreen() {
                             <View style={[styles.iosIcon, { backgroundColor: '#F59E0B' }]}>
                               <ShieldCheck size={16} color="#000" />
                             </View>
-                            <Text style={styles.iosButtonText}>Verificación y pagos</Text>
+                            <Text style={styles.iosButtonText}>{t('profile.organizer.settings.verification_payments')}</Text>
                             <ChevronRight size={16} color="#8E8E93" />
                           </TouchableOpacity>
                           <View style={styles.iosDivider} />
@@ -1032,7 +1039,7 @@ export default function ProfileScreen() {
                             <View style={[styles.iosIcon, { backgroundColor: '#34d399' }]}>
                               <FileText size={16} color="#000" />
                             </View>
-                            <Text style={styles.iosButtonText}>Información legal</Text>
+                            <Text style={styles.iosButtonText}>{t('profile.legal_info')}</Text>
                             <ChevronRight size={16} color="#8E8E93" />
                           </TouchableOpacity>
                         </GlassView>
@@ -1050,36 +1057,36 @@ export default function ProfileScreen() {
                           </LinearGradient>
                         </View>
                         <View style={{ flex: 1 }}>
-                          <Text style={styles.premiumTitle}>Negocio</Text>
-                          <Text style={styles.premiumSubtitle}>Información del club.</Text>
+                          <Text style={styles.premiumTitle}>{t('profile.organizer.business_title')}</Text>
+                          <Text style={styles.premiumSubtitle}>{t('profile.organizer.business_subtitle')}</Text>
                         </View>
                       </View>
                       <View style={styles.iosGroup}>
                         <GlassView intensity={14} style={[styles.iosGroupContainer, styles.premiumCard]}>
                           <View style={styles.iosRow}>
                             <View style={styles.iosLabelContainer}>
-                              <Text style={styles.iosLabel}>Club</Text>
+                              <Text style={styles.iosLabel}>{t('profile.organizer.business.club_label')}</Text>
                             </View>
                             <View style={styles.iosValueContainer}>
-                              <Text style={styles.iosValue} numberOfLines={1}>{organizerMeta?.club_name || 'No especificado'}</Text>
+                              <Text style={styles.iosValue} numberOfLines={1}>{organizerMeta?.club_name || t('profile.not_specified')}</Text>
                             </View>
                           </View>
                           <View style={styles.iosDivider} />
                           <View style={styles.iosRow}>
                             <View style={styles.iosLabelContainer}>
-                              <Text style={styles.iosLabel}>Email negocio</Text>
+                              <Text style={styles.iosLabel}>{t('profile.organizer.business.business_email_label')}</Text>
                             </View>
                             <View style={styles.iosValueContainer}>
-                              <Text style={styles.iosValue} numberOfLines={1}>{organizerMeta?.business_email || 'No especificado'}</Text>
+                              <Text style={styles.iosValue} numberOfLines={1}>{organizerMeta?.business_email || t('profile.not_specified')}</Text>
                             </View>
                           </View>
                           <View style={styles.iosDivider} />
                           <View style={styles.iosRow}>
                             <View style={styles.iosLabelContainer}>
-                              <Text style={styles.iosLabel}>Instagram</Text>
+                              <Text style={styles.iosLabel}>{t('profile.organizer.business.instagram_label')}</Text>
                             </View>
                             <View style={styles.iosValueContainer}>
-                              <Text style={styles.iosValue} numberOfLines={1}>{organizerMeta?.instagram_account || 'No especificado'}</Text>
+                              <Text style={styles.iosValue} numberOfLines={1}>{organizerMeta?.instagram_account || t('profile.not_specified')}</Text>
                             </View>
                           </View>
                           <View style={styles.iosDivider} />
@@ -1164,7 +1171,7 @@ export default function ProfileScreen() {
                         <View style={[styles.iosIcon, { backgroundColor: '#34d399' }]}>
                           <FileText size={16} color="#000" />
                         </View>
-                        <Text style={styles.iosButtonText}>Información legal</Text>
+                        <Text style={styles.iosButtonText}>{t('profile.legal_info')}</Text>
                         <ChevronRight size={16} color="#8E8E93" />
                       </TouchableOpacity>
                       {profileRole === 'admin' && (
@@ -1220,7 +1227,9 @@ export default function ProfileScreen() {
                   onPress={handleDeleteAccount}
                   disabled={deletingAccount}
                 >
-                   <Text style={[styles.logoutText, { color: '#fff' }]}>{deletingAccount ? 'Eliminando…' : 'Eliminar mi cuenta y mis datos'}</Text>
+                   <Text style={[styles.logoutText, { color: '#fff' }]}>
+                     {deletingAccount ? t('profile.deleting') : t('profile.delete_my_account')}
+                   </Text>
                 </TouchableOpacity>
                 <TouchableOpacity style={styles.logoutButton} onPress={handleSignOut}>
                    <Text style={styles.logoutText}>{t('profile.logout')}</Text>
@@ -1376,7 +1385,7 @@ export default function ProfileScreen() {
           <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ width: '100%', maxWidth: 560 }}>
             <GlassView intensity={14} style={[styles.modalCard, styles.premiumCard]}>
               <View style={styles.modalHeaderRow}>
-                <Text style={styles.modalTitle}>Editar perfil del club</Text>
+                <Text style={styles.modalTitle}>{t('profile.organizer.edit_modal.title')}</Text>
                 <TouchableOpacity onPress={() => setEditOpen(false)} style={styles.modalClose}>
                   <X size={18} color="white" />
                 </TouchableOpacity>
@@ -1384,40 +1393,91 @@ export default function ProfileScreen() {
 
               <View style={{ gap: 10 }}>
                 <View style={styles.modalField}>
-                  <Text style={styles.modalLabel}>Nombre del club</Text>
-                  <TextInput value={editDraft.club_name} onChangeText={(v) => setEditDraft((p) => ({ ...p, club_name: v }))} placeholder="Club" placeholderTextColor="rgba(255,255,255,0.4)" style={styles.modalInput} />
+                  <Text style={styles.modalLabel}>{t('profile.organizer.edit_modal.club_name_label')}</Text>
+                  <TextInput
+                    value={editDraft.club_name}
+                    onChangeText={(v) => setEditDraft((p) => ({ ...p, club_name: v }))}
+                    placeholder={t('profile.organizer.edit_modal.club_name_placeholder')}
+                    placeholderTextColor="rgba(255,255,255,0.4)"
+                    style={styles.modalInput}
+                  />
                 </View>
                 <View style={styles.modalField}>
-                  <Text style={styles.modalLabel}>Email de negocio</Text>
-                  <TextInput value={editDraft.business_email} onChangeText={(v) => setEditDraft((p) => ({ ...p, business_email: v }))} placeholder="contacto@club.com" placeholderTextColor="rgba(255,255,255,0.4)" autoCapitalize="none" keyboardType="email-address" style={styles.modalInput} />
+                  <Text style={styles.modalLabel}>{t('profile.organizer.edit_modal.business_email_label')}</Text>
+                  <TextInput
+                    value={editDraft.business_email}
+                    onChangeText={(v) => setEditDraft((p) => ({ ...p, business_email: v }))}
+                    placeholder={t('profile.organizer.edit_modal.business_email_placeholder')}
+                    placeholderTextColor="rgba(255,255,255,0.4)"
+                    autoCapitalize="none"
+                    keyboardType="email-address"
+                    style={styles.modalInput}
+                  />
                 </View>
                 <View style={styles.modalField}>
-                  <Text style={styles.modalLabel}>Instagram</Text>
-                  <TextInput value={editDraft.instagram_account} onChangeText={(v) => setEditDraft((p) => ({ ...p, instagram_account: v }))} placeholder="@club" placeholderTextColor="rgba(255,255,255,0.4)" autoCapitalize="none" style={styles.modalInput} />
+                  <Text style={styles.modalLabel}>{t('profile.organizer.edit_modal.instagram_label')}</Text>
+                  <TextInput
+                    value={editDraft.instagram_account}
+                    onChangeText={(v) => setEditDraft((p) => ({ ...p, instagram_account: v }))}
+                    placeholder={t('profile.organizer.edit_modal.instagram_placeholder')}
+                    placeholderTextColor="rgba(255,255,255,0.4)"
+                    autoCapitalize="none"
+                    style={styles.modalInput}
+                  />
                 </View>
                 <View style={styles.modalFieldRow}>
                   <View style={[styles.modalField, { flex: 1 }]}>
-                    <Text style={styles.modalLabel}>Ciudad</Text>
-                    <TextInput value={editDraft.city} onChangeText={(v) => setEditDraft((p) => ({ ...p, city: v }))} placeholder="Ciudad" placeholderTextColor="rgba(255,255,255,0.4)" style={styles.modalInput} />
+                    <Text style={styles.modalLabel}>{t('profile.organizer.edit_modal.city_label')}</Text>
+                    <TextInput
+                      value={editDraft.city}
+                      onChangeText={(v) => setEditDraft((p) => ({ ...p, city: v }))}
+                      placeholder={t('profile.organizer.edit_modal.city_placeholder')}
+                      placeholderTextColor="rgba(255,255,255,0.4)"
+                      style={styles.modalInput}
+                    />
                   </View>
                   <View style={[styles.modalField, { flex: 1 }]}>
-                    <Text style={styles.modalLabel}>País</Text>
-                    <TextInput value={editDraft.country} onChangeText={(v) => setEditDraft((p) => ({ ...p, country: v }))} placeholder="País" placeholderTextColor="rgba(255,255,255,0.4)" style={styles.modalInput} />
+                    <Text style={styles.modalLabel}>{t('profile.organizer.edit_modal.country_label')}</Text>
+                    <TextInput
+                      value={editDraft.country}
+                      onChangeText={(v) => setEditDraft((p) => ({ ...p, country: v }))}
+                      placeholder={t('profile.organizer.edit_modal.country_placeholder')}
+                      placeholderTextColor="rgba(255,255,255,0.4)"
+                      style={styles.modalInput}
+                    />
                   </View>
                 </View>
                 <View style={styles.modalField}>
-                  <Text style={styles.modalLabel}>Dirección</Text>
-                  <TextInput value={editDraft.address} onChangeText={(v) => setEditDraft((p) => ({ ...p, address: v }))} placeholder="Dirección" placeholderTextColor="rgba(255,255,255,0.4)" style={styles.modalInput} />
+                  <Text style={styles.modalLabel}>{t('profile.organizer.edit_modal.address_label')}</Text>
+                  <TextInput
+                    value={editDraft.address}
+                    onChangeText={(v) => setEditDraft((p) => ({ ...p, address: v }))}
+                    placeholder={t('profile.organizer.edit_modal.address_placeholder')}
+                    placeholderTextColor="rgba(255,255,255,0.4)"
+                    style={styles.modalInput}
+                  />
                 </View>
                 <View style={styles.modalField}>
-                  <Text style={styles.modalLabel}>Teléfono</Text>
-                  <TextInput value={editDraft.phone} onChangeText={(v) => setEditDraft((p) => ({ ...p, phone: v }))} placeholder="+34..." placeholderTextColor="rgba(255,255,255,0.4)" keyboardType="phone-pad" style={styles.modalInput} />
+                  <Text style={styles.modalLabel}>{t('profile.organizer.edit_modal.phone_label')}</Text>
+                  <TextInput
+                    value={editDraft.phone}
+                    onChangeText={(v) => setEditDraft((p) => ({ ...p, phone: v }))}
+                    placeholder={t('profile.organizer.edit_modal.phone_placeholder')}
+                    placeholderTextColor="rgba(255,255,255,0.4)"
+                    keyboardType="phone-pad"
+                    style={styles.modalInput}
+                  />
                 </View>
               </View>
 
               <View style={{ marginTop: 14, flexDirection: 'row', gap: 10 }}>
-                <ThemedButton title="Cancelar" variant="outline" onPress={() => setEditOpen(false)} style={{ flex: 1 }} />
-                <ThemedButton title={savingEdit ? 'Guardando…' : 'Guardar'} onPress={saveOrganizerEdits} disabled={savingEdit} style={{ flex: 1 }} />
+                <ThemedButton title={t('common.cancel')} variant="outline" onPress={() => setEditOpen(false)} style={{ flex: 1 }} />
+                <ThemedButton
+                  title={savingEdit ? t('profile.saving') : t('common.save')}
+                  onPress={saveOrganizerEdits}
+                  disabled={savingEdit}
+                  style={{ flex: 1 }}
+                />
               </View>
             </GlassView>
           </KeyboardAvoidingView>
