@@ -1,4 +1,4 @@
-export type PurchaseKind = 'event_ticket' | 'resale_ticket' | 'vip_table' | 'premium_feature' | 'wallet_topup';
+export type PurchaseKind = 'event_ticket' | 'resale_ticket' | 'vip_table' | 'premium_feature';
 
 export type Currency = 'eur';
 
@@ -10,7 +10,7 @@ export type CreatePaymentIntentRequest =
       quantity: number;
       buyer_name?: string;
       buyer_email?: string;
-      wallet_debit_eur?: number;
+      credit_debit_eur?: number;
     }
   | {
       kind: 'resale_ticket';
@@ -19,17 +19,13 @@ export type CreatePaymentIntentRequest =
   | {
       kind: 'vip_table';
       reference_id: string;
-      wallet_debit_eur?: number;
+      credit_debit_eur?: number;
       buyer_name?: string;
       buyer_email?: string;
     }
   | {
       kind: 'premium_feature';
       reference_id: string;
-    }
-  | {
-      kind: 'wallet_topup';
-      amount_eur: number;
     };
 
 export type CreatePaymentIntentResponse = {
