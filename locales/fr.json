@@ -28,6 +28,7 @@
   "tickets": {
     "my_tickets": "Mes Billets",
     "no_tickets": "Votre portefeuille est vide",
+    "empty_subtitle": "Achetez des billets et vous aurez ici votre QR prêt. Si vous ne pouvez pas y aller, revendez-les en un clic.",
     "buy_tickets": "Explorer les événements",
     "add_to_wallet": "Ajouter au Wallet",
     "in_wallet": "Dans le Wallet",
@@ -35,6 +36,12 @@
     "sell": "Vendre",
     "used": "Utilisé",
     "valid": "Valide"
+  },
+  "home": {
+    "search_city": "Rechercher une ville ou une zone…",
+    "empty_title": "Aucune soirée pour le moment",
+    "empty_subtitle": "Changez la date ou essayez d'effacer les filtres pour en découvrir davantage.",
+    "clear_filters": "Effacer les filtres"
   },
   "notifications_msg": {
     "purchase_completed": "🎟️ Billet assuré ! Préparez-vous, cet événement fait désormais partie de votre histoire.",
