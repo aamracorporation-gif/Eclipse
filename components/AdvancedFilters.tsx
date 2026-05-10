@@ -1,7 +1,7 @@
 import { View, Text, StyleSheet, TouchableOpacity, Modal, ScrollView, useWindowDimensions } from 'react-native';
 import { useState } from 'react';
 import { BlurView } from 'expo-blur';
-import { X, Filter, Music, Shirt, User, SlidersHorizontal } from 'lucide-react-native';
+import { X, Filter, Music, Shirt, User, SlidersHorizontal } from '@/lib/icons';
 import { Colors } from '@/constants/Colors';
 import { GlassView } from '@/components/ui/GlassView';
 import { LinearGradient } from 'expo-linear-gradient';
