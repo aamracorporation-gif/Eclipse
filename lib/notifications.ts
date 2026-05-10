@@ -84,6 +84,14 @@ export async function registerForPushNotifications(userId: string | null) {
     return;
   }
 
+  const executionEnvironment = (Constants as any)?.executionEnvironment;
+  const appOwnership = (Constants as any)?.appOwnership;
+  const isExpoGo = executionEnvironment === 'storeClient' || appOwnership === 'expo';
+  if (isExpoGo) {
+    await AsyncStorage.setItem('remote_push_enabled', '0');
+    return;
+  }
+
   let token;
   try {
     // Check if we are in a physical device context where push tokens are supported
@@ -94,12 +102,14 @@ export async function registerForPushNotifications(userId: string | null) {
       (Constants as any)?.expoConfig?.extra?.projectId ||
       (Constants as any)?.expoConfig?.extra?.expoProjectId;
 
-    const tokenData = await Notifications.getExpoPushTokenAsync(
-      projectId ? ({ projectId } as any) : undefined
-    );
+    if (!projectId) {
+      await AsyncStorage.setItem('remote_push_enabled', '0');
+      return;
+    }
+
+    const tokenData = await Notifications.getExpoPushTokenAsync({ projectId } as any);
     token = tokenData.data;
   } catch (error) {
-    console.warn('Error getting push token (likely running in Expo Go or Simulator):', error);
     await AsyncStorage.setItem('remote_push_enabled', '0');
     return;
   }
@@ -125,7 +135,6 @@ export async function registerForPushNotifications(userId: string | null) {
           { onConflict: 'token' }
         );
       if (upsertError) {
-        console.warn('Push token registration failed:', upsertError);
         await AsyncStorage.setItem('remote_push_enabled', '0');
         return;
       }
@@ -141,6 +150,7 @@ export async function registerForPushNotifications(userId: string | null) {
 export async function initNotifications() {
   Notifications.setNotificationHandler({
     handleNotification: async () => ({
+      shouldShowAlert: true,
       shouldPlaySound: true,
       shouldSetBadge: false,
       shouldShowBanner: true,
