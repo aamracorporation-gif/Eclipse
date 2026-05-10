@@ -1,12 +1,12 @@
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, Image, KeyboardAvoidingView, Platform, Modal, Pressable, Keyboard, ActionSheetIOS } from 'react-native';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useEvents, TicketType } from '@/lib/EventContext';
 import { useAuth } from '@/lib/AuthContext';
 import { getErrorMessage } from '@/lib/errorHelpers';
 import { LinearGradient } from 'expo-linear-gradient';
-import { ArrowLeft, Calendar, MapPin, DollarSign, Image as ImageIcon, Tag, Plus, Trash2, Clock, Camera, Search, X, Check, Sparkles, Ticket } from 'lucide-react-native';
+import { ArrowLeft, Calendar, MapPin, DollarSign, Image as ImageIcon, Tag, Plus, Trash2, Clock, Camera, Search, X, Check, Sparkles, Ticket, Lock, Info } from '@/lib/icons';
 import { Colors } from '@/constants/Colors';
 import { GlassView } from '@/components/ui/GlassView';
 import { ThemedButton } from '@/components/ui/ThemedButton';
@@ -20,6 +20,8 @@ import { uploadImage } from '@/lib/storage';
 import { supabase } from '@/lib/supabase';
 import { useI18n } from '@/lib/I18nContext';
 import { useTranslation } from 'react-i18next';
+import { invokeEdgeFunctionStrict } from '@/lib/edgeFunctions';
+import { validateEventDraft } from '@/lib/eventFormValidation';
 
 type VipReservadoDraft = {
   id: string;
@@ -31,6 +33,10 @@ type VipReservadoDraft = {
   extraBottlePrice: string;
   quantityAvailable: string;
 };
+
+type NewVipDraft = Omit<VipReservadoDraft, 'id'>;
+
+type TicketTypeDraft = TicketType & { priceText?: string; quantityText?: string };
 
 export default function CreateEventScreen() {
   const router = useRouter();
@@ -50,9 +56,21 @@ export default function CreateEventScreen() {
   };
 
   const [loading, setLoading] = useState(false);
-  const [ticketTypes, setTicketTypes] = useState<TicketType[]>([]);
+  const [ticketTypes, setTicketTypes] = useState<TicketTypeDraft[]>([]);
   const [newTicket, setNewTicket] = useState({ name: '', price: '', quantity: '' });
-  const [vipReservados, setVipReservados] = useState<VipReservadoDraft[]>([]);
+  const [vipTypes, setVipTypes] = useState<VipReservadoDraft[]>([]);
+  const [newVip, setNewVip] = useState<NewVipDraft>({
+    name: '',
+    description: '',
+    basePrice: '',
+    capacityPeople: '',
+    includedBottles: '',
+    extraBottlePrice: '',
+    quantityAvailable: '',
+  });
+  const [removedVipIds, setRemovedVipIds] = useState<string[]>([]);
+  const isUuid = (value: string) =>
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(value || ''));
 
   // DatePicker states
   const [date, setDate] = useState(new Date());
@@ -89,6 +107,36 @@ export default function CreateEventScreen() {
     eventType: 'party',
   });
 
+  const [submitAttempted, setSubmitAttempted] = useState(false);
+  const [touched, setTouched] = useState<Record<string, boolean>>({});
+  const touch = (field: string) => setTouched((prev) => ({ ...prev, [field]: true }));
+
+  const draftValidation = useMemo(() => {
+    return validateEventDraft({
+      title: formData.title,
+      description: formData.description,
+      location: formData.location,
+      imageUrl: formData.imageUrl,
+      theme: formData.theme,
+      dressCode: formData.dressCode,
+      ageRestriction: formData.ageRestriction,
+      dateText,
+      timeText,
+      hasDateSelected,
+      hasTimeSelected,
+      dateValue: date,
+      ticketTypes,
+      newTicket,
+      vipTypes,
+      newVip,
+    });
+  }, [formData, dateText, timeText, hasDateSelected, hasTimeSelected, date, ticketTypes, newTicket, vipTypes, newVip]);
+
+  const getFieldError = (field: string) => {
+    if (!submitAttempted && !touched[field]) return undefined;
+    return (draftValidation.fieldErrors as any)?.[field] || undefined;
+  };
+
   // Check Stripe Status
   useEffect(() => {
     const checkStripe = async () => {
@@ -110,32 +158,95 @@ export default function CreateEventScreen() {
     checkStripe();
   }, [user]);
 
-  const addVipReservado = () => {
-    setVipReservados((prev) => [
+  const withTimeout = async <T,>(promise: Promise<T>, ms: number, label: string): Promise<T> => {
+    let timeoutId: ReturnType<typeof setTimeout> | null = null;
+    const timeoutPromise = new Promise<T>((_, reject) => {
+      timeoutId = setTimeout(() => reject(new Error(`Timeout: ${label}`)), ms);
+    });
+    try {
+      return await Promise.race([promise, timeoutPromise]);
+    } finally {
+      if (timeoutId) clearTimeout(timeoutId);
+    }
+  };
+
+  const vipDraftHasAny = (v: NewVipDraft) => {
+    const fields = [v.name, v.description, v.basePrice, v.capacityPeople, v.includedBottles, v.extraBottlePrice, v.quantityAvailable];
+    return fields.some((f) => String(f || '').trim().length > 0);
+  };
+
+  const sanitizeIntText = (text: string) => String(text || '').replace(/[^\d]/g, '');
+  const sanitizeEuroText = (text: string) => String(text || '').replace(/[^\d.,]/g, '');
+
+  const showVipHelp = (title: string, body: string) => {
+    Alert.alert(title, body);
+  };
+
+  const touchNewVipAll = () => {
+    touch('newVip.name');
+    touch('newVip.basePrice');
+    touch('newVip.capacityPeople');
+    touch('newVip.includedBottles');
+    touch('newVip.quantityAvailable');
+    touch('newVip.extraBottlePrice');
+  };
+
+  const handleAddVip = () => {
+    setSubmitAttempted(true);
+    touchNewVipAll();
+    if (!vipDraftHasAny(newVip)) return;
+    const errs = draftValidation.newVipErrors;
+    if (errs.name || errs.basePrice || errs.capacityPeople || errs.quantityAvailable || errs.includedBottles || errs.extraBottlePrice) return;
+
+    setVipTypes((prev) => [
       ...prev,
       {
-        id: Math.random().toString(36).substr(2, 9),
-        name: '',
-        description: '',
-        basePrice: '',
-        capacityPeople: '',
-        includedBottles: '',
-        extraBottlePrice: '',
-        quantityAvailable: '',
+        id: Math.random().toString(36).slice(2),
+        name: newVip.name,
+        description: newVip.description,
+        basePrice: newVip.basePrice,
+        capacityPeople: newVip.capacityPeople,
+        includedBottles: newVip.includedBottles,
+        extraBottlePrice: newVip.extraBottlePrice,
+        quantityAvailable: newVip.quantityAvailable,
+      },
+    ]);
+    setNewVip({
+      name: '',
+      description: '',
+      basePrice: '',
+      capacityPeople: '',
+      includedBottles: '',
+      extraBottlePrice: '',
+      quantityAvailable: '',
+    });
+    setTouched((prev) => ({
+      ...prev,
+      'newVip.name': false,
+      'newVip.basePrice': false,
+      'newVip.capacityPeople': false,
+      'newVip.includedBottles': false,
+      'newVip.quantityAvailable': false,
+      'newVip.extraBottlePrice': false,
+    }));
+  };
+
+  const removeVipType = (id: string) => {
+    Alert.alert('Eliminar VIP', '¿Seguro que quieres eliminar este VIP?', [
+      { text: 'Cancelar', style: 'cancel' },
+      {
+        text: 'Eliminar',
+        style: 'destructive',
+        onPress: () => {
+          if (isUuid(id)) setRemovedVipIds((prev) => (prev.includes(id) ? prev : [...prev, id]));
+          setVipTypes((prev) => prev.filter((v) => v.id !== id));
+        },
       },
     ]);
   };
 
-  const updateVipReservado = (id: string, updates: Partial<VipReservadoDraft>) => {
-    setVipReservados((prev) => prev.map((v) => (v.id === id ? { ...v, ...updates } : v)));
-  };
-
-  const removeVipReservado = (id: string) => {
-    setVipReservados((prev) => prev.filter((v) => v.id !== id));
-  };
-
   const saveVipReservadosIfAny = async (eventIdToLink: string) => {
-    const normalized = vipReservados
+    const normalized = vipTypes
       .map((v) => ({
         ...v,
         name: v.name.trim(),
@@ -159,45 +270,26 @@ export default function CreateEventScreen() {
         return fields.some((f) => f.length > 0);
       });
 
-    if (normalized.length === 0) return null;
+    if (normalized.length === 0 && removedVipIds.length === 0) return null;
 
     const errors: string[] = [];
-    const rows: Array<{
-      event_id: string;
-      name: string;
-      description: string;
-      base_price: number;
-      capacity_people: number;
-      included_bottles: number;
-      extra_bottle_price: number | null;
-      quantity_available: number;
-    }> = [];
+    const rowsToUpsert: any[] = [];
+    const rowsToInsert: any[] = [];
 
     normalized.forEach((vip, idx) => {
+      const vipErrors = (draftValidation.vipErrors as any)?.[vip.id];
+      if (vipErrors && Object.keys(vipErrors).length > 0) {
+        errors.push(`• VIP #${idx + 1}: revisa los campos marcados en rojo`);
+        return;
+      }
+
       const basePrice = parseFloat(vip.basePrice.replace(',', '.'));
       const capacityPeople = parseInt(vip.capacityPeople, 10);
       const includedBottles = vip.includedBottles.length > 0 ? parseInt(vip.includedBottles, 10) : 0;
       const quantityAvailable = vip.quantityAvailable.length > 0 ? parseInt(vip.quantityAvailable, 10) : 0;
+      const extraBottlePrice = vip.extraBottlePrice.length > 0 ? parseFloat(vip.extraBottlePrice.replace(',', '.')) : null;
 
-      const extraBottlePrice =
-        vip.extraBottlePrice.length > 0 ? parseFloat(vip.extraBottlePrice.replace(',', '.')) : null;
-
-      const rowErrors: string[] = [];
-      if (!vip.name) rowErrors.push('falta el nombre');
-      if (!Number.isFinite(basePrice) || basePrice <= 0) rowErrors.push('precio base inválido');
-      if (!Number.isFinite(capacityPeople) || capacityPeople <= 0) rowErrors.push('capacidad inválida');
-      if (!Number.isFinite(quantityAvailable) || quantityAvailable < 0) rowErrors.push('cantidad disponible inválida');
-      if (!Number.isFinite(includedBottles) || includedBottles < 0) rowErrors.push('botellas incluidas inválidas');
-      if (extraBottlePrice !== null && (!Number.isFinite(extraBottlePrice) || extraBottlePrice < 0)) {
-        rowErrors.push('precio botella extra inválido');
-      }
-
-      if (rowErrors.length > 0) {
-        errors.push(`• VIP #${idx + 1}: ${rowErrors.join(', ')}`);
-        return;
-      }
-
-      rows.push({
+      const row: any = {
         event_id: eventIdToLink,
         name: vip.name,
         description: vip.description || '',
@@ -206,34 +298,81 @@ export default function CreateEventScreen() {
         included_bottles: includedBottles,
         extra_bottle_price: extraBottlePrice,
         quantity_available: quantityAvailable,
-      });
+      };
+
+      if (isUuid(vip.id)) rowsToUpsert.push({ id: vip.id, ...row });
+      else rowsToInsert.push(row);
     });
 
-    if (rows.length === 0) {
+    if (rowsToUpsert.length === 0 && rowsToInsert.length === 0 && removedVipIds.length === 0) {
       return `Reservados VIP no guardados:\n${errors.join('\n')}`;
     }
 
     try {
-      const delRes = await supabase.from('reservados_vip').delete().eq('event_id', eventIdToLink);
-      if (delRes.error) {
-        const code = (delRes.error as any)?.code ? String((delRes.error as any).code) : '';
-        if (code === 'PGRST205') {
-          return "Reservados VIP no guardados:\nFalta la tabla 'reservados_vip' en este proyecto de Supabase. Ejecuta la migración 20260318120000_add_reservados_vip.sql y reinicia el schema cache.";
+      if (removedVipIds.length > 0) {
+        const trySoftDelete = async (withSoftDeleteCols: boolean) => {
+          const payload = withSoftDeleteCols ? { is_active: false, deleted_at: new Date().toISOString() } : {};
+          const q = withSoftDeleteCols
+            ? supabase.from('reservados_vip').update(payload).in('id', removedVipIds).eq('event_id', eventIdToLink)
+            : supabase.from('reservados_vip').delete().in('id', removedVipIds).eq('event_id', eventIdToLink);
+          return q;
+        };
+
+        let delRes: any = await withTimeout(trySoftDelete(true), 12000, 'borrando VIP');
+        if (delRes.error?.code === '42703' && String(delRes.error?.message || '').match(/is_active|deleted_at/i)) {
+          delRes = await withTimeout(trySoftDelete(false), 12000, 'borrando VIP');
         }
-        return `Reservados VIP no guardados:\n${code ? `${code}: ` : ''}${getErrorMessage(delRes.error)}`;
+        if (delRes.error) {
+          const code = (delRes.error as any)?.code ? String((delRes.error as any).code) : '';
+          if (code === 'PGRST205') {
+            return "Reservados VIP no guardados:\nFalta la tabla 'reservados_vip' en este proyecto de Supabase. Ejecuta la migración 20260318120000_add_reservados_vip.sql y reinicia el schema cache.";
+          }
+          return `Reservados VIP no guardados:\n${code ? `${code}: ` : ''}${getErrorMessage(delRes.error)}`;
+        }
       }
 
-      const insRes = await supabase.from('reservados_vip').insert(rows);
-      if (insRes.error) {
-        const code = (insRes.error as any)?.code ? String((insRes.error as any).code) : '';
-        if (code === 'PGRST205') {
-          return "Reservados VIP no guardados:\nFalta la tabla 'reservados_vip' en este proyecto de Supabase. Ejecuta la migración 20260318120000_add_reservados_vip.sql y reinicia el schema cache.";
+      if (rowsToUpsert.length > 0) {
+        const tryUpsert = async (withSoftDeleteCols: boolean) => {
+          const payload = withSoftDeleteCols
+            ? rowsToUpsert.map((r) => ({ ...r, is_active: true, deleted_at: null }))
+            : rowsToUpsert;
+          return supabase.from('reservados_vip').upsert(payload, { onConflict: 'id' });
+        };
+
+        let upRes: any = await withTimeout(tryUpsert(true), 12000, 'guardando VIP');
+        if (upRes.error?.code === '42703' && String(upRes.error?.message || '').match(/is_active|deleted_at/i)) {
+          upRes = await withTimeout(tryUpsert(false), 12000, 'guardando VIP');
         }
-        return `Reservados VIP no guardados:\n${code ? `${code}: ` : ''}${getErrorMessage(insRes.error)}`;
+        if (upRes.error) {
+          const code = (upRes.error as any)?.code ? String((upRes.error as any).code) : '';
+          if (code === 'PGRST205') {
+            return "Reservados VIP no guardados:\nFalta la tabla 'reservados_vip' en este proyecto de Supabase. Ejecuta la migración 20260318120000_add_reservados_vip.sql y reinicia el schema cache.";
+          }
+          return `Reservados VIP no guardados:\n${code ? `${code}: ` : ''}${getErrorMessage(upRes.error)}`;
+        }
       }
-      if (errors.length > 0) {
-        return `Algunos reservados VIP no se guardaron:\n${errors.join('\n')}`;
+
+      if (rowsToInsert.length > 0) {
+        const tryInsert = async (withSoftDeleteCols: boolean) => {
+          const payload = withSoftDeleteCols ? rowsToInsert.map((r) => ({ ...r, is_active: true, deleted_at: null })) : rowsToInsert;
+          return supabase.from('reservados_vip').insert(payload);
+        };
+        let insRes: any = await withTimeout(tryInsert(true), 12000, 'guardando VIP');
+        if (insRes.error?.code === '42703' && String(insRes.error?.message || '').match(/is_active|deleted_at/i)) {
+          insRes = await withTimeout(tryInsert(false), 12000, 'guardando VIP');
+        }
+        if (insRes.error) {
+          const code = (insRes.error as any)?.code ? String((insRes.error as any).code) : '';
+          if (code === 'PGRST205') {
+            return "Reservados VIP no guardados:\nFalta la tabla 'reservados_vip' en este proyecto de Supabase. Ejecuta la migración 20260318120000_add_reservados_vip.sql y reinicia el schema cache.";
+          }
+          return `Reservados VIP no guardados:\n${code ? `${code}: ` : ''}${getErrorMessage(insRes.error)}`;
+        }
       }
+
+      setRemovedVipIds([]);
+
+      if (errors.length > 0) return `Algunos reservados VIP no se guardaron:\n${errors.join('\n')}`;
       return null;
     } catch (error: any) {
       const code = (error as any)?.code ? String((error as any).code) : '';
@@ -248,6 +387,16 @@ export default function CreateEventScreen() {
     if (isEditing && eventId) {
       const event = getEventById(eventId);
       if (event) {
+        setRemovedVipIds([]);
+        setNewVip({
+          name: '',
+          description: '',
+          basePrice: '',
+          capacityPeople: '',
+          includedBottles: '',
+          extraBottlePrice: '',
+          quantityAvailable: '',
+        });
         setFormData({
           title: event.title,
           description: event.description,
@@ -273,9 +422,48 @@ export default function CreateEventScreen() {
           }
         }
         if (event.ticketTypes) {
-          setTicketTypes(event.ticketTypes);
+          setTicketTypes(event.ticketTypes as any);
         }
       }
+
+      (async () => {
+        try {
+          const fetchVip = async (withSoftDeleteCols: boolean) => {
+            const q = supabase
+              .from('reservados_vip')
+              .select('*')
+              .eq('event_id', eventId)
+              .order('created_at', { ascending: true });
+            if (withSoftDeleteCols) {
+              return q.eq('is_active', true).is('deleted_at', null);
+            }
+            return q;
+          };
+
+          let vipRes: any = await fetchVip(true);
+          if (vipRes.error?.code === '42703' && String(vipRes.error?.message || '').match(/is_active|deleted_at/i)) {
+            vipRes = await fetchVip(false);
+          }
+
+          if (!vipRes.error && Array.isArray(vipRes.data)) {
+            const rows = vipRes.data as any[];
+            setVipTypes(
+              rows.map((r) => ({
+                id: String(r.id),
+                name: String(r.name ?? ''),
+                description: String(r.description ?? ''),
+                basePrice: r.base_price != null ? String(r.base_price) : '',
+                capacityPeople: r.capacity_people != null ? String(r.capacity_people) : '',
+                includedBottles: r.included_bottles != null ? String(r.included_bottles) : '',
+                extraBottlePrice: r.extra_bottle_price != null ? String(r.extra_bottle_price) : '',
+                quantityAvailable: r.quantity_available != null ? String(r.quantity_available) : '',
+              }))
+            );
+          }
+        } catch (e) {
+          console.warn('[vip_load_failed]', e);
+        }
+      })();
     }
   }, [isEditing, eventId]);
 
@@ -506,18 +694,16 @@ export default function CreateEventScreen() {
   };
 
   const handleAddTicket = () => {
-    if (!newTicket.name || !newTicket.price || !newTicket.quantity) {
-      Alert.alert(t('common.error'), t('creator.create_event.tickets.fill_fields'));
+    setSubmitAttempted(true);
+    touch('newTicket.name');
+    touch('newTicket.price');
+    touch('newTicket.quantity');
+    if (draftValidation.newTicketErrors.name || draftValidation.newTicketErrors.price || draftValidation.newTicketErrors.quantity) {
       return;
     }
 
     const price = parseFloat(newTicket.price.replace(',', '.'));
     const quantity = parseInt(newTicket.quantity, 10);
-
-    if (isNaN(price) || isNaN(quantity)) {
-      Alert.alert(t('common.error'), t('creator.create_event.tickets.invalid_numbers'));
-      return;
-    }
 
     setTicketTypes([...ticketTypes, {
       id: Math.random().toString(36).substr(2, 9),
@@ -527,10 +713,26 @@ export default function CreateEventScreen() {
       sold: 0
     }]);
     setNewTicket({ name: '', price: '', quantity: '' });
+    setTouched((prev) => ({
+      ...prev,
+      'newTicket.name': false,
+      'newTicket.price': false,
+      'newTicket.quantity': false,
+    }));
   };
 
   const removeTicket = (ticketId: string) => {
-    setTicketTypes(ticketTypes.filter(t => t.id !== ticketId));
+    const current = ticketTypes.find((t) => t.id === ticketId);
+    if (!current) return;
+    const sold = Number((current as any).sold || 0);
+    if (sold > 0) {
+      Alert.alert('No se puede eliminar', 'Este tipo de entrada ya tiene ventas. Para no perder el histórico, no se permite eliminarlo.');
+      return;
+    }
+    Alert.alert('Eliminar tipo de entrada', '¿Seguro que quieres eliminar este tipo de entrada?', [
+      { text: 'Cancelar', style: 'cancel' },
+      { text: 'Eliminar', style: 'destructive', onPress: () => setTicketTypes(ticketTypes.filter((t) => t.id !== ticketId)) },
+    ]);
   };
 
   const getTotalCapacity = () => ticketTypes.reduce((acc, t) => acc + t.quantity, 0);
@@ -603,75 +805,21 @@ export default function CreateEventScreen() {
   const handleCreate = async () => {
     Keyboard.dismiss();
     console.log('handleCreate initiated');
-    
-    // Validate manual inputs one last time in case onBlur didn't fire
-    let currentHasDate = hasDateSelected;
-    let currentHasTime = hasTimeSelected;
-    let finalDate = new Date(date);
-
-    // Try to parse date text if not selected yet
-    if (!currentHasDate && dateText) {
-      const dateRegex = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/;
-      const match = dateText.match(dateRegex);
-      if (match) {
-        const day = parseInt(match[1], 10);
-        const month = parseInt(match[2], 10) - 1;
-        const year = parseInt(match[3], 10);
-        finalDate.setFullYear(year, month, day);
-        if (finalDate.getFullYear() === year && finalDate.getMonth() === month && finalDate.getDate() === day) {
-          currentHasDate = true;
-        }
-      }
-    }
-
-    // Try to parse time text if not selected yet
-    if (!currentHasTime && timeText) {
-      const timeRegex = /^(\d{1,2}):(\d{2})$/;
-      const match = timeText.match(timeRegex);
-      if (match) {
-        const hours = parseInt(match[1], 10);
-        const minutes = parseInt(match[2], 10);
-        if (hours >= 0 && hours < 24 && minutes >= 0 && minutes < 60) {
-          finalDate.setHours(hours, minutes);
-          currentHasTime = true;
-        }
-      }
-    }
-
-    // Validation
-    const errors: string[] = [];
-
-    if (!formData.title.trim()) errors.push("• Falta el nombre del evento");
-    if (!formData.location.trim()) errors.push("• Falta la ubicación");
-    if (!formData.imageUrl.trim()) errors.push("• Falta la imagen");
-    
-    if (ticketTypes.length === 0) {
-        if (newTicket.name || newTicket.price || newTicket.quantity) {
-             errors.push("• Tienes una entrada escrita pero no añadida. Pulsa el botón '+' para añadirla.");
-        } else {
-             errors.push("• Añade al menos un tipo de entrada");
-        }
-    }
-
-    if (!currentHasDate) errors.push("• Selecciona o escribe una fecha válida (DD/MM/AAAA)");
-    if (!currentHasTime) errors.push("• Selecciona o escribe una hora válida (HH:MM)");
-
-    if (currentHasDate && currentHasTime) {
-        const now = new Date();
-        if (finalDate < now) {
-             errors.push("• La fecha y hora deben ser en el futuro");
-        }
-    }
-
-    if (errors.length > 0) {
-      Alert.alert(
-        "Formulario mal rellenado",
-        "Por favor revisa los siguientes campos:\n\n" + errors.join("\n")
-      );
+    setSubmitAttempted(true);
+    if (!draftValidation.ok || !draftValidation.dateTime) {
+      const payload = {
+        errors: (draftValidation.errors || []).map((e: any) => ({ field: e.field, code: e.code, message: e.message })),
+        fieldErrors: draftValidation.fieldErrors,
+        ticketTypeErrors: draftValidation.ticketTypeErrors,
+        vipErrors: draftValidation.vipErrors,
+      };
+      console.warn('[event_form_validation_failed]', JSON.stringify(payload));
+      Alert.alert('Revisa el formulario', 'Corrige los campos marcados en rojo para continuar.');
       return;
     }
 
     setLoading(true);
+    const finalDate = draftValidation.dateTime;
     
     // Mock coordinates for venues (around Madrid) - Fallback
     const mockLatitude = 40.4168 + (Math.random() - 0.5) * 0.1;
@@ -803,12 +951,42 @@ export default function CreateEventScreen() {
       console.log('Event created successfully');
       let vipWarning: string | null = null;
       if (savedEventId) {
-        vipWarning = await saveVipReservadosIfAny(savedEventId);
+        try {
+          vipWarning = await withTimeout(saveVipReservadosIfAny(savedEventId), 12000, 'guardando reservados VIP');
+        } catch (e: any) {
+          console.warn('[vip_save_timeout_or_failed]', e);
+          vipWarning = `Reservados VIP no guardados:\n${String(e?.message || 'Proceso bloqueado. Vuelve a intentarlo.')}`;
+        }
+      }
+      let dispatchWarning: string | null = null;
+      if (isEditing) {
+        try {
+          const result: any = await withTimeout(
+            invokeEdgeFunctionStrict('dispatch-notifications', { limit: 200, eventId: savedEventId, enqueueEventUpdate: true }),
+            12000,
+            'enviando notificaciones'
+          );
+          console.log('[dispatch-notifications][creator_save]', JSON.stringify(result));
+          const enq = (result as any)?.enqueued_event_update;
+          const buyersFound = Number(enq?.buyers_found ?? NaN);
+          const inserted = Number(enq?.notifications_inserted ?? NaN);
+          if (Number.isFinite(buyersFound) && buyersFound === 0) {
+            dispatchWarning = '\n\nAviso notificaciones: no se encontraron compradores previos para este evento.';
+          } else if (Number.isFinite(inserted) && inserted === 0) {
+            dispatchWarning = '\n\nAviso notificaciones: no se pudo insertar ninguna notificación (revisa logs de Edge Functions).';
+          }
+        } catch (e) {
+          const msg = String((e as any)?.message || e || '');
+          dispatchWarning = msg ? `\n\nAviso notificaciones: ${msg}` : '\n\nAviso: no se pudieron enviar notificaciones ahora mismo.';
+          console.warn('dispatch-notifications failed after save:', e);
+        }
       }
       setLoading(false);
+      const successTitle = isEditing ? 'Evento actualizado con éxito' : 'Evento creado con éxito';
+      const successBodyBase = isEditing ? 'Evento actualizado con éxito' : 'Evento creado con éxito';
       Alert.alert(
-        '¡Enhorabuena!', 
-        vipWarning ? `Lio creado exitosamente\n\n${vipWarning}` : 'Lio creado exitosamente', 
+        successTitle,
+        (vipWarning ? `${successBodyBase}\n\n${vipWarning}` : successBodyBase) + (dispatchWarning || ''),
         [{ text: 'OK', onPress: safeBack }]
       );
     } catch (error: any) {
@@ -866,6 +1044,8 @@ export default function CreateEventScreen() {
                 placeholder={t('creator.create_event.event_name_placeholder')}
                 value={formData.title}
                 onChangeText={(text) => setFormData({ ...formData, title: text })}
+                onBlur={() => touch('title')}
+                error={getFieldError('title')}
                 icon={<Tag size={20} color={Colors.dark.textSecondary} />}
               />
 
@@ -874,6 +1054,8 @@ export default function CreateEventScreen() {
                 placeholder={t('creator.create_event.description_placeholder')}
                 value={formData.description}
                 onChangeText={(text) => setFormData({ ...formData, description: text })}
+                onBlur={() => touch('description')}
+                error={getFieldError('description')}
                 multiline
                 numberOfLines={4}
                 containerStyle={{ height: 100 }}
@@ -881,13 +1063,20 @@ export default function CreateEventScreen() {
 
               <View style={{ marginBottom: 16 }}>
                 <Text style={styles.inputLabel}>{t('event.details.date')}</Text>
-                <TouchableOpacity onPress={() => setShowDatePicker(true)} activeOpacity={0.8}>
+                <TouchableOpacity
+                  onPress={() => {
+                    touch('date');
+                    setShowDatePicker(true);
+                  }}
+                  activeOpacity={0.8}
+                >
                   <View pointerEvents="none">
                     <ThemedInput
                       value={dateText}
                       onChangeText={() => {}}
                       editable={false}
                       placeholder={t('creator.create_event.select_date')}
+                      error={getFieldError('date')}
                       icon={<Calendar size={20} color={Colors.dark.textSecondary} />}
                     />
                   </View>
@@ -896,13 +1085,20 @@ export default function CreateEventScreen() {
 
               <View style={{ marginBottom: 16 }}>
                 <Text style={styles.inputLabel}>{t('event.details.time')}</Text>
-                <TouchableOpacity onPress={() => setShowTimePicker(true)} activeOpacity={0.8}>
+                <TouchableOpacity
+                  onPress={() => {
+                    touch('time');
+                    setShowTimePicker(true);
+                  }}
+                  activeOpacity={0.8}
+                >
                   <View pointerEvents="none">
                     <ThemedInput
                       value={timeText}
                       onChangeText={() => {}}
                       editable={false}
                       placeholder={t('creator.create_event.select_time')}
+                      error={getFieldError('time')}
                       icon={<Clock size={20} color={Colors.dark.textSecondary} />}
                     />
                   </View>
@@ -957,7 +1153,13 @@ export default function CreateEventScreen() {
               <View>
                 <View style={{ flexDirection: 'row', alignItems: 'flex-end', gap: 8 }}>
                   <View style={{ flex: 1 }}>
-                    <TouchableOpacity onPress={() => setShowMapModal(true)} activeOpacity={0.8}>
+                    <TouchableOpacity
+                      onPress={() => {
+                        touch('location');
+                        setShowMapModal(true);
+                      }}
+                      activeOpacity={0.8}
+                    >
                         <View pointerEvents="none">
                             <ThemedInput
                             label={t('creator.create_event.location_label')}
@@ -966,12 +1168,16 @@ export default function CreateEventScreen() {
                             onChangeText={(text) => setFormData({ ...formData, location: text })}
                             icon={<MapPin size={20} color={Colors.dark.textSecondary} />}
                             editable={false}
+                            error={getFieldError('location')}
                             />
                         </View>
                     </TouchableOpacity>
                   </View>
                   <TouchableOpacity 
-                    onPress={() => setShowMapModal(true)}
+                    onPress={() => {
+                      touch('location');
+                      setShowMapModal(true);
+                    }}
                     style={{ 
                         marginBottom: 16, 
                         height: 50, 
@@ -1085,6 +1291,8 @@ export default function CreateEventScreen() {
                 placeholder={t('creator.create_event.music_placeholder')}
                 value={formData.theme}
                 onChangeText={(text) => setFormData({ ...formData, theme: text })}
+                onBlur={() => touch('theme')}
+                error={getFieldError('theme')}
                 icon={<Tag size={20} color={Colors.dark.textSecondary} />}
               />
 
@@ -1093,6 +1301,8 @@ export default function CreateEventScreen() {
                 placeholder={t('creator.create_event.min_age_placeholder')}
                 value={formData.ageRestriction}
                 onChangeText={(text) => setFormData({ ...formData, ageRestriction: text })}
+                onBlur={() => touch('ageRestriction')}
+                error={getFieldError('ageRestriction')}
                 keyboardType="numeric"
                 icon={<Tag size={20} color={Colors.dark.textSecondary} />}
               />
@@ -1102,13 +1312,15 @@ export default function CreateEventScreen() {
                 placeholder={t('creator.create_event.dress_code_placeholder')}
                 value={formData.dressCode}
                 onChangeText={(text) => setFormData({ ...formData, dressCode: text })}
+                onBlur={() => touch('dressCode')}
+                error={getFieldError('dressCode')}
                 icon={<Tag size={20} color={Colors.dark.textSecondary} />}
               />
 
               <View style={{ marginBottom: 16 }}>
                 <Text style={styles.inputLabel}>{t('creator.create_event.event_image_label')}</Text>
                 {formData.imageUrl ? (
-                  <View style={styles.imagePreviewContainer}>
+                  <View style={[styles.imagePreviewContainer, getFieldError('imageUrl') ? styles.fieldErrorBorder : null]}>
                     <Image source={{ uri: formData.imageUrl }} style={styles.imagePreview} resizeMode="cover" />
                     <TouchableOpacity style={styles.removeImageButton} onPress={() => setFormData({ ...formData, imageUrl: '' })}>
                       <GlassView intensity={20} style={styles.removeIconContainer}>
@@ -1118,12 +1330,13 @@ export default function CreateEventScreen() {
                   </View>
                 ) : (
                   <TouchableOpacity onPress={pickImage} activeOpacity={0.8}>
-                     <GlassView intensity={10} style={styles.uploadPlaceholder}>
+                     <GlassView intensity={10} style={[styles.uploadPlaceholder, getFieldError('imageUrl') ? styles.fieldErrorBorder : null]}>
                         <Camera size={32} color={Colors.dark.textSecondary} />
                         <Text style={styles.uploadText}>{t('creator.create_event.event_image_cta')}</Text>
                      </GlassView>
                   </TouchableOpacity>
                 )}
+                {getFieldError('imageUrl') ? <Text style={styles.fieldErrorText}>{getFieldError('imageUrl')}</Text> : null}
               </View>
 
               <View style={{ marginBottom: 16 }}>
@@ -1171,7 +1384,13 @@ export default function CreateEventScreen() {
                 <ThemedInput
                   placeholder={t('creator.create_event.tickets.name_placeholder')}
                   value={newTicket.name}
-                  onChangeText={(text) => setNewTicket({ ...newTicket, name: text })}
+                  onChangeText={(text) => {
+                    touch('newTicket.name');
+                    setNewTicket({ ...newTicket, name: text });
+                  }}
+                  onBlur={() => touch('newTicket.name')}
+                  error={((submitAttempted || touched['newTicket.name']) && (draftValidation.newTicketErrors as any)?.name) || undefined}
+                  success={!!touched['newTicket.name'] && !(draftValidation.newTicketErrors as any)?.name && !!newTicket.name.trim()}
                   containerStyle={{ marginBottom: 12 }}
                 />
                 <View style={styles.row}>
@@ -1179,7 +1398,13 @@ export default function CreateEventScreen() {
                     <ThemedInput
                       placeholder={t('creator.create_event.tickets.price_placeholder')}
                       value={newTicket.price}
-                      onChangeText={(text) => setNewTicket({ ...newTicket, price: text })}
+                        onChangeText={(text) => {
+                          touch('newTicket.price');
+                          setNewTicket({ ...newTicket, price: sanitizeEuroText(text) });
+                        }}
+                      onBlur={() => touch('newTicket.price')}
+                      error={((submitAttempted || touched['newTicket.price']) && (draftValidation.newTicketErrors as any)?.price) || undefined}
+                      success={!!touched['newTicket.price'] && !(draftValidation.newTicketErrors as any)?.price && !!newTicket.price.trim()}
                       keyboardType="numeric"
                       icon={<DollarSign size={16} color={Colors.dark.textSecondary} />}
                     />
@@ -1188,34 +1413,67 @@ export default function CreateEventScreen() {
                     <ThemedInput
                       placeholder={t('creator.create_event.tickets.quantity_placeholder')}
                       value={newTicket.quantity}
-                      onChangeText={(text) => setNewTicket({ ...newTicket, quantity: text })}
+                        onChangeText={(text) => {
+                          touch('newTicket.quantity');
+                          setNewTicket({ ...newTicket, quantity: sanitizeIntText(text) });
+                        }}
+                      onBlur={() => touch('newTicket.quantity')}
+                      error={((submitAttempted || touched['newTicket.quantity']) && (draftValidation.newTicketErrors as any)?.quantity) || undefined}
+                      success={!!touched['newTicket.quantity'] && !(draftValidation.newTicketErrors as any)?.quantity && !!newTicket.quantity.trim()}
                       keyboardType="numeric"
                     />
                   </View>
                 </View>
                 
+                {getFieldError('ticketTypes') ? <Text style={styles.fieldErrorText}>{getFieldError('ticketTypes')}</Text> : null}
                 <ThemedButton
                   title={t('creator.create_event.tickets.add_button')}
                   onPress={handleAddTicket}
                   variant="outline"
                   style={styles.addTicketButton}
+                  disabled={
+                    !!(newTicket.name.trim() || newTicket.price.trim() || newTicket.quantity.trim()) &&
+                    Object.values(draftValidation.newTicketErrors || {}).some(Boolean)
+                  }
                   icon={<Plus size={20} color={Colors.dark.primary} />}
                 />
               </View>
 
-              {ticketTypes.map((ticket) => (
-                <View key={ticket.id} style={styles.ticketItem}>
-                  <View style={styles.ticketInfo}>
-                    <Text style={styles.ticketName}>{ticket.name}</Text>
-                    <Text style={styles.ticketDetails}>
-                      {ticket.price}€ • {ticket.quantity} {t('creator.create_event.tickets.units')}
-                    </Text>
+              {ticketTypes.map((ticket) => {
+                const sold = Number((ticket as any).sold || 0);
+                const ttErr: any = (draftValidation.ticketTypeErrors as any)?.[String(ticket.id)] || {};
+                const itemError =
+                  ttErr.quantity || ttErr.price || ttErr.name || null;
+                return (
+                  <View key={ticket.id} style={styles.ticketItem}>
+                    <View style={styles.ticketInfo}>
+                      <View style={styles.ticketItemHeader}>
+                        <Text style={styles.ticketName}>{ticket.name}</Text>
+                        <View style={styles.ticketHeaderRight}>
+                          <View style={styles.lockedPill}>
+                            <Lock size={14} color={Colors.dark.textSecondary} />
+                            <Text style={styles.lockedPillText}>Bloqueada</Text>
+                          </View>
+                          <TouchableOpacity onPress={() => removeTicket(ticket.id)} style={styles.deleteButton}>
+                            <Trash2 size={20} color={Colors.dark.error} />
+                          </TouchableOpacity>
+                        </View>
+                      </View>
+                      <Text style={styles.ticketDetails}>
+                        {Number(ticket.price || 0).toFixed(2)}€ • {Number(ticket.quantity || 0)} {t('creator.create_event.tickets.units')}
+                      </Text>
+                      <Text style={styles.ticketDetails}>
+                        Vendidas: {sold} • Restantes: {Math.max((Number(ticket.quantity) || 0) - sold, 0)}
+                      </Text>
+                      {itemError ? (
+                        <Text style={styles.fieldErrorText}>
+                          {itemError} Elimina esta entrada y vuelve a crearla.
+                        </Text>
+                      ) : null}
+                    </View>
                   </View>
-                  <TouchableOpacity onPress={() => removeTicket(ticket.id)} style={styles.deleteButton}>
-                    <Trash2 size={20} color={Colors.dark.error} />
-                  </TouchableOpacity>
-                </View>
-              ))}
+                );
+              })}
             </GlassView>
 
             <GlassView intensity={14} style={[styles.formCard, styles.premiumCard, styles.vipSectionCard]}>
@@ -1241,17 +1499,182 @@ export default function CreateEventScreen() {
                 </View>
               </View>
 
-              <ThemedButton
-                title={t('creator.create_event.vip.add_button')}
-                onPress={addVipReservado}
-                variant="outline"
-                style={styles.vipAddButton}
-                icon={<Plus size={20} color={Colors.dark.primary} />}
-              />
+              <View style={styles.ticketForm}>
+                <View style={styles.fieldLabelRow}>
+                  <Text style={styles.fieldLabel}>Nombre del VIP</Text>
+                  <Pressable onPress={() => showVipHelp('Nombre del VIP', 'Nombre visible para el usuario.\nEjemplo: Mesa VIP.\nMínimo 2 caracteres.')}>
+                    <Info size={16} color={Colors.dark.textSecondary} />
+                  </Pressable>
+                </View>
+                <ThemedInput
+                  placeholder="Ej: Mesa VIP"
+                  value={newVip.name}
+                  onChangeText={(text) => {
+                    touch('newVip.name');
+                    setNewVip((prev) => ({ ...prev, name: text }));
+                  }}
+                  onBlur={() => touch('newVip.name')}
+                  error={((submitAttempted || touched['newVip.name']) && draftValidation.newVipErrors.name) || undefined}
+                  success={!!touched['newVip.name'] && !draftValidation.newVipErrors.name && !!newVip.name.trim()}
+                  containerStyle={{ marginBottom: 12 }}
+                />
+                <View style={styles.fieldLabelRow}>
+                  <Text style={styles.fieldLabel}>Descripción (opcional)</Text>
+                  <Pressable onPress={() => showVipHelp('Descripción', 'Detalles opcionales del VIP.\nEjemplo: Incluye acceso prioritario y botellas.')}>
+                    <Info size={16} color={Colors.dark.textSecondary} />
+                  </Pressable>
+                </View>
+                <ThemedInput
+                  placeholder="Ej: Incluye acceso prioritario y botellas"
+                  value={newVip.description}
+                  onChangeText={(text) => {
+                    touch('newVip.description');
+                    setNewVip((prev) => ({ ...prev, description: text }));
+                  }}
+                  multiline
+                  numberOfLines={3}
+                  containerStyle={{ height: 86, marginBottom: 12 }}
+                />
+                <View style={styles.row}>
+                  <View style={styles.halfWidth}>
+                    <View style={styles.fieldLabelRow}>
+                      <Text style={styles.fieldLabel}>Precio base (€)</Text>
+                      <Pressable
+                        onPress={() =>
+                          showVipHelp(
+                            'Precio base (€)',
+                            'Precio en euros.\nFormato: 200,00\nMínimo 1,00 € · Máximo 999.999'
+                          )
+                        }
+                      >
+                        <Info size={16} color={Colors.dark.textSecondary} />
+                      </Pressable>
+                    </View>
+                    <ThemedInput
+                      placeholder="Ej: 200,00"
+                      value={newVip.basePrice}
+                      onChangeText={(text) => {
+                        touch('newVip.basePrice');
+                        setNewVip((prev) => ({ ...prev, basePrice: sanitizeEuroText(text) }));
+                      }}
+                      onBlur={() => touch('newVip.basePrice')}
+                      error={((submitAttempted || touched['newVip.basePrice']) && draftValidation.newVipErrors.basePrice) || undefined}
+                      success={!!touched['newVip.basePrice'] && !draftValidation.newVipErrors.basePrice && !!newVip.basePrice.trim()}
+                      keyboardType="numeric"
+                      icon={<DollarSign size={16} color={Colors.dark.textSecondary} />}
+                    />
+                  </View>
+                  <View style={styles.halfWidth}>
+                    <View style={styles.fieldLabelRow}>
+                      <Text style={styles.fieldLabel}>Capacidad (personas)</Text>
+                      <Pressable
+                        onPress={() =>
+                          showVipHelp('Capacidad (personas)', 'Número de personas incluidas.\nEjemplo: 4\nMínimo 1 · Máximo 999')
+                        }
+                      >
+                        <Info size={16} color={Colors.dark.textSecondary} />
+                      </Pressable>
+                    </View>
+                    <ThemedInput
+                      placeholder="Ej: 4"
+                      value={newVip.capacityPeople}
+                      onChangeText={(text) => {
+                        touch('newVip.capacityPeople');
+                        setNewVip((prev) => ({ ...prev, capacityPeople: sanitizeIntText(text) }));
+                      }}
+                      onBlur={() => touch('newVip.capacityPeople')}
+                      error={((submitAttempted || touched['newVip.capacityPeople']) && draftValidation.newVipErrors.capacityPeople) || undefined}
+                      success={!!touched['newVip.capacityPeople'] && !draftValidation.newVipErrors.capacityPeople && !!newVip.capacityPeople.trim()}
+                      keyboardType="numeric"
+                    />
+                  </View>
+                </View>
+                <View style={styles.row}>
+                  <View style={styles.halfWidth}>
+                    <View style={styles.fieldLabelRow}>
+                      <Text style={styles.fieldLabel}>Botellas incluidas</Text>
+                      <Pressable
+                        onPress={() =>
+                          showVipHelp('Botellas incluidas', 'Número de botellas incluidas.\nEjemplo: 1\nMínimo 0 · Máximo 99')
+                        }
+                      >
+                        <Info size={16} color={Colors.dark.textSecondary} />
+                      </Pressable>
+                    </View>
+                    <ThemedInput
+                      placeholder="Ej: 1"
+                      value={newVip.includedBottles}
+                      onChangeText={(text) => {
+                        touch('newVip.includedBottles');
+                        setNewVip((prev) => ({ ...prev, includedBottles: sanitizeIntText(text) }));
+                      }}
+                      onBlur={() => touch('newVip.includedBottles')}
+                      error={((submitAttempted || touched['newVip.includedBottles']) && draftValidation.newVipErrors.includedBottles) || undefined}
+                      success={!!touched['newVip.includedBottles'] && !draftValidation.newVipErrors.includedBottles && !!newVip.includedBottles.trim()}
+                      keyboardType="numeric"
+                    />
+                  </View>
+                  <View style={styles.halfWidth}>
+                    <View style={styles.fieldLabelRow}>
+                      <Text style={styles.fieldLabel}>Disponibles</Text>
+                      <Pressable
+                        onPress={() =>
+                          showVipHelp('Disponibles', 'Cuántos VIP se pueden vender.\nEjemplo: 2\nMínimo 0 · Máximo 9.999')
+                        }
+                      >
+                        <Info size={16} color={Colors.dark.textSecondary} />
+                      </Pressable>
+                    </View>
+                    <ThemedInput
+                      placeholder="Ej: 2"
+                      value={newVip.quantityAvailable}
+                      onChangeText={(text) => {
+                        touch('newVip.quantityAvailable');
+                        setNewVip((prev) => ({ ...prev, quantityAvailable: sanitizeIntText(text) }));
+                      }}
+                      onBlur={() => touch('newVip.quantityAvailable')}
+                      error={((submitAttempted || touched['newVip.quantityAvailable']) && draftValidation.newVipErrors.quantityAvailable) || undefined}
+                      success={!!touched['newVip.quantityAvailable'] && !draftValidation.newVipErrors.quantityAvailable && !!newVip.quantityAvailable.trim()}
+                      keyboardType="numeric"
+                    />
+                  </View>
+                </View>
+                <View style={styles.fieldLabelRow}>
+                  <Text style={styles.fieldLabel}>Precio botella extra (€)</Text>
+                  <Pressable
+                    onPress={() =>
+                      showVipHelp('Precio botella extra (€)', 'Precio opcional por botella extra.\nFormato: 50,00\nMínimo 0,00 € · Máximo 999.999')
+                    }
+                  >
+                    <Info size={16} color={Colors.dark.textSecondary} />
+                  </Pressable>
+                </View>
+                <ThemedInput
+                  placeholder="Ej: 50,00"
+                  value={newVip.extraBottlePrice}
+                  onChangeText={(text) => {
+                    touch('newVip.extraBottlePrice');
+                    setNewVip((prev) => ({ ...prev, extraBottlePrice: sanitizeEuroText(text) }));
+                  }}
+                  onBlur={() => touch('newVip.extraBottlePrice')}
+                  error={((submitAttempted || touched['newVip.extraBottlePrice']) && draftValidation.newVipErrors.extraBottlePrice) || undefined}
+                  success={!!touched['newVip.extraBottlePrice'] && !draftValidation.newVipErrors.extraBottlePrice && !!newVip.extraBottlePrice.trim()}
+                  keyboardType="numeric"
+                  icon={<DollarSign size={16} color={Colors.dark.textSecondary} />}
+                />
 
-              <View style={{ height: 16 }} />
+                {getFieldError('vipTypes') ? <Text style={styles.fieldErrorText}>{getFieldError('vipTypes')}</Text> : null}
+                <ThemedButton
+                  title={t('creator.create_event.vip.add_button')}
+                  onPress={handleAddVip}
+                  variant="outline"
+                  style={styles.vipAddButton}
+                  disabled={vipDraftHasAny(newVip) && Object.values(draftValidation.newVipErrors).some(Boolean)}
+                  icon={<Plus size={20} color={Colors.dark.primary} />}
+                />
+              </View>
 
-              {vipReservados.map((vip, index) => (
+              {vipTypes.map((vip, index) => (
                 <View key={vip.id} style={styles.vipCard}>
                   <LinearGradient
                     colors={['rgba(124,58,237,0.18)', 'rgba(6,182,212,0.10)', 'rgba(255,255,255,0.03)']}
@@ -1260,88 +1683,34 @@ export default function CreateEventScreen() {
                   />
 
                   <View style={styles.vipCardHeader}>
-                    <Text style={styles.vipCardTitle}>{t('creator.create_event.vip.card_title', { index: index + 1 })}</Text>
-                    <TouchableOpacity onPress={() => removeVipReservado(vip.id)} style={styles.vipRemoveButton}>
+                    <View style={styles.lockedHeaderRow}>
+                      <Text style={styles.vipCardTitle}>{t('creator.create_event.vip.card_title', { index: index + 1 })}</Text>
+                      <View style={styles.lockedPill}>
+                        <Lock size={14} color={Colors.dark.textSecondary} />
+                        <Text style={styles.lockedPillText}>Bloqueado</Text>
+                      </View>
+                    </View>
+                    <TouchableOpacity onPress={() => removeVipType(vip.id)} style={styles.vipRemoveButton}>
                       <Trash2 size={18} color={Colors.dark.error} />
                     </TouchableOpacity>
                   </View>
 
-                  <ThemedInput
-                    label={t('creator.create_event.vip.name_label')}
-                    placeholder={t('creator.create_event.vip.name_placeholder')}
-                    value={vip.name}
-                    onChangeText={(text) => updateVipReservado(vip.id, { name: text })}
-                  />
-
-                  <ThemedInput
-                    label={t('creator.create_event.vip.description_label')}
-                    placeholder={t('creator.create_event.vip.description_placeholder')}
-                    value={vip.description}
-                    onChangeText={(text) => updateVipReservado(vip.id, { description: text })}
-                    multiline
-                    numberOfLines={3}
-                    containerStyle={{ height: 86 }}
-                  />
-
-                  <View style={styles.row}>
-                    <View style={styles.halfWidth}>
-                      <ThemedInput
-                        label={t('creator.create_event.vip.base_price_label')}
-                        placeholder={t('creator.create_event.vip.base_price_placeholder')}
-                        value={vip.basePrice}
-                        onChangeText={(text) => updateVipReservado(vip.id, { basePrice: text })}
-                        keyboardType="numeric"
-                        icon={<DollarSign size={16} color={Colors.dark.textSecondary} />}
-                      />
-                    </View>
-                    <View style={styles.halfWidth}>
-                      <ThemedInput
-                        label={t('creator.create_event.vip.capacity_label')}
-                        placeholder={t('creator.create_event.vip.capacity_placeholder')}
-                        value={vip.capacityPeople}
-                        onChangeText={(text) => updateVipReservado(vip.id, { capacityPeople: text })}
-                        keyboardType="numeric"
-                      />
-                    </View>
-                  </View>
-
-                  <View style={styles.row}>
-                    <View style={styles.halfWidth}>
-                      <ThemedInput
-                        label={t('creator.create_event.vip.included_bottles_label')}
-                        placeholder={t('creator.create_event.vip.included_bottles_placeholder')}
-                        value={vip.includedBottles}
-                        onChangeText={(text) => updateVipReservado(vip.id, { includedBottles: text })}
-                        keyboardType="numeric"
-                      />
-                    </View>
-                    <View style={styles.halfWidth}>
-                      <ThemedInput
-                        label={t('creator.create_event.vip.quantity_label')}
-                        placeholder={t('creator.create_event.vip.quantity_placeholder')}
-                        value={vip.quantityAvailable}
-                        onChangeText={(text) => updateVipReservado(vip.id, { quantityAvailable: text })}
-                        keyboardType="numeric"
-                      />
-                    </View>
-                  </View>
-
-                  <ThemedInput
-                    label={t('creator.create_event.vip.extra_bottle_price_label')}
-                    placeholder={t('creator.create_event.vip.extra_bottle_price_placeholder')}
-                    value={vip.extraBottlePrice}
-                    onChangeText={(text) => updateVipReservado(vip.id, { extraBottlePrice: text })}
-                    keyboardType="numeric"
-                    icon={<DollarSign size={16} color={Colors.dark.textSecondary} />}
-                  />
+                  <Text style={styles.ticketDetails}>{vip.name}</Text>
+                  {vip.description ? <Text style={styles.ticketDetails}>{vip.description}</Text> : null}
+                  <Text style={styles.ticketDetails}>
+                    Precio: {vip.basePrice}€ • Capacidad: {vip.capacityPeople} • Disponibles: {vip.quantityAvailable || '0'}
+                  </Text>
+                  <Text style={styles.ticketDetails}>
+                    Botellas: {vip.includedBottles || '0'} • Extra: {vip.extraBottlePrice ? `${vip.extraBottlePrice}€` : '0€'}
+                  </Text>
                 </View>
               ))}
             </GlassView>
 
             <TouchableOpacity 
-                style={[styles.directButton, loading && styles.disabledButton, { marginBottom: 40 }]}
+                style={[styles.directButton, (loading || !draftValidation.ok) && styles.disabledButton, { marginBottom: 40 }]}
                 onPress={handleCreate}
-                disabled={loading}
+                disabled={loading || !draftValidation.ok}
                 activeOpacity={0.8}
             >
                 <LinearGradient
@@ -1429,6 +1798,18 @@ const styles = StyleSheet.create({
     marginBottom: 8,
     marginLeft: 4,
   },
+  fieldLabelRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 6,
+    marginLeft: 4,
+    marginRight: 4,
+  },
+  fieldLabel: {
+    fontSize: 14,
+    color: Colors.dark.textSecondary,
+  },
   inputDescription: {
     fontSize: 12,
     color: Colors.dark.textSecondary,
@@ -1436,6 +1817,15 @@ const styles = StyleSheet.create({
     marginLeft: 4,
     marginTop: -4,
     opacity: 0.7
+  },
+  fieldErrorText: {
+    color: Colors.dark.error,
+    fontSize: 12,
+    marginTop: 6,
+    marginLeft: 4,
+  },
+  fieldErrorBorder: {
+    borderColor: Colors.dark.error,
   },
   row: {
     flexDirection: 'row',
@@ -1458,7 +1848,7 @@ const styles = StyleSheet.create({
   ticketItem: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     padding: 16,
     backgroundColor: 'rgba(255,255,255,0.05)',
     borderRadius: 12,
@@ -1468,6 +1858,41 @@ const styles = StyleSheet.create({
   },
   ticketInfo: {
     flex: 1,
+  },
+  ticketItemHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 10,
+    marginBottom: 6,
+  },
+  ticketHeaderRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    flexShrink: 0,
+  },
+  lockedHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 10,
+    marginBottom: 6,
+  },
+  lockedPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.10)',
+    backgroundColor: 'rgba(255,255,255,0.05)',
+  },
+  lockedPillText: {
+    color: Colors.dark.textSecondary,
+    fontSize: 12,
   },
   ticketName: {
     color: Colors.dark.text,
