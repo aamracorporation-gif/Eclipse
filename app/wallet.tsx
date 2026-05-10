@@ -4,7 +4,7 @@ import { Colors } from '@/constants/Colors';
 import { LinearGradient } from 'expo-linear-gradient';
 import { GlassView } from '@/components/ui/GlassView';
 import { DiscoLoader } from '@/components/ui/DiscoLoader';
-import { ArrowUpRight, ArrowDownLeft } from 'lucide-react-native';
+import { ArrowUpRight, ArrowDownLeft } from '@/lib/icons';
 import { Stack } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useResponsive } from '@/lib/responsive';
