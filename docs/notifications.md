@@ -10,20 +10,27 @@ Unificar y endurecer el sistema de notificaciones para que soporte:
 
 ## Esquema (BD)
 Tablas principales:
-- `public.notifications`: historial y cola de entrega.
+- `public.notifications`: historial in-app (y fuente para generar entregas por canal).
+- `public.notification_deliveries`: cola por canal (`push|email|sms|in_app`), con reintentos.
+- `public.notification_delivery_events`: auditoría de cada transición de delivery (canal/estado/error/provider).
 - `public.notification_templates`: plantillas por tipo.
-- `public.notification_settings`: preferencias por usuario/rol.
-- `public.user_push_tokens`: tokens Expo por usuario.
+- `public.notification_template_translations`: traducciones por idioma.
+- `public.notification_settings`: preferencias por usuario/rol y opt-out por canal + marketing opt-in.
+- `public.user_push_tokens`: tokens Expo por usuario (con `is_active`).
 
 Funciones RPC / helpers:
 - `public.mark_all_notifications_read(p_user_id uuid)`: marca como leídas.
 - `public.enqueue_notification(...)`: inserta en cola con rate limit.
-- `public.enqueue_notification_from_template(...)`: renderiza template + dedupe y encola.
+- `public.enqueue_notification_from_template(...)`: selecciona idioma, renderiza template + dedupe y encola.
 - `public.notify(...)`: wrapper de compatibilidad para triggers/funciones antiguas.
+Triggers / jobs:
+- `on_event_update` (events): dispara notificaciones a compradores con diff.
+- `trg_create_notification_deliveries` (notifications): genera filas en `notification_deliveries` según `channels`.
 
 Migraciones relevantes:
 - `supabase/migrations/20260401130000_notifications_unify_v1.sql`
-- `supabase/migrations/20260401131500_purchase_fulfilled_notifications.sql`
+- `supabase/migrations/20260501123000_notification_i18n_prefs_and_logs.sql`
+- `supabase/migrations/20260501174000_event_update_notifier_v3_with_ticket_notified_at.sql`
 
 ## Plantillas (Templates)
 Tabla: `public.notification_templates`
@@ -32,52 +39,36 @@ Tabla: `public.notification_templates`
 - `default_priority`, `default_channels`: comportamiento por defecto.
 - `dedupe_seconds`: evita duplicados por usuario/tipo en una ventana.
 
-## Notificaciones añadidas
-Estas son las notificaciones que quedaron añadidas/registradas en el sistema (plantillas + notificaciones directas por rol):
+## Tipos cubiertos (resumen)
+Compra:
+- `purchase_completed` (cliente)
+- `organizer_realtime_sale` (organizador)
+- `resale_sold` (vendedor reventa)
 
-### Plantillas (notification_templates)
-- `purchase_completed`
-  - Título: `🎉 ¡Compra completada!`
-  - Mensaje: `¡Listo, {{name}}! Tu compra para "{{event_title}}" se confirmó. Tienes {{quantity}} entrada(s) lista(s) en Mis Entradas.`
-  - Prioridad: `high`
-  - Canales: `in_app`, `push`
-  - Anti-duplicado: 60s
-- `ticket_ready`
-  - Título: `🎟️ Tu entrada está lista`
-  - Mensaje: `Tu QR para "{{event_title}}" ya está disponible. Muéstralo en la entrada.`
-  - Prioridad: `normal`
-  - Canales: `in_app`, `push`
-  - Anti-duplicado: 120s
-- `event_modified`
-  - Título: `🔁 Cambios en el evento`
-  - Mensaje: `Hubo cambios en "{{event_title}}". Revisa los nuevos detalles antes de ir.`
-  - Prioridad: `high`
-  - Canales: `in_app`, `push`
-  - Anti-duplicado: 300s
+Edición de evento (compradores):
+- `event_updated` (genérico)
+- `event_time_changed`
+- `event_location_changed`
+- `event_access_policy_changed`
+- `event_capacity_or_price_changed`
+- `event_lineup_changed`
 - `event_cancelled`
-  - Título: `⚠️ Evento cancelado`
-  - Mensaje: `"{{event_title}}" ha sido cancelado. Estamos gestionando el reembolso si aplica.`
-  - Prioridad: `high`
-  - Canales: `in_app`, `push`
-  - Anti-duplicado: 300s
-- `security_alert`
-  - Título: `🚩 Alerta de seguridad`
-  - Mensaje: `{{message}}`
-  - Prioridad: `high`
-  - Canales: `in_app`, `push`
-  - Anti-duplicado: 60s
 
-### Notificaciones directas (sin template)
-Estas se insertan directamente en `public.notifications` (sin pasar por template), con datos en `data`:
-- `organizer_realtime_sale` (rol `organizer`)
-  - Título: `💰 Nueva venta`
-  - Mensaje: `Se vendieron {quantity} entrada(s) para {event_title}`
-  - Prioridad: `normal`
-  - Canales: `in_app`, `push`
+Recordatorios / otros:
+- `event_reminder_24h`, `event_reminder_1h`
+- `ticket_cancelled_or_refunded`
+- `ticket_upgraded_or_changed`
+- `waitlist_ticket_available`
+- Marketing (opt-in): `event_discount`, `event_offer`
 
-## Evento que las dispara
-- Compra completada (cliente): se encola `purchase_completed` cuando `payment_transactions.status` pasa a `fulfilled` (trigger `trg_payment_fulfilled_notifications`).
-- Compra completada (organizador): se encola `organizer_realtime_sale` cuando `payment_transactions.status` pasa a `fulfilled` y existe `events.creator_id`.
+## Disparadores principales
+- Compra (tarjeta): `payment_intent.succeeded` → backend llama RPC `fulfill_payment_for_user(...)` → `payment_transactions.status='fulfilled'` → notificaciones de compra.
+- Compra (crédito): RPCs de compra generan notificación directamente.
+- Evento editado: trigger `on_event_update` llama `send_event_update_notifications(...)`:
+  - identifica compradores (`tickets.status='valid'`)
+  - genera `diff` + `changed_fields`
+  - encola notificación por tipo
+  - actualiza `tickets.event_update_notified_at` para evitar reenvíos
 
 Ejemplo de variables en `data`:
 ```json
@@ -92,6 +83,7 @@ Ejemplo de variables en `data`:
 Push:
 - Edge Function: `supabase/functions/send-push`
 - Selecciona notificaciones `status='pending'` y actualiza a `sent/failed`.
+ - Desactiva tokens inválidos (`DeviceNotRegistered`) marcando `user_push_tokens.is_active=false`.
 
 Email:
 - Edge Function: `supabase/functions/send-email-notifications`
@@ -103,10 +95,18 @@ Email:
 SMS:
 - Se deja preparado a nivel de datos (`channels`), pero requiere proveedor (Twilio u otro).
 
+Dispatcher:
+- Edge Function: `supabase/functions/dispatch-notifications`
+- Ejecuta push/email/sms en una sola llamada (útil para garantizar entrega < 60s).
+
 ## Anti-spam / Rate limiting
 Dos capas:
 - Dedupe por template: `dedupe_seconds`.
 - Rate limit general por usuario: si hay >= 5 notificaciones en el último minuto se inserta como `status='blocked'`.
+
+## Auditoría
+- `notification_deliveries`: estado por canal con `attempts/max_attempts`.
+- `notification_delivery_events`: traza por cada cambio de estado (incluye `event_id` si existe en data).
 
 ## Frontend (Expo)
 Pantallas:
