@@ -6,6 +6,56 @@ export function calculateAgeFromDate(date: Date) {
   return age;
 }
 
+export function normalizeWhitespace(input: string) {
+  return String(input || '').replace(/\s+/g, ' ').trim();
+}
+
+function hasControlChars(s: string) {
+  return /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/.test(String(s || ''));
+}
+
+export function isValidPersonName(input: string) {
+  const s = normalizeWhitespace(input);
+  if (!s) return false;
+  if (hasControlChars(s)) return false;
+  return /^[\p{L}]+(?: [\p{L}]+)*$/u.test(s);
+}
+
+export function isSafeTextNoEmojis(input: string) {
+  const s = String(input || '');
+  if (!s) return true;
+  if (s.includes('\n') || s.includes('\r') || s.includes('\t')) return false;
+  if (hasControlChars(s)) return false;
+  return /^[\p{L}\p{N}\s.,'’"¡!¿?\-_:;()&+/€@#%/ºª]*$/u.test(s);
+}
+
+export function isSafeAddressText(input: string) {
+  const s = String(input || '');
+  if (!s) return true;
+  if (s.includes('\n') || s.includes('\r') || s.includes('\t')) return false;
+  if (hasControlChars(s)) return false;
+  return /^[\p{L}\p{N}\s.,'’"\-#/ºª]*$/u.test(s);
+}
+
+export function isSafeOrgText(input: string) {
+  const s = String(input || '');
+  if (!s) return true;
+  if (s.includes('\n') || s.includes('\r') || s.includes('\t')) return false;
+  if (hasControlChars(s)) return false;
+  return /^[\p{L}\p{N}\s.&'’"\-()/#]*$/u.test(s);
+}
+
+export function isUuid(input: string) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(input || ''));
+}
+
+export function buildPublicEventShareUrl(baseUrl: string, token: string) {
+  const base = String(baseUrl || '').replace(/\/$/, '');
+  if (!base) return '';
+  if (!isUuid(token)) return '';
+  return `${base}/evento/${token}`;
+}
+
 export function normalizeIban(input: string) {
   return String(input || '').replace(/\s+/g, '').toUpperCase();
 }
@@ -92,4 +142,3 @@ export function normalizePhoneEsE164(input: string) {
   if (digits.length === 9) return `+34${digits}`;
   return `+${digits}`;
 }
-
