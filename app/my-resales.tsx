@@ -9,7 +9,7 @@ import { Colors } from '@/constants/Colors';
 import { GlassView } from '@/components/ui/GlassView';
 import { ThemedButton } from '@/components/ui/ThemedButton';
 import { DiscoLoader } from '@/components/ui/DiscoLoader';
-import { ArrowLeft, Tag, Calendar, MapPin, Trash2, CheckCircle, Clock } from 'lucide-react-native';
+import { ArrowLeft, Tag, Calendar, MapPin, Trash2, CheckCircle, Clock } from '@/lib/icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useResponsive } from '@/lib/responsive';
 import { useTranslation } from 'react-i18next';
