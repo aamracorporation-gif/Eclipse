@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { StyleSheet, Text, View, TouchableOpacity, Modal, Alert, Vibration } from 'react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { router } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
+import { Check, ChevronDown, X } from '@/lib/icons';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/lib/AuthContext';
 import { Colors } from '@/constants/Colors';
@@ -265,7 +265,7 @@ export default function WorkerScanScreen() {
               style={styles.closeButton} 
               onPress={safeBack}
             >
-              <Ionicons name="close" size={28} color="white" />
+              <X size={28} color="white" />
             </TouchableOpacity>
             <Text style={[styles.title, { fontSize: scaleFont(18) }]}>Escanear Entrada</Text>
           </View>
@@ -280,7 +280,7 @@ export default function WorkerScanScreen() {
               <Text style={[styles.selectedEventText, { fontSize: scaleFont(16) }]} numberOfLines={1}>
                 {events.find(e => e.id === selectedEventId)?.title || 'Seleccionar evento...'}
               </Text>
-              <Ionicons name="chevron-down" size={20} color="white" />
+              <ChevronDown size={20} color="white" />
             </TouchableOpacity>
             
             {showEventSelector && events.length > 0 && (
@@ -348,11 +348,7 @@ export default function WorkerScanScreen() {
                   styles.resultIconContainer, 
                   { backgroundColor: result.valid ? '#22c55e' : '#ef4444' }
                 ]}>
-                  <Ionicons 
-                    name={result.valid ? "checkmark" : "close"} 
-                    size={50} 
-                    color="white" 
-                  />
+                  {result.valid ? <Check size={50} color="white" /> : <X size={50} color="white" />}
                 </View>
                 
                 <Text style={styles.resultTitle}>
