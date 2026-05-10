@@ -1,43 +1,49 @@
 import { TextInput, View, StyleSheet, TextInputProps, Text, StyleProp, ViewStyle, TextStyle } from 'react-native';
 import { Colors } from '@/constants/Colors';
-import { LucideIcon } from 'lucide-react-native';
+import { AlertCircle, CheckCircle2, AppIconComponent } from '@/lib/icons';
 import React, { forwardRef, isValidElement } from 'react';
 import { theme } from '@/theme/styles';
 
 interface ThemedInputProps extends Omit<TextInputProps, 'style'> {
-  icon?: LucideIcon | React.ReactNode;
+  icon?: AppIconComponent | React.ReactNode;
   rightIcon?: React.ReactNode;
   error?: string;
+  success?: boolean;
   label?: string;
   style?: StyleProp<ViewStyle>;
   containerStyle?: StyleProp<ViewStyle>;
   inputStyle?: StyleProp<TextStyle>;
 }
 
-export const ThemedInput = forwardRef<TextInput, ThemedInputProps>(({ icon: Icon, rightIcon, error, label, style, containerStyle, inputStyle, ...props }, ref) => {
+export const ThemedInput = forwardRef<TextInput, ThemedInputProps>(({ icon: Icon, rightIcon, error, success, label, style, containerStyle, inputStyle, ...props }, ref) => {
+  const resolvedRightIcon = error
+    ? <AlertCircle size={18} color={Colors.dark.error} />
+    : (rightIcon ?? (success ? <CheckCircle2 size={18} color={Colors.dark.success} /> : null));
   return (
     <View style={[styles.wrapper, containerStyle]}>
       {label && <Text style={styles.label}>{label}</Text>}
-      <View style={[styles.container, error ? styles.errorBorder : null, style]}>
+      <View style={[styles.container, error ? styles.errorBorder : null, !error && success ? styles.successBorder : null, style]}>
         {Icon && (
           <View style={styles.iconContainer}>
             {isValidElement(Icon) ? (
               Icon
             ) : (
-              // @ts-ignore: Icon is treated as a component here
-              <Icon size={20} color={Colors.dark.textSecondary} />
+              (() => {
+                const IconComponent = Icon as AppIconComponent;
+                return <IconComponent size={20} color={Colors.dark.textSecondary} />;
+              })()
             )}
           </View>
         )}
         <TextInput
           ref={ref}
-          style={[styles.input, !Icon && styles.noIconInput, !!rightIcon && styles.inputWithRightIcon, inputStyle]}
+          style={[styles.input, !Icon && styles.noIconInput, !!resolvedRightIcon && styles.inputWithRightIcon, inputStyle]}
           placeholderTextColor={Colors.dark.textSecondary}
           {...props}
         />
-        {rightIcon && (
+        {resolvedRightIcon && (
           <View style={styles.rightIconContainer}>
-            {rightIcon}
+            {resolvedRightIcon}
           </View>
         )}
       </View>
@@ -54,7 +60,7 @@ const styles = StyleSheet.create({
     width: '100%',
   },
   label: {
-    color: 'white',
+    color: Colors.dark.text,
     fontSize: theme.typography.size.md,
     fontWeight: theme.typography.weight.semibold,
     marginBottom: theme.space[2],
@@ -62,7 +68,7 @@ const styles = StyleSheet.create({
   container: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    backgroundColor: 'rgba(255, 255, 255, 0.06)',
     borderRadius: theme.radius.md,
     borderWidth: theme.components.input.borderWidth,
     borderColor: Colors.dark.border,
@@ -70,6 +76,9 @@ const styles = StyleSheet.create({
   },
   errorBorder: {
     borderColor: Colors.dark.error,
+  },
+  successBorder: {
+    borderColor: Colors.dark.success,
   },
   iconContainer: {
     paddingLeft: theme.space[4],
@@ -85,7 +94,7 @@ const styles = StyleSheet.create({
   },
   input: {
     flex: 1,
-    color: '#FFFFFF',
+    color: Colors.dark.text,
     fontSize: theme.typography.size.md,
     minHeight: theme.components.input.minHeight,
     paddingRight: theme.space[4],
