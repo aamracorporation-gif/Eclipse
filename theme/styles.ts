@@ -7,8 +7,8 @@ export const theme = {
   },
   space: [0, 4, 8, 12, 16, 20, 24, 28, 32, 40, 48, 56, 64],
   radius: {
-    md: 16,
-    lg: 24,
+    md: 14,
+    lg: 22,
   },
   layout: {
     minTapSize: 44,
@@ -34,7 +34,7 @@ export const theme = {
   },
   components: {
     card: {
-      padding: 18,
+      padding: 16,
       borderWidth: 1,
     },
     button: {
