@@ -1,10 +1,10 @@
 import { View, Text, StyleSheet, KeyboardAvoidingView, Platform, ScrollView, Alert, TouchableOpacity } from 'react-native';
-import { useState, useEffect } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '@/lib/AuthContext';
 import { supabase } from '@/lib/supabase';
-import { Mail, Lock, Eye, EyeOff, ArrowRight, User, MapPin, Phone, Calendar, Building2, PartyPopper, Edit2, RefreshCw, Check, Building, CreditCard } from 'lucide-react-native';
+import { Mail, Lock, Eye, EyeOff, ArrowRight, User, MapPin, Calendar, Building2, PartyPopper, Edit2, RefreshCw, Check, Building, CreditCard } from '@/lib/icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Location from 'expo-location';
 import DateTimePicker from '@react-native-community/datetimepicker';
@@ -14,7 +14,7 @@ import { ThemedInput } from '@/components/ui/ThemedInput';
 import { GlassView } from '@/components/ui/GlassView';
 import { DiscoLoader } from '@/components/ui/DiscoLoader';
 import { invokeEdgeFunction } from '@/lib/edgeFunctions';
-import { calculateAgeFromDate, isValidIbanES, isValidSpanishTaxId, normalizePhoneEsE164 } from '@/lib/validators';
+import { calculateAgeFromDate, isSafeAddressText, isSafeOrgText, isValidIbanES, isValidPersonName, isValidSpanishTaxId, normalizeWhitespace } from '@/lib/validators';
 
 export default function RegisterScreen() {
   const router = useRouter();
@@ -24,7 +24,7 @@ export default function RegisterScreen() {
   // Steps:
   // 1. Role Selection
   // 2. Personal/Club Info (Name, Location)
-  // 3. Specific Info (Attendee: DOB/Music, Organizer: Legal/Tax/Phone)
+  // 3. Specific Info (Attendee: DOB, Organizer: Legal/Tax)
   // 4. Account (Email, Password)
   // 5. Email verification
   const [step, setStep] = useState(1);
@@ -64,7 +64,6 @@ export default function RegisterScreen() {
     responsibleName: '',
     iban: '',
     // Common
-    phone: '',
     city: '',
     country: '',
     // Stripe Connect / Business
@@ -73,8 +72,65 @@ export default function RegisterScreen() {
     businessType: 'individual' as 'individual' | 'company',
   });
 
+  const [submitAttempted, setSubmitAttempted] = useState(false);
+  const [touched, setTouched] = useState<Record<string, boolean>>({});
+  const touch = (key: string) => setTouched((prev) => ({ ...prev, [key]: true }));
+
+  const [clubNameUnavailable, setClubNameUnavailable] = useState<string | null>(null);
+
+  const sanitizeByAllowed = (text: string, allowed: RegExp) => {
+    const raw = String(text || '');
+    let out = '';
+    for (const ch of raw) {
+      if (allowed.test(ch)) out += ch;
+    }
+    return out;
+  };
+
+  const sanitizeNameText = (text: string) => sanitizeByAllowed(text, /^[\p{L}\s]$/u);
+  const sanitizeCityCountryText = (text: string) => sanitizeByAllowed(text, /^[\p{L}\s]$/u);
+  const sanitizeOrgText = (text: string) => sanitizeByAllowed(text, /^[\p{L}\p{N}\s.&'’"\-()/#]$/u);
+  const sanitizeAddressText = (text: string) => sanitizeByAllowed(text, /^[\p{L}\p{N}\s.,'’"\-#/ºª]$/u);
+  const sanitizePostalCode = (text: string) => String(text || '').replace(/[^\d]/g, '').slice(0, 5);
+  const sanitizeIban = (text: string) => String(text || '').replace(/[^0-9A-Za-z]/g, '').toUpperCase();
+  const sanitizeTaxId = (text: string) => String(text || '').replace(/[^0-9A-Za-z]/g, '').toUpperCase();
+
   const updateForm = (key: string, value: any) => {
     setFormData(prev => ({ ...prev, [key]: value }));
+  };
+
+  const setField = (key: string, value: string) => {
+    touch(key);
+    if (key === 'firstName' || key === 'lastName' || key === 'responsibleName') {
+      updateForm(key, normalizeWhitespace(sanitizeNameText(value)));
+      return;
+    }
+    if (key === 'city' || key === 'country') {
+      updateForm(key, normalizeWhitespace(sanitizeCityCountryText(value)));
+      return;
+    }
+    if (key === 'clubName' || key === 'legalName') {
+      setClubNameUnavailable(null);
+      updateForm(key, normalizeWhitespace(sanitizeOrgText(value)));
+      return;
+    }
+    if (key === 'venueAddress' || key === 'fiscalAddress') {
+      updateForm(key, normalizeWhitespace(sanitizeAddressText(value)));
+      return;
+    }
+    if (key === 'postalCode') {
+      updateForm(key, sanitizePostalCode(value));
+      return;
+    }
+    if (key === 'iban') {
+      updateForm(key, sanitizeIban(value));
+      return;
+    }
+    if (key === 'taxIdNumber') {
+      updateForm(key, sanitizeTaxId(value));
+      return;
+    }
+    updateForm(key, value);
   };
 
   // Auto-detect location when entering Step 2
@@ -122,38 +178,121 @@ export default function RegisterScreen() {
   const onDateChange = (event: any, selectedDate?: Date) => {
     setShowDatePicker(false);
     if (selectedDate) {
-      if (activeDateField === 'attendee') setBirthDate(selectedDate);
-      else setResponsibleBirthDate(selectedDate);
+      if (activeDateField === 'attendee') {
+        touch('birthDate');
+        setBirthDate(selectedDate);
+      } else {
+        touch('responsibleBirthDate');
+        setResponsibleBirthDate(selectedDate);
+      }
     }
   };
 
+  const fieldErrors = useMemo(() => {
+    const errors: Record<string, string> = {};
+    const role = formData.role === 'organizer' ? 'organizer' : 'attendee';
+
+    const required = (key: string, value: string, msg: string) => {
+      if (!String(value || '').trim()) errors[key] = msg;
+    };
+
+    if (step === 2) {
+      if (formData.country.trim() && !isValidPersonName(formData.country)) errors.country = 'Solo letras y espacios. Sin emojis.';
+      if (role === 'attendee') {
+        required('firstName', formData.firstName, 'El nombre es obligatorio.');
+        if (formData.firstName.trim() && !isValidPersonName(formData.firstName)) errors.firstName = 'Solo letras y espacios. Sin emojis.';
+
+        required('lastName', formData.lastName, 'Los apellidos son obligatorios.');
+        if (formData.lastName.trim() && !isValidPersonName(formData.lastName)) errors.lastName = 'Solo letras y espacios. Sin emojis.';
+      } else {
+        required('clubName', formData.clubName, 'El nombre del local es obligatorio.');
+        if (formData.clubName.trim() && !isSafeOrgText(formData.clubName)) errors.clubName = 'No se permiten emojis ni caracteres especiales.';
+        if (clubNameUnavailable) errors.clubName = clubNameUnavailable;
+
+        required('venueAddress', formData.venueAddress, 'La dirección del local es obligatoria.');
+        if (formData.venueAddress.trim() && !isSafeAddressText(formData.venueAddress)) errors.venueAddress = 'No se permiten emojis ni caracteres especiales.';
+
+        required('city', formData.city, 'La ciudad es obligatoria.');
+        if (formData.city.trim() && !isValidPersonName(formData.city)) errors.city = 'Solo letras y espacios. Sin emojis.';
+
+        required('postalCode', formData.postalCode, 'El código postal es obligatorio.');
+        if (formData.postalCode.trim() && !/^\d{5}$/.test(formData.postalCode)) errors.postalCode = 'Formato inválido. Ejemplo: 28001';
+      }
+    }
+
+    if (step === 3) {
+      if (role === 'attendee') {
+        if (!birthDate) errors.birthDate = 'Selecciona tu fecha de nacimiento.';
+        else if (calculateAgeFromDate(birthDate) < 18) errors.birthDate = 'Debes ser mayor de 18 años.';
+      } else {
+        required('legalName', formData.legalName, 'El nombre legal es obligatorio.');
+        if (formData.legalName.trim() && !isSafeOrgText(formData.legalName)) errors.legalName = 'No se permiten emojis ni caracteres especiales.';
+
+        required('taxIdNumber', formData.taxIdNumber, 'El CIF/NIF es obligatorio.');
+        if (formData.taxIdNumber.trim() && !isValidSpanishTaxId(formData.taxIdNumber)) errors.taxIdNumber = 'Ingresa un CIF/NIF/NIE válido.';
+
+        required('responsibleName', formData.responsibleName, 'El nombre del responsable es obligatorio.');
+        if (formData.responsibleName.trim() && !isValidPersonName(formData.responsibleName)) errors.responsibleName = 'Solo letras y espacios. Sin emojis.';
+
+        if (!responsibleBirthDate) errors.responsibleBirthDate = 'Selecciona la fecha de nacimiento del responsable.';
+        else if (calculateAgeFromDate(responsibleBirthDate) < 18) errors.responsibleBirthDate = 'El responsable debe ser mayor de 18 años.';
+
+        required('fiscalAddress', formData.fiscalAddress, 'La dirección fiscal es obligatoria.');
+        if (formData.fiscalAddress.trim() && !isSafeAddressText(formData.fiscalAddress)) errors.fiscalAddress = 'No se permiten emojis ni caracteres especiales.';
+
+        required('iban', formData.iban, 'El IBAN es obligatorio.');
+        if (formData.iban.trim() && !isValidIbanES(formData.iban)) errors.iban = 'Ingresa un IBAN válido de España.';
+
+        if (!acceptedLicenses) errors.acceptedLicenses = 'Debes declarar que dispones de las licencias necesarias.';
+      }
+    }
+
+    if (step === 4) {
+      required('email', formData.email, 'El email es obligatorio.');
+      if (formData.email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(formData.email)) errors.email = 'Formato de email inválido.';
+
+      required('password', formData.password, 'La contraseña es obligatoria.');
+      if (formData.password && formData.password.length < 6) errors.password = 'Mínimo 6 caracteres.';
+
+      required('confirmPassword', formData.confirmPassword, 'Confirma la contraseña.');
+      if (formData.confirmPassword && formData.password !== formData.confirmPassword) errors.confirmPassword = 'Las contraseñas no coinciden.';
+
+      if (!acceptedTerms) errors.acceptedTerms = 'Debes aceptar los Términos y Condiciones.';
+      if (!acceptedPrivacy) errors.acceptedPrivacy = 'Debes aceptar la Política de Privacidad.';
+    }
+
+    return errors;
+  }, [
+    step,
+    formData,
+    birthDate,
+    responsibleBirthDate,
+    acceptedLicenses,
+    acceptedTerms,
+    acceptedPrivacy,
+    clubNameUnavailable,
+  ]);
+
+  const showFieldError = (key: string) => (submitAttempted || touched[key]) ? fieldErrors[key] : undefined;
+  const showFieldSuccess = (key: string) =>
+    !!touched[key] && !fieldErrors[key] && !!String((formData as any)[key] || '').trim();
+
   const validateStep = async () => {
     if (step === 1) return true;
+    setSubmitAttempted(true);
 
     // Step 2: Basic Info (Name/Club + Location)
     if (step === 2) {
       if (formData.role === 'attendee') {
-        if (!formData.firstName.trim() || !formData.lastName.trim()) {
-          Alert.alert('Faltan datos', 'Por favor ingresa tu nombre y apellidos.');
-          return false;
-        }
+        touch('firstName');
+        touch('lastName');
+        if (fieldErrors.firstName || fieldErrors.lastName) return false;
       } else {
-        if (!formData.clubName.trim()) {
-          Alert.alert('Faltan datos', 'Ingresa el nombre de tu local u organización.');
-          return false;
-        }
-        if (!formData.venueAddress.trim()) {
-          Alert.alert('Faltan datos', 'Ingresa la dirección del local.');
-          return false;
-        }
-        if (!formData.city.trim()) {
-          Alert.alert('Faltan datos', 'Ingresa la ciudad.');
-          return false;
-        }
-        if (!formData.postalCode.trim()) {
-          Alert.alert('Faltan datos', 'Ingresa el código postal.');
-          return false;
-        }
+        touch('clubName');
+        touch('venueAddress');
+        touch('city');
+        touch('postalCode');
+        if (fieldErrors.clubName || fieldErrors.venueAddress || fieldErrors.city || fieldErrors.postalCode) return false;
         
         setLoading(true);
         try {
@@ -164,7 +303,7 @@ export default function RegisterScreen() {
             .maybeSingle();
 
           if (data) {
-            Alert.alert('Nombre no disponible', 'Ya existe un local con este nombre.');
+            setClubNameUnavailable('Ya existe un local con este nombre.');
             setLoading(false);
             return false;
           }
@@ -176,63 +315,32 @@ export default function RegisterScreen() {
 
     // Step 3: Specific Info
     if (step === 3) {
-      if (!formData.phone.trim()) {
-        Alert.alert('Faltan datos', 'Por favor ingresa un número de teléfono móvil.');
-        return false;
-      }
-
       if (formData.role === 'attendee') {
-        if (!birthDate) {
-          Alert.alert('Faltan datos', 'Por favor selecciona tu fecha de nacimiento.');
-          return false;
-        }
-        const age = calculateAgeFromDate(birthDate);
-        if (age < 18) {
-          Alert.alert('Edad inválida', 'Debes ser mayor de 18 años para registrarte en la Plataforma conforme a nuestros Términos y Condiciones.');
-          return false;
-        }
+        if (fieldErrors.birthDate) return false;
       } else {
-        if (!formData.legalName.trim()) {
-          Alert.alert('Faltan datos', 'Ingresa el Nombre Legal o Razón Social.');
-          return false;
-        }
-        if (!formData.taxIdNumber.trim()) {
-          Alert.alert('Faltan datos', 'Ingresa el CIF/NIF para configurar los pagos.');
-          return false;
-        }
-        if (!isValidSpanishTaxId(formData.taxIdNumber)) {
-          Alert.alert('CIF/NIF inválido', 'Ingresa un CIF/NIF/NIE válido de España.');
-          return false;
-        }
-        if (!formData.responsibleName.trim()) {
-          Alert.alert('Faltan datos', 'Ingresa el nombre del responsable.');
-          return false;
-        }
-        if (!responsibleBirthDate) {
-          Alert.alert('Faltan datos', 'Selecciona la fecha de nacimiento del responsable.');
-          return false;
-        }
-        if (calculateAgeFromDate(responsibleBirthDate) < 18) {
-          Alert.alert('Edad inválida', 'Debes ser mayor de 18 años para registrarte en la Plataforma conforme a nuestros Términos y Condiciones.');
-          return false;
-        }
-        if (!formData.fiscalAddress.trim()) {
-          Alert.alert('Faltan datos', 'Ingresa la dirección fiscal.');
-          return false;
-        }
-        if (!formData.iban.trim()) {
-          Alert.alert('Faltan datos', 'Ingresa el IBAN.');
-          return false;
-        }
-        if (!isValidIbanES(formData.iban)) {
-          Alert.alert('IBAN inválido', 'Ingresa un IBAN válido de España.');
-          return false;
-        }
-        if (!acceptedLicenses) {
-          Alert.alert('Requisito', 'Debes declarar que dispones de las licencias necesarias.');
-          return false;
-        }
+        touch('legalName');
+        touch('taxIdNumber');
+        touch('responsibleName');
+        touch('fiscalAddress');
+        touch('iban');
+        if (
+          fieldErrors.legalName ||
+          fieldErrors.taxIdNumber ||
+          fieldErrors.responsibleName ||
+          fieldErrors.responsibleBirthDate ||
+          fieldErrors.fiscalAddress ||
+          fieldErrors.iban ||
+          fieldErrors.acceptedLicenses
+        ) return false;
       }
+      return true;
+    }
+
+    if (step === 4) {
+      touch('email');
+      touch('password');
+      touch('confirmPassword');
+      if (fieldErrors.email || fieldErrors.password || fieldErrors.confirmPassword || fieldErrors.acceptedTerms || fieldErrors.acceptedPrivacy) return false;
       return true;
     }
 
@@ -284,7 +392,6 @@ export default function RegisterScreen() {
     try {
       const age = birthDate ? calculateAgeFromDate(birthDate) : 0;
       const acceptedAt = new Date().toISOString();
-      const phoneE164 = normalizePhoneEsE164(formData.phone);
       
       const metadata = {
         role: safeRole,
@@ -292,7 +399,6 @@ export default function RegisterScreen() {
         email: email,
         club_name: formData.clubName,
         address: formData.venueAddress,
-        phone: phoneE164,
         legal_name: formData.legalName,
         tax_id_number: formData.taxIdNumber,
         business_type: formData.businessType,
@@ -341,14 +447,12 @@ export default function RegisterScreen() {
         try {
           const age = birthDate ? calculateAgeFromDate(birthDate) : 0;
           const acceptedAt = new Date().toISOString();
-          const phoneE164 = normalizePhoneEsE164(formData.phone);
           const metadata = {
             role: safeRole,
             full_name: safeRole === 'organizer' ? formData.clubName : `${formData.firstName} ${formData.lastName}`,
             email: formData.email.trim(),
             club_name: formData.clubName,
             address: formData.venueAddress,
-            phone: phoneE164,
             legal_name: formData.legalName,
             tax_id_number: formData.taxIdNumber,
             business_type: formData.businessType,
@@ -457,30 +561,59 @@ export default function RegisterScreen() {
           <ThemedInput
             placeholder="Nombre comercial del local"
             value={formData.clubName}
-            onChangeText={(t) => updateForm('clubName', t)}
+            onChangeText={(t) => setField('clubName', t)}
+            onBlur={() => touch('clubName')}
+            error={showFieldError('clubName')}
+            success={showFieldSuccess('clubName')}
             icon={Building2}
           />
           <ThemedInput
             placeholder="Dirección física del local"
             value={formData.venueAddress}
-            onChangeText={(t) => updateForm('venueAddress', t)}
+            onChangeText={(t) => setField('venueAddress', t)}
+            onBlur={() => touch('venueAddress')}
+            error={showFieldError('venueAddress')}
+            success={showFieldSuccess('venueAddress')}
             icon={MapPin}
           />
-          <ThemedInput placeholder="Ciudad" value={formData.city} onChangeText={(t) => updateForm('city', t)} icon={MapPin} />
-          <ThemedInput placeholder="Código postal" value={formData.postalCode} onChangeText={(t) => updateForm('postalCode', t)} icon={MapPin} keyboardType="number-pad" />
+          <ThemedInput
+            placeholder="Ciudad"
+            value={formData.city}
+            onChangeText={(t) => setField('city', t)}
+            onBlur={() => touch('city')}
+            error={showFieldError('city')}
+            success={showFieldSuccess('city')}
+            icon={MapPin}
+          />
+          <ThemedInput
+            placeholder="Código postal"
+            value={formData.postalCode}
+            onChangeText={(t) => setField('postalCode', t)}
+            onBlur={() => touch('postalCode')}
+            error={showFieldError('postalCode')}
+            success={showFieldSuccess('postalCode')}
+            icon={MapPin}
+            keyboardType="number-pad"
+          />
         </>
       ) : (
         <>
           <ThemedInput
             placeholder="Nombre"
             value={formData.firstName}
-            onChangeText={(t) => updateForm('firstName', t)}
+            onChangeText={(t) => setField('firstName', t)}
+            onBlur={() => touch('firstName')}
+            error={showFieldError('firstName')}
+            success={showFieldSuccess('firstName')}
             icon={User}
           />
           <ThemedInput
             placeholder="Apellidos"
             value={formData.lastName}
-            onChangeText={(t) => updateForm('lastName', t)}
+            onChangeText={(t) => setField('lastName', t)}
+            onBlur={() => touch('lastName')}
+            error={showFieldError('lastName')}
+            success={showFieldSuccess('lastName')}
             icon={User}
           />
         </>
@@ -507,8 +640,24 @@ export default function RegisterScreen() {
             </GlassView>
         ) : (
             <View style={styles.manualLocationContainer}>
-                <ThemedInput placeholder="Ciudad" value={formData.city} onChangeText={(t) => updateForm('city', t)} icon={MapPin} />
-                <ThemedInput placeholder="País" value={formData.country} onChangeText={(t) => updateForm('country', t)} icon={Building} />
+                <ThemedInput
+                  placeholder="Ciudad"
+                  value={formData.city}
+                  onChangeText={(t) => setField('city', t)}
+                  onBlur={() => touch('city')}
+                  error={showFieldError('city')}
+                  success={showFieldSuccess('city')}
+                  icon={MapPin}
+                />
+                <ThemedInput
+                  placeholder="País"
+                  value={formData.country}
+                  onChangeText={(t) => setField('country', t)}
+                  onBlur={() => touch('country')}
+                  error={showFieldError('country')}
+                  success={showFieldSuccess('country')}
+                  icon={Building}
+                />
                 <TouchableOpacity style={styles.retryLocation} onPress={() => { setManualLocation(false); detectLocation(); }}>
                     <RefreshCw size={16} color={Colors.dark.primary} />
                     <Text style={styles.retryText}>Usar GPS</Text>
@@ -527,9 +676,34 @@ export default function RegisterScreen() {
       
       {formData.role === 'organizer' ? (
         <>
-          <ThemedInput placeholder="Razón social o nombre legal" value={formData.legalName} onChangeText={(t) => updateForm('legalName', t)} icon={Building2} />
-          <ThemedInput placeholder="CIF/NIF (España)" value={formData.taxIdNumber} onChangeText={(t) => updateForm('taxIdNumber', t)} autoCapitalize="characters" icon={Check} />
-          <ThemedInput placeholder="Nombre del responsable" value={formData.responsibleName} onChangeText={(t) => updateForm('responsibleName', t)} icon={User} />
+          <ThemedInput
+            placeholder="Razón social o nombre legal"
+            value={formData.legalName}
+            onChangeText={(t) => setField('legalName', t)}
+            onBlur={() => touch('legalName')}
+            error={showFieldError('legalName')}
+            success={showFieldSuccess('legalName')}
+            icon={Building2}
+          />
+          <ThemedInput
+            placeholder="CIF/NIF (España)"
+            value={formData.taxIdNumber}
+            onChangeText={(t) => setField('taxIdNumber', t)}
+            onBlur={() => touch('taxIdNumber')}
+            error={showFieldError('taxIdNumber')}
+            success={showFieldSuccess('taxIdNumber')}
+            autoCapitalize="characters"
+            icon={Check}
+          />
+          <ThemedInput
+            placeholder="Nombre del responsable"
+            value={formData.responsibleName}
+            onChangeText={(t) => setField('responsibleName', t)}
+            onBlur={() => touch('responsibleName')}
+            error={showFieldError('responsibleName')}
+            success={showFieldSuccess('responsibleName')}
+            icon={User}
+          />
 
           <View style={styles.inputContainer}>
             <Text style={styles.label}>Fecha de nacimiento del responsable</Text>
@@ -537,6 +711,7 @@ export default function RegisterScreen() {
               style={styles.dateButton}
               onPress={() => {
                 setActiveDateField('responsible');
+                touch('responsibleBirthDate');
                 setShowDatePicker(true);
               }}
             >
@@ -545,14 +720,33 @@ export default function RegisterScreen() {
                   {responsibleBirthDate ? responsibleBirthDate.toLocaleDateString() : 'Seleccionar fecha'}
                 </Text>
             </TouchableOpacity>
+            {(submitAttempted || touched['responsibleBirthDate']) && fieldErrors.responsibleBirthDate ? (
+              <Text style={styles.errorText}>{fieldErrors.responsibleBirthDate}</Text>
+            ) : null}
             {showDatePicker && activeDateField === 'responsible' && (
                 <DateTimePicker value={responsibleBirthDate || new Date(1990, 0, 1)} mode="date" display={Platform.OS === 'ios' ? 'spinner' : 'default'} onChange={onDateChange} maximumDate={new Date()} />
             )}
           </View>
 
-          <ThemedInput placeholder="Dirección fiscal" value={formData.fiscalAddress} onChangeText={(t) => updateForm('fiscalAddress', t)} icon={MapPin} />
-          <ThemedInput placeholder="IBAN" value={formData.iban} onChangeText={(t) => updateForm('iban', t)} autoCapitalize="characters" icon={CreditCard} />
-          <ThemedInput placeholder="Teléfono móvil" value={formData.phone} onChangeText={(t) => updateForm('phone', t)} icon={Phone} keyboardType="phone-pad" />
+          <ThemedInput
+            placeholder="Dirección fiscal"
+            value={formData.fiscalAddress}
+            onChangeText={(t) => setField('fiscalAddress', t)}
+            onBlur={() => touch('fiscalAddress')}
+            error={showFieldError('fiscalAddress')}
+            success={showFieldSuccess('fiscalAddress')}
+            icon={MapPin}
+          />
+          <ThemedInput
+            placeholder="IBAN"
+            value={formData.iban}
+            onChangeText={(t) => setField('iban', t)}
+            onBlur={() => touch('iban')}
+            error={showFieldError('iban')}
+            success={showFieldSuccess('iban')}
+            autoCapitalize="characters"
+            icon={CreditCard}
+          />
 
           <TouchableOpacity activeOpacity={0.8} style={styles.legalRow} onPress={() => setAcceptedLicenses(v => !v)}>
             <View style={[styles.checkbox, acceptedLicenses && styles.checkboxChecked]}>
@@ -560,6 +754,7 @@ export default function RegisterScreen() {
             </View>
             <Text style={styles.legalText}>Declaro que dispongo de las licencias necesarias</Text>
           </TouchableOpacity>
+          {submitAttempted && fieldErrors.acceptedLicenses ? <Text style={styles.errorText}>{fieldErrors.acceptedLicenses}</Text> : null}
         </>
       ) : (
         <>
@@ -569,17 +764,20 @@ export default function RegisterScreen() {
               style={styles.dateButton}
               onPress={() => {
                 setActiveDateField('attendee');
+                touch('birthDate');
                 setShowDatePicker(true);
               }}
             >
                 <Calendar size={20} color={Colors.dark.textSecondary} />
                 <Text style={[styles.dateText, !birthDate && { color: '#666' }]}>{birthDate ? birthDate.toLocaleDateString() : 'Seleccionar fecha'}</Text>
             </TouchableOpacity>
+            {(submitAttempted || touched['birthDate']) && fieldErrors.birthDate ? (
+              <Text style={styles.errorText}>{fieldErrors.birthDate}</Text>
+            ) : null}
             {showDatePicker && activeDateField === 'attendee' && (
                 <DateTimePicker value={birthDate || new Date(2000, 0, 1)} mode="date" display={Platform.OS === 'ios' ? 'spinner' : 'default'} onChange={onDateChange} maximumDate={new Date()} />
             )}
           </View>
-          <ThemedInput placeholder="Teléfono móvil" value={formData.phone} onChangeText={(t) => updateForm('phone', t)} icon={Phone} keyboardType="phone-pad" />
         </>
       )}
     </View>
@@ -589,13 +787,23 @@ export default function RegisterScreen() {
     <View style={styles.stepContainer}>
       <Text style={styles.stepTitle}>Cuenta y Seguridad</Text>
       
-      <ThemedInput placeholder="Correo electrónico" value={formData.email} onChangeText={(t) => updateForm('email', t)} keyboardType="email-address" autoCapitalize="none" icon={Mail} />
-      <ThemedInput placeholder="Contraseña" value={formData.password} onChangeText={(t) => updateForm('password', t)} secureTextEntry={!showPassword} icon={Lock} rightIcon={
+      <ThemedInput
+        placeholder="Correo electrónico"
+        value={formData.email}
+        onChangeText={(t) => setField('email', t)}
+        onBlur={() => touch('email')}
+        error={showFieldError('email')}
+        success={showFieldSuccess('email')}
+        keyboardType="email-address"
+        autoCapitalize="none"
+        icon={Mail}
+      />
+      <ThemedInput placeholder="Contraseña" value={formData.password} onChangeText={(t) => { touch('password'); updateForm('password', t); }} onBlur={() => touch('password')} error={showFieldError('password')} secureTextEntry={!showPassword} icon={Lock} rightIcon={
         <TouchableOpacity onPress={() => setShowPassword(!showPassword)}>
           {showPassword ? <EyeOff size={20} color="#ccc" /> : <Eye size={20} color="#ccc" />}
         </TouchableOpacity>
       } />
-      <ThemedInput placeholder="Confirmar contraseña" value={formData.confirmPassword} onChangeText={(t) => updateForm('confirmPassword', t)} secureTextEntry={!showConfirmPassword} icon={Lock} />
+      <ThemedInput placeholder="Confirmar contraseña" value={formData.confirmPassword} onChangeText={(t) => { touch('confirmPassword'); updateForm('confirmPassword', t); }} onBlur={() => touch('confirmPassword')} error={showFieldError('confirmPassword')} secureTextEntry={!showConfirmPassword} icon={Lock} />
 
       <View style={styles.legalBox}>
         <TouchableOpacity activeOpacity={0.8} style={styles.legalRow} onPress={() => setAcceptedTerms(v => !v)}>
@@ -607,6 +815,7 @@ export default function RegisterScreen() {
             <Text style={styles.legalLink} onPress={() => router.push('/legal/terminos')}>Términos y Condiciones</Text>
           </Text>
         </TouchableOpacity>
+        {submitAttempted && fieldErrors.acceptedTerms ? <Text style={styles.errorText}>{fieldErrors.acceptedTerms}</Text> : null}
         <TouchableOpacity activeOpacity={0.8} style={styles.legalRow} onPress={() => setAcceptedPrivacy(v => !v)}>
           <View style={[styles.checkbox, acceptedPrivacy && styles.checkboxChecked]}>
             {acceptedPrivacy && <Check size={16} color="#fff" />}
@@ -616,6 +825,7 @@ export default function RegisterScreen() {
             <Text style={styles.legalLink} onPress={() => router.push('/legal/privacidad')}>Política de Privacidad</Text>
           </Text>
         </TouchableOpacity>
+        {submitAttempted && fieldErrors.acceptedPrivacy ? <Text style={styles.errorText}>{fieldErrors.acceptedPrivacy}</Text> : null}
       </View>
     </View>
   );
@@ -677,7 +887,7 @@ export default function RegisterScreen() {
                 <ThemedButton
                   title={loading ? 'Procesando...' : (step === 4 ? 'Crear Cuenta' : 'Siguiente')}
                   onPress={handleNextStep}
-                  disabled={loading}
+                  disabled={loading || (step >= 2 && step <= 4 && Object.keys(fieldErrors).length > 0)}
                   icon={!loading && step < 4 ? <ArrowRight size={20} color="white" /> : undefined}
                   iconPosition="right"
                   style={{ flex: 1 }}
@@ -720,6 +930,7 @@ const styles = StyleSheet.create({
   loginLinkText: { color: Colors.dark.primary, fontWeight: 'bold' },
   inputContainer: { marginBottom: 10 },
   label: { color: Colors.dark.textSecondary, marginBottom: 8, fontSize: 14, marginLeft: 4 },
+  errorText: { color: Colors.dark.error, fontSize: 12, marginTop: 6, marginLeft: 4 },
   dateButton: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(255, 255, 255, 0.05)', borderRadius: 12, padding: 16, borderWidth: 1, borderColor: 'rgba(255, 255, 255, 0.1)' },
   dateText: { color: 'white', marginLeft: 10, fontSize: 16 },
   locationCard: { padding: 16, borderRadius: 12, backgroundColor: 'rgba(16, 185, 129, 0.1)', borderWidth: 1, borderColor: 'rgba(16, 185, 129, 0.3)' },
