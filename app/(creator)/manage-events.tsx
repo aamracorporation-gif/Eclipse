@@ -1,7 +1,7 @@
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, Image, Alert, TextInput } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
-import { ArrowLeft, Calendar, MapPin, Ticket, Edit, Trash2, BarChart2, Plus, Search, ShieldCheck } from 'lucide-react-native';
+import { ArrowLeft, Calendar, MapPin, Ticket, Edit, Trash2, BarChart2, Plus, Search, ShieldCheck } from '@/lib/icons';
 import { useRouter } from 'expo-router';
 import { useEvents } from '@/lib/EventContext';
 import { useAuth } from '@/lib/AuthContext';
