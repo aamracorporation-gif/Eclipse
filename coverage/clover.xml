@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<coverage generated="1778438492299" clover="3.2.0">
+  <project timestamp="1778438492299" name="All files">
+    <metrics statements="2" coveredstatements="2" conditionals="23" coveredconditionals="23" methods="1" coveredmethods="1" elements="26" coveredelements="26" complexity="0" loc="2" ncloc="2" packages="1" files="1" classes="1"/>
+    <file name="notificationSchema.ts" path="C:\Users\Achraf\Desktop\AplicacionMovil\lib\notificationSchema.ts">
+      <metrics statements="2" coveredstatements="2" conditionals="23" coveredconditionals="23" methods="1" coveredmethods="1"/>
+      <line num="23" count="5" type="cond" truecount="3" falsecount="0"/>
+      <line num="27" count="5" type="stmt"/>
+    </file>
+  </project>
+</coverage>
