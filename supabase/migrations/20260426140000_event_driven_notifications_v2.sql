@@ -447,6 +447,9 @@ AFTER UPDATE OF status ON public.tickets
 FOR EACH ROW
 EXECUTE FUNCTION public.notify_ticket_validated();
 
+DROP TRIGGER IF EXISTS trg_ticket_insert_notifications ON public.tickets;
+DROP TRIGGER IF EXISTS trigger_notify_ticket_sale ON public.tickets;
+
 CREATE OR REPLACE FUNCTION public.schedule_event_notifications()
 RETURNS void
 LANGUAGE plpgsql
@@ -856,7 +859,7 @@ BEGIN
       ) THEN
         BEGIN
           IF NOT EXISTS (SELECT 1 FROM cron.job WHERE jobname = 'event_reminders_5min') THEN
-            PERFORM cron.schedule('event_reminders_5min', '*/5 * * * *', $$select public.schedule_event_notifications();$$);
+            PERFORM cron.schedule('event_reminders_5min', '*/5 * * * *', $cron$select public.schedule_event_notifications();$cron$);
           END IF;
         EXCEPTION WHEN others THEN
           NULL;
