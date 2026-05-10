@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, StatusBar } from 'react-native';
 import { useRouter } from 'expo-router';
-import { ArrowLeft, CheckCheck, Bell, Clock, Trash2 } from 'lucide-react-native';
+import { ArrowLeft, CheckCheck, Bell, Clock, Trash2 } from '@/lib/icons';
 import { useNotifications, Notification } from '@/lib/NotificationContext';
 import { Colors } from '@/constants/Colors';
 import { GlassView } from '@/components/ui/GlassView';
