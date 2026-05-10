@@ -1,9 +1,9 @@
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert } from 'react-native';
-import { useState, useEffect } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { useRouter } from 'expo-router';
 import { useAuth } from '@/lib/AuthContext';
 import { supabase } from '@/lib/supabase';
-import { ChevronLeft, DollarSign, Plus, Minus, CheckCircle, FileText, Share, User, Mail, Calendar, Tag } from 'lucide-react-native';
+import { ChevronLeft, DollarSign, Plus, Minus, CheckCircle, FileText, Share, User, Mail, Calendar, Tag } from '@/lib/icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Colors } from '@/constants/Colors';
 import { GlassView } from '@/components/ui/GlassView';
@@ -44,6 +44,39 @@ export default function WorkerSell() {
     age: ''
   });
 
+  const [submitAttempted, setSubmitAttempted] = useState(false);
+  const [touched, setTouched] = useState<Record<string, boolean>>({});
+  const touch = (field: string) => setTouched((prev) => ({ ...prev, [field]: true }));
+
+  const buyerErrors = useMemo(() => {
+    const errors: Record<string, string> = {};
+    const name = String(buyerDetails.name || '').trim();
+    const email = String(buyerDetails.email || '').trim();
+    const ageRaw = String(buyerDetails.age || '').trim();
+    const ageRestriction = Number((selectedEvent as any)?.age_restriction || 0);
+
+    const isAllowed = (s: string) => /^[\p{L}\p{N}\s.,'’"-]*$/u.test(s) && !/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/.test(s);
+
+    if (!name) errors.name = 'Obligatorio.';
+    else if (name.length < 2 || name.length > 80) errors.name = 'Entre 2 y 80 caracteres.';
+    else if (!isAllowed(name)) errors.name = 'Caracteres no permitidos.';
+
+    if (!email) errors.email = 'Obligatorio.';
+    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) errors.email = 'Formato de email inválido.';
+
+    if (!ageRaw) errors.age = 'Obligatorio.';
+    else if (!/^\d+$/.test(ageRaw)) errors.age = 'Introduce un número entero válido.';
+    else {
+      const age = Number(ageRaw);
+      if (!Number.isFinite(age) || age < 1) errors.age = 'Debe ser un entero positivo.';
+      else if (Number.isFinite(ageRestriction) && ageRestriction > 0 && age < ageRestriction) {
+        errors.age = `Edad mínima: ${ageRestriction}.`;
+      }
+    }
+
+    return errors;
+  }, [buyerDetails, selectedEvent]);
+
   useEffect(() => {
     fetchAssignedEvents();
   }, []);
@@ -54,7 +87,7 @@ export default function WorkerSell() {
       const { data, error } = await supabase
         .from('events')
         .select(`
-          id, title, event_date, poster_url,
+          id, title, event_date, poster_url, age_restriction,
           venues (name)
         `)
         .eq('creator_id', workerProfile.organizer_id)
@@ -86,6 +119,8 @@ export default function WorkerSell() {
     setVipQty(0);
     setSelectedVipId(null);
     setBuyerDetails({ name: '', email: '', age: '' }); // Reset buyer form
+    setSubmitAttempted(false);
+    setTouched({});
 
     try {
       // Fetch REAL ticket types from the database
@@ -97,10 +132,29 @@ export default function WorkerSell() {
       if (error) throw error;
 
       if (data && data.length > 0) {
-        setTicketTypes(data);
+        const { data: ticketsRows } = await supabase
+          .from('tickets')
+          .select('ticket_type_id, quantity, status, ticket_status')
+          .eq('event_id', event.id);
+
+        const soldByType = new Map<string, number>();
+        for (const row of (ticketsRows || []) as any[]) {
+          if (row?.status === 'cancelled' || row?.ticket_status === 'invalidated') continue;
+          const tid = row?.ticket_type_id ? String(row.ticket_type_id) : null;
+          if (!tid) continue;
+          soldByType.set(tid, (soldByType.get(tid) || 0) + (Number(row?.quantity) || 1));
+        }
+
+        const activeTypes = (data as any[]).filter((t) => !t?.deleted_at && (t?.is_active ?? true));
+        setTicketTypes(
+          activeTypes.map((t: any) => ({
+            ...t,
+            sold: soldByType.get(String(t.id)) ?? Number(t.sold || 0),
+          }))
+        );
         // Initialize quantities
         const initialQty: any = {};
-        data.forEach((t: any) => initialQty[t.id] = 0);
+        data.forEach((t: any) => (initialQty[t.id] = 0));
         setQuantities(initialQty);
       } else {
         // Fallback or empty state
@@ -108,11 +162,19 @@ export default function WorkerSell() {
         setTicketTypes([]);
       }
 
-      const vipRes = await supabase
-        .from('reservados_vip')
-        .select('*')
-        .eq('event_id', event.id)
-        .order('base_price', { ascending: true });
+      const fetchVip = async (withSoftDeleteCols: boolean) => {
+        const q = supabase
+          .from('reservados_vip')
+          .select('*')
+          .eq('event_id', event.id)
+          .order('base_price', { ascending: true });
+        return withSoftDeleteCols ? q.eq('is_active', true).is('deleted_at', null) : q;
+      };
+
+      let vipRes: any = await fetchVip(true);
+      if (vipRes.error?.code === '42703' && String(vipRes.error?.message || '').match(/is_active|deleted_at/i)) {
+        vipRes = await fetchVip(false);
+      }
 
       if (!vipRes.error && Array.isArray(vipRes.data)) {
         setVipReservados(vipRes.data);
@@ -130,7 +192,9 @@ export default function WorkerSell() {
   const updateQuantity = (typeId: string, delta: number) => {
     setQuantities(prev => {
       const current = prev[typeId] || 0;
-      const newValue = Math.max(0, current + delta);
+      const tt = ticketTypes.find((t) => t.id === typeId);
+      const available = tt ? Math.max((Number(tt.quantity) || 0) - (Number(tt.sold) || 0), 0) : Number.MAX_SAFE_INTEGER;
+      const newValue = Math.max(0, Math.min(available, current + delta));
       return { ...prev, [typeId]: newValue };
     });
   };
@@ -146,8 +210,28 @@ export default function WorkerSell() {
 
   const handleSale = async () => {
     const total = calculateTotal();
+    setSubmitAttempted(true);
+    touch('buyer.name');
+    touch('buyer.email');
+    touch('buyer.age');
     if (total === 0) {
       Alert.alert('Error', 'Selecciona al menos una entrada');
+      return;
+    }
+
+    if (Object.keys(buyerErrors).length > 0) {
+      console.warn('[worker_sale_validation_failed]', JSON.stringify({ buyerErrors }));
+      Alert.alert('Revisa los datos', 'Corrige los campos marcados en rojo para continuar.');
+      return;
+    }
+
+    const invalidQty = ticketTypes.some((tt) => {
+      const qty = quantities[tt.id] || 0;
+      const available = Math.max((Number(tt.quantity) || 0) - (Number(tt.sold) || 0), 0);
+      return qty > available;
+    });
+    if (invalidQty) {
+      Alert.alert('No hay stock suficiente', 'Algún tipo de entrada no tiene suficientes unidades disponibles.');
       return;
     }
 
@@ -262,12 +346,6 @@ export default function WorkerSell() {
   // Process Sale
   const processSale = async () => {
     if (!workerProfile || !selectedEvent) return;
-    
-    // Validate Buyer Details
-    if (!buyerDetails.name.trim() || !buyerDetails.email.trim() || !buyerDetails.age.trim()) {
-      Alert.alert('Error', 'Por favor completa los datos del comprador (Nombre, Email, Edad)');
-      return;
-    }
 
     setProcessing(true);
 
@@ -505,6 +583,8 @@ export default function WorkerSell() {
                         placeholder="Ej: Juan Pérez"
                         value={buyerDetails.name}
                         onChangeText={(text) => setBuyerDetails(prev => ({...prev, name: text}))}
+                        onBlur={() => touch('buyer.name')}
+                        error={((submitAttempted || touched['buyer.name']) && buyerErrors.name) || undefined}
                         containerStyle={{ marginBottom: 15 }}
                         icon={<User size={20} color={Colors.dark.textSecondary} />}
                       />
@@ -513,6 +593,8 @@ export default function WorkerSell() {
                         placeholder="juan@ejemplo.com"
                         value={buyerDetails.email}
                         onChangeText={(text) => setBuyerDetails(prev => ({...prev, email: text}))}
+                        onBlur={() => touch('buyer.email')}
+                        error={((submitAttempted || touched['buyer.email']) && buyerErrors.email) || undefined}
                         keyboardType="email-address"
                         autoCapitalize="none"
                         containerStyle={{ marginBottom: 15 }}
@@ -523,6 +605,8 @@ export default function WorkerSell() {
                         placeholder="Ej: 25"
                         value={buyerDetails.age}
                         onChangeText={(text) => setBuyerDetails(prev => ({...prev, age: text}))}
+                        onBlur={() => touch('buyer.age')}
+                        error={((submitAttempted || touched['buyer.age']) && buyerErrors.age) || undefined}
                         keyboardType="numeric"
                         containerStyle={{ marginBottom: 5 }}
                         icon={<Calendar size={20} color={Colors.dark.textSecondary} />}
@@ -563,7 +647,7 @@ export default function WorkerSell() {
             <ThemedButton
               title={processing ? "Procesando..." : "Confirmar Venta (Efectivo)"}
               onPress={handleSale}
-              disabled={processing || calculateTotal() === 0}
+              disabled={processing || calculateTotal() === 0 || Object.keys(buyerErrors).length > 0}
               icon={<DollarSign size={20} color="white" />}
             />
           )}
