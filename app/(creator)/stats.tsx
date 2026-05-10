@@ -9,7 +9,7 @@ import { useAuth } from '@/lib/AuthContext';
 import { useResponsive } from '@/lib/responsive';
 import { supabase } from '@/lib/supabase';
 import { useEffect, useMemo, useState } from 'react';
-import { ArrowLeft, ArrowUpRight, ArrowDownRight, Download, Filter, LineChart, BarChart2, PieChart, Activity } from 'lucide-react-native';
+import { ArrowLeft, ArrowUpRight, ArrowDownRight, Download, Filter, LineChart, BarChart2, PieChart, Activity } from '@/lib/icons';
 import { useTranslation } from 'react-i18next';
 
 type TimeFilter = 'today' | 'week' | 'month' | 'custom';
