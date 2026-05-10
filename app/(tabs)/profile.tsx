@@ -3,7 +3,7 @@ import { router } from 'expo-router';
 import { useAuth } from '@/lib/AuthContext';
 import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
-import { User, Ticket, ChevronRight, Tag, TrendingUp, UserPlus, Calendar, Sparkles, CheckCircle2, ShieldCheck, Wallet, QrCode, Clock, MapPin, Pencil, X, FileText } from 'lucide-react-native';
+import { User, Ticket, ChevronRight, Tag, TrendingUp, UserPlus, Calendar, Sparkles, CheckCircle2, ShieldCheck, Wallet, QrCode, Clock, MapPin, Pencil, X, FileText } from '@/lib/icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Colors } from '@/constants/Colors';
 import { GlassView } from '@/components/ui/GlassView';
@@ -549,8 +549,6 @@ export default function ProfileScreen() {
           colors={[Colors.dark.background, '#1e1b4b']}
           style={StyleSheet.absoluteFill}
         />
-        <View style={styles.ambientGlowTop} />
-        <View style={styles.ambientGlowBottom} />
 
         <View style={styles.authPrompt}>
           <GlassView intensity={40} style={styles.authCard}>
@@ -590,10 +588,6 @@ export default function ProfileScreen() {
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
       />
-      
-      {/* Subtle Ambient Glow (Blue/Purple for Night Vibe) */}
-      <View style={styles.ambientGlowTop} />
-      <View style={styles.ambientGlowBottom} />
       
       <ScrollView
         contentContainerStyle={[
