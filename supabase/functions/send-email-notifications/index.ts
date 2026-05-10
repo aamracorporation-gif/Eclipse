@@ -28,19 +28,39 @@ serve(async (req) => {
 
   const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
-  const { data: pending, error } = await supabase
-    .from("notification_deliveries")
-    .select("id, attempts, max_attempts, notifications (user_id, title, body, data)")
-    .eq("channel", "email")
-    .eq("status", "pending")
-    .limit(limit as number);
+  const now = new Date().toISOString();
+  const fetchPending = async (withRetryAt: boolean) => {
+    let q = supabase
+      .from("notification_deliveries")
+      .select(
+        withRetryAt
+          ? "id, attempts, max_attempts, next_retry_at, notifications (user_id, title, body, data)"
+          : "id, attempts, max_attempts, notifications (user_id, title, body, data)",
+      )
+      .eq("channel", "email")
+      .eq("status", "pending")
+      .limit(limit as number);
+    if (withRetryAt) q = q.or(`next_retry_at.is.null,next_retry_at.lte.${now}`);
+    return q;
+  };
+
+  let pending: any[] | null = null;
+  let error: any = null;
+  {
+    const res = await fetchPending(true);
+    pending = res.data as any;
+    error = res.error as any;
+  }
+  if (error?.code === "42703" && String(error?.message || "").includes("next_retry_at")) {
+    const res = await fetchPending(false);
+    pending = res.data as any;
+    error = res.error as any;
+  }
 
   if (error) return jsonResponse({ ok: false, error }, 500);
 
   const candidates = (pending as any[]) || [];
   if (candidates.length === 0) return jsonResponse({ ok: true, sent: 0, failed: 0 });
-
-  const now = new Date().toISOString();
 
   if (!RESEND_API_KEY || !FROM_EMAIL) {
     const ids = candidates.map((n) => n.id);
@@ -53,12 +73,68 @@ serve(async (req) => {
 
   let sent = 0;
   let failed = 0;
+  const attemptsById: Record<string, number> = {};
+  const maxAttemptsById: Record<string, number> = {};
+
+  const computeBackoffSeconds = (attempts: number) => {
+    const base = 60;
+    const cap = 30 * 60;
+    const s = Math.min(cap, base * Math.pow(2, Math.max(0, attempts)));
+    return Math.max(60, Math.floor(s));
+  };
+
+  const retryOrFail = async (deliveryId: string, attempts: number, maxAttempts: number, lastError: string, response: any) => {
+    const nextAttempts = attempts + 1;
+    if (nextAttempts >= maxAttempts) {
+      await supabase
+        .from("notification_deliveries")
+        .update({
+          status: "failed",
+          attempts: nextAttempts,
+          last_error: lastError,
+          provider: "resend",
+          response,
+          updated_at: now,
+          last_attempt_at: now,
+        })
+        .eq("id", deliveryId);
+      return;
+    }
+    const backoff = computeBackoffSeconds(nextAttempts);
+    const nextRetryAt = new Date(Date.now() + backoff * 1000).toISOString();
+    await supabase
+      .from("notification_deliveries")
+      .update({
+        status: "pending",
+        attempts: nextAttempts,
+        last_error: lastError,
+        provider: "resend",
+        response,
+        updated_at: now,
+        last_attempt_at: now,
+        next_retry_at: nextRetryAt,
+      })
+      .eq("id", deliveryId);
+  };
+
+  const userIds = Array.from(new Set(candidates.map((n) => String(n?.notifications?.user_id || "")).filter(Boolean)));
+  const profilesRes = userIds.length
+    ? await supabase.from("profiles").select("id, email").in("id", userIds)
+    : { data: [], error: null };
+  const emailByUser: Record<string, string> = {};
+  for (const p of (profilesRes.data as any[]) || []) {
+    const id = String(p.id || "");
+    const email = String(p.email || "");
+    if (id && email) emailByUser[id] = email;
+  }
 
   for (const n of candidates) {
     try {
       const deliveryId = String(n.id);
       const attempts = Number(n.attempts || 0);
       const maxAttempts = Number(n.max_attempts || 3);
+      attemptsById[deliveryId] = attempts;
+      maxAttemptsById[deliveryId] = maxAttempts;
 
       if (attempts >= maxAttempts) {
         await supabase
@@ -70,8 +146,7 @@ serve(async (req) => {
       }
 
       const userId = String(n?.notifications?.user_id || "");
-      const userRes = await supabase.auth.admin.getUserById(userId);
-      const email = userRes?.data?.user?.email || "";
+      const email = emailByUser[userId] || "";
       if (!email) throw new Error("User email not found");
 
       const subject = String(n?.notifications?.title || "Notificación");
@@ -109,20 +184,16 @@ serve(async (req) => {
           response: data,
           sent_at: now,
           updated_at: now,
+          last_attempt_at: now,
         })
         .eq("id", deliveryId);
 
       sent += 1;
     } catch (e) {
-      await supabase
-        .from("notification_deliveries")
-        .update({
-          status: "failed",
-          attempts: Number(n.attempts || 0) + 1,
-          last_error: String((e as any)?.message || e),
-          updated_at: now,
-        })
-        .eq("id", String(n.id));
+      const deliveryId = String(n.id);
+      const attempts = Number(n.attempts || 0);
+      const maxAttempts = Number(n.max_attempts || 3);
+      await retryOrFail(deliveryId, attempts, maxAttempts, String((e as any)?.message || e), { ok: false });
       failed += 1;
     }
   }
