@@ -371,13 +371,18 @@
         "add_button": "Añadir entrada",
         "units": "uds",
         "fill_fields": "Completa los datos de la entrada",
-        "invalid_numbers": "El precio y la cantidad deben ser números válidos"
+        "invalid_numbers": "El precio y la cantidad deben ser números válidos",
+        "duplicate_type": "Ya existe una entrada con el mismo nombre y precio.",
+        "cannot_delete_sold": "No puedes eliminar este tipo porque ya tiene entradas vendidas.",
+        "new_badge": "NUEVO",
+        "sold_badge": "VENDIDAS {{count}}"
       },
       "vip": {
         "section_title": "Reservados VIP (Opcional)",
         "section_subtitle": "Se guardan aparte y no afectan a las entradas.",
         "add_button": "+ Añadir reservado VIP",
         "card_title": "Reservado VIP #{{index}}",
+        "new_badge": "NUEVO",
         "name_label": "Nombre del reservado",
         "name_placeholder": "Ej: Mesa Oro",
         "description_label": "Descripción",
@@ -521,11 +526,13 @@
         "rejected_create_event_body": "Lo sentimos, tu solicitud de organizador ha sido rechazada.",
         "complete_button": "Completar verificación"
       },
-      "balance_available": "Saldo disponible (Stripe)",
+      "balance_available": "Balance neto (organizador)",
       "pending_payouts": "+ {{amount}} pendientes",
       "revenue_real_30d": "Ingresos reales (Stripe 30d)",
       "metrics": {
         "tickets_sold": "Entradas vendidas",
+        "total_sales": "Ventas totales",
+        "commissions": "Comisiones",
         "active_events": "Eventos activos",
         "top_event": "Evento top",
         "total": "Total",
@@ -762,6 +769,10 @@
       "extra_bottle": "Extra botella {{price}}",
       "not_available": "Este reservado VIP ya no está disponible.",
       "load_failed": "No se pudieron cargar los reservados VIP."
+    },
+    "realtime": {
+      "title": "Actualización en tiempo real",
+      "body": "El evento se ha actualizado. Mostrando los últimos datos…"
     }
   },
   "resale": {
@@ -885,13 +896,17 @@
     "card_title": "Notificaciones",
     "card_subtitle": "Activa solo lo que te interese. Evita spam.",
     "items": {
+      "push": { "label": "Push", "desc": "Recibir notificaciones push en tu dispositivo." },
+      "email": { "label": "Email", "desc": "Recibir notificaciones por correo electrónico." },
+      "sms": { "label": "SMS", "desc": "Recibir notificaciones por SMS (si tienes teléfono configurado)." },
       "purchase": { "label": "Compras", "desc": "Confirmaciones y estado de compra." },
       "reminders": { "label": "Recordatorios", "desc": "Recordatorios de eventos y avisos cercanos." },
       "resale": { "label": "Reventa", "desc": "Cambios de estado en reventas." },
       "stock": { "label": "Stock", "desc": "Avisos de poco stock / agotado (organizadores)." },
       "realtime_sales": { "label": "Ventas en tiempo real", "desc": "Avisos de nuevas ventas (organizadores)." },
       "daily_summary": { "label": "Resumen diario", "desc": "Resumen de actividad (organizadores/admin)." },
-      "thresholds": { "label": "Umbrales", "desc": "Alertas por umbrales de stock (organizadores)." }
+      "thresholds": { "label": "Umbrales", "desc": "Alertas por umbrales de stock (organizadores)." },
+      "marketing": { "label": "Ofertas", "desc": "Descuentos y ofertas (opcional)." }
     }
   },
   "my_resales": {
