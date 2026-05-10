@@ -3,7 +3,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Colors } from '@/constants/Colors';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
-import { ChevronLeft, ChevronRight, FileText } from 'lucide-react-native';
+import { ChevronLeft, ChevronRight, FileText } from '@/lib/icons';
 import { useTranslation } from 'react-i18next';
 
 export default function LegalIndexScreen() {
