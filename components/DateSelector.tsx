@@ -1,5 +1,5 @@
 import { View, Text, StyleSheet, TouchableOpacity, FlatList } from 'react-native';
-import { Sparkles } from 'lucide-react-native';
+import { Sparkles } from '@/lib/icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useMemo, useRef, useEffect } from 'react';
 import { useI18n } from '@/lib/I18nContext';
