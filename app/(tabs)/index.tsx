@@ -6,7 +6,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
 import { useFocusEffect } from '@react-navigation/native';
-import { MapPin, Calendar, Navigation, Map as MapIcon, Search } from 'lucide-react-native';
+import { MapPin, Calendar, Navigation, Map as MapIcon, Search } from '@/lib/icons';
 
 import { Colors } from '@/constants/Colors';
 import { useEvents, AppEvent } from '@/lib/EventContext';
@@ -187,7 +187,7 @@ export default function HomeScreen() {
           </GlassView>
           {item.distance != null && (
             <GlassView intensity={22} style={styles.distanceBadge}>
-              <Navigation size={12} color="white" />
+              <Navigation size={12} color={Colors.dark.text} />
               <Text style={styles.distanceText}>{item.distance.toFixed(1)} km</Text>
             </GlassView>
           )}
@@ -228,10 +228,11 @@ export default function HomeScreen() {
   return (
     <View style={styles.container}>
       <StatusBar barStyle="light-content" />
-      <LinearGradient colors={['#0F0F1A', '#1A1025', '#0F0F1A']} locations={[0, 0.55, 1]} style={StyleSheet.absoluteFill} />
-
-      <View style={styles.ambientGlowTop} />
-      <View style={styles.ambientGlowBottom} />
+      <LinearGradient
+        colors={[Colors.dark.background, '#1A1025', Colors.dark.background]}
+        locations={[0, 0.55, 1]}
+        style={StyleSheet.absoluteFill}
+      />
 
       <SafeAreaView style={styles.safeArea}>
         <View style={[styles.header, { paddingTop: Platform.OS === 'android' ? Math.max(10, insets.top) : insets.top, paddingHorizontal: horizontalPadding }]}>
@@ -247,7 +248,7 @@ export default function HomeScreen() {
               <Search size={20} color={Colors.dark.primary} />
               <TextInput
                 placeholder={t('home.search_placeholder')}
-                placeholderTextColor="rgba(255,255,255,0.4)"
+                placeholderTextColor={Colors.dark.textSecondary}
                 style={styles.searchInput}
                 value={searchQuery}
                 onChangeText={setSearchQuery}
@@ -301,30 +302,10 @@ export default function HomeScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#0F0F1A',
+    backgroundColor: Colors.dark.background,
   },
   safeArea: {
     flex: 1,
-  },
-  ambientGlowTop: {
-    position: 'absolute',
-    top: -120,
-    left: -120,
-    width: 320,
-    height: 320,
-    borderRadius: 160,
-    backgroundColor: '#6B2CA1',
-    opacity: 0.16,
-  },
-  ambientGlowBottom: {
-    position: 'absolute',
-    bottom: -120,
-    right: -120,
-    width: 320,
-    height: 320,
-    borderRadius: 160,
-    backgroundColor: '#06B6D4',
-    opacity: 0.10,
   },
   header: {
     paddingBottom: 18,
@@ -336,14 +317,14 @@ const styles = StyleSheet.create({
     marginBottom: 14,
   },
   headerSubtitle: {
-    color: '#A1A1AA',
+    color: Colors.dark.textSecondary,
     fontSize: 13,
     fontWeight: '700',
     textTransform: 'uppercase',
     letterSpacing: 1,
   },
   headerTitle: {
-    color: '#FFF',
+    color: Colors.dark.text,
     fontSize: 28,
     fontWeight: '900',
     letterSpacing: -0.6,
@@ -358,16 +339,16 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: 'rgba(20, 20, 30, 0.6)',
-    borderRadius: 16,
+    borderRadius: 18,
     paddingHorizontal: 16,
     height: 50,
     borderWidth: 1,
-    borderColor: 'rgba(107, 44, 161, 0.28)',
+    borderColor: 'rgba(124,58,237,0.22)',
   },
   searchInput: {
     flex: 1,
     height: '100%',
-    color: 'white',
+    color: Colors.dark.text,
     fontSize: 16,
     marginLeft: 10,
     fontWeight: '400',
@@ -375,12 +356,12 @@ const styles = StyleSheet.create({
   mapButton: {
     width: 50,
     height: 50,
-    backgroundColor: 'rgba(107, 44, 161, 0.8)',
-    borderRadius: 16,
+    backgroundColor: 'rgba(124,58,237,0.85)',
+    borderRadius: 18,
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: '#9D4EDD',
+    borderColor: 'rgba(255,255,255,0.14)',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.28,
@@ -396,7 +377,7 @@ const styles = StyleSheet.create({
   cardContainer: {
     aspectRatio: 0.86,
     marginBottom: 22,
-    borderRadius: 24,
+    borderRadius: 22,
     overflow: 'hidden',
     backgroundColor: '#1E1E2E',
     shadowColor: '#000',
@@ -405,7 +386,7 @@ const styles = StyleSheet.create({
     shadowRadius: 16,
     elevation: 10,
     borderWidth: 1,
-    borderColor: 'rgba(107, 44, 161, 0.2)',
+    borderColor: 'rgba(124,58,237,0.16)',
   },
   cardImage: {
     width: '100%',
