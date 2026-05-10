@@ -1,11 +1,11 @@
-import { View, Text, StyleSheet, FlatList, Image, TouchableOpacity, RefreshControl, Platform, Modal, TextInput, Alert, KeyboardAvoidingView, Animated, Easing } from 'react-native';
+import { View, Text, StyleSheet, FlatList, Image, TouchableOpacity, RefreshControl, Platform, Modal, Alert, KeyboardAvoidingView, Animated, Easing } from 'react-native';
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { router } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
 import { supabase, Ticket } from '@/lib/supabase';
 import { useAuth } from '@/lib/AuthContext';
 import { useCredit } from '@/lib/WalletContext';
-import { Ticket as TicketIcon, LogIn, DollarSign, X, Download, ChevronRight, Sparkles, CreditCard } from 'lucide-react-native';
+import { Ticket as TicketIcon, LogIn, DollarSign, X, Download, ChevronRight, Sparkles, CreditCard } from '@/lib/icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Colors } from '@/constants/Colors';
 import { GlassView } from '@/components/ui/GlassView';
@@ -40,6 +40,7 @@ export default function TicketsScreen() {
   const [tickets, setTickets] = useState<ExtendedTicket[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const isEmptyState = !loading && tickets.length === 0;
   const emptyFloat = useRef(new Animated.Value(0)).current;
   const emptyPulse = useRef(new Animated.Value(0)).current;
   const emptyEnter = useRef(new Animated.Value(0)).current;
@@ -52,8 +53,31 @@ export default function TicketsScreen() {
   const [sellModalVisible, setSellModalVisible] = useState(false);
   const [selectedTicket, setSelectedTicket] = useState<ExtendedTicket | null>(null);
   const [resalePrice, setResalePrice] = useState('');
+  const [resaleSubmitAttempted, setResaleSubmitAttempted] = useState(false);
+  const [resaleTouched, setResaleTouched] = useState(false);
   const [selling, setSelling] = useState(false);
   const [addingToWallet, setAddingToWallet] = useState<string | null>(null);
+
+  const resalePriceError = useCallback(() => {
+    const normalized = String(resalePrice || '').trim().replace(',', '.');
+    if (!normalized) return 'Obligatorio.';
+    const price = Number(normalized);
+    if (!Number.isFinite(price)) return 'Introduce un número válido.';
+    if (price < 1) return 'Precio mínimo 1,00 €.';
+
+    const rawOriginal = selectedTicket ? (typeof selectedTicket.total_price === 'string' ? Number(selectedTicket.total_price) : (selectedTicket as any).total_price) : 0;
+    const originalPrice = typeof rawOriginal === 'number' && Number.isFinite(rawOriginal) ? rawOriginal : 0;
+    const minResalePrice = Math.max(originalPrice, 1);
+    const maxResalePrice = originalPrice * 1.2;
+
+    if (Number.isFinite(minResalePrice) && price < minResalePrice) {
+      return `Precio mínimo: ${(minResalePrice || 0).toFixed(2)} €`;
+    }
+    if (Number.isFinite(maxResalePrice) && price > maxResalePrice) {
+      return `Precio máximo: ${(maxResalePrice || 0).toFixed(2)} €`;
+    }
+    return null;
+  }, [resalePrice, selectedTicket]);
 
   useEffect(() => {
     const enabledEmpty = !loading && tickets.length === 0;
@@ -288,6 +312,8 @@ export default function TicketsScreen() {
     
     setSelectedTicket(ticket);
     setResalePrice('');
+    setResaleSubmitAttempted(false);
+    setResaleTouched(false);
     setSellModalVisible(true);
   };
 
@@ -379,16 +405,19 @@ export default function TicketsScreen() {
 
   const confirmSell = async () => {
     if (!selectedTicket || !resalePrice) return;
+    setResaleSubmitAttempted(true);
+    setResaleTouched(true);
     
     const normalized = resalePrice.replace(',', '.');
     const price = Number(normalized);
-    if (isNaN(price) || price <= 0) {
-      Alert.alert(t('tickets.invalid_price_title'), t('tickets.invalid_price_body'));
+    const err = resalePriceError();
+    if (err) {
+      Alert.alert('Precio inválido', err);
       return;
     }
 
     const originalPrice = getOriginalTicketPrice(selectedTicket);
-    const minResalePrice = originalPrice;
+    const minResalePrice = Math.max(originalPrice, 1);
     const maxResalePrice = originalPrice * 1.2;
 
     if (Number.isFinite(minResalePrice) && price < minResalePrice) {
@@ -960,7 +989,11 @@ export default function TicketsScreen() {
           data={tickets}
           renderItem={renderTicket}
           keyExtractor={(item) => item.id}
-          contentContainerStyle={[styles.listContent, { paddingHorizontal: horizontalPadding, alignItems: 'center' }]}
+          contentContainerStyle={
+            isEmptyState
+              ? styles.listContentEmpty
+              : [styles.listContent, { paddingHorizontal: horizontalPadding, alignItems: 'center' }]
+          }
           showsVerticalScrollIndicator={false}
           ListHeaderComponent={
             refreshing ? (
@@ -1134,21 +1167,21 @@ export default function TicketsScreen() {
             </Text>
 
             <View style={styles.inputContainer}>
-              <Text style={styles.inputLabel}>{t('tickets.sell_modal.price_label')}</Text>
-              <TextInput 
-                style={styles.priceInput}
+              <ThemedInput
+                label={t('tickets.sell_modal.price_label')}
                 value={resalePrice}
                 onChangeText={setResalePrice}
+                onBlur={() => setResaleTouched(true)}
+                error={((resaleSubmitAttempted || resaleTouched) && (resalePriceError() || undefined)) || undefined}
                 keyboardType="numeric"
                 placeholder="0.00"
-                placeholderTextColor={Colors.dark.textSecondary}
               />
             </View>
 
             <ThemedButton 
               title={selling ? t('tickets.sell_modal.processing') : t('tickets.sell_modal.confirm')}
               onPress={confirmSell}
-              disabled={selling}
+              disabled={selling || !!resalePriceError()}
               variant="primary"
               style={{ marginTop: 20 }}
             />
@@ -1171,7 +1204,7 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 32,
     fontWeight: 'bold',
-    color: 'white',
+    color: Colors.dark.text,
     marginBottom: 4,
   },
   headerSubtitle: {
@@ -1181,6 +1214,12 @@ const styles = StyleSheet.create({
   listContent: {
     padding: 20,
     paddingTop: 0,
+    paddingBottom: 120,
+    flexGrow: 1,
+  },
+  listContentEmpty: {
+    padding: 20,
+    paddingTop: 10,
     paddingBottom: 120,
     flexGrow: 1,
   },
@@ -1622,7 +1661,6 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   emptyScreen: {
-    flex: 1,
     paddingTop: 10,
     paddingHorizontal: 20,
     paddingBottom: 40,
