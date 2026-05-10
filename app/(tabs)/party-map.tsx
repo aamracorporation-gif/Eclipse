@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { View, Text, StyleSheet, Animated, Pressable, Dimensions } from 'react-native';
+import { View, Text, StyleSheet, Animated, Pressable, Dimensions, StatusBar } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Location from 'expo-location';
@@ -12,6 +12,7 @@ import { useEvents, AppEvent } from '@/lib/EventContext';
 import { supabase } from '@/lib/supabase';
 import { MapEventMarker, CrowdLevel } from '@/components/MapEventMarker';
 import { router, useLocalSearchParams } from 'expo-router';
+import { ArrowLeft } from '@/lib/icons';
 
 type LiveMetrics = {
   event_id: string;
@@ -23,6 +24,18 @@ type LiveMetrics = {
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 const SHEET_HEIGHT = Math.min(320, Math.max(260, Math.round(SCREEN_HEIGHT * 0.36)));
+
+const MUTED_MAP_STYLE = [
+  { elementType: 'geometry', stylers: [{ color: '#0B0B14' }] },
+  { elementType: 'labels.text.fill', stylers: [{ color: '#A1A1AA' }] },
+  { elementType: 'labels.text.stroke', stylers: [{ color: '#0B0B14' }] },
+  { featureType: 'poi', elementType: 'labels', stylers: [{ visibility: 'off' }] },
+  { featureType: 'road', elementType: 'geometry', stylers: [{ color: '#151528' }] },
+  { featureType: 'road', elementType: 'geometry.stroke', stylers: [{ color: '#232344' }] },
+  { featureType: 'road', elementType: 'labels.icon', stylers: [{ visibility: 'off' }] },
+  { featureType: 'transit', elementType: 'labels', stylers: [{ visibility: 'off' }] },
+  { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#0A1A2B' }] },
+];
 
 function haversineKm(a: { latitude: number; longitude: number }, b: { latitude: number; longitude: number }) {
   const toRad = (deg: number) => (deg * Math.PI) / 180;
@@ -231,12 +244,20 @@ export default function PartyMapScreen() {
 
   return (
     <View style={styles.container}>
-      <LinearGradient colors={['#0B0B14', '#12081C', '#0B0B14']} style={StyleSheet.absoluteFill} />
+      <StatusBar barStyle="light-content" />
+      <LinearGradient colors={[Colors.dark.background, '#12081C', Colors.dark.background]} style={StyleSheet.absoluteFill} />
 
       <SafeAreaView style={styles.safeArea}>
         <View style={[styles.header, { paddingTop: Math.max(10, insets.top) }]}>
-          <Text style={styles.title}>Party Map</Text>
-          <Text style={styles.subtitle}>Eventos cerca de ti, en tiempo real</Text>
+          <View style={styles.headerRow}>
+            <Pressable onPress={() => router.back()} hitSlop={10} style={styles.backButton}>
+              <ArrowLeft size={20} color={Colors.dark.text} />
+            </Pressable>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.title}>Explorar mapa</Text>
+              <Text style={styles.subtitle}>Eventos cerca de ti, en tiempo real</Text>
+            </View>
+          </View>
         </View>
 
         <View style={styles.mapContainer}>
@@ -253,6 +274,7 @@ export default function PartyMapScreen() {
               onRegionChangeComplete={setRegion}
               showsUserLocation={locationPermission === 'granted'}
               showsMyLocationButton={false}
+              customMapStyle={MUTED_MAP_STYLE as any}
             >
               {eventsWithVenue.map((event) => {
                 const venue = event.venues;
@@ -345,12 +367,23 @@ export default function PartyMapScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#0B0B14' },
+  container: { flex: 1, backgroundColor: Colors.dark.background },
   safeArea: { flex: 1 },
   header: { paddingHorizontal: 18, paddingBottom: 12 },
-  title: { color: 'white', fontSize: 26, fontWeight: '900', letterSpacing: 0.4 },
+  headerRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  backButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 14,
+    backgroundColor: 'rgba(18, 18, 28, 0.72)',
+    borderWidth: 1,
+    borderColor: Colors.dark.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  title: { color: Colors.dark.text, fontSize: 22, fontWeight: '900', letterSpacing: -0.3 },
   subtitle: { marginTop: 4, color: Colors.dark.textSecondary, fontSize: 13, fontWeight: '600' },
-  mapContainer: { flex: 1, borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.06)' },
+  mapContainer: { flex: 1, borderTopWidth: 1, borderTopColor: Colors.dark.border },
   loading: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 10 },
   loadingText: { color: Colors.dark.textSecondary, fontWeight: '600' },
   backdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.4)' },
@@ -370,39 +403,39 @@ const styles = StyleSheet.create({
     paddingTop: 12,
     paddingBottom: 14,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.1)',
+    borderColor: Colors.dark.border,
   },
   sheetHandle: {
     alignSelf: 'center',
     width: 44,
     height: 5,
     borderRadius: 3,
-    backgroundColor: 'rgba(255,255,255,0.18)',
+    backgroundColor: 'rgba(15, 23, 42, 0.18)',
     marginBottom: 10,
   },
   sheetHeaderRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  eventTitle: { color: 'white', fontSize: 18, fontWeight: '900' },
+  eventTitle: { color: Colors.dark.text, fontSize: 18, fontWeight: '900' },
   clubName: { marginTop: 2, color: Colors.dark.textSecondary, fontWeight: '700' },
   trendingPill: {
-    backgroundColor: 'rgba(239, 68, 68, 0.16)',
+    backgroundColor: 'rgba(124,58,237,0.18)',
     borderWidth: 1,
-    borderColor: 'rgba(239, 68, 68, 0.4)',
+    borderColor: 'rgba(124,58,237,0.30)',
     paddingHorizontal: 10,
     paddingVertical: 6,
     borderRadius: 999,
   },
-  trendingPillText: { color: 'white', fontWeight: '900', fontSize: 12 },
+  trendingPillText: { color: Colors.dark.text, fontWeight: '900', fontSize: 12 },
   statsRow: { flexDirection: 'row', gap: 10, marginTop: 14 },
   statCard: {
     flex: 1,
     backgroundColor: 'rgba(255,255,255,0.06)',
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.08)',
+    borderColor: Colors.dark.border,
     borderRadius: 14,
     paddingVertical: 10,
     paddingHorizontal: 10,
   },
   statLabel: { color: Colors.dark.textSecondary, fontWeight: '800', fontSize: 11 },
-  statValue: { marginTop: 6, color: 'white', fontWeight: '900', fontSize: 14 },
+  statValue: { marginTop: 6, color: Colors.dark.text, fontWeight: '900', fontSize: 14 },
   sheetEmpty: { color: Colors.dark.textSecondary, fontWeight: '700', textAlign: 'center' },
 });
