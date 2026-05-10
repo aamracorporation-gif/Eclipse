@@ -16,7 +16,7 @@ export function GlassView({ style, contentContainerStyle, intensity = 30, childr
         style={[
           styles.container, 
           style, 
-          { backgroundColor: 'rgba(20, 20, 30, 0.95)', borderColor: 'rgba(255,255,255,0.1)' }
+          { backgroundColor: Colors.dark.surface, borderColor: Colors.dark.border }
         ]} 
         {...props}
       >
@@ -43,7 +43,7 @@ export function GlassView({ style, contentContainerStyle, intensity = 30, childr
 
 const styles = StyleSheet.create({
   container: {
-    backgroundColor: Platform.OS === 'android' ? 'rgba(30, 30, 40, 0.85)' : Colors.dark.surface,
+    backgroundColor: Colors.dark.surface,
     borderRadius: theme.radius.lg,
     overflow: 'hidden',
     borderWidth: theme.components.card.borderWidth,
