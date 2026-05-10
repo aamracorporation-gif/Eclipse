@@ -371,13 +371,18 @@
         "add_button": "Add ticket",
         "units": "pcs",
         "fill_fields": "Fill in the ticket fields",
-        "invalid_numbers": "Price and quantity must be valid numbers"
+        "invalid_numbers": "Price and quantity must be valid numbers",
+        "duplicate_type": "A ticket type with the same name and price already exists.",
+        "cannot_delete_sold": "You can't delete this type because tickets have already been sold.",
+        "new_badge": "NEW",
+        "sold_badge": "SOLD {{count}}"
       },
       "vip": {
         "section_title": "VIP reservations (Optional)",
         "section_subtitle": "Saved separately and won't affect tickets.",
         "add_button": "+ Add VIP reservation",
         "card_title": "VIP reservation #{{index}}",
+        "new_badge": "NEW",
         "name_label": "Reservation name",
         "name_placeholder": "E.g. Gold table",
         "description_label": "Description",
@@ -521,11 +526,13 @@
         "rejected_create_event_body": "Sorry, your organizer request was rejected.",
         "complete_button": "Complete verification"
       },
-      "balance_available": "Available balance (Stripe)",
+      "balance_available": "Net balance (organizer)",
       "pending_payouts": "+ {{amount}} pending",
       "revenue_real_30d": "Real revenue (Stripe 30d)",
       "metrics": {
         "tickets_sold": "Tickets sold",
+        "total_sales": "Total sales",
+        "commissions": "Commissions",
         "active_events": "Active events",
         "top_event": "Top event",
         "total": "Total",
@@ -762,6 +769,10 @@
       "extra_bottle": "Extra bottle {{price}}",
       "not_available": "This VIP table is no longer available.",
       "load_failed": "VIP tables could not be loaded."
+    },
+    "realtime": {
+      "title": "Real-time update",
+      "body": "This event was updated. Showing the latest data…"
     }
   },
   "resale": {
@@ -885,13 +896,17 @@
     "card_title": "Notifications",
     "card_subtitle": "Enable only what matters to you. Avoid spam.",
     "items": {
+      "push": { "label": "Push", "desc": "Receive push notifications on your device." },
+      "email": { "label": "Email", "desc": "Receive notifications by email." },
+      "sms": { "label": "SMS", "desc": "Receive SMS notifications (if you have a phone set)." },
       "purchase": { "label": "Purchases", "desc": "Purchase confirmations and status updates." },
       "reminders": { "label": "Reminders", "desc": "Event reminders and nearby alerts." },
       "resale": { "label": "Resale", "desc": "Status changes for resale listings." },
       "stock": { "label": "Stock", "desc": "Low stock / sold out alerts (organizers)." },
       "realtime_sales": { "label": "Real-time sales", "desc": "New sale alerts (organizers)." },
       "daily_summary": { "label": "Daily summary", "desc": "Daily activity summary (organizers/admin)." },
-      "thresholds": { "label": "Thresholds", "desc": "Stock threshold alerts (organizers)." }
+      "thresholds": { "label": "Thresholds", "desc": "Stock threshold alerts (organizers)." },
+      "marketing": { "label": "Offers", "desc": "Discounts and offers (optional)." }
     }
   },
   "my_resales": {
