@@ -5,7 +5,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
-import { FileText, Image as ImageIcon, Upload, X, LogOut } from 'lucide-react-native';
+import { FileText, Image as ImageIcon, Upload, X, LogOut } from '@/lib/icons';
 import { Colors } from '@/constants/Colors';
 import { GlassView } from '@/components/ui/GlassView';
 import { ThemedButton } from '@/components/ui/ThemedButton';
