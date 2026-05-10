@@ -1,7 +1,7 @@
 import { Link, Stack, useRouter } from 'expo-router';
 import { StyleSheet, Text, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { AlertTriangle, Home } from 'lucide-react-native';
+import { AlertTriangle, Home } from '@/lib/icons';
 import { Colors } from '@/constants/Colors';
 import { GlassView } from '@/components/ui/GlassView';
 import { ThemedButton } from '@/components/ui/ThemedButton';
