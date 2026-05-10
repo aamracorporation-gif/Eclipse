@@ -2,7 +2,7 @@ import { View, Text, StyleSheet, Switch, TouchableOpacity, ScrollView } from 're
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
-import { ArrowLeft } from 'lucide-react-native';
+import { ArrowLeft } from '@/lib/icons';
 import { useEffect, useMemo, useState } from 'react';
 import { Colors } from '@/constants/Colors';
 import { GlassView } from '@/components/ui/GlassView';
