@@ -2,7 +2,7 @@ import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-nati
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
-import { ArrowLeft, DollarSign, Ticket, Users, TrendingUp } from 'lucide-react-native';
+import { ArrowLeft, DollarSign, Ticket, Users, TrendingUp } from '@/lib/icons';
 import { useEvents } from '@/lib/EventContext';
 import { useAuth } from '@/lib/AuthContext';
 import { Colors } from '@/constants/Colors';
