@@ -8,7 +8,7 @@ import { ThemedButton } from '@/components/ui/ThemedButton';
 import { ThemedInput } from '@/components/ui/ThemedInput';
 import { DiscoLoader } from '@/components/ui/DiscoLoader';
 import { useCredit } from '@/lib/WalletContext';
-import { Calendar, MapPin, Tag, Filter, X, Search, User, Clock, ChevronDown, SlidersHorizontal, ChevronRight, Users, Sparkles } from 'lucide-react-native';
+import { Calendar, MapPin, Tag, Filter, X, Search, User, Clock, ChevronDown, SlidersHorizontal, ChevronRight, Users, Sparkles } from '@/lib/icons';
 import { useAuth } from '@/lib/AuthContext';
 import { useRouter } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
@@ -584,9 +584,6 @@ export default function ResaleScreen() {
         style={StyleSheet.absoluteFill}
       />
       
-      {/* Subtle Ambient Glow */}
-      <View style={styles.ambientGlowTop} />
-      
       <View style={[styles.headerContainer, { paddingTop: insets.top + 10 }]}>
         <View style={styles.headerTop}>
           <Text style={styles.headerTitle}>{t('tabs.resale')}</Text>
@@ -846,7 +843,7 @@ export default function ResaleScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#000',
+    backgroundColor: Colors.dark.background,
   },
   headerContainer: {
     paddingHorizontal: 20,
@@ -862,19 +859,19 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 34,
     fontWeight: '800',
-    color: '#FFF',
+    color: Colors.dark.text,
     letterSpacing: -1,
   },
   headerSubtitle: {
     fontSize: 15,
-    color: '#8E8E93',
+    color: Colors.dark.textSecondary,
     marginBottom: 10,
   },
   filterButton: {
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: 'rgba(255,255,255,0.1)',
+    backgroundColor: 'rgba(255,255,255,0.10)',
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -900,7 +897,7 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   filterTitle: {
-    color: '#FFF',
+    color: Colors.dark.text,
     fontWeight: '600',
     fontSize: 14,
   },
