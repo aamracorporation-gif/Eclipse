@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { StyleSheet, Text, View, TouchableOpacity, Modal, Alert, Vibration } from 'react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { router } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
+import { AlertTriangle, Check, X } from '@/lib/icons';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/lib/AuthContext';
 import { Colors } from '@/constants/Colors';
@@ -142,7 +142,7 @@ export default function ScanScreen() {
       <View style={[styles.overlay, { paddingTop: insets.top + 20 }]}>
         <View style={styles.header}>
           <TouchableOpacity onPress={safeBack} style={styles.backButton}>
-            <Ionicons name="close" size={28} color="white" />
+            <X size={28} color="white" />
           </TouchableOpacity>
           <Text style={styles.title}>{t('creator.scan.title')}</Text>
           <View style={{ width: 40 }} />
@@ -173,7 +173,7 @@ export default function ScanScreen() {
              {result?.valid ? (
                <View style={styles.resultContent}>
                  <View style={[styles.iconCircle, { backgroundColor: '#4ade80' }]}>
-                   <Ionicons name="checkmark" size={50} color="white" />
+                   <Check size={50} color="white" />
                  </View>
                  <Text style={styles.resultTitle}>{t('creator.scan.valid_title')}</Text>
                  <Text style={styles.resultMessage}>{result.message}</Text>
@@ -194,7 +194,7 @@ export default function ScanScreen() {
              ) : (
                <View style={styles.resultContent}>
                  <View style={[styles.iconCircle, { backgroundColor: '#ef4444' }]}>
-                   <Ionicons name="close" size={50} color="white" />
+                   <X size={50} color="white" />
                  </View>
                  <Text style={[styles.resultTitle, { color: '#ef4444' }]}>{t('creator.scan.invalid_title')}</Text>
                  
@@ -204,7 +204,7 @@ export default function ScanScreen() {
                    
                    return isExpired && (
                      <View style={styles.expiredBanner}>
-                       <Ionicons name="warning" size={24} color="white" />
+                       <AlertTriangle size={24} color="white" />
                        <Text style={styles.expiredText}>{t('creator.scan.expired_banner')}</Text>
                      </View>
                    );
