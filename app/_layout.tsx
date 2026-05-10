@@ -17,6 +17,7 @@ import { RussoOne_400Regular } from '@expo-google-fonts/russo-one';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { DiscoLoader } from '@/components/ui/DiscoLoader';
 import { initNotifications } from '@/lib/notifications';
+import { Colors } from '@/constants/Colors';
 
 import * as Notifications from 'expo-notifications';
 import * as ExpoLinking from 'expo-linking';
@@ -88,7 +89,7 @@ function RootLayoutNav({ fontsLoaded }: { fontsLoaded: boolean }) {
             screenOptions={{
               headerShown: false,
               contentStyle: {
-                backgroundColor: '#0F0F1A',
+                backgroundColor: Colors.dark.background,
               },
             }}
           >
