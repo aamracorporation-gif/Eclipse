@@ -39,7 +39,7 @@ const resources = {
 export function getDeviceLanguage() {
   const locales = Localization.getLocales?.() || [];
   const first = locales[0];
-  const raw = (first?.languageCode || first?.languageTag || 'en').toString().toLowerCase();
+  const raw = (first?.languageCode || first?.languageTag || 'es').toString().toLowerCase();
   const code = raw.includes('-') ? raw.split('-')[0] : raw;
   return code;
 }
@@ -47,7 +47,7 @@ export function getDeviceLanguage() {
 function normalizeLanguage(lang) {
   const code = (lang || '').toString().toLowerCase();
   if (SUPPORTED_LANGUAGES.includes(code)) return code;
-  return 'en';
+  return 'es';
 }
 
 export async function initLanguage() {
@@ -68,7 +68,7 @@ export async function initLanguage() {
       await i18next.use(initReactI18next).init({
         resources,
         lng: initial,
-        fallbackLng: 'en',
+        fallbackLng: 'es',
         interpolation: {
           escapeValue: false,
         },
