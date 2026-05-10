@@ -3,7 +3,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'expo-router';
 import { useAuth } from '@/lib/AuthContext';
 import { getErrorMessage } from '@/lib/errorHelpers';
-import { Mail, Lock, Sparkles, Eye, EyeOff } from 'lucide-react-native';
+import { Mail, Lock, Sparkles, Eye, EyeOff } from '@/lib/icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Colors } from '@/constants/Colors';
 import { ThemedButton } from '@/components/ui/ThemedButton';
