@@ -1,6 +1,6 @@
 import React from 'react';
 import { TouchableOpacity, View, Text, StyleSheet } from 'react-native';
-import { Bell } from 'lucide-react-native';
+import { Bell } from '@/lib/icons';
 import { useRouter } from 'expo-router';
 import { useNotifications } from '@/lib/NotificationContext';
 import { Colors } from '@/constants/Colors';
