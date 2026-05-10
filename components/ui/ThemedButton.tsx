@@ -62,10 +62,10 @@ export function ThemedButton({
       <LinearGradient
         colors={
           disabled 
-            ? ['#4B5563', '#374151'] 
+            ? ['rgba(15, 23, 42, 0.25)', 'rgba(15, 23, 42, 0.18)'] 
             : variant === 'secondary' 
-              ? ['#06B6D4', '#3B82F6'] 
-              : ['#7C3AED', '#4C1D95']
+              ? ['#B39DFF', '#6B4EFF'] 
+              : ['#6B4EFF', '#5B38FF']
         }
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
@@ -92,7 +92,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     width: '100%',
     minHeight: theme.components.button.height,
-    backgroundColor: '#4C1D95',
+    backgroundColor: Colors.dark.primary,
     ...(shadow('sm') as any),
   },
   gradient: {
@@ -108,7 +108,7 @@ const styles = StyleSheet.create({
     color: 'white',
     fontSize: theme.typography.size.md,
     fontWeight: theme.typography.weight.bold,
-    letterSpacing: 0.5,
+    letterSpacing: 0.2,
   },
   outlineButton: {
     width: '100%',
@@ -118,10 +118,10 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Colors.dark.border,
     borderRadius: theme.components.button.borderRadius,
-    backgroundColor: 'rgba(255,255,255,0.04)',
+    backgroundColor: 'transparent',
   },
   outlineText: {
-    color: Colors.dark.text,
+    color: Colors.dark.primary,
     fontSize: theme.typography.size.md,
     fontWeight: theme.typography.weight.semibold,
   },
