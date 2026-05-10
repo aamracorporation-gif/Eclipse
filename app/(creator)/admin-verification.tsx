@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { ArrowLeft, XCircle, FileText, Image as ImageIcon, ExternalLink, X, Search, Ban, ShieldCheck } from 'lucide-react-native';
+import { ArrowLeft, XCircle, FileText, Image as ImageIcon, ExternalLink, X, Search, Ban, ShieldCheck } from '@/lib/icons';
 import { Colors } from '@/constants/Colors';
 import { GlassView } from '@/components/ui/GlassView';
 import { ThemedButton } from '@/components/ui/ThemedButton';
