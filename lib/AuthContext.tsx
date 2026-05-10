@@ -4,6 +4,7 @@ import { Session, User } from '@supabase/supabase-js';
 import { registerForPushNotifications } from './notifications';
 import * as Linking from 'expo-linking';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { invokeEdgeFunctionStrict } from '@/lib/edgeFunctions';
 
 export type WorkerProfile = {
   id: string;
@@ -79,6 +80,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (user) {
       fetchWorkerProfile(user.id);
       registerForPushNotifications(user.id).catch(() => {});
+      (async () => {
+        try {
+          const raw = await AsyncStorage.getItem('pending_event_share');
+          if (!raw) return;
+          const parsed = JSON.parse(raw);
+          const eventId = String(parsed?.eventId || '');
+          const token = String(parsed?.token || '');
+          if (!eventId || !token) return;
+          await invokeEdgeFunctionStrict('event-share', { action: 'convert', token, kind: 'login' });
+          await AsyncStorage.removeItem('pending_event_share');
+        } catch {}
+      })();
     } else {
       setWorkerProfile(null);
     }
