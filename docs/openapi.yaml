@@ -1,0 +1,74 @@
+openapi: 3.0.3
+info:
+  title: Eclipse API
+  version: 1.0.0
+  description: |
+    Especificación mínima (manual) de endpoints críticos del backend/edge functions.
+servers:
+  - url: https://{projectRef}.supabase.co
+    variables:
+      projectRef:
+        default: your-project-ref
+paths:
+  /functions/v1/dispatch-notifications:
+    post:
+      summary: Procesa la cola de notificaciones (push/email/sms)
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                limit:
+                  type: integer
+                  minimum: 1
+                  maximum: 500
+                  default: 50
+      responses:
+        "200":
+          description: Resultado por canal
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean }
+                  push: { type: object }
+                  email: { type: object }
+                  sms: { type: object }
+  /functions/v1/ticket-calendar:
+    get:
+      summary: Descarga un archivo .ics para añadir el evento al calendario
+      parameters:
+        - name: ticket_id
+          in: query
+          required: true
+          schema: { type: string, format: uuid }
+        - name: token
+          in: query
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: ICS
+          content:
+            text/calendar:
+              schema:
+                type: string
+        "400": { description: Parámetros inválidos }
+        "403": { description: Token inválido }
+        "404": { description: Ticket o evento no encontrado }
+  /stripe/webhook:
+    post:
+      summary: Stripe webhook (payment_intent.succeeded, payment_intent.payment_failed, account.updated)
+      description: Requiere body raw y Stripe-Signature.
+      responses:
+        "200": { description: Acknowledge }
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
