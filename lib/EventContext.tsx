@@ -1,6 +1,8 @@
 import { createContext, useContext, useState, useEffect, useRef, useCallback } from 'react';
 import { supabase, Event } from '@/lib/supabase';
 import i18n from '@/lib/i18n';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { invokeEdgeFunction, invokeEdgeFunctionStrict } from '@/lib/edgeFunctions';
 
 export type TicketType = {
   id: string;
@@ -15,6 +17,7 @@ export type AppEvent = {
   id: string;
   title: string;
   startsAt?: string;
+  updatedAt?: string;
   date: string; // YYYY-MM-DD
   time: string;
   location: string;
@@ -48,8 +51,8 @@ const INITIAL_EVENTS: AppEvent[] = [];
 type EventContextType = {
   events: AppEvent[];
   addEvent: (event: Omit<AppEvent, 'id' | 'sold'>) => Promise<string>;
-  updateEvent: (id: string, updates: Partial<AppEvent>) => void;
-  deleteEvent: (id: string) => void;
+  updateEvent: (id: string, updates: Partial<AppEvent>, expectedUpdatedAt?: string | null) => Promise<string | null>;
+  deleteEvent: (id: string) => Promise<void>;
   getEventById: (id: string) => AppEvent | undefined;
   refreshEvents: () => Promise<void>;
 };
@@ -57,8 +60,8 @@ type EventContextType = {
 const EventContext = createContext<EventContextType>({
   events: [],
   addEvent: async () => '',
-  updateEvent: () => {},
-  deleteEvent: () => {},
+  updateEvent: async () => null,
+  deleteEvent: async () => {},
   getEventById: () => undefined,
   refreshEvents: async () => {},
 });
@@ -68,6 +71,21 @@ export const useEvents = () => useContext(EventContext);
 export function EventProvider({ children }: { children: React.ReactNode }) {
   const [events, setEvents] = useState<AppEvent[]>(INITIAL_EVENTS);
   const refreshTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const cacheKey = 'events_cache_v1';
+
+  useEffect(() => {
+    AsyncStorage.getItem(cacheKey)
+      .then((raw) => {
+        if (!raw) return;
+        try {
+          const parsed = JSON.parse(raw);
+          if (Array.isArray(parsed)) {
+            setEvents(parsed as AppEvent[]);
+          }
+        } catch {}
+      })
+      .catch(() => {});
+  }, []);
 
   const fetchEventsQuery = useCallback(async (includeVerificationStatus: boolean) => {
     return supabase
@@ -112,11 +130,14 @@ export function EventProvider({ children }: { children: React.ReactNode }) {
           const localeTag = lang === 'en' ? 'en-US' : lang === 'fr' ? 'fr-FR' : 'es-ES';
           const eventDate = new Date(e.event_date);
           const creatorProfile = Array.isArray(e.profiles) ? e.profiles[0] : e.profiles;
+          const pad2 = (n: number) => String(n).padStart(2, '0');
+          const localDate = `${eventDate.getFullYear()}-${pad2(eventDate.getMonth() + 1)}-${pad2(eventDate.getDate())}`;
           return {
             id: e.id,
             title: e.title,
             startsAt: e.event_date,
-            date: eventDate.toISOString().split('T')[0],
+            updatedAt: e.updated_at || null,
+            date: localDate,
             time: eventDate.toLocaleTimeString(localeTag, { hour: '2-digit', minute: '2-digit' }),
             location: e.venues?.name || 'Ubicación desconocida',
             price: e.ticket_price.toString(),
@@ -138,13 +159,17 @@ export function EventProvider({ children }: { children: React.ReactNode }) {
                   verification_status: creatorProfile.verification_status ?? null,
                 }
               : undefined,
-            ticketTypes: e.event_ticket_types ? e.event_ticket_types.map((t: any) => ({
-              id: t.id,
-              name: t.name,
-              price: t.price,
-              quantity: t.quantity,
-              sold: t.sold
-            })) : [],
+            ticketTypes: e.event_ticket_types
+              ? (e.event_ticket_types as any[])
+                  .filter((t: any) => !t?.deleted_at && (t?.is_active ?? true))
+                  .map((t: any) => ({
+                    id: t.id,
+                    name: t.name,
+                    price: t.price,
+                    quantity: t.quantity,
+                    sold: t.sold,
+                  }))
+              : [],
             venues: e.venues ? {
               latitude: e.venues.latitude,
               longitude: e.venues.longitude,
@@ -153,6 +178,7 @@ export function EventProvider({ children }: { children: React.ReactNode }) {
           };
         });
         setEvents(mappedEvents);
+        AsyncStorage.setItem(cacheKey, JSON.stringify(mappedEvents)).catch(() => {});
       }
     } catch (error) {
       console.error('Error fetching events:', error);
@@ -317,8 +343,11 @@ export function EventProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  const updateEvent = async (id: string, updates: Partial<AppEvent>) => {
+  const updateEvent = async (id: string, updates: Partial<AppEvent>, expectedUpdatedAt?: string | null) => {
     try {
+      const isUuid = (value: string) =>
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+
       // Map updates to DB schema
       const dbUpdates: any = {};
       if (updates.title !== undefined) dbUpdates.title = updates.title;
@@ -328,21 +357,203 @@ export function EventProvider({ children }: { children: React.ReactNode }) {
       if (updates.date !== undefined && updates.time !== undefined) {
         dbUpdates.event_date = new Date(`${updates.date}T${updates.time}`).toISOString();
       }
-      if (updates.price !== undefined) dbUpdates.ticket_price = parseFloat(updates.price);
-      if (updates.capacity !== undefined) dbUpdates.available_tickets = updates.capacity;
+      if (Array.isArray(updates.ticketTypes) && updates.ticketTypes.length > 0) {
+        const minPrice = Math.min(...updates.ticketTypes.map((t) => Number(t.price) || 0));
+        dbUpdates.ticket_price = Number.isFinite(minPrice) ? minPrice : 0;
+        const totalQty = updates.ticketTypes.reduce((acc, t) => acc + (Number(t.quantity) || 0), 0);
+        const totalSold = updates.ticketTypes.reduce((acc, t) => acc + (Number(t.sold) || 0), 0);
+        dbUpdates.available_tickets = Math.max(totalQty - totalSold, 0);
+        dbUpdates.sold_tickets = Math.max(totalSold, 0);
+      } else {
+        if (updates.price !== undefined) {
+          const price = parseFloat(String(updates.price));
+          if (Number.isFinite(price)) dbUpdates.ticket_price = price;
+        }
+        if (updates.capacity !== undefined) dbUpdates.available_tickets = updates.capacity;
+      }
       if (updates.dressCode !== undefined) dbUpdates.dress_code = updates.dressCode;
       if (updates.ageRestriction !== undefined) dbUpdates.age_restriction = parseInt(updates.ageRestriction);
       if (updates.theme !== undefined) dbUpdates.theme = updates.theme;
       if (updates.eventType !== undefined) dbUpdates.event_type = updates.eventType;
 
-      const { error } = await supabase
-        .from('events')
-        .update(dbUpdates)
-        .eq('id', id);
+      const doUpdate = async (useUpdatedAt: boolean) => {
+        let q = supabase.from('events').update(dbUpdates).eq('id', id);
+        if (useUpdatedAt && expectedUpdatedAt) {
+          q = q.eq('updated_at', expectedUpdatedAt);
+        }
+        const sel = useUpdatedAt ? 'id, venue_id, updated_at' : 'id, venue_id';
+        return q.select(sel).maybeSingle();
+      };
+
+      let updatedEvent: any = null;
+      let error: any = null;
+
+      {
+        const res = await doUpdate(true);
+        updatedEvent = res.data as any;
+        error = res.error as any;
+      }
+
+      if (error?.code === '42703' && String(error?.message || '').includes('updated_at')) {
+        const res = await doUpdate(false);
+        updatedEvent = res.data as any;
+        error = res.error as any;
+      }
 
       if (error) throw error;
+      if (!updatedEvent?.id) {
+        if (expectedUpdatedAt) {
+          let retryData: any = null;
+          let retryError: any = null;
+
+          {
+            const retry = await supabase.from('events').update(dbUpdates).eq('id', id).select('id, venue_id, updated_at').maybeSingle();
+            retryData = retry.data as any;
+            retryError = retry.error as any;
+          }
+          if (retryError?.code === '42703' && String(retryError?.message || '').includes('updated_at')) {
+            const retry = await supabase.from('events').update(dbUpdates).eq('id', id).select('id, venue_id').maybeSingle();
+            retryData = retry.data as any;
+            retryError = retry.error as any;
+          }
+          if (retryError) throw retryError;
+          updatedEvent = retryData;
+          if (!updatedEvent?.id) {
+            throw new Error('Este evento fue modificado por otra sesión. Actualiza y vuelve a intentarlo.');
+          }
+        } else {
+          throw new Error('No se pudo guardar el evento (permisos/RLS).');
+        }
+      }
+
+      const venueId: string | null = (updatedEvent as any)?.venue_id ?? null;
+      const updatedAt: string | null = (updatedEvent as any)?.updated_at ?? null;
+
+      const venueName = (updates.venues?.name ?? updates.location ?? '').toString().trim();
+      const venueLat = updates.venues?.latitude;
+      const venueLng = updates.venues?.longitude;
+      const shouldUpdateVenue =
+        !!venueId &&
+        (venueName.length > 0 || typeof venueLat === 'number' || typeof venueLng === 'number');
+
+      if (shouldUpdateVenue) {
+        const venueUpdates: any = {};
+        if (venueName.length > 0) {
+          venueUpdates.name = venueName;
+          venueUpdates.address = venueName;
+        }
+        if (typeof venueLat === 'number') venueUpdates.latitude = venueLat;
+        if (typeof venueLng === 'number') venueUpdates.longitude = venueLng;
+
+        const { data: updatedVenue, error: venueError } = await supabase
+          .from('venues')
+          .update(venueUpdates)
+          .eq('id', venueId)
+          .select('id')
+          .maybeSingle();
+        if (venueError) throw venueError;
+        if (!updatedVenue?.id) throw new Error('No se pudo guardar la ubicación (permisos/RLS).');
+      }
+
+      if (Array.isArray(updates.ticketTypes)) {
+        const desired = updates.ticketTypes;
+
+        const { data: existingTypes, error: existingErr } = await supabase
+          .from('event_ticket_types')
+          .select('id, sold')
+          .eq('event_id', id);
+        if (existingErr) throw existingErr;
+
+        const keepIds = new Set(desired.filter((t) => isUuid(String(t.id))).map((t) => String(t.id)));
+
+        for (const row of existingTypes || []) {
+          const rowId = String((row as any).id || '');
+          const sold = Number((row as any).sold || 0);
+          if (!keepIds.has(rowId) && sold <= 0) {
+            const del = await supabase
+              .from('event_ticket_types')
+              .update({ is_active: false, deleted_at: new Date().toISOString() })
+              .eq('id', rowId)
+              .eq('event_id', id);
+            if (del.error) throw del.error;
+          }
+        }
+
+        const seen = new Set<string>();
+        for (const t of desired) {
+          const ticketId = String((t as any).id || '');
+          const name = String((t as any).name || '').trim();
+          const price = Number((t as any).price || 0);
+          const qtyRaw = Number((t as any).quantity || 0);
+          const sold = Number((t as any).sold || 0);
+          const qty = Math.max(qtyRaw, sold, 0);
+
+          if (!name) continue;
+
+          const key = `${name.toLowerCase()}|${Number.isFinite(price) ? price.toFixed(2) : String(price)}`;
+          if (seen.has(key)) {
+            throw new Error('No se permiten tipos de entrada duplicados (mismo nombre y precio).');
+          }
+          seen.add(key);
+
+          if (isUuid(ticketId)) {
+            const upsert = await supabase
+              .from('event_ticket_types')
+              .upsert(
+                { id: ticketId, event_id: id, name, price, quantity: qty, is_active: true, deleted_at: null },
+                { onConflict: 'id' }
+              )
+              .select('id')
+              .maybeSingle();
+            if (upsert.error) throw upsert.error;
+            if (!upsert.data?.id) throw new Error('No se pudo guardar un tipo de entrada (permisos/RLS).');
+          } else {
+            const ins = await supabase
+              .from('event_ticket_types')
+              .insert({ event_id: id, name, price, quantity: qty, sold: 0, is_active: true })
+              .select('id')
+              .maybeSingle();
+            if (ins.error) throw ins.error;
+            if (!ins.data?.id) throw new Error('No se pudo añadir un tipo de entrada (permisos/RLS).');
+          }
+        }
+
+        const { data: typesAfter, error: typesAfterErr } = await supabase
+          .from('event_ticket_types')
+          .select('price, quantity, sold, is_active, deleted_at')
+          .eq('event_id', id);
+        if (typesAfterErr) throw typesAfterErr;
+
+        const activeTypes = (typesAfter || []).filter((t: any) => !t?.deleted_at && (t?.is_active ?? true));
+        const totalQty = (activeTypes || []).reduce((acc, t) => acc + (Number((t as any).quantity) || 0), 0);
+        const totalSold = (activeTypes || []).reduce((acc, t) => acc + (Number((t as any).sold) || 0), 0);
+        const minPrice = (activeTypes || []).length
+          ? Math.min(...(activeTypes || []).map((t) => Number((t as any).price) || 0))
+          : 0;
+
+        const { error: syncErr } = await supabase
+          .from('events')
+          .update({
+            ticket_price: Number.isFinite(minPrice) ? minPrice : 0,
+            sold_tickets: Math.max(totalSold, 0),
+            available_tickets: Math.max(totalQty - totalSold, 0),
+          })
+          .eq('id', id);
+        if (syncErr) throw syncErr;
+      }
 
       await fetchEvents();
+      try {
+        const dispatchResult: any = await invokeEdgeFunctionStrict('dispatch-notifications', {
+          limit: 400,
+          eventId: id,
+          enqueueEventUpdate: true,
+        });
+        console.log('[dispatch-notifications][event_update]', JSON.stringify(dispatchResult));
+      } catch (e) {
+        console.warn('dispatch-notifications failed after event update:', e);
+      }
+      return updatedAt;
     } catch (error) {
       console.error('Error updating event:', error);
       throw error;
@@ -359,6 +570,9 @@ export function EventProvider({ children }: { children: React.ReactNode }) {
       if (error) throw error;
 
       setEvents((prev) => prev.filter((e) => e.id !== id));
+      try {
+        await invokeEdgeFunctionStrict('dispatch-notifications', { limit: 400 });
+      } catch {}
     } catch (error) {
       console.error('Error deleting event:', error);
       throw error;
