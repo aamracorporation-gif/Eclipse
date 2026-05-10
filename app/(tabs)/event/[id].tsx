@@ -6,7 +6,7 @@ import { useAuth } from '@/lib/AuthContext';
 import { useEvents } from '@/lib/EventContext';
 import { useCredit } from '@/lib/WalletContext';
 import { getErrorMessage } from '@/lib/errorHelpers';
-import { MapPin, Calendar, Ticket, ArrowLeft, Navigation, TrendingUp, User as UserIcon, Shirt, Users, Music, PartyPopper, Clock, Euro, Image as ImageIcon, X, CreditCard, Minus, Plus, Sparkles, Wallet, Share2, Mail } from 'lucide-react-native';
+import { MapPin, Calendar, Ticket, ArrowLeft, Navigation, TrendingUp, User as UserIcon, Shirt, Users, Music, PartyPopper, Clock, Euro, Image as ImageIcon, X, CreditCard, Minus, Plus, Sparkles, Wallet, Share2, Mail } from '@/lib/icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Colors } from '@/constants/Colors';
@@ -21,6 +21,7 @@ import * as ExpoLinking from 'expo-linking';
 import { useI18n } from '@/lib/I18nContext';
 import { useTranslation } from 'react-i18next';
 import { scheduleLocalNotification } from '@/lib/notifications';
+import { invokeEdgeFunctionStrict } from '@/lib/edgeFunctions';
 
 export default function EventDetailScreen() {
   const { id } = useLocalSearchParams();
@@ -188,11 +189,19 @@ export default function EventDetailScreen() {
 
       let vipRows: any[] = [];
       try {
-        const vipRes = await supabase
-          .from('reservados_vip')
-          .select('*')
-          .eq('event_id', eventId)
-          .order('created_at', { ascending: true });
+        const fetchVip = async (withSoftDeleteCols: boolean) => {
+          const q = supabase
+            .from('reservados_vip')
+            .select('*')
+            .eq('event_id', eventId)
+            .order('created_at', { ascending: true });
+          return withSoftDeleteCols ? q.eq('is_active', true).is('deleted_at', null) : q;
+        };
+
+        let vipRes: any = await fetchVip(true);
+        if (vipRes.error?.code === '42703' && String(vipRes.error?.message || '').match(/is_active|deleted_at/i)) {
+          vipRes = await fetchVip(false);
+        }
         if (vipRes.error) {
           const code = (vipRes.error as any)?.code ? String((vipRes.error as any).code) : '';
           setVipLoadError(`${code ? `${code}: ` : ''}${getErrorMessage(vipRes.error)}`);
@@ -232,24 +241,15 @@ export default function EventDetailScreen() {
 
   const shareEvent = async () => {
     if (!event?.id) return;
-    const supabaseUrlRaw = process.env.EXPO_PUBLIC_SUPABASE_URL;
-    let httpsBaseUrl: string | null = null;
     try {
-      httpsBaseUrl = supabaseUrlRaw ? new URL(supabaseUrlRaw).origin : null;
-    } catch {
-      httpsBaseUrl = null;
-    }
+      const result: any = await invokeEdgeFunctionStrict('event-share', { action: 'create', eventId: event.id });
+      const url = String(result?.url || '');
+      if (!url) throw new Error('No se pudo generar el enlace.');
 
-    const httpsUrl = `${(httpsBaseUrl || 'https://zurbdrfmwjqbrscairub.supabase.co').replace(/\/$/, '')}/event/${event.id}`;
-    const message = httpsUrl;
-
-    try {
-      await Share.share({
-        message,
-        url: httpsUrl,
-      });
-    } catch {
-      Alert.alert('Enlace del evento', httpsUrl);
+      await Share.share({ message: url, url });
+      return;
+    } catch (e: any) {
+      Alert.alert('No se pudo compartir', 'No se pudo generar el enlace de compartición. Inténtalo de nuevo.');
     }
   };
 
@@ -651,7 +651,7 @@ export default function EventDetailScreen() {
             style={styles.posterImage}
           />
           <LinearGradient
-            colors={['transparent', Colors.dark.background]}
+            colors={['rgba(15, 23, 42, 0)', 'rgba(15, 23, 42, 0.68)']}
             style={styles.imageOverlay}
           />
           
@@ -660,7 +660,7 @@ export default function EventDetailScreen() {
             onPress={safeBack}
             activeOpacity={0.8}>
             <GlassView intensity={40} style={styles.backButtonGlass}>
-              <ArrowLeft size={24} color="white" />
+              <ArrowLeft size={24} color={Colors.dark.text} />
             </GlassView>
           </TouchableOpacity>
 
@@ -670,7 +670,7 @@ export default function EventDetailScreen() {
             activeOpacity={0.8}
           >
             <GlassView intensity={40} style={styles.backButtonGlass}>
-              <Share2 size={22} color="white" />
+              <Share2 size={22} color={Colors.dark.text} />
             </GlassView>
           </TouchableOpacity>
 
@@ -683,8 +683,8 @@ export default function EventDetailScreen() {
           )}
         </View>
 
-        <View style={[styles.content, { paddingHorizontal: horizontalPadding, alignItems: 'center' }]}>
-          <View style={{ width: '100%', maxWidth: maxContentWidth }}>
+        <View style={[styles.content, { paddingHorizontal: horizontalPadding }]}>
+          <View style={{ width: '100%', maxWidth: maxContentWidth, alignSelf: 'center' }}>
           <Text style={[styles.title, { fontSize: scaleFont(32) }]}>{event.title}</Text>
           <Text style={styles.description}>{event.description}</Text>
 
@@ -764,7 +764,7 @@ export default function EventDetailScreen() {
               onPress={openMaps}
               variant="outline"
               style={{ flex: 1 }}
-              icon={<MapPin size={20} color="white" />}
+              icon={<MapPin size={20} color={Colors.dark.primary} />}
             />
             {event.venue_plan_url && (
               <ThemedButton
@@ -1349,7 +1349,7 @@ const styles = StyleSheet.create({
   backButtonGlass: {
     borderRadius: 50,
     padding: 12,
-    backgroundColor: 'rgba(0,0,0,0.3)',
+    backgroundColor: 'rgba(0,0,0,0.30)',
     borderWidth: 0,
   },
   soldBadgeContainer: {
@@ -1378,11 +1378,8 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 32,
     fontWeight: '800',
-    color: 'white',
+    color: Colors.dark.text,
     marginBottom: 12,
-    textShadowColor: 'rgba(0,0,0,0.5)',
-    textShadowOffset: { width: 0, height: 2 },
-    textShadowRadius: 2,
     letterSpacing: -0.4,
   },
   verifiedRow: {
@@ -1419,14 +1416,14 @@ const styles = StyleSheet.create({
   },
   divider: {
     height: 1,
-    backgroundColor: 'rgba(255,255,255,0.1)',
+    backgroundColor: Colors.dark.border,
     marginLeft: 56,
   },
   iconBox: {
     width: 40,
     height: 40,
     borderRadius: 12,
-    backgroundColor: 'rgba(255,255,255,0.05)',
+    backgroundColor: 'rgba(107, 78, 255, 0.10)',
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 16,
@@ -1453,7 +1450,7 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 20,
     fontWeight: 'bold',
-    color: 'white',
+    color: Colors.dark.text,
     marginBottom: 16,
   },
   detailsGrid: {
@@ -1466,10 +1463,10 @@ const styles = StyleSheet.create({
     width: '48%',
     alignItems: 'center',
     padding: 16,
-    backgroundColor: 'rgba(255,255,255,0.02)',
+    backgroundColor: 'rgba(255,255,255,0.05)',
     borderRadius: 18,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.08)',
+    borderColor: 'rgba(255,255,255,0.10)',
   },
   detailIcon: {
     marginBottom: 8,
