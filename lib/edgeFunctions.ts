@@ -75,3 +75,19 @@ export async function invokeEdgeFunction<T = any>(functionName: string, body: an
 
   return { data: (json as T) ?? ({} as T), error: null, status: res.status };
 }
+
+export async function invokeEdgeFunctionStrict<T = any>(functionName: string, body: any): Promise<T> {
+  const res = await invokeEdgeFunction<T>(functionName, body);
+  if (res.error) {
+    const msg = String(res.error?.message || res.error?.error || 'Edge Function error');
+    const details = (() => {
+      try {
+        return JSON.stringify({ status: res.status, error: res.error });
+      } catch {
+        return String(res.error);
+      }
+    })();
+    throw new Error(`${msg} | ${details}`);
+  }
+  return (res.data as T) ?? ({} as T);
+}
