@@ -3,7 +3,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Colors } from '@/constants/Colors';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
-import { ChevronLeft } from 'lucide-react-native';
+import { ChevronLeft } from '@/lib/icons';
 
 export function LegalDocumentScreen({ title, text }: { title: string; text: string }) {
   const insets = useSafeAreaInsets();
@@ -48,4 +48,3 @@ const styles = StyleSheet.create({
   content: { paddingHorizontal: 20, paddingTop: 16 },
   body: { color: 'rgba(255,255,255,0.86)', fontSize: 15, lineHeight: 22 },
 });
-
