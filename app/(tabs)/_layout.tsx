@@ -1,7 +1,7 @@
 import { Tabs } from 'expo-router';
-import { Home, Ticket, User, Repeat, Map as MapIcon } from 'lucide-react-native';
+import { Home, Ticket, User, Repeat, Map as MapIcon } from '@/lib/icons';
 import { Colors } from '@/constants/Colors';
-import { Platform, StyleSheet, View } from 'react-native';
+import { Platform } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { theme } from '@/theme/styles';
@@ -17,17 +17,25 @@ export default function TabLayout() {
         tabBarInactiveTintColor: Colors.dark.textSecondary,
         tabBarStyle: {
           position: 'absolute',
-          bottom: 0,
-          left: 0,
-          right: 0,
+          left: 16,
+          right: 16,
+          bottom: 12,
           height: 64 + insets.bottom,
-          elevation: 0,
-          backgroundColor: 'transparent',
-          borderTopWidth: 0,
+          paddingTop: 10,
+          paddingBottom: Math.max(10, insets.bottom),
+          borderRadius: 22,
+          backgroundColor: 'rgba(10, 10, 16, 0.92)',
+          borderWidth: 1,
+          borderColor: theme.colors.border,
+          shadowColor: '#000',
+          shadowOffset: { width: 0, height: 10 },
+          shadowOpacity: 0.28,
+          shadowRadius: 18,
+          elevation: 12,
         },
-        tabBarBackground: () => (
-          <View style={[StyleSheet.absoluteFill, styles.tabBarBg]} />
-        ),
+        tabBarHideOnKeyboard: true,
+        tabBarLabelStyle: { paddingBottom: 2 },
+        tabBarItemStyle: { paddingTop: 2 },
       }}>
       <Tabs.Screen
         name="index"
@@ -84,11 +92,3 @@ export default function TabLayout() {
     </Tabs>
   );
 }
-
-const styles = StyleSheet.create({
-  tabBarBg: {
-    backgroundColor: 'rgba(10, 10, 15, 0.92)',
-    borderTopWidth: 1,
-    borderTopColor: theme.colors.border,
-  },
-});
