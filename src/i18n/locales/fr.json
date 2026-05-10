@@ -371,13 +371,18 @@
         "add_button": "Ajouter un billet",
         "units": "pcs",
         "fill_fields": "Complétez les informations du billet",
-        "invalid_numbers": "Le prix et la quantité doivent être des nombres valides"
+        "invalid_numbers": "Le prix et la quantité doivent être des nombres valides",
+        "duplicate_type": "Un type de billet avec le même nom et prix existe déjà.",
+        "cannot_delete_sold": "Impossible de supprimer ce type : des billets ont déjà été vendus.",
+        "new_badge": "NOUVEAU",
+        "sold_badge": "VENDUS {{count}}"
       },
       "vip": {
         "section_title": "Réservations VIP (Optionnel)",
         "section_subtitle": "Enregistrées séparément et n’affectent pas les billets.",
         "add_button": "+ Ajouter une réservation VIP",
         "card_title": "Réservation VIP #{{index}}",
+        "new_badge": "NOUVEAU",
         "name_label": "Nom de la réservation",
         "name_placeholder": "Ex : Table Or",
         "description_label": "Description",
@@ -521,11 +526,13 @@
         "rejected_create_event_body": "Désolé, votre demande d’organisateur a été refusée.",
         "complete_button": "Terminer la vérification"
       },
-      "balance_available": "Solde disponible (Stripe)",
+      "balance_available": "Solde net (organisateur)",
       "pending_payouts": "+ {{amount}} en attente",
       "revenue_real_30d": "Revenus réels (Stripe 30j)",
       "metrics": {
         "tickets_sold": "Billets vendus",
+        "total_sales": "Ventes totales",
+        "commissions": "Commissions",
         "active_events": "Événements actifs",
         "top_event": "Meilleur événement",
         "total": "Total",
@@ -762,6 +769,10 @@
       "extra_bottle": "Bouteille extra {{price}}",
       "not_available": "Cette table VIP n'est plus disponible.",
       "load_failed": "Impossible de charger les tables VIP."
+    },
+    "realtime": {
+      "title": "Mise à jour en temps réel",
+      "body": "Cet événement a été mis à jour. Affichage des dernières données…"
     }
   },
   "resale": {
@@ -885,13 +896,17 @@
     "card_title": "Notifications",
     "card_subtitle": "Activez seulement ce qui vous intéresse. Évitez le spam.",
     "items": {
+      "push": { "label": "Push", "desc": "Recevoir des notifications push sur votre appareil." },
+      "email": { "label": "Email", "desc": "Recevoir des notifications par email." },
+      "sms": { "label": "SMS", "desc": "Recevoir des notifications par SMS (si un téléphone est configuré)." },
       "purchase": { "label": "Achats", "desc": "Confirmations et état des achats." },
       "reminders": { "label": "Rappels", "desc": "Rappels d'événements et alertes à proximité." },
       "resale": { "label": "Revente", "desc": "Changements d'état des reventes." },
       "stock": { "label": "Stock", "desc": "Alertes de stock faible / complet (organisateurs)." },
       "realtime_sales": { "label": "Ventes en temps réel", "desc": "Alertes de nouvelles ventes (organisateurs)." },
       "daily_summary": { "label": "Résumé quotidien", "desc": "Résumé d'activité (organisateurs/admin)." },
-      "thresholds": { "label": "Seuils", "desc": "Alertes par seuils de stock (organisateurs)." }
+      "thresholds": { "label": "Seuils", "desc": "Alertes par seuils de stock (organisateurs)." },
+      "marketing": { "label": "Offres", "desc": "Réductions et offres (optionnel)." }
     }
   },
   "my_resales": {
