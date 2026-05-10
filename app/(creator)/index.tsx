@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, StatusBar, AppState, Linking } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Calendar, Plus, Ticket, BarChart3, LogOut, ScanLine, Users, CreditCard, ArrowUpRight, Flame, ChevronRight, Menu, Activity, Trash2, FileText } from 'lucide-react-native';
+import { Calendar, Plus, Ticket, BarChart3, LogOut, ScanLine, Users, CreditCard, ArrowUpRight, Flame, ChevronRight, Menu, Activity, Trash2, FileText } from '@/lib/icons';
 import { router, useFocusEffect } from 'expo-router';
 import { useAuth } from '@/lib/AuthContext';
 import { useEvents } from '@/lib/EventContext';
@@ -737,10 +737,6 @@ export default function CreatorDashboard() {
         style={StyleSheet.absoluteFill}
       />
       
-      {/* Background Ambient Glow */}
-      <View style={styles.glowTopLeft} />
-      <View style={styles.glowBottomRight} />
-
       <SafeAreaView style={styles.content}>
         <ScrollView 
             contentContainerStyle={[
