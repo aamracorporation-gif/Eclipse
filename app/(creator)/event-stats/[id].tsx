@@ -2,7 +2,7 @@ import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert } from 'rea
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
-import { ArrowLeft, DollarSign, Ticket, Users, TrendingUp } from 'lucide-react-native';
+import { ArrowLeft, DollarSign, Ticket, Users, TrendingUp } from '@/lib/icons';
 import { useEvents } from '@/lib/EventContext';
 import { useState, useEffect } from 'react';
 import { Colors } from '@/constants/Colors';
@@ -41,39 +41,45 @@ export default function EventStatsScreen() {
     // Initial fetch to ensure accuracy
     const fetchFreshStats = async () => {
       try {
-        const { data: eventData, error: eventError } = await supabase
-          .from('events')
-          .select('sold, ticket_types(id, name, price, quantity, sold)')
-          .eq('id', event.id)
-          .single();
+        const [{ data: typesData, error: typesErr }, { data: ticketsData, error: ticketsErr }] = await Promise.all([
+          supabase
+            .from('event_ticket_types')
+            .select('id, name, price, quantity, is_active, deleted_at')
+            .eq('event_id', event.id),
+          supabase
+            .from('tickets')
+            .select('ticket_type_id, quantity, total_price, status, ticket_status')
+            .eq('event_id', event.id),
+        ]);
 
-        if (eventData) {
-            // Calculate revenue
-            const types = eventData.ticket_types || [];
-            const revenue = types.reduce((acc: number, t: any) => {
-                const price = typeof t.price === 'string' ? parseFloat(t.price.replace(',', '.')) : t.price;
-                return acc + (t.sold * price);
-            }, 0);
-            
-            // If no types but sold count exists (legacy/simple events), estimate revenue
-            let finalRevenue = revenue;
-            if (revenue === 0 && eventData.sold > 0) {
-                 const price = parseFloat(event.price?.replace(',', '.') || '0');
-                 finalRevenue = eventData.sold * price;
-            }
+        if (typesErr) throw typesErr;
+        if (ticketsErr) throw ticketsErr;
 
-            setStats({
-                sold: eventData.sold,
-                revenue: finalRevenue,
-                ticketTypes: types.map((t: any) => ({
-                    id: t.id,
-                    name: t.name,
-                    price: t.price,
-                    quantity: t.quantity,
-                    sold: t.sold
-                }))
-            });
+        const types = (typesData || []).filter((t: any) => !t?.deleted_at && (t?.is_active ?? true));
+
+        const tickets = (ticketsData || []) as any[];
+        const validTickets = tickets.filter((t) => !(t?.status === 'cancelled' || t?.ticket_status === 'invalidated'));
+        const totalSoldUnits = validTickets.reduce((acc, t) => acc + (Number(t?.quantity) || 1), 0);
+        const totalRevenue = validTickets.reduce((acc, t) => acc + (Number(t?.total_price) || 0), 0);
+
+        const soldByType = new Map<string, number>();
+        for (const row of validTickets) {
+          const tid = row?.ticket_type_id ? String(row.ticket_type_id) : null;
+          if (!tid) continue;
+          soldByType.set(tid, (soldByType.get(tid) || 0) + (Number(row?.quantity) || 1));
         }
+
+        setStats({
+          sold: totalSoldUnits,
+          revenue: totalRevenue,
+          ticketTypes: types.map((t: any) => ({
+            id: t.id,
+            name: t.name,
+            price: Number(t.price) || 0,
+            quantity: Number(t.quantity) || 0,
+            sold: soldByType.get(String(t.id)) || 0,
+          })),
+        });
       } catch (e) {
         console.error("Error fetching stats:", e);
       }
@@ -97,6 +103,26 @@ export default function EventStatsScreen() {
             // We could increment locally but re-fetching ensures consistency with DB triggers
             fetchFreshStats();
         }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'event_ticket_types',
+          filter: `event_id=eq.${event.id}`,
+        },
+        () => fetchFreshStats()
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'events',
+          filter: `id=eq.${event.id}`,
+        },
+        () => fetchFreshStats()
       )
       .subscribe();
 
@@ -128,7 +154,7 @@ export default function EventStatsScreen() {
 
   // Use stats from state
   const totalRevenue = stats.revenue;
-  const totalCapacity = event.capacity;
+  const totalCapacity = stats.ticketTypes.reduce((acc, t: any) => acc + (Number(t.quantity) || 0), 0);
   const totalTicketsSold = stats.sold; // Use DB source of truth
   
   const percentageSold = totalCapacity > 0 ? Math.round((totalTicketsSold / totalCapacity) * 100) : 0;
@@ -206,7 +232,7 @@ export default function EventStatsScreen() {
               <View style={styles.ticketRight}>
                 <Text style={styles.ticketSoldText}>{ticket.sold} / {ticket.quantity}</Text>
                 <Text style={styles.ticketRevenueText}>
-                    {new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' }).format(ticket.sold * ticket.price)}
+                    {new Intl.NumberFormat(localeTag, { style: 'currency', currency: 'EUR' }).format((Number(ticket.sold) || 0) * (Number(ticket.price) || 0))}
                 </Text>
               </View>
             </GlassView>
