@@ -74,7 +74,14 @@ export default function CreatorLayout() {
   }
 
   if (!user) {
-    return <Redirect href="/(auth)/login" />;
+    return (
+      <Redirect
+        href={{
+          pathname: '/auth-required',
+          params: { titleKey: 'auth.login', subtitleKey: 'profile.sign_in_prompt' },
+        } as any}
+      />
+    );
   }
 
   if (!isAdminEmail && profileRole !== 'organizer' && profileRole !== 'admin') {
