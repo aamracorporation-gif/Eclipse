@@ -1,4 +1,4 @@
-import { View, Text, StyleSheet, FlatList, Image, TouchableOpacity, Alert } from 'react-native';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, Alert } from 'react-native';
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
@@ -9,11 +9,13 @@ import { Colors } from '@/constants/Colors';
 import { GlassView } from '@/components/ui/GlassView';
 import { ThemedButton } from '@/components/ui/ThemedButton';
 import { DiscoLoader } from '@/components/ui/DiscoLoader';
-import { ArrowLeft, Tag, Calendar, MapPin, Trash2, CheckCircle, Clock } from '@/lib/icons';
+import { ArrowLeft, Tag, Calendar, MapPin, Trash2, CheckCircle, Clock, LogIn } from '@/lib/icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useResponsive } from '@/lib/responsive';
 import { useTranslation } from 'react-i18next';
 import { useI18n } from '@/lib/I18nContext';
+import { AuthRequiredScreen } from '@/components/ui/AuthRequiredScreen';
+import { getErrorMessage } from '@/lib/errorHelpers';
 
 export default function MyResalesScreen() {
   const { user } = useAuth();
@@ -28,6 +30,8 @@ export default function MyResalesScreen() {
   const [isCancelling, setIsCancelling] = useState(false);
   const refreshTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  const userId = user?.id || null;
+
   const safeBack = () => {
     const canGoBack = (router as any)?.canGoBack?.();
     if (canGoBack) router.back();
@@ -35,10 +39,9 @@ export default function MyResalesScreen() {
   };
 
   const fetchMyResales = useCallback(async () => {
-    if (!user) return;
+    if (!userId) return;
     try {
       setLoading(true);
-      // Hard-clean expired tickets/resales (event ended >= 5h ago) before loading resale UI.
       await supabase.rpc('purge_expired_tickets_and_resales');
       const { data, error } = await supabase
         .from('resale_listings')
@@ -55,46 +58,45 @@ export default function MyResalesScreen() {
             )
           )
         `)
-        .eq('seller_id', user.id)
+        .eq('seller_id', userId)
         .order('created_at', { ascending: false });
 
       if (error) throw error;
       setListings(data || []);
     } catch (error) {
-      console.error('Error fetching resales:', error);
+      Alert.alert(t('common.error'), getErrorMessage(error));
     } finally {
       setLoading(false);
     }
-  }, [user]);
+  }, [t, userId]);
 
   const scheduleRefresh = useCallback(() => {
-    if (!user) return;
     if (refreshTimeoutRef.current) clearTimeout(refreshTimeoutRef.current);
     refreshTimeoutRef.current = setTimeout(() => {
       fetchMyResales();
     }, 250);
-  }, [fetchMyResales, user]);
+  }, [fetchMyResales]);
 
   useFocusEffect(
     useCallback(() => {
-      if (user) fetchMyResales();
+      fetchMyResales();
       return () => {
         if (refreshTimeoutRef.current) {
           clearTimeout(refreshTimeoutRef.current);
           refreshTimeoutRef.current = null;
         }
       };
-    }, [fetchMyResales, user])
+    }, [fetchMyResales])
   );
 
   useEffect(() => {
-    if (!user) return;
+    if (!userId) return;
 
     const channel = supabase
-      .channel(`my_resales_${user.id}`)
+      .channel(`my_resales_${userId}`)
       .on(
         'postgres_changes',
-        { event: '*', schema: 'public', table: 'resale_listings', filter: `seller_id=eq.${user.id}` },
+        { event: '*', schema: 'public', table: 'resale_listings', filter: `seller_id=eq.${userId}` },
         () => scheduleRefresh()
       )
       .subscribe();
@@ -106,16 +108,16 @@ export default function MyResalesScreen() {
         refreshTimeoutRef.current = null;
       }
     };
-  }, [scheduleRefresh, user]);
+  }, [scheduleRefresh, user?.id, userId]);
 
   const cancelResale = async (_listingId: string, ticketId: string) => {
     Alert.alert(
-      'Cancelar Venta',
-      '¿Estás seguro de que quieres retirar esta entrada de la reventa? Volverá a estar disponible en tus entradas.',
+      t('tickets.cancel_sale_title'),
+      t('tickets.cancel_sale_body'),
       [
-        { text: 'No', style: 'cancel' },
+        { text: t('common.cancel'), style: 'cancel' },
         {
-          text: 'Sí, retirar',
+          text: t('tickets.cancel_sale_confirm'),
           onPress: async () => {
             try {
               setIsCancelling(true);
@@ -229,6 +231,17 @@ export default function MyResalesScreen() {
     );
   };
 
+  if (!user) {
+    return (
+      <AuthRequiredScreen
+        title={t('auth.login')}
+        subtitle={t('profile.sign_in_prompt')}
+        ctaLabel={t('auth.login')}
+        Icon={LogIn}
+      />
+    );
+  }
+
   return (
     <View style={styles.container}>
       <LinearGradient
@@ -252,23 +265,22 @@ export default function MyResalesScreen() {
           <ArrowLeft size={24} color="white" />
         </TouchableOpacity>
         <Text style={[styles.headerTitle, { fontSize: scaleFont(24) }]} numberOfLines={1}>
-          Mis Ventas
+          {t('resale.my_sales_title')}
         </Text>
       </View>
 
-      {/* Global Loading Overlay for Cancellation */}
       {isCancelling && (
         <View style={styles.loadingOverlay}>
           <GlassView intensity={40} style={styles.loadingCard}>
             <DiscoLoader size={74} />
-            <Text style={styles.loadingText}>Procesando...</Text>
+            <Text style={styles.loadingText}>{t('common.loading')}</Text>
           </GlassView>
         </View>
       )}
 
       {loading ? (
         <View style={styles.center}>
-          <DiscoLoader label="Cargando ventas…" size={150} />
+          <DiscoLoader label={t('resale.my_sales_loading')} size={150} />
         </View>
       ) : listings.length === 0 ? (
         <View style={styles.emptyContainer}>
@@ -276,9 +288,9 @@ export default function MyResalesScreen() {
             <View style={styles.emptyIcon}>
               <Tag size={28} color={Colors.dark.textSecondary} />
             </View>
-            <Text style={styles.emptyText}>No tienes entradas en reventa</Text>
+            <Text style={styles.emptyText}>{t('resale.my_sales_empty')}</Text>
             <ThemedButton
-              title="Ver mis entradas"
+              title={t('resale.view_my_tickets')}
               onPress={() => router.push('/(tabs)/tickets')}
               style={styles.emptyButton}
             />
