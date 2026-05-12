@@ -33,7 +33,7 @@ Notifications.setNotificationHandler({
 });
 
 function RootLayoutNav({ fontsLoaded }: { fontsLoaded: boolean }) {
-  const { loading, user } = useAuth();
+  const { loading } = useAuth();
   const { t } = useTranslation();
   const [isAppReady, setIsAppReady] = useState(false);
 
