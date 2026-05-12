@@ -1,19 +1,17 @@
-import { View, Text, StyleSheet, FlatList, Image, TouchableOpacity, Alert, RefreshControl, ScrollView, Platform, StatusBar, Animated, Easing } from 'react-native';
+import { View, Text, StyleSheet, FlatList, Image, TouchableOpacity, Alert, RefreshControl, StatusBar, Animated, Easing } from 'react-native';
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
 import { Colors } from '@/constants/Colors';
 import { LinearGradient } from 'expo-linear-gradient';
 import { GlassView } from '@/components/ui/GlassView';
-import { ThemedButton } from '@/components/ui/ThemedButton';
 import { ThemedInput } from '@/components/ui/ThemedInput';
 import { DiscoLoader } from '@/components/ui/DiscoLoader';
 import { useCredit } from '@/lib/WalletContext';
-import { Calendar, MapPin, Tag, Filter, X, Search, User, Clock, ChevronDown, SlidersHorizontal, ChevronRight, Users, Sparkles } from '@/lib/icons';
+import { Calendar, Tag, Search, User, Clock, SlidersHorizontal, ChevronRight, Users, Sparkles } from '@/lib/icons';
 import { useAuth } from '@/lib/AuthContext';
 import { useRouter } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-// import Animated, { FadeInDown, FadeInUp } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
 import { usePaymentSheetHandler } from '@/components/PaymentSheetHandler';
 import { PurchaseConfirmation } from '@/components/PurchaseConfirmation';
@@ -372,7 +370,10 @@ export default function ResaleScreen() {
     Haptics.selectionAsync();
     
     if (!user) {
-      Alert.alert(t('resale.login_required_title'), t('resale.login_required_body'));
+      router.push({
+        pathname: '/auth-required',
+        params: { titleKey: 'resale.login_required_title', subtitleKey: 'resale.login_required_body' },
+      } as any);
       return;
     }
 
