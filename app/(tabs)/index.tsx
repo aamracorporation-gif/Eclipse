@@ -12,7 +12,6 @@ import { Colors } from '@/constants/Colors';
 import { useEvents, AppEvent } from '@/lib/EventContext';
 import { useResponsive } from '@/lib/responsive';
 import { GlassView } from '@/components/ui/GlassView';
-import { DiscoLoader } from '@/components/ui/DiscoLoader';
 import DateSelector from '@/components/DateSelector';
 import AdvancedFilters, { FilterState } from '@/components/AdvancedFilters';
 
