@@ -1,9 +1,9 @@
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, Alert } from 'react-native';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'expo-router';
 import { useAuth } from '@/lib/AuthContext';
 import { supabase } from '@/lib/supabase';
-import { Users, Plus, Mail, Shield, ChevronLeft, Trash2 } from '@/lib/icons';
+import { Users, Plus, ChevronLeft, Trash2 } from '@/lib/icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Colors } from '@/constants/Colors';
 import { GlassView } from '@/components/ui/GlassView';
@@ -25,11 +25,7 @@ export default function ManageWorkers() {
     else router.replace('/(creator)');
   };
 
-  useEffect(() => {
-    fetchWorkers();
-  }, [user]);
-
-  const fetchWorkers = async () => {
+  const fetchWorkers = useCallback(async () => {
     if (!user) return;
     try {
       setLoading(true);
@@ -60,7 +56,11 @@ export default function ManageWorkers() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [t, user]);
+
+  useEffect(() => {
+    fetchWorkers();
+  }, [fetchWorkers]);
 
   const handleDeleteWorker = (id: string, name: string) => {
     Alert.alert(
@@ -76,7 +76,7 @@ export default function ManageWorkers() {
               const { error } = await supabase.from('workers').delete().eq('id', id);
               if (error) throw error;
               fetchWorkers();
-            } catch (error) {
+            } catch {
               Alert.alert(t('common.error'), t('creator.workers.delete_failed'));
             }
           }
