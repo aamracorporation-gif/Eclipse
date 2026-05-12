@@ -1,8 +1,8 @@
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
-import { ArrowLeft, DollarSign, Ticket, Users, TrendingUp } from '@/lib/icons';
+import { ArrowLeft, DollarSign, Ticket } from '@/lib/icons';
 import { useEvents } from '@/lib/EventContext';
 import { useState, useEffect } from 'react';
 import { Colors } from '@/constants/Colors';
@@ -16,9 +16,9 @@ import { useI18n } from '@/lib/I18nContext';
 export default function EventStatsScreen() {
   const { id } = useLocalSearchParams();
   const router = useRouter();
-  const { getEventById, updateEvent } = useEvents();
+  const { getEventById } = useEvents();
   const event = getEventById(id as string);
-  const { horizontalPadding, maxContentWidth, scaleFont, isTablet } = useResponsive();
+  const { horizontalPadding, maxContentWidth, scaleFont } = useResponsive();
   const { t } = useTranslation();
   const { language } = useI18n();
   const localeTag = language === 'en' ? 'en-US' : language === 'fr' ? 'fr-FR' : 'es-ES';
