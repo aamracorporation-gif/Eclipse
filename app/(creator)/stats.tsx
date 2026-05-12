@@ -12,8 +12,6 @@ import { useEffect, useMemo, useState } from 'react';
 import { ArrowLeft, ArrowUpRight, ArrowDownRight, Download, Filter, LineChart, BarChart2, PieChart, Activity } from '@/lib/icons';
 import { useTranslation } from 'react-i18next';
 
-type TimeFilter = 'today' | 'week' | 'month' | 'custom';
-
 export default function OrganizerStatsScreen() {
   const router = useRouter();
   const { events } = useEvents();
@@ -28,8 +26,7 @@ export default function OrganizerStatsScreen() {
   };
 
   const myEvents = useMemo(() => events.filter((e) => e.creatorId === user?.id), [events, user?.id]);
-  const myEventIdsKey = useMemo(() => myEvents.map((e) => e.id).filter(Boolean).sort().join('|'), [myEvents]);
-  const myEventIds = useMemo(() => (myEventIdsKey ? myEventIdsKey.split('|') : []), [myEventIdsKey]);
+  const myEventIds = useMemo(() => myEvents.map((e) => e.id).filter(Boolean).sort(), [myEvents]);
 
   const [totals, setTotals] = useState<{ revenue: number; tickets: number }>({ revenue: 0, tickets: 0 });
 
@@ -65,28 +62,11 @@ export default function OrganizerStatsScreen() {
     return () => {
       cancelled = true;
     };
-  }, [myEventIdsKey, user?.id]);
+  }, [myEventIds, user?.id]);
 
   const totalTicketsSold = totals.tickets;
   const totalRevenue = totals.revenue;
   const uniqueAttendees = totalTicketsSold;
-
-  const StatChange = ({ value, positive }: { value: string; positive: boolean }) => (
-    <View style={styles.changeRow}>
-      {positive ? (
-        <ArrowUpRight size={14} color={Colors.dark.success} />
-      ) : (
-        <ArrowDownRight size={14} color={Colors.dark.error} />
-      )}
-      <Text style={[styles.changeText, { color: positive ? Colors.dark.success : Colors.dark.error }]}>
-        {value}
-      </Text>
-    </View>
-  );
-
-  const metricCols = isDesktop ? 4 : isTablet ? 2 : 1;
-  const metricsGap = 20;
-  const metricCardWidth = metricCols > 1 ? (maxContentWidth - metricsGap * (metricCols - 1)) / metricCols : undefined;
 
   return (
     <View style={styles.container}>
