@@ -34,7 +34,7 @@ export default function ScanScreen() {
     if (!permission?.granted) {
       requestPermission();
     }
-  }, []);
+  }, [permission?.granted, requestPermission]);
 
   const playFeedback = async (success: boolean) => {
     try {
