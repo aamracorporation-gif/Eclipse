@@ -16,10 +16,15 @@ export default function WorkerLayout() {
     );
   }
 
-  // If not logged in or not a worker, redirect
-  // Note: logic might need refinement if we want to allow normal users to mistakenly hit this URL and get redirected to home
   if (!user) {
-    return <Redirect href="/(auth)/login" />;
+    return (
+      <Redirect
+        href={{
+          pathname: '/auth-required',
+          params: { titleKey: 'auth.login', subtitleKey: 'profile.sign_in_prompt' },
+        } as any}
+      />
+    );
   }
 
   if (!workerProfile) {
