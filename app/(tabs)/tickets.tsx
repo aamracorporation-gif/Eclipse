@@ -12,6 +12,7 @@ import { GlassView } from '@/components/ui/GlassView';
 import { ThemedButton } from '@/components/ui/ThemedButton';
 import { ThemedInput } from '@/components/ui/ThemedInput';
 import { DiscoLoader } from '@/components/ui/DiscoLoader';
+import { AuthRequiredScreen } from '@/components/ui/AuthRequiredScreen';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import QRCode from 'react-native-qrcode-svg';
 import * as Print from 'expo-print';
@@ -471,17 +472,6 @@ export default function TicketsScreen() {
     }
   };
 
-  const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
-    return date.toLocaleDateString(localeTag, {
-      weekday: 'short',
-      day: 'numeric',
-      month: 'short',
-      hour: '2-digit',
-      minute: '2-digit',
-    });
-  };
-
   const handleDownloadPDF = async (ticket: ExtendedTicket) => {
     const isOnResale =
       ticket.status === 'resale' ||
@@ -923,35 +913,12 @@ export default function TicketsScreen() {
 
   if (!user) {
     return (
-      <View style={styles.container}>
-        <LinearGradient
-          colors={[Colors.dark.background, '#1e1b4b']}
-          style={styles.authPrompt}
-        >
-          <GlassView intensity={30} style={styles.authCard}>
-            <View style={styles.iconContainer}>
-              <LogIn size={48} color={Colors.dark.primary} />
-            </View>
-            <Text style={styles.authPromptTitle}>{t('auth.login')}</Text>
-            <Text style={styles.authPromptText}>
-              {t('tickets.login_required_body')}
-            </Text>
-            
-            <ThemedButton 
-              title={t('auth.login')} 
-              onPress={() => router.push('/(auth)/login')} 
-              style={styles.authButton}
-            />
-            
-            <ThemedButton 
-              title={t('auth.register')} 
-              onPress={() => router.push('/(auth)/register')} 
-              variant="outline"
-              style={styles.authButton}
-            />
-          </GlassView>
-        </LinearGradient>
-      </View>
+      <AuthRequiredScreen
+        title={t('auth.login')}
+        subtitle={t('tickets.login_required_body')}
+        ctaLabel={t('auth.login')}
+        Icon={LogIn}
+      />
     );
   }
 
