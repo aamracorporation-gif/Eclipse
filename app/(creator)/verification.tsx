@@ -1,5 +1,5 @@
 import { View, Text, StyleSheet, TouchableOpacity, Image, Alert, Linking, Modal, ScrollView } from 'react-native';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, useCallback } from 'react';
 import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -46,6 +46,7 @@ export default function OrganizerVerificationScreen() {
   const { user, signOut } = useAuth();
   const { horizontalPadding, maxContentWidth, scaleFont } = useResponsive();
   const { t } = useTranslation();
+  const userId = user?.id ?? null;
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -77,7 +78,7 @@ export default function OrganizerVerificationScreen() {
     if (verificationStatus === 'needs_correction') return t('creator.verification.status.needs_correction');
     if (verificationStatus === 'rejected') return t('creator.verification.status.rejected');
     return t('creator.verification.status.pending');
-  }, [verificationStatus]);
+  }, [t, verificationStatus]);
 
   const statusColor = useMemo(() => {
     if (verificationStatus === 'verified') return '#4ade80';
@@ -86,14 +87,14 @@ export default function OrganizerVerificationScreen() {
     return '#f59e0b';
   }, [verificationStatus]);
 
-  const fetchData = async () => {
-    if (!user?.id) return;
+  const fetchData = useCallback(async () => {
+    if (!userId) return;
     setLoading(true);
     try {
       let { data: profileData, error: profileError } = await supabase
         .from('profiles')
         .select('*')
-        .eq('id', user.id)
+        .eq('id', userId)
         .maybeSingle();
       if (profileError) throw profileError;
 
@@ -107,7 +108,7 @@ export default function OrganizerVerificationScreen() {
       if (currentVerificationStatus === 'verified' && profileData && !profileData.stripe_account_id) {
         try {
           await createStripeConnectAccount();
-          const { data: updatedProfile } = await supabase.from('profiles').select('*').eq('id', user.id).maybeSingle();
+          const { data: updatedProfile } = await supabase.from('profiles').select('*').eq('id', userId).maybeSingle();
           if (updatedProfile) profileData = updatedProfile;
         } catch {}
       }
@@ -125,30 +126,30 @@ export default function OrganizerVerificationScreen() {
       const { data: docsData, error: docsError } = await supabase
         .from('organizer_verification_documents')
         .select('user_id, business_license_path, tax_id_path, venue_photo_path')
-        .eq('user_id', user.id)
+        .eq('user_id', userId)
         .maybeSingle();
       if (docsError) throw docsError;
       setDocs(docsData ?? null);
-    } catch (e: any) {
+    } catch {
       setDocs(null);
       setVerificationStatus('pending_verification');
       setRejectionReason(null);
     } finally {
       setLoading(false);
     }
-  };
+  }, [router, userId]);
 
   useEffect(() => {
     fetchData();
-  }, [user?.id]);
+  }, [fetchData]);
 
   useEffect(() => {
-    if (!user?.id) return;
+    if (!userId) return;
     const channel = supabase
-      .channel(`organizer-profile-verification-${user.id}`)
+      .channel(`organizer-profile-verification-${userId}`)
       .on(
         'postgres_changes',
-        { event: 'UPDATE', schema: 'public', table: 'profiles', filter: `id=eq.${user.id}` },
+        { event: 'UPDATE', schema: 'public', table: 'profiles', filter: `id=eq.${userId}` },
         (payload) => {
           const next = (payload.new as any)?.verification_status ?? null;
           setVerificationStatus(next);
@@ -159,7 +160,7 @@ export default function OrganizerVerificationScreen() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [user?.id]);
+  }, [fetchData, userId]);
 
   const handleSignOut = async () => {
     try {
@@ -197,8 +198,8 @@ export default function OrganizerVerificationScreen() {
     }
   };
 
-  const refreshStripe = async () => {
-    if (!user?.id) return;
+  const refreshStripe = useCallback(async () => {
+    if (!userId) return;
     setStripeLoading(true);
     try {
       const status = await refreshStripeConnectStatus();
@@ -215,15 +216,15 @@ export default function OrganizerVerificationScreen() {
     } finally {
       setStripeLoading(false);
     }
-  };
+  }, [fetchData, t, userId]);
 
   useEffect(() => {
-    if (!user?.id) return;
+    if (!userId) return;
     if (verificationStatus !== 'verified') return;
     if (!stripeStatus.stripe_account_id) return;
     if (stripeStatus.stripe_onboarding_completed) return;
     refreshStripe();
-  }, [user?.id, verificationStatus, stripeStatus.stripe_account_id, stripeStatus.stripe_onboarding_completed]);
+  }, [refreshStripe, stripeStatus.stripe_account_id, stripeStatus.stripe_onboarding_completed, userId, verificationStatus]);
 
   const pickBusinessDoc = async (kind: 'business_license' | 'tax_id') => {
     if (!canUpload) {
