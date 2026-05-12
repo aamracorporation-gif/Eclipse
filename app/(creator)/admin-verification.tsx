@@ -379,7 +379,7 @@ export default function AdminVerificationScreen() {
         setLoadingMore(false);
       }
     }
-  }, [activeFilter, buildProfilesQuery, extractMissingColumn, searchDebounced]);
+  }, [activeFilter, buildProfilesQuery, searchDebounced]);
 
   const ensureDocsLoaded = async (targetUserId: string) => {
     if (docsByUser[targetUserId]) return;
