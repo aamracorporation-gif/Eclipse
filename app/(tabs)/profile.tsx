@@ -9,6 +9,7 @@ import { Colors } from '@/constants/Colors';
 import { GlassView } from '@/components/ui/GlassView';
 import { ThemedButton } from '@/components/ui/ThemedButton';
 import { DiscoLoader } from '@/components/ui/DiscoLoader';
+import { AuthRequiredScreen } from '@/components/ui/AuthRequiredScreen';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useResponsive } from '@/lib/responsive';
 import * as Haptics from 'expo-haptics';
@@ -17,12 +18,9 @@ import { useEvents } from '@/lib/EventContext';
 import { useTranslation } from 'react-i18next';
 import { useI18n } from '@/lib/I18nContext';
 import { invokeEdgeFunction } from '@/lib/edgeFunctions';
-// import Animated, { FadeInDown, FadeInUp, ZoomIn, useSharedValue, useAnimatedStyle, withRepeat, withTiming, Easing, withSequence, withDelay, interpolate, Extrapolate, runOnJS } from 'react-native-reanimated';
-
-// const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
 export default function ProfileScreen() {
-  const { user, signOut, loading, workerProfile } = useAuth();
+  const { user, signOut, workerProfile } = useAuth();
   const { events, refreshEvents } = useEvents();
   const { t } = useTranslation();
   const { language, setLanguage, setDeviceLanguage } = useI18n();
@@ -48,7 +46,6 @@ export default function ProfileScreen() {
     verification_rejection_reason?: string | null;
   } | null>(null);
   const [deletingAccount, setDeletingAccount] = useState(false);
-  const [organizerEventCounts, setOrganizerEventCounts] = useState<{ total: number; upcoming: number }>({ total: 0, upcoming: 0 });
   const [resaleListings, setResaleListings] = useState<any[]>([]);
   const [loadingResales, setLoadingResales] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -185,17 +182,7 @@ export default function ProfileScreen() {
               suspended_reason: (data.suspended_reason as any) ?? null,
               verification_rejection_reason: (data.verification_rejection_reason as any) ?? null,
             });
-            const nowIso = new Date().toISOString();
-            const [allEvents, upcomingEvents, myEvents] = await Promise.all([
-              supabase.from('events').select('id', { count: 'exact', head: true }).eq('creator_id', user.id),
-              supabase.from('events').select('id', { count: 'exact', head: true }).eq('creator_id', user.id).gte('event_date', nowIso),
-              supabase.from('events').select('id').eq('creator_id', user.id),
-            ]);
-            setOrganizerEventCounts({
-              total: allEvents.count ?? 0,
-              upcoming: upcomingEvents.count ?? 0,
-            });
-
+            const myEvents = await supabase.from('events').select('id').eq('creator_id', user.id);
             const myEventIds = ((myEvents.data ?? []) as any[]).map((e) => e.id).filter(Boolean);
             if (!myEventIds.length) {
               setOrganizerStats({ revenue: 0, tickets: 0 });
@@ -217,7 +204,6 @@ export default function ProfileScreen() {
             setOrganizerStats({ revenue: 0, tickets: 0 });
             setVerificationStatus(null);
             setOrganizerMeta(null);
-            setOrganizerEventCounts({ total: 0, upcoming: 0 });
           }
         }
       } catch (e) {
@@ -254,7 +240,6 @@ export default function ProfileScreen() {
               setOrganizerStats({ revenue: 0, tickets: 0 });
               setVerificationStatus(null);
               setOrganizerMeta(null);
-              setOrganizerEventCounts({ total: 0, upcoming: 0 });
             }
           }
         }
@@ -529,52 +514,14 @@ export default function ProfileScreen() {
     );
   };
 
-  const formatDate = (dateString: string) => {
-    try {
-      return new Date(dateString).toLocaleDateString(localeTag, {
-        day: 'numeric',
-        month: 'short',
-        year: 'numeric',
-      });
-    } catch (e) {
-      return t('profile.unknown_date');
-    }
-  };
-
   if (!user) {
     return (
-      <View style={styles.container}>
-        <StatusBar barStyle="light-content" />
-        <LinearGradient
-          colors={[Colors.dark.background, '#1e1b4b']}
-          style={StyleSheet.absoluteFill}
-        />
-
-        <View style={styles.authPrompt}>
-          <GlassView intensity={40} style={styles.authCard}>
-            <View style={styles.iconContainer}>
-              <User size={48} color={Colors.dark.primary} />
-            </View>
-            <Text style={styles.authPromptTitle}>{t('tabs.profile')}</Text>
-            <Text style={styles.authPromptText}>
-              {t('profile.sign_in_prompt')}
-            </Text>
-            
-            <ThemedButton 
-              title={t('auth.login')} 
-              onPress={() => router.push('/(auth)/login')} 
-              style={styles.authButton}
-            />
-            
-            <ThemedButton 
-              title={t('auth.register')} 
-              onPress={() => router.push('/(auth)/register')} 
-              variant="outline"
-              style={styles.authButton}
-            />
-          </GlassView>
-        </View>
-      </View>
+      <AuthRequiredScreen
+        title={t('tabs.profile')}
+        subtitle={t('profile.sign_in_prompt')}
+        ctaLabel={t('auth.login')}
+        Icon={User}
+      />
     );
   }
 
