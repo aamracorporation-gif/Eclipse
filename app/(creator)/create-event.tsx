@@ -1,7 +1,8 @@
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, Image, KeyboardAvoidingView, Platform, Modal, Pressable, Keyboard, ActionSheetIOS } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, Image, Platform, Modal, Pressable, Keyboard, ActionSheetIOS } from 'react-native';
 import { useState, useEffect, useMemo } from 'react';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useEvents, TicketType } from '@/lib/EventContext';
 import { useAuth } from '@/lib/AuthContext';
 import { getErrorMessage } from '@/lib/errorHelpers';
@@ -43,6 +44,7 @@ export default function CreateEventScreen() {
   const { id, isEditing: isEditingParam } = useLocalSearchParams<{ id: string, isEditing: string }>();
   const { addEvent, updateEvent, getEventById } = useEvents();
   const { user } = useAuth();
+  const insets = useSafeAreaInsets();
   const { language } = useI18n();
   const { t } = useTranslation();
   const localeTag = language === 'en' ? 'en-US' : language === 'fr' ? 'fr-FR' : 'es-ES';
@@ -84,7 +86,6 @@ export default function CreateEventScreen() {
   const [timeText, setTimeText] = useState('');
 
   const [coordinates, setCoordinates] = useState<{latitude: number, longitude: number} | null>(null);
-  const [isGeocoding, setIsGeocoding] = useState(false);
   const [showMapModal, setShowMapModal] = useState(false);
   const [mapRegion, setMapRegion] = useState<Region>({
     latitude: 40.4168,
@@ -156,7 +157,7 @@ export default function CreateEventScreen() {
       }
     };
     checkStripe();
-  }, [user]);
+  }, [router, t, user]);
 
   const withTimeout = async <T,>(promise: Promise<T>, ms: number, label: string): Promise<T> => {
     let timeoutId: ReturnType<typeof setTimeout> | null = null;
@@ -465,7 +466,7 @@ export default function CreateEventScreen() {
         }
       })();
     }
-  }, [isEditing, eventId]);
+  }, [eventId, getEventById, isEditing, localeTag]);
 
   const onDateChange = (event: any, selectedDate?: Date) => {
     if (Platform.OS === 'android') {
@@ -502,61 +503,6 @@ export default function CreateEventScreen() {
   const confirmIOSDate = () => {
     setShowDatePicker(false);
     setShowTimePicker(false);
-  };
-
-  const validateDateText = () => {
-    // Regex for DD/MM/YYYY
-    const dateRegex = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/;
-    const match = dateText.match(dateRegex);
-
-    if (match) {
-      const day = parseInt(match[1], 10);
-      const month = parseInt(match[2], 10) - 1; // Month is 0-indexed
-      const year = parseInt(match[3], 10);
-
-      const newDate = new Date(date);
-      newDate.setFullYear(year, month, day);
-
-      // Check if date is valid
-      if (newDate.getFullYear() === year && newDate.getMonth() === month && newDate.getDate() === day) {
-        setDate(newDate);
-        setHasDateSelected(true);
-        // Format consistently
-        setDateText(newDate.toLocaleDateString(localeTag, { day: '2-digit', month: '2-digit', year: 'numeric' }));
-        return;
-      }
-    }
-    
-    // Invalid date, revert or show error? For now, revert if empty or invalid
-    if (hasDateSelected) {
-       setDateText(date.toLocaleDateString(localeTag, { day: '2-digit', month: '2-digit', year: 'numeric' }));
-    } else {
-       // Keep text but it won't submit
-    }
-  };
-
-  const validateTimeText = () => {
-    // Regex for HH:MM
-    const timeRegex = /^(\d{1,2}):(\d{2})$/;
-    const match = timeText.match(timeRegex);
-
-    if (match) {
-      const hours = parseInt(match[1], 10);
-      const minutes = parseInt(match[2], 10);
-
-      if (hours >= 0 && hours < 24 && minutes >= 0 && minutes < 60) {
-        const newDate = new Date(date);
-        newDate.setHours(hours, minutes);
-        setDate(newDate);
-        setHasTimeSelected(true);
-        setTimeText(newDate.toLocaleTimeString(localeTag, { hour: '2-digit', minute: '2-digit' }));
-        return;
-      }
-    }
-
-    if (hasTimeSelected) {
-       setTimeText(date.toLocaleTimeString(localeTag, { hour: '2-digit', minute: '2-digit' }));
-    }
   };
 
   const pickImage = async () => {
@@ -740,11 +686,6 @@ export default function CreateEventScreen() {
     if (ticketTypes.length === 0) return '0';
     const min = Math.min(...ticketTypes.map(t => t.price));
     return min.toString();
-  };
-
-  const handleValidateLocation = async () => {
-    // Open Map Modal instead of simple geocoding
-    setShowMapModal(true);
   };
 
   const handleMapSearch = async () => {
@@ -1271,10 +1212,10 @@ export default function CreateEventScreen() {
                                 showsMyLocationButton
                             />
                             <View style={{ position: 'absolute', top: '50%', left: '50%', marginTop: -24, marginLeft: -24, pointerEvents: 'none' }}>
-                                <MapPin size={48} color={Colors.dark.primary} fill="white" />
+                                <MapPin size={48} color={Colors.dark.primary} />
                             </View>
                             
-                            <View style={{ position: 'absolute', bottom: 30, left: 20, right: 20 }}>
+                            <View style={{ position: 'absolute', bottom: insets.bottom + 30, left: 20, right: 20 }}>
                                 <ThemedButton 
                                     title={t('creator.create_event.confirm_location')}
                                     onPress={confirmMapLocation}
