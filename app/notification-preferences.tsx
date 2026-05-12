@@ -2,7 +2,7 @@ import { View, Text, StyleSheet, Switch, TouchableOpacity, ScrollView } from 're
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
-import { ArrowLeft } from '@/lib/icons';
+import { ArrowLeft, LogIn } from '@/lib/icons';
 import { useEffect, useMemo, useState } from 'react';
 import { Colors } from '@/constants/Colors';
 import { GlassView } from '@/components/ui/GlassView';
@@ -10,6 +10,7 @@ import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/lib/AuthContext';
 import { DiscoLoader } from '@/components/ui/DiscoLoader';
 import { useTranslation } from 'react-i18next';
+import { AuthRequiredScreen } from '@/components/ui/AuthRequiredScreen';
 
 type Settings = {
   user_id: string;
@@ -106,6 +107,17 @@ export default function NotificationPreferencesScreen() {
   };
 
   type SettingsKey = keyof Settings & string;
+
+  if (!user) {
+    return (
+      <AuthRequiredScreen
+        title={t('notification_preferences.title')}
+        subtitle={t('profile.sign_in_prompt')}
+        ctaLabel={t('auth.login')}
+        Icon={LogIn}
+      />
+    );
+  }
 
   return (
     <View style={styles.container}>
