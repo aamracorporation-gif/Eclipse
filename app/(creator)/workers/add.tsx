@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { useRouter } from 'expo-router';
 import { useAuth } from '@/lib/AuthContext';
 import { supabase } from '@/lib/supabase';
-import { ChevronLeft, Mail, User, Shield } from '@/lib/icons';
+import { ChevronLeft, Mail, User } from '@/lib/icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Colors } from '@/constants/Colors';
 import { GlassView } from '@/components/ui/GlassView';
