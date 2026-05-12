@@ -1,5 +1,5 @@
 import { View, Text, StyleSheet, KeyboardAvoidingView, Platform, ScrollView, Alert, TouchableOpacity } from 'react-native';
-import { useMemo, useState, useEffect } from 'react';
+import { useMemo, useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '@/lib/AuthContext';
@@ -30,7 +30,6 @@ export default function RegisterScreen() {
   const [step, setStep] = useState(1);
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
-  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
   // Date Picker State
   const [birthDate, setBirthDate] = useState<Date | null>(null);
@@ -133,14 +132,7 @@ export default function RegisterScreen() {
     updateForm(key, value);
   };
 
-  // Auto-detect location when entering Step 2
-  useEffect(() => {
-    if (step === 2 && locationStatus === 'idle') {
-      detectLocation();
-    }
-  }, [step]);
-
-  const detectLocation = async () => {
+  const detectLocation = useCallback(async () => {
     setLocationStatus('detecting');
     try {
       const { status } = await Location.requestForegroundPermissionsAsync();
@@ -173,7 +165,14 @@ export default function RegisterScreen() {
       setLocationStatus('error');
       setManualLocation(true);
     }
-  };
+  }, []);
+
+  // Auto-detect location when entering Step 2
+  useEffect(() => {
+    if (step === 2 && locationStatus === 'idle') {
+      detectLocation();
+    }
+  }, [detectLocation, locationStatus, step]);
 
   const onDateChange = (event: any, selectedDate?: Date) => {
     setShowDatePicker(false);
@@ -307,7 +306,7 @@ export default function RegisterScreen() {
             setLoading(false);
             return false;
           }
-        } catch (e) { /* ignore */ }
+        } catch { /* ignore */ }
         setLoading(false);
       }
       return true;
@@ -803,7 +802,7 @@ export default function RegisterScreen() {
           {showPassword ? <EyeOff size={20} color="#ccc" /> : <Eye size={20} color="#ccc" />}
         </TouchableOpacity>
       } />
-      <ThemedInput placeholder="Confirmar contraseña" value={formData.confirmPassword} onChangeText={(t) => { touch('confirmPassword'); updateForm('confirmPassword', t); }} onBlur={() => touch('confirmPassword')} error={showFieldError('confirmPassword')} secureTextEntry={!showConfirmPassword} icon={Lock} />
+      <ThemedInput placeholder="Confirmar contraseña" value={formData.confirmPassword} onChangeText={(t) => { touch('confirmPassword'); updateForm('confirmPassword', t); }} onBlur={() => touch('confirmPassword')} error={showFieldError('confirmPassword')} secureTextEntry={!showPassword} icon={Lock} />
 
       <View style={styles.legalBox}>
         <TouchableOpacity activeOpacity={0.8} style={styles.legalRow} onPress={() => setAcceptedTerms(v => !v)}>
@@ -849,7 +848,7 @@ export default function RegisterScreen() {
             if (signInError) throw signInError;
             await invokeEdgeFunction('record-legal-acceptance', {});
             router.replace(formData.role === 'organizer' ? '/(creator)/verification' : '/(tabs)');
-          } catch (e: any) {
+          } catch {
             Alert.alert('Aún no verificado', 'Confirma el email y vuelve a intentarlo.');
           } finally {
             setEmailConfirmedLoading(false);
