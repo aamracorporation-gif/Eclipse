@@ -24,6 +24,7 @@ export default function ManageEventsScreen() {
 
   const adminEmail = ((process.env.EXPO_PUBLIC_ADMIN_EMAIL as any) ?? '').toString().trim().toLowerCase() || 'aamracorporation@gmail.com';
   const isAdminEmail = !!user?.email && user.email.toLowerCase() === adminEmail;
+  const metadataRole = useMemo(() => ((user?.user_metadata as any)?.role as any) ?? null, [user?.user_metadata]);
 
   useEffect(() => {
     if (!user?.id) return;
@@ -33,10 +34,10 @@ export default function ManageEventsScreen() {
         if (error) throw error;
         setProfileRole(((data as any)?.role as any) ?? null);
       } catch {
-        setProfileRole((user.user_metadata as any)?.role ?? null);
+        setProfileRole(metadataRole);
       }
     })();
-  }, [user?.id]);
+  }, [metadataRole, user?.id]);
 
   const isAdminDb = profileRole === 'admin';
   const isAdmin = isAdminDb || isAdminEmail;
