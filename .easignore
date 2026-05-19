@@ -1,7 +1,13 @@
 .expo
 .expo-home
 coverage
+android
+android_backup
 android/.gradle
 android/**/build
 android/local.properties
 supabase/.temp
+backend
+__tests__
+docs
+coverage
