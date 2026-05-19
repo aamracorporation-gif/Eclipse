@@ -11,12 +11,15 @@ interface GlassViewProps extends ViewProps {
 export function GlassView({ style, contentContainerStyle, intensity = 30, children, ...props }: GlassViewProps) {
   // On Android, we avoid BlurView completely to prevent touch issues
   if (Platform.OS === 'android') {
+    const flattened = StyleSheet.flatten(style) as any;
+    const backgroundColor = flattened?.backgroundColor ?? Colors.dark.surface;
+    const borderColor = flattened?.borderColor ?? Colors.dark.border;
     return (
       <View 
         style={[
           styles.container, 
           style, 
-          { backgroundColor: Colors.dark.surface, borderColor: Colors.dark.border }
+          { backgroundColor, borderColor }
         ]} 
         {...props}
       >

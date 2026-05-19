@@ -166,6 +166,80 @@
   "profile": {
     "notification_preferences": "Notification preferences",
     "notification_center": "Notification center",
+    "edit_profile": "Edit profile",
+    "edit": {
+      "title": "Edit profile",
+      "autosave": "Auto-save",
+      "show": "Show",
+      "hide": "Hide",
+      "save_confirm": "Save your profile changes?",
+      "autosave_prompt": "You have unsaved changes. Save now?",
+      "discard_confirm": "You have unsaved changes. Discard them?",
+      "discard": "Discard",
+      "fix_errors": "Fix the errors before saving.",
+      "sections": {
+        "account": "Account",
+        "personal": "Personal info",
+        "contact": "Contact",
+        "organizer": "Organizer"
+      },
+      "fields": {
+        "full_name": "Display name",
+        "first_name": "First name",
+        "last_name": "Last name",
+        "gender": "Gender",
+        "age": "Age",
+        "city": "City",
+        "country": "Country",
+        "club_name": "Venue / club name",
+        "business_email": "Business email",
+        "instagram": "Instagram",
+        "venue_address": "Venue address",
+        "fiscal_address": "Billing address",
+        "postal_code": "Postal code",
+        "responsible_name": "Responsible person",
+        "responsible_birthdate": "Responsible birthdate",
+        "iban": "IBAN"
+      },
+      "placeholders": {
+        "full_name": "Your name",
+        "first_name": "First name",
+        "last_name": "Last name",
+        "gender": "Optional",
+        "age": "Optional",
+        "phone": "+34…",
+        "city": "City",
+        "country": "Country",
+        "club_name": "Venue / club name",
+        "business_email": "contact@…",
+        "instagram": "@your_account",
+        "venue_address": "Venue address",
+        "fiscal_address": "Billing address",
+        "postal_code": "00000",
+        "responsible_name": "Responsible person's name",
+        "responsible_birthdate": "YYYY-MM-DD",
+        "iban": "ES…"
+      },
+      "errors": {
+        "name_required": "Enter your name.",
+        "invalid_name": "Invalid name.",
+        "invalid_city": "Invalid city.",
+        "invalid_country": "Invalid country.",
+        "invalid_gender": "Invalid value.",
+        "invalid_age": "Invalid age.",
+        "invalid_phone": "Invalid phone number.",
+        "invalid_text": "Emojis and special characters are not allowed.",
+        "invalid_email": "Invalid email.",
+        "invalid_instagram": "Invalid Instagram handle.",
+        "invalid_address": "Invalid address.",
+        "invalid_postal": "Invalid postal code.",
+        "invalid_birthdate": "Invalid date (YYYY-MM-DD).",
+        "invalid_iban": "Invalid IBAN.",
+        "location_incomplete": "Enter both city and country to validate.",
+        "location_not_found": "City/country not found. Check that it's correct.",
+        "location_check_failed": "Couldn't validate the location. Check your connection."
+      }
+    },
     "change_language": "Change language",
     "language": {
       "device": "Device language",
@@ -174,13 +248,28 @@
       "fr": "French"
     },
     "segment_panel": "Panel",
-    "segment_account": "Account",
+    "segment_my_profile": "My profile",
+    "segment_account": "Settings",
+    "section_profile": "Profile details",
+    "section_settings": "App preferences",
+    "section_settings_sub": "Language and notifications.",
+    "section_privacy": "Privacy and security",
+    "section_privacy_sub": "Legal info and data controls.",
+    "device_language": "System",
     "section_account": "ACCOUNT",
     "section_management": "MANAGEMENT",
     "section_staff": "STAFF",
     "sign_in_prompt": "Sign in to access your profile and manage your tickets",
     "name": "Name",
     "email": "Email",
+    "full_name": "Name",
+    "first_name": "First name",
+    "last_name": "Last name",
+    "phone": "Phone",
+    "city": "City",
+    "country": "Country",
+    "gender": "Gender",
+    "age": "Age",
     "wallet": "Eclipse Credit",
     "review_organizers": "Review organizers",
     "location_label": "Location",
@@ -304,6 +393,9 @@
     }
   },
   "creator": {
+    "tabs": {
+      "stats": "Stats"
+    },
     "dashboard": {
       "hello": "Hi, {{name}}",
       "role_admin": "Admin",
@@ -562,7 +654,19 @@
       }
     },
     "scan": {
-      "title": "Scan ticket",
+      "title": "Access",
+      "dashboard_title": "Access",
+      "dashboard_subtitle": "Validate tickets via QR or manual code.",
+      "camera_permission_title": "Camera permission",
+      "actions": {
+        "validate": "Validate",
+        "staff": "Staff"
+      },
+      "staff_subtitle": "Invite and manage your staff team for entry control.",
+      "manual_hint": "Format: QR text with no spaces. Useful if the QR is damaged or won't focus.",
+      "manual_placeholder": "Paste the QR code text here",
+      "helper_camera": "Recommended for fast entry checks.",
+      "helper_manual": "Use this if the QR is damaged or the scanner won't focus.",
       "aim_qr": "Point at the ticket QR code",
       "validating": "Validating...",
       "valid_title": "VALID TICKET!",
@@ -570,7 +674,7 @@
       "expired_banner": "EXPIRED TICKET",
       "not_recognized": "Code not recognized",
       "next_scan": "Next scan",
-      "na": "N/A",
+      "na": "No data",
       "labels": {
         "event": "Event:",
         "holder": "Holder:",
@@ -681,6 +785,24 @@
     "map_title": "Map",
     "map_subtitle": "In {{city}}",
     "map_subtitle_generic": "Discover by area",
+    "map_unavailable_title": "Map unavailable",
+    "map_unavailable_body": "Google Maps key is not configured for Android.\n\nAdd EXPO_PUBLIC_GOOGLE_MAPS_API_KEY in EAS and rebuild the APK.",
+    "map_sheet": {
+      "trending": "Trending",
+      "view_event": "View event",
+      "crowd_label": "Crowd",
+      "attendees_label": "Attendees",
+      "distance_label": "Distance",
+      "crowd_info_title": "What does \"Crowd\" mean?",
+      "crowd_info_body": "It’s an estimate of how busy the event is (low/medium/full) based on signals like sales, check-ins and real-time activity.",
+      "attendees_info_title": "What does \"Attendees\" mean?",
+      "attendees_info_body": "It’s an estimate of how many people might be at the event right now.",
+      "level": {
+        "low": "Low",
+        "medium": "Medium",
+        "full": "Full"
+      }
+    },
     "get_tickets": "Get tickets",
     "tabs": {
       "concerts": "Concerts",
@@ -711,7 +833,8 @@
       "type": "Type",
       "music": "Music",
       "age": "Age",
-      "dress_code": "Dress code"
+      "dress_code": "Dress code",
+      "lineup": "Line-up"
     },
     "actions": {
       "map": "Map",
@@ -802,7 +925,10 @@
     "empty_no_results_subtitle": "Try fewer filters or search by event name.",
     "empty_no_listings": "No tickets on resale",
     "empty_no_listings_subtitle": "When other users list tickets, they’ll show up here with fast and secure checkout.",
-    "view_my_tickets": "View my tickets"
+    "view_my_tickets": "View my tickets",
+    "my_sales_title": "My sales",
+    "my_sales_loading": "Loading sales…",
+    "my_sales_empty": "You have no tickets on resale"
   },
   "tickets_pdf": {
     "ticket_title": "Ticket",

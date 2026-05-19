@@ -11,12 +11,14 @@ import { formatDistanceToNow } from 'date-fns';
 import { es, enUS, fr } from 'date-fns/locale';
 import { useTranslation } from 'react-i18next';
 import { useI18n } from '@/lib/I18nContext';
+import { useAppDialog } from '@/components/ui/AppDialog';
 
 export default function NotificationsScreen() {
   const router = useRouter();
   const { t } = useTranslation();
   const { language } = useI18n();
-  const { notifications, markAsRead, markAllAsRead, loading } = useNotifications();
+  const { show: showDialog } = useAppDialog();
+  const { notifications, markAsRead, markAllAsRead, deleteNotification, deleteAllNotifications, loading } = useNotifications();
   const [filter, setFilter] = useState<'all' | 'unread' | 'urgent'>('all');
 
   const getLocale = () => {
@@ -73,6 +75,23 @@ export default function NotificationsScreen() {
               <Text style={styles.timeText}>{timeAgo}</Text>
             </View>
           </View>
+
+          <TouchableOpacity
+            activeOpacity={0.8}
+            onPress={() => {
+              showDialog({
+                title: t('common.confirm', { defaultValue: 'Confirmar' }),
+                message: t('notifications.confirm_delete_one', { defaultValue: '¿Eliminar esta notificación?' }),
+                actions: [
+                  { label: t('common.delete', { defaultValue: 'Eliminar' }), variant: 'primary', onPress: () => void deleteNotification(item.id) },
+                  { label: t('common.cancel', { defaultValue: 'Cancelar' }), variant: 'outline' },
+                ],
+              });
+            }}
+            style={styles.deleteBtn}
+          >
+            <Trash2 size={18} color="rgba(255,255,255,0.55)" />
+          </TouchableOpacity>
         </GlassView>
       </TouchableOpacity>
     );
@@ -92,9 +111,26 @@ export default function NotificationsScreen() {
             <ArrowLeft size={24} color="white" />
           </TouchableOpacity>
           <Text style={styles.title}>{t('common.notifications')}</Text>
-          <TouchableOpacity onPress={markAllAsRead} style={styles.markAllButton}>
-            <CheckCheck size={20} color={Colors.dark.primary} />
-          </TouchableOpacity>
+          <View style={styles.headerActions}>
+            <TouchableOpacity onPress={markAllAsRead} style={styles.headerActionBtn}>
+              <CheckCheck size={20} color={Colors.dark.primary} />
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={() => {
+                showDialog({
+                  title: t('common.confirm', { defaultValue: 'Confirmar' }),
+                  message: t('notifications.confirm_delete_all', { defaultValue: '¿Eliminar todas las notificaciones?' }),
+                  actions: [
+                    { label: t('common.delete_all', { defaultValue: 'Eliminar todas' }), variant: 'primary', onPress: () => void deleteAllNotifications() },
+                    { label: t('common.cancel', { defaultValue: 'Cancelar' }), variant: 'outline' },
+                  ],
+                });
+              }}
+              style={styles.headerActionBtn}
+            >
+              <Trash2 size={20} color="rgba(255,255,255,0.55)" />
+            </TouchableOpacity>
+          </View>
         </View>
 
         <View style={styles.filterRow}>
@@ -157,6 +193,17 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: 'white',
   },
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  headerActionBtn: {
+    width: 40,
+    height: 40,
+    justifyContent: 'center',
+    alignItems: 'flex-end',
+  },
   filterRow: {
     flexDirection: 'row',
     gap: 10,
@@ -183,12 +230,6 @@ const styles = StyleSheet.create({
   },
   filterChipTextActive: {
     color: 'white',
-  },
-  markAllButton: {
-    width: 40,
-    height: 40,
-    justifyContent: 'center',
-    alignItems: 'flex-end',
   },
   listContent: {
     padding: 20,
@@ -259,6 +300,18 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
+  },
+  deleteBtn: {
+    width: 34,
+    height: 34,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    alignSelf: 'flex-start',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.10)',
+    backgroundColor: 'rgba(255,255,255,0.04)',
+    marginLeft: 10,
   },
   timeText: {
     fontSize: 12,

@@ -8,7 +8,7 @@ import { useAuth } from '@/lib/AuthContext';
 import { Colors } from '@/constants/Colors';
 import { GlassView } from '@/components/ui/GlassView';
 import { ThemedButton } from '@/components/ui/ThemedButton';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useTranslation } from 'react-i18next';
 
@@ -21,6 +21,8 @@ export default function ManageEventsScreen() {
   const [profileRole, setProfileRole] = useState<'organizer' | 'admin' | 'attendee' | null>(null);
   const [filter, setFilter] = useState<'all' | 'upcoming' | 'past'>('upcoming');
   const [query, setQuery] = useState('');
+  const listRef = useRef<FlatList<any> | null>(null);
+  const searchRef = useRef<TextInput | null>(null);
 
   const adminEmail = ((process.env.EXPO_PUBLIC_ADMIN_EMAIL as any) ?? '').toString().trim().toLowerCase() || 'aamracorporation@gmail.com';
   const isAdminEmail = !!user?.email && user.email.toLowerCase() === adminEmail;
@@ -219,6 +221,7 @@ export default function ManageEventsScreen() {
               <Search size={16} color="rgba(255,255,255,0.65)" />
             </View>
             <TextInput
+              ref={(r) => { searchRef.current = r; }}
               value={query}
               onChangeText={setQuery}
               placeholder={isAdmin ? t('creator.manage_events.search_placeholder_admin') : t('creator.manage_events.search_placeholder')}
@@ -243,10 +246,41 @@ export default function ManageEventsScreen() {
         </GlassView>
 
         <FlatList
+          ref={(r) => { listRef.current = r; }}
           data={filteredEvents}
           renderItem={renderEventItem}
           keyExtractor={(item) => item.id}
           contentContainerStyle={styles.listContent}
+          ListHeaderComponent={
+            !isAdmin ? (
+              <View style={{ paddingBottom: 14 }}>
+                <GlassView intensity={16} style={styles.dashboardCard}>
+                  <Text style={styles.dashboardTitle}>{t('creator.manage_events.title_organizer', { defaultValue: 'Mis eventos' })}</Text>
+                  <Text style={styles.dashboardSubtitle}>
+                    {t('creator.organizer.actions.my_events_desc', { defaultValue: 'Centraliza la creación y la gestión de tus eventos.' })}
+                  </Text>
+                  <View style={styles.dashboardActionsRow}>
+                    <ThemedButton
+                      title={t('creator.create_event.create_title')}
+                      onPress={() => router.push('/(creator)/create-event')}
+                      icon={<Plus size={20} color={Colors.dark.text} />}
+                      style={styles.dashboardActionBtn}
+                    />
+                    <ThemedButton
+                      title={t('creator.organizer.actions.my_events_title', { defaultValue: 'Mis eventos' })}
+                      onPress={() => {
+                        listRef.current?.scrollToOffset({ offset: 0, animated: true });
+                        searchRef.current?.focus();
+                      }}
+                      icon={<Calendar size={20} color={Colors.dark.text} />}
+                      style={styles.dashboardActionBtn}
+                      variant="outline"
+                    />
+                  </View>
+                </GlassView>
+              </View>
+            ) : null
+          }
           ListEmptyComponent={
             <GlassView intensity={10} style={styles.emptyContainer}>
               <Text style={styles.emptyText}>{isAdmin ? t('creator.manage_events.empty_admin') : t('creator.manage_events.empty_organizer')}</Text>
@@ -367,6 +401,33 @@ const styles = StyleSheet.create({
   },
   filterChipTextActive: {
     color: 'white',
+  },
+  dashboardCard: {
+    borderRadius: 22,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.10)',
+    backgroundColor: 'rgba(255,255,255,0.04)',
+  },
+  dashboardTitle: {
+    color: 'white',
+    fontFamily: 'RussoOne_400Regular',
+    fontSize: 18,
+  },
+  dashboardSubtitle: {
+    color: 'rgba(255,255,255,0.70)',
+    fontSize: 13,
+    fontWeight: '700',
+    marginTop: 6,
+    lineHeight: 18,
+  },
+  dashboardActionsRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 14,
+  },
+  dashboardActionBtn: {
+    flex: 1,
   },
   listContent: {
     padding: 24,

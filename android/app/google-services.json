@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "647570671410",
+    "project_id": "eclipse-b5990",
+    "storage_bucket": "eclipse-b5990.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:647570671410:android:64c067d6cfa9607efc792b",
+        "android_client_info": {
+          "package_name": "com.achraf.eclipse"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAuYYijzfw5NgQEZrwDxp13ntDnakipRO4"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

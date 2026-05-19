@@ -1,4 +1,4 @@
-import { View, Text, StyleSheet, Alert, TouchableOpacity, TextInput, Keyboard, ScrollView, KeyboardAvoidingView, Platform } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, TextInput, Keyboard, ScrollView, KeyboardAvoidingView, Platform } from 'react-native';
 import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'expo-router';
 import { useAuth } from '@/lib/AuthContext';
@@ -14,6 +14,7 @@ import { supabase } from '@/lib/supabase';
 import { useTranslation } from 'react-i18next';
 import { theme } from '@/theme/styles';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useAppDialog } from '@/components/ui/AppDialog';
 
 async function fetchWithTimeout(input: RequestInfo | URL, init: RequestInit, ms: number): Promise<Response> {
   const controller = new AbortController();
@@ -32,6 +33,7 @@ export default function LoginScreen() {
   const [loading, setLoading] = useState(false);
   const { signIn, resetPassword } = useAuth();
   const { t } = useTranslation();
+  const { show: showDialog } = useAppDialog();
   const router = useRouter();
   
   const passwordInputRef = useRef<TextInput>(null);
@@ -43,7 +45,7 @@ export default function LoginScreen() {
 
   const handleResetPassword = async () => {
     if (!email) {
-      Alert.alert(t('auth.reset_password.email_required_title'), t('auth.reset_password.email_required_body'));
+      showDialog({ title: t('auth.reset_password.email_required_title'), message: t('auth.reset_password.email_required_body') });
       return;
     }
     
@@ -51,12 +53,12 @@ export default function LoginScreen() {
       setLoading(true);
       const { error } = await resetPassword(email);
       if (error) {
-        Alert.alert(t('common.error'), getErrorMessage(error));
+        showDialog({ title: t('common.error'), message: getErrorMessage(error) });
       } else {
-        Alert.alert(t('auth.reset_password.sent_title'), t('auth.reset_password.sent_body'));
+        showDialog({ title: t('auth.reset_password.sent_title'), message: t('auth.reset_password.sent_body') });
       }
     } catch {
-      Alert.alert(t('common.error'), t('auth.reset_password.failed'));
+      showDialog({ title: t('common.error'), message: t('auth.reset_password.failed') });
     } finally {
       setLoading(false);
     }
@@ -70,11 +72,11 @@ export default function LoginScreen() {
     const sbUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
     const sbAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
     if (!sbUrl || sbUrl.includes('placeholder')) {
-      Alert.alert(t('auth.login_screen.config_error_title'), t('auth.login_screen.config_error_missing_url'));
+      showDialog({ title: t('auth.login_screen.config_error_title'), message: t('auth.login_screen.config_error_missing_url') });
        return;
     }
     if (!sbAnonKey || sbAnonKey.includes('placeholder')) {
-       Alert.alert(t('auth.login_screen.config_error_title'), t('auth.login_screen.config_error_missing_anon'));
+       showDialog({ title: t('auth.login_screen.config_error_title'), message: t('auth.login_screen.config_error_missing_anon') });
        return;
     }
 
@@ -83,7 +85,7 @@ export default function LoginScreen() {
     const cleanPassword = password.trim();
 
     if (!cleanEmail || !cleanPassword) {
-      Alert.alert(t('auth.login_screen.missing_fields_title'), t('auth.login_screen.missing_fields_body'));
+      showDialog({ title: t('auth.login_screen.missing_fields_title'), message: t('auth.login_screen.missing_fields_body') });
       return;
     }
 
@@ -105,12 +107,10 @@ export default function LoginScreen() {
       } catch (e: any) {
         const msg = String(e?.message || e || '');
         const isAbort = msg.includes('aborted') || msg.includes('AbortError');
-        Alert.alert(
-          t('errors.network'),
-          isAbort
-            ? t('auth.login_screen.supabase_timeout')
-            : t('auth.login_screen.supabase_unreachable')
-        );
+        showDialog({
+          title: t('errors.network'),
+          message: isAbort ? t('auth.login_screen.supabase_timeout') : t('auth.login_screen.supabase_unreachable'),
+        });
         setLoading(false);
         return;
       }
@@ -125,15 +125,15 @@ export default function LoginScreen() {
         
         // Handle specific error cases
         if (error.message?.includes('Email not confirmed')) {
-          Alert.alert(
-            t('auth.login_screen.email_not_confirmed_title'),
-            t('auth.login_screen.email_not_confirmed_body')
-          );
+          showDialog({
+            title: t('auth.login_screen.email_not_confirmed_title'),
+            message: t('auth.login_screen.email_not_confirmed_body'),
+          });
         } else if (error.message?.includes('Invalid login credentials')) {
-           Alert.alert(t('auth.login_screen.invalid_credentials_title'), t('auth.login_screen.invalid_credentials_body'));
+           showDialog({ title: t('auth.login_screen.invalid_credentials_title'), message: t('auth.login_screen.invalid_credentials_body') });
         } else {
            // Fallback showing the RAW error to help debug
-           Alert.alert(t('auth.login_screen.access_error_title'), t('auth.login_screen.access_error_body', { detail: error.message }));
+           showDialog({ title: t('auth.login_screen.access_error_title'), message: t('auth.login_screen.access_error_body', { detail: error.message }) });
         }
         
         setLoading(false);
@@ -173,19 +173,19 @@ export default function LoginScreen() {
         else router.replace('/(tabs)');
       } else {
         setLoading(false);
-        Alert.alert(
-          t('auth.login_screen.verification_required_title'),
-          t('auth.login_screen.verification_required_body')
-        );
+        showDialog({
+          title: t('auth.login_screen.verification_required_title'),
+          message: t('auth.login_screen.verification_required_body'),
+        });
       }
     } catch (err: any) {
       console.error('Unexpected login error:', err);
       const errorMsg = err.message || 'Ha ocurrido un error inesperado.';
       
       if (errorMsg.includes('Failed to fetch') || errorMsg.includes('Network request failed')) {
-         Alert.alert(t('errors.network'), t('auth.login_screen.network_failed'));
+         showDialog({ title: t('errors.network'), message: t('auth.login_screen.network_failed') });
       } else {
-         Alert.alert(t('common.error'), errorMsg);
+         showDialog({ title: t('common.error'), message: errorMsg });
       }
       setLoading(false);
     }

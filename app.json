@@ -7,7 +7,7 @@
     "icon": "./assets/images/Icon.png",
     "scheme": "eclipse",
     "userInterfaceStyle": "automatic",
-    "newArchEnabled": true,
+    "newArchEnabled": false,
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.achraf.eclipse",
@@ -44,7 +44,8 @@
         }
       ],
       "expo-mail-composer",
-      "@react-native-community/datetimepicker"
+      "@react-native-community/datetimepicker",
+      "expo-notifications"
     ],
     "experiments": {
       "typedRoutes": true
@@ -64,15 +65,14 @@
         "backgroundColor": "#6B2CA1"
       },
       "package": "com.achraf.eclipse",
-      "config": {
-        "googleMaps": {
-          "apiKey": "TU_CLAVE_API_DE_GOOGLE_MAPS_AQUI"
-        }
-      },
+      "googleServicesFile": "./google-services.json",
       "permissions": [
         "android.permission.RECORD_AUDIO",
         "android.permission.ACCESS_COARSE_LOCATION",
-        "android.permission.ACCESS_FINE_LOCATION"
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.POST_NOTIFICATIONS",
+        "android.permission.WAKE_LOCK",
+        "android.permission.RECEIVE_BOOT_COMPLETED"
       ],
       "navigationBar": {
         "backgroundColor": "#0f0f1a",

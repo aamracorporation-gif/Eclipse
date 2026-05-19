@@ -16,9 +16,11 @@ interface ThemedInputProps extends Omit<TextInputProps, 'style'> {
 }
 
 export const ThemedInput = forwardRef<TextInput, ThemedInputProps>(({ icon: Icon, rightIcon, error, success, label, style, containerStyle, inputStyle, ...props }, ref) => {
-  const resolvedRightIcon = error
-    ? <AlertCircle size={18} color={Colors.dark.error} />
-    : (rightIcon ?? (success ? <CheckCircle2 size={18} color={Colors.dark.success} /> : null));
+  const resolvedRightIcon =
+    rightIcon ??
+    (error
+      ? <AlertCircle size={18} color={Colors.dark.error} />
+      : (success ? <CheckCircle2 size={18} color={Colors.dark.success} /> : null));
   return (
     <View style={[styles.wrapper, containerStyle]}>
       {label && <Text style={styles.label}>{label}</Text>}

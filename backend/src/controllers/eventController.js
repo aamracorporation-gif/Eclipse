@@ -21,7 +21,33 @@ const create = asyncHandler(async (req, res) => {
 });
 
 const list = asyncHandler(async (req, res) => {
-  const events = await listEvents();
+  const readFloat = (v) => {
+    const n = Number(v);
+    return Number.isFinite(n) ? n : null;
+  };
+
+  const minLat = readFloat(req.query.minLat);
+  const maxLat = readFloat(req.query.maxLat);
+  const minLng = readFloat(req.query.minLng);
+  const maxLng = readFloat(req.query.maxLng);
+  const fromIso = typeof req.query.from === 'string' ? req.query.from : null;
+  const toIso = typeof req.query.to === 'string' ? req.query.to : null;
+
+  const bboxEnabled = [minLat, maxLat, minLng, maxLng].every((n) => n !== null);
+  const bbox =
+    bboxEnabled
+      ? {
+          enabled: true,
+          minLat: Math.max(-85, Math.min(85, Math.min(minLat, maxLat))),
+          maxLat: Math.max(-85, Math.min(85, Math.max(minLat, maxLat))),
+          minLng: Math.max(-180, Math.min(180, Math.min(minLng, maxLng))),
+          maxLng: Math.max(-180, Math.min(180, Math.max(minLng, maxLng))),
+          fromIso,
+          toIso,
+        }
+      : { enabled: false };
+
+  const events = await listEvents({ bbox });
   return res.json({ ok: true, events });
 });
 

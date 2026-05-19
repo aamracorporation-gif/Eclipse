@@ -1,6 +1,6 @@
-import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, Alert, Linking, Platform, KeyboardAvoidingView, Modal, Switch, Animated, Easing, Share } from 'react-native';
-import { useState, useEffect, useRef } from 'react';
-import { router, useLocalSearchParams } from 'expo-router';
+import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, Linking, Platform, KeyboardAvoidingView, Modal, Switch, Animated, Easing, Share } from 'react-native';
+import { useState, useEffect, useRef, useCallback } from 'react';
+import { router, useLocalSearchParams, useSegments } from 'expo-router';
 import { supabase, Event } from '@/lib/supabase';
 import { useAuth } from '@/lib/AuthContext';
 import { useEvents } from '@/lib/EventContext';
@@ -21,15 +21,19 @@ import { useI18n } from '@/lib/I18nContext';
 import { useTranslation } from 'react-i18next';
 import { scheduleLocalNotification } from '@/lib/notifications';
 import { invokeEdgeFunctionStrict } from '@/lib/edgeFunctions';
+import { useAppDialog } from '@/components/ui/AppDialog';
+import { useFocusEffect } from '@react-navigation/native';
 
 export default function EventDetailScreen() {
   const { id } = useLocalSearchParams();
+  const segments = useSegments();
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
   const { refreshEvents } = useEvents();
   const { creditBalance, loading: creditLoading, buyTicketWithCredit, buyVipWithCredit, refreshCredit } = useCredit();
   const { present, loading: stripeLoading } = usePaymentSheetHandler();
   const { t } = useTranslation();
+  const { show: showDialog } = useAppDialog();
   const [event, setEvent] = useState<Event | null>(null);
   const [loading, setLoading] = useState(true);
   const [vipLoadError, setVipLoadError] = useState<string | null>(null);
@@ -50,6 +54,9 @@ export default function EventDetailScreen() {
   const localeTag = language === 'en' ? 'en-US' : language === 'fr' ? 'fr-FR' : 'es-ES';
   const vipGlow = useRef(new Animated.Value(0)).current;
   const vipShimmer = useRef(new Animated.Value(0)).current;
+
+  const inCreator = segments?.[0] === '(creator)';
+  const userRole = (user?.user_metadata as any)?.role ?? null;
 
   const translateEventType = (raw: any) => {
     const value = String(raw || '').trim();
@@ -72,12 +79,13 @@ export default function EventDetailScreen() {
     else router.replace('/(tabs)');
   };
 
-  useEffect(() => {
-    fetchEvent();
-    if (user?.user_metadata?.full_name) {
-      setBuyerName(user.user_metadata.full_name);
-    }
-  }, [id, user]);
+  useFocusEffect(
+    useCallback(() => {
+      if (userRole === 'organizer' && !inCreator) {
+        router.replace('/(creator)');
+      }
+    }, [userRole, inCreator])
+  );
 
   useEffect(() => {
     setSelectedTicketType(null);
@@ -104,7 +112,7 @@ export default function EventDetailScreen() {
     if (user?.email && !buyerEmail) {
       setBuyerEmail(user.email);
     }
-  }, [user?.email]);
+  }, [buyerEmail, user?.email]);
 
   useEffect(() => {
     if (!event?.reservados_vip?.length || selectedVipReservadoId) return;
@@ -141,7 +149,7 @@ export default function EventDetailScreen() {
     };
   }, [vipGlow, vipShimmer]);
 
-  const fetchEventQuery = async (includeVerificationStatus: boolean) => {
+  const fetchEventQuery = useCallback(async (includeVerificationStatus: boolean) => {
     return supabase
       .from('events')
       .select(
@@ -158,9 +166,9 @@ export default function EventDetailScreen() {
       )
       .eq('id', eventId)
       .maybeSingle();
-  };
+  }, [eventId]);
 
-  const fetchEvent = async () => {
+  const fetchEvent = useCallback(async () => {
     setLoading(true);
     setVipLoadError(null);
     try {
@@ -221,7 +229,14 @@ export default function EventDetailScreen() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [eventId, fetchEventQuery]);
+
+  useEffect(() => {
+    fetchEvent();
+    if (user?.user_metadata?.full_name) {
+      setBuyerName(user.user_metadata.full_name);
+    }
+  }, [fetchEvent, user?.user_metadata?.full_name]);
 
   const openMaps = () => {
     if (!event?.venues) return;
@@ -247,60 +262,60 @@ export default function EventDetailScreen() {
 
       await Share.share({ message: url, url });
       return;
-    } catch (e: any) {
-      Alert.alert('No se pudo compartir', 'No se pudo generar el enlace de compartición. Inténtalo de nuevo.');
+    } catch {
+      showDialog({
+        title: 'No se pudo compartir',
+        message: 'No se pudo generar el enlace de compartición. Inténtalo de nuevo.',
+      });
     }
   };
 
   const handlePurchase = async () => {
     if (!user) {
-      Alert.alert(
-        t('auth.login'),
-        t('event.purchase.login_required'),
-        [
-          {
-            text: t('auth.login'),
-            onPress: () => router.push('/(auth)/login'),
-          },
-          { text: t('common.cancel'), style: 'cancel' },
-        ]
-      );
+      showDialog({
+        title: t('auth.login'),
+        message: t('event.purchase.login_required'),
+        actions: [
+          { label: t('auth.login'), onPress: () => router.push('/(auth)/login'), variant: 'primary' },
+          { label: t('common.cancel'), variant: 'outline' },
+        ],
+      });
       return;
     }
 
     if (!buyerName.trim()) {
-      Alert.alert(t('common.error'), t('event.purchase.enter_name'));
+      showDialog({ title: t('common.error'), message: t('event.purchase.enter_name') });
       return;
     }
 
     const qty = parseInt(quantity);
     if (isNaN(qty) || qty < 1) {
-      Alert.alert(t('common.error'), t('event.purchase.invalid_quantity'));
+      showDialog({ title: t('common.error'), message: t('event.purchase.invalid_quantity') });
       return;
     }
 
     if (!event || qty > event.available_tickets) {
-      Alert.alert(t('common.error'), t('event.purchase.not_enough_tickets'));
+      showDialog({ title: t('common.error'), message: t('event.purchase.not_enough_tickets') });
       return;
     }
 
     const selectedType = event.event_ticket_types?.find(t => t.id === selectedTicketType);
     if (event.event_ticket_types?.length && !selectedType) {
-        Alert.alert(t('common.error'), t('event.purchase.select_ticket_type'));
-        return;
+      showDialog({ title: t('common.error'), message: t('event.purchase.select_ticket_type') });
+      return;
     }
 
     // Check specific ticket type availability
     if (selectedType) {
         if ((selectedType.quantity - (selectedType.sold || 0)) < qty) {
-            Alert.alert(t('common.error'), t('event.purchase.not_enough_of_type'));
-            return;
+          showDialog({ title: t('common.error'), message: t('event.purchase.not_enough_of_type') });
+          return;
         }
     }
 
     try {
       if (payWithWallet && creditLoading) {
-        Alert.alert(t('common.wallet'), t('event.purchase.wallet_loading'));
+        showDialog({ title: t('common.wallet'), message: t('event.purchase.wallet_loading') });
         return;
       }
       // 1. RE-FETCH EVENT DATA to ensure stock is up to date (Prevent Overselling)
@@ -389,14 +404,14 @@ export default function EventDetailScreen() {
         } else {
           const remainder = totalPrice - walletDebit;
           const decision = await new Promise<'hybrid' | 'cancel'>((resolve) => {
-            Alert.alert(
-              t('event.purchase.insufficient_balance_title'),
-              t('event.purchase.wallet_split', { wallet: walletDebit.toFixed(2), card: remainder.toFixed(2) }),
-              [
-                { text: t('event.purchase.use_wallet_card'), onPress: () => resolve('hybrid') },
-                { text: t('common.cancel'), style: 'cancel', onPress: () => resolve('cancel') },
-              ]
-            );
+            showDialog({
+              title: t('event.purchase.insufficient_balance_title'),
+              message: t('event.purchase.wallet_split', { wallet: walletDebit.toFixed(2), card: remainder.toFixed(2) }),
+              actions: [
+                { label: t('event.purchase.use_wallet_card'), onPress: () => resolve('hybrid'), variant: 'primary' },
+                { label: t('common.cancel'), onPress: () => resolve('cancel'), variant: 'outline' },
+              ],
+            });
           });
           if (decision === 'cancel') return;
           const r = await payTicketsWithCard(walletDebit);
@@ -433,12 +448,16 @@ export default function EventDetailScreen() {
       console.error('Error purchasing ticket:', error);
       const msg = getErrorMessage(error);
       if (msg.includes('Tu sesión no es válida') || msg.includes('La sesión ha expirado')) {
-        Alert.alert(t('common.session'), msg, [
-          { text: t('auth.login'), onPress: () => router.push('/(auth)/login') },
-          { text: t('common.cancel'), style: 'cancel' },
-        ]);
+        showDialog({
+          title: t('common.session'),
+          message: msg,
+          actions: [
+            { label: t('auth.login'), onPress: () => router.push('/(auth)/login'), variant: 'primary' },
+            { label: t('common.cancel'), variant: 'outline' },
+          ],
+        });
       } else {
-        Alert.alert(t('common.error'), msg);
+        showDialog({ title: t('common.error'), message: msg });
       }
       // Refresh event data to reflect latest stock if purchase failed (e.g. sold out)
       fetchEvent();
@@ -449,37 +468,37 @@ export default function EventDetailScreen() {
 
   const handleVipPurchase = async () => {
     if (!user) {
-      Alert.alert(
-        'Inicia sesión',
-        'Debes iniciar sesión para comprar reservados VIP',
-        [
-          { text: 'Iniciar sesión', onPress: () => router.push('/(auth)/login') },
-          { text: 'Cancelar', style: 'cancel' },
-        ]
-      );
+      showDialog({
+        title: 'Inicia sesión',
+        message: 'Debes iniciar sesión para comprar reservados VIP',
+        actions: [
+          { label: 'Iniciar sesión', onPress: () => router.push('/(auth)/login'), variant: 'primary' },
+          { label: 'Cancelar', variant: 'outline' },
+        ],
+      });
       return;
     }
 
     if (!buyerName.trim()) {
-      Alert.alert('Error', 'Por favor completa tu nombre');
+      showDialog({ title: 'Error', message: 'Por favor completa tu nombre' });
       return;
     }
 
     const vip = event?.reservados_vip?.find((v) => v.id === selectedVipReservadoId);
     if (!event || !vip) {
-      Alert.alert('Error', 'Selecciona un reservado VIP.');
+      showDialog({ title: 'Error', message: 'Selecciona un reservado VIP.' });
       return;
     }
 
     if ((vip.quantity_available ?? 0) <= 0) {
-      Alert.alert(t('event.tickets.sold_out'), t('event.vip.not_available'));
+      showDialog({ title: t('event.tickets.sold_out'), message: t('event.vip.not_available') });
       return;
     }
 
     setVipPurchasing(true);
     try {
       if (payVipWithWallet && creditLoading) {
-        Alert.alert('Cartera', 'Estamos cargando tu saldo. Espera un momento y vuelve a intentarlo.');
+        showDialog({ title: 'Cartera', message: 'Estamos cargando tu saldo. Espera un momento y vuelve a intentarlo.' });
         return;
       }
       if (payVipWithWallet) {
@@ -499,14 +518,14 @@ export default function EventDetailScreen() {
         } else {
           const remainder = vip.base_price - walletDebit;
           const decision = await new Promise<'hybrid' | 'cancel'>((resolve) => {
-            Alert.alert(
-              t('event.purchase.insufficient_balance_title'),
-              t('event.purchase.wallet_split', { wallet: walletDebit.toFixed(2), card: remainder.toFixed(2) }),
-              [
-                { text: t('event.purchase.use_wallet_card'), onPress: () => resolve('hybrid') },
-                { text: t('common.cancel'), style: 'cancel', onPress: () => resolve('cancel') },
-              ]
-            );
+            showDialog({
+              title: t('event.purchase.insufficient_balance_title'),
+              message: t('event.purchase.wallet_split', { wallet: walletDebit.toFixed(2), card: remainder.toFixed(2) }),
+              actions: [
+                { label: t('event.purchase.use_wallet_card'), onPress: () => resolve('hybrid'), variant: 'primary' },
+                { label: t('common.cancel'), onPress: () => resolve('cancel'), variant: 'outline' },
+              ],
+            });
           });
           if (decision === 'cancel') return;
 
@@ -550,12 +569,16 @@ export default function EventDetailScreen() {
       console.error('Error purchasing VIP:', error);
       const msg = getErrorMessage(error);
       if (msg.includes('Tu sesión no es válida') || msg.includes('La sesión ha expirado')) {
-        Alert.alert('Sesión', msg, [
-          { text: 'Iniciar sesión', onPress: () => router.push('/(auth)/login') },
-          { text: 'Cancelar', style: 'cancel' },
-        ]);
+        showDialog({
+          title: 'Sesión',
+          message: msg,
+          actions: [
+            { label: 'Iniciar sesión', onPress: () => router.push('/(auth)/login'), variant: 'primary' },
+            { label: 'Cancelar', variant: 'outline' },
+          ],
+        });
       } else {
-        Alert.alert('Error', msg);
+        showDialog({ title: 'Error', message: msg });
       }
       fetchEvent();
     } finally {
@@ -642,7 +665,7 @@ export default function EventDetailScreen() {
         style={StyleSheet.absoluteFill}
       />
       
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 32 }}>
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: insets.bottom + 120 }}>
         {/* Header Image */}
         <View style={styles.imageContainer}>
           <Image

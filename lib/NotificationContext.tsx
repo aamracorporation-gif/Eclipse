@@ -29,6 +29,8 @@ type NotificationContextType = {
   fetchNotifications: () => Promise<void>;
   markAsRead: (id: string) => Promise<void>;
   markAllAsRead: () => Promise<void>;
+  deleteNotification: (id: string) => Promise<void>;
+  deleteAllNotifications: () => Promise<void>;
 };
 
 const NotificationContext = createContext<NotificationContextType | undefined>(undefined);
@@ -91,6 +93,28 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
       setNotifications(prev => prev.map(n => ({ ...n, read: true })));
     } catch (error) {
       console.error('Error marking all notifications as read:', error);
+    }
+  };
+
+  const deleteNotification = async (id: string) => {
+    if (!user) return;
+    try {
+      const { error } = await supabase.from('notifications').delete().eq('id', id).eq('user_id', user.id);
+      if (error) throw error;
+      setNotifications((prev) => prev.filter((n) => n.id !== id));
+    } catch (error) {
+      console.error('Error deleting notification:', error);
+    }
+  };
+
+  const deleteAllNotifications = async () => {
+    if (!user) return;
+    try {
+      const { error } = await supabase.from('notifications').delete().eq('user_id', user.id);
+      if (error) throw error;
+      setNotifications([]);
+    } catch (error) {
+      console.error('Error deleting all notifications:', error);
     }
   };
 
@@ -162,6 +186,8 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
       fetchNotifications,
       markAsRead,
       markAllAsRead,
+      deleteNotification,
+      deleteAllNotifications,
     }}>
       {children}
     </NotificationContext.Provider>

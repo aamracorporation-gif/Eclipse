@@ -1,5 +1,5 @@
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, Image, Platform, Modal, Pressable, Keyboard, ActionSheetIOS } from 'react-native';
-import { useState, useEffect, useMemo } from 'react';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, Platform, Modal, Pressable, Keyboard, ActionSheetIOS } from 'react-native';
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -13,6 +13,7 @@ import { GlassView } from '@/components/ui/GlassView';
 import { ThemedButton } from '@/components/ui/ThemedButton';
 import { ThemedInput } from '@/components/ui/ThemedInput';
 import { DiscoLoader } from '@/components/ui/DiscoLoader';
+import { PurchaseConfirmation } from '@/components/PurchaseConfirmation';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import * as ImagePicker from 'expo-image-picker';
 import * as Location from 'expo-location';
@@ -23,6 +24,7 @@ import { useI18n } from '@/lib/I18nContext';
 import { useTranslation } from 'react-i18next';
 import { invokeEdgeFunctionStrict } from '@/lib/edgeFunctions';
 import { validateEventDraft } from '@/lib/eventFormValidation';
+import { useAppDialog } from '@/components/ui/AppDialog';
 
 type VipReservadoDraft = {
   id: string;
@@ -39,6 +41,18 @@ type NewVipDraft = Omit<VipReservadoDraft, 'id'>;
 
 type TicketTypeDraft = TicketType & { priceText?: string; quantityText?: string };
 
+const MUTED_MAP_STYLE = [
+  { elementType: 'geometry', stylers: [{ color: '#0B0B14' }] },
+  { elementType: 'labels.text.fill', stylers: [{ color: '#A1A1AA' }] },
+  { elementType: 'labels.text.stroke', stylers: [{ color: '#0B0B14' }] },
+  { featureType: 'poi', elementType: 'labels', stylers: [{ visibility: 'off' }] },
+  { featureType: 'road', elementType: 'geometry', stylers: [{ color: '#151528' }] },
+  { featureType: 'road', elementType: 'geometry.stroke', stylers: [{ color: '#232344' }] },
+  { featureType: 'road', elementType: 'labels.icon', stylers: [{ visibility: 'off' }] },
+  { featureType: 'transit', elementType: 'labels', stylers: [{ visibility: 'off' }] },
+  { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#0A1A2B' }] },
+];
+
 export default function CreateEventScreen() {
   const router = useRouter();
   const { id, isEditing: isEditingParam } = useLocalSearchParams<{ id: string, isEditing: string }>();
@@ -47,6 +61,7 @@ export default function CreateEventScreen() {
   const insets = useSafeAreaInsets();
   const { language } = useI18n();
   const { t } = useTranslation();
+  const { show: showDialog } = useAppDialog();
   const localeTag = language === 'en' ? 'en-US' : language === 'fr' ? 'fr-FR' : 'es-ES';
   const isEditing = isEditingParam === 'true';
   const eventId = id;
@@ -58,6 +73,7 @@ export default function CreateEventScreen() {
   };
 
   const [loading, setLoading] = useState(false);
+  const [saveResult, setSaveResult] = useState<{ kind: 'success' | 'error'; title: string; message: string; eventId?: string | null } | null>(null);
   const [ticketTypes, setTicketTypes] = useState<TicketTypeDraft[]>([]);
   const [newTicket, setNewTicket] = useState({ name: '', price: '', quantity: '' });
   const [vipTypes, setVipTypes] = useState<VipReservadoDraft[]>([]);
@@ -87,6 +103,13 @@ export default function CreateEventScreen() {
 
   const [coordinates, setCoordinates] = useState<{latitude: number, longitude: number} | null>(null);
   const [showMapModal, setShowMapModal] = useState(false);
+  const mapModalRef = useRef<MapView>(null);
+  const mapRegionRef = useRef<Region>({
+    latitude: 40.4168,
+    longitude: -3.7038,
+    latitudeDelta: 0.05,
+    longitudeDelta: 0.05,
+  });
   const [mapRegion, setMapRegion] = useState<Region>({
     latitude: 40.4168,
     longitude: -3.7038,
@@ -95,6 +118,9 @@ export default function CreateEventScreen() {
   });
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearchingMap, setIsSearchingMap] = useState(false);
+  const [mapPermission, setMapPermission] = useState<'unknown' | 'granted' | 'denied'>('unknown');
+  const [mapModalReady, setMapModalReady] = useState(false);
+  const [mapModalTimedOut, setMapModalTimedOut] = useState(false);
 
   const [formData, setFormData] = useState({
     title: '',
@@ -149,15 +175,15 @@ export default function CreateEventScreen() {
         .maybeSingle();
       
       if (data && data.role === 'organizer' && !data.stripe_onboarding_completed) {
-        Alert.alert(
-          t('creator.create_event.stripe_required_title'),
-          t('creator.create_event.stripe_required_body'),
-          [{ text: t('creator.create_event.go_to_dashboard'), onPress: () => router.replace('/(creator)') }]
-        );
+        showDialog({
+          title: t('creator.create_event.stripe_required_title'),
+          message: t('creator.create_event.stripe_required_body'),
+          actions: [{ label: t('creator.create_event.go_to_dashboard'), onPress: () => router.replace('/(creator)'), variant: 'primary' }],
+        });
       }
     };
     checkStripe();
-  }, [router, t, user]);
+  }, [router, showDialog, t, user]);
 
   const withTimeout = async <T,>(promise: Promise<T>, ms: number, label: string): Promise<T> => {
     let timeoutId: ReturnType<typeof setTimeout> | null = null;
@@ -171,6 +197,57 @@ export default function CreateEventScreen() {
     }
   };
 
+  const sanitizeRegion = useCallback((r: Region): Region => {
+    const clamp = (n: number, min: number, max: number) => Math.min(max, Math.max(min, n));
+    const lat = Number((r as any)?.latitude);
+    const lng = Number((r as any)?.longitude);
+    const latDelta = Number((r as any)?.latitudeDelta);
+    const lngDelta = Number((r as any)?.longitudeDelta);
+
+    const safeLat = Number.isFinite(lat) ? clamp(lat, -85, 85) : 40.4168;
+    const safeLng = Number.isFinite(lng) ? clamp(lng, -180, 180) : -3.7038;
+    const safeLatDelta = Number.isFinite(latDelta) ? clamp(latDelta, 0.002, 2.0) : 0.05;
+    const safeLngDelta = Number.isFinite(lngDelta) ? clamp(lngDelta, 0.002, 2.0) : 0.05;
+    return { latitude: safeLat, longitude: safeLng, latitudeDelta: safeLatDelta, longitudeDelta: safeLngDelta };
+  }, []);
+
+  useEffect(() => {
+    if (!showMapModal) {
+      setMapModalReady(false);
+      setMapModalTimedOut(false);
+      return;
+    }
+
+    setMapModalReady(false);
+    setMapModalTimedOut(false);
+    try {
+      mapRegionRef.current = sanitizeRegion(mapRegion);
+    } catch {}
+    let cancelled = false;
+    const timeoutId = setTimeout(() => {
+      if (!cancelled) setMapModalTimedOut(true);
+    }, 3800);
+
+    void (async () => {
+      try {
+        const permission = await withTimeout(Location.requestForegroundPermissionsAsync(), 6000, 'requestForegroundPermissionsAsync');
+        if (cancelled) return;
+        setMapPermission(permission.status === 'granted' ? 'granted' : 'denied');
+      } catch {
+        if (!cancelled) setMapPermission('denied');
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timeoutId);
+    };
+  }, [mapRegion, sanitizeRegion, showMapModal]);
+
+  useEffect(() => {
+    if (mapModalReady) setMapModalTimedOut(false);
+  }, [mapModalReady]);
+
   const vipDraftHasAny = (v: NewVipDraft) => {
     const fields = [v.name, v.description, v.basePrice, v.capacityPeople, v.includedBottles, v.extraBottlePrice, v.quantityAvailable];
     return fields.some((f) => String(f || '').trim().length > 0);
@@ -180,7 +257,7 @@ export default function CreateEventScreen() {
   const sanitizeEuroText = (text: string) => String(text || '').replace(/[^\d.,]/g, '');
 
   const showVipHelp = (title: string, body: string) => {
-    Alert.alert(title, body);
+    showDialog({ title, message: body });
   };
 
   const touchNewVipAll = () => {
@@ -233,17 +310,21 @@ export default function CreateEventScreen() {
   };
 
   const removeVipType = (id: string) => {
-    Alert.alert('Eliminar VIP', '¿Seguro que quieres eliminar este VIP?', [
-      { text: 'Cancelar', style: 'cancel' },
-      {
-        text: 'Eliminar',
-        style: 'destructive',
-        onPress: () => {
-          if (isUuid(id)) setRemovedVipIds((prev) => (prev.includes(id) ? prev : [...prev, id]));
-          setVipTypes((prev) => prev.filter((v) => v.id !== id));
+    showDialog({
+      title: 'Eliminar VIP',
+      message: '¿Seguro que quieres eliminar este VIP?',
+      actions: [
+        { label: 'Cancelar', variant: 'outline' },
+        {
+          label: 'Eliminar',
+          variant: 'secondary',
+          onPress: () => {
+            if (isUuid(id)) setRemovedVipIds((prev) => (prev.includes(id) ? prev : [...prev, id]));
+            setVipTypes((prev) => prev.filter((v) => v.id !== id));
+          },
         },
-      },
-    ]);
+      ],
+    });
   };
 
   const saveVipReservadosIfAny = async (eventIdToLink: string) => {
@@ -518,7 +599,7 @@ export default function CreateEventScreen() {
           // Camera
           const { status } = await ImagePicker.requestCameraPermissionsAsync();
           if (status !== 'granted') {
-            Alert.alert(t('common.error'), t('creator.create_event.photo.permission_camera'));
+            showDialog({ title: t('common.error'), message: t('creator.create_event.photo.permission_camera') });
             return;
           }
           result = await ImagePicker.launchCameraAsync({
@@ -531,7 +612,7 @@ export default function CreateEventScreen() {
           // Gallery
           const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
           if (status !== 'granted') {
-            Alert.alert(t('common.error'), t('creator.create_event.photo.permission_gallery'));
+            showDialog({ title: t('common.error'), message: t('creator.create_event.photo.permission_gallery') });
             return;
           }
           result = await ImagePicker.launchImageLibraryAsync({
@@ -547,7 +628,7 @@ export default function CreateEventScreen() {
         }
       } catch (error) {
         console.error('Error picking image:', error);
-        Alert.alert(t('common.error'), t('creator.create_event.photo.upload_failed'));
+        showDialog({ title: t('common.error'), message: t('creator.create_event.photo.upload_failed') });
       }
     };
 
@@ -560,15 +641,15 @@ export default function CreateEventScreen() {
         handleSelection
       );
     } else {
-      Alert.alert(
-        t('creator.create_event.photo.upload_title'),
-        t('creator.create_event.photo.choose_option'),
-        [
-          { text: t('creator.create_event.photo.camera'), onPress: () => handleSelection(0) },
-          { text: t('creator.create_event.photo.gallery'), onPress: () => handleSelection(1) },
-          { text: t('common.cancel'), style: 'cancel' },
-        ]
-      );
+      showDialog({
+        title: t('creator.create_event.photo.upload_title'),
+        message: t('creator.create_event.photo.choose_option'),
+        actions: [
+          { label: t('creator.create_event.photo.camera'), onPress: () => void handleSelection(0), variant: 'primary' },
+          { label: t('creator.create_event.photo.gallery'), onPress: () => void handleSelection(1), variant: 'outline' },
+          { label: t('common.cancel'), variant: 'secondary' },
+        ],
+      });
     }
   };
 
@@ -585,7 +666,7 @@ export default function CreateEventScreen() {
           // Camera
           const { status } = await ImagePicker.requestCameraPermissionsAsync();
           if (status !== 'granted') {
-            Alert.alert(t('common.error'), t('creator.create_event.photo.permission_camera'));
+            showDialog({ title: t('common.error'), message: t('creator.create_event.photo.permission_camera') });
             return;
           }
           result = await ImagePicker.launchCameraAsync({
@@ -598,7 +679,7 @@ export default function CreateEventScreen() {
           // Gallery
           const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
           if (status !== 'granted') {
-            Alert.alert(t('common.error'), t('creator.create_event.photo.permission_gallery'));
+            showDialog({ title: t('common.error'), message: t('creator.create_event.photo.permission_gallery') });
             return;
           }
           result = await ImagePicker.launchImageLibraryAsync({
@@ -614,7 +695,7 @@ export default function CreateEventScreen() {
         }
       } catch (error) {
         console.error('Error picking venue plan image:', error);
-        Alert.alert(t('common.error'), t('creator.create_event.photo.plan_upload_failed'));
+        showDialog({ title: t('common.error'), message: t('creator.create_event.photo.plan_upload_failed') });
       }
     };
 
@@ -627,15 +708,15 @@ export default function CreateEventScreen() {
         handleSelection
       );
     } else {
-      Alert.alert(
-        t('creator.create_event.photo.plan_upload_title'),
-        t('creator.create_event.photo.choose_option'),
-        [
-          { text: t('creator.create_event.photo.camera'), onPress: () => handleSelection(0) },
-          { text: t('creator.create_event.photo.gallery'), onPress: () => handleSelection(1) },
-          { text: t('common.cancel'), style: 'cancel' },
-        ]
-      );
+      showDialog({
+        title: t('creator.create_event.photo.plan_upload_title'),
+        message: t('creator.create_event.photo.choose_option'),
+        actions: [
+          { label: t('creator.create_event.photo.camera'), onPress: () => void handleSelection(0), variant: 'primary' },
+          { label: t('creator.create_event.photo.gallery'), onPress: () => void handleSelection(1), variant: 'outline' },
+          { label: t('common.cancel'), variant: 'secondary' },
+        ],
+      });
     }
   };
 
@@ -672,13 +753,24 @@ export default function CreateEventScreen() {
     if (!current) return;
     const sold = Number((current as any).sold || 0);
     if (sold > 0) {
-      Alert.alert('No se puede eliminar', 'Este tipo de entrada ya tiene ventas. Para no perder el histórico, no se permite eliminarlo.');
+      showDialog({
+        title: 'No se puede eliminar',
+        message: 'Este tipo de entrada ya tiene ventas. Para no perder el histórico, no se permite eliminarlo.',
+      });
       return;
     }
-    Alert.alert('Eliminar tipo de entrada', '¿Seguro que quieres eliminar este tipo de entrada?', [
-      { text: 'Cancelar', style: 'cancel' },
-      { text: 'Eliminar', style: 'destructive', onPress: () => setTicketTypes(ticketTypes.filter((t) => t.id !== ticketId)) },
-    ]);
+    showDialog({
+      title: 'Eliminar tipo de entrada',
+      message: '¿Seguro que quieres eliminar este tipo de entrada?',
+      actions: [
+        { label: 'Cancelar', variant: 'outline' },
+        {
+          label: 'Eliminar',
+          variant: 'secondary',
+          onPress: () => setTicketTypes(ticketTypes.filter((t) => t.id !== ticketId)),
+        },
+      ],
+    });
   };
 
   const getTotalCapacity = () => ticketTypes.reduce((acc, t) => acc + t.quantity, 0);
@@ -694,21 +786,21 @@ export default function CreateEventScreen() {
     setIsSearchingMap(true);
     Keyboard.dismiss();
     try {
-      const geocodedLocation = await Location.geocodeAsync(searchQuery);
+      const geocodedLocation = await withTimeout(Location.geocodeAsync(searchQuery), 8000, 'geocodeAsync');
       if (geocodedLocation.length > 0) {
         const { latitude, longitude } = geocodedLocation[0];
-        setMapRegion({
-          latitude,
-          longitude,
-          latitudeDelta: 0.01,
-          longitudeDelta: 0.01,
-        });
+        const next = sanitizeRegion({ latitude, longitude, latitudeDelta: 0.01, longitudeDelta: 0.01 });
+        mapRegionRef.current = next;
+        setMapRegion(next);
+        try {
+          mapModalRef.current?.animateToRegion(next, 700);
+        } catch {}
       } else {
-        Alert.alert('No encontrado', 'No pudimos encontrar esa ubicación.');
+        showDialog({ title: 'No encontrado', message: 'No pudimos encontrar esa ubicación.' });
       }
     } catch (error) {
       console.error('Map search error:', error);
-      Alert.alert('Error', 'Falló la búsqueda de ubicación');
+      showDialog({ title: 'Error', message: 'Falló la búsqueda de ubicación' });
     } finally {
       setIsSearchingMap(false);
     }
@@ -716,16 +808,18 @@ export default function CreateEventScreen() {
 
   const confirmMapLocation = async () => {
     try {
+      const current = mapRegionRef.current;
       setCoordinates({
-        latitude: mapRegion.latitude,
-        longitude: mapRegion.longitude
+        latitude: current.latitude,
+        longitude: current.longitude
       });
       
       // Reverse geocode to get address if possible
-      const reverseGeocode = await Location.reverseGeocodeAsync({
-        latitude: mapRegion.latitude,
-        longitude: mapRegion.longitude
-      });
+      const reverseGeocode = await withTimeout(
+        Location.reverseGeocodeAsync({ latitude: current.latitude, longitude: current.longitude }),
+        8000,
+        'reverseGeocodeAsync'
+      );
 
       if (reverseGeocode.length > 0) {
         const addr = reverseGeocode[0];
@@ -755,7 +849,7 @@ export default function CreateEventScreen() {
         vipErrors: draftValidation.vipErrors,
       };
       console.warn('[event_form_validation_failed]', JSON.stringify(payload));
-      Alert.alert('Revisa el formulario', 'Corrige los campos marcados en rojo para continuar.');
+      showDialog({ title: 'Revisa el formulario', message: 'Corrige los campos marcados en rojo para continuar.' });
       return;
     }
 
@@ -777,7 +871,7 @@ export default function CreateEventScreen() {
       const formattedTime = `${hours}:${minutes}`;
 
       if (!user?.id) {
-        Alert.alert('Error', 'No se ha podido identificar al usuario. Por favor, inicia sesión de nuevo.');
+        showDialog({ title: 'Error', message: 'No se ha podido identificar al usuario. Por favor, inicia sesión de nuevo.' });
         setLoading(false);
         return;
       }
@@ -814,14 +908,14 @@ export default function CreateEventScreen() {
         const isAdminEmail = !!user?.email && user.email.toLowerCase() === adminEmail;
 
         if (profileData?.role !== 'organizer') {
-          Alert.alert('Acceso denegado', 'Solo los organizadores pueden publicar eventos.');
+          showDialog({ title: 'Acceso denegado', message: 'Solo los organizadores pueden publicar eventos.' });
           setLoading(false);
           router.replace('/(tabs)');
           return;
         }
 
           if ('is_suspended' in (profileData || {}) && (profileData as any)?.is_suspended) {
-            Alert.alert('Cuenta suspendida', 'Tu cuenta está suspendida y no puede publicar eventos.');
+            showDialog({ title: 'Cuenta suspendida', message: 'Tu cuenta está suspendida y no puede publicar eventos.' });
             setLoading(false);
             router.replace('/(tabs)');
             return;
@@ -830,10 +924,10 @@ export default function CreateEventScreen() {
         if ('verification_status' in (profileData || {}) && profileData?.verification_status !== 'verified') {
           if (isAdminEmail) {
           } else {
-          Alert.alert(
-            'Verificación pendiente',
-            'Tu cuenta de organizador está pendiente de verificación. Nuestro equipo revisará tus documentos en breve.'
-          );
+          showDialog({
+            title: 'Verificación pendiente',
+            message: 'Tu cuenta de organizador está pendiente de verificación. Nuestro equipo revisará tus documentos en breve.',
+          });
           setLoading(false);
           router.push('/(creator)/verification');
           return;
@@ -849,7 +943,7 @@ export default function CreateEventScreen() {
           finalImageUrl = uploadedUrl;
         } else {
           setLoading(false);
-          Alert.alert('Error', 'No se pudo subir la imagen del evento');
+          showDialog({ title: 'Error', message: 'No se pudo subir la imagen del evento' });
           return;
         }
       }
@@ -925,17 +1019,51 @@ export default function CreateEventScreen() {
       setLoading(false);
       const successTitle = isEditing ? 'Evento actualizado con éxito' : 'Evento creado con éxito';
       const successBodyBase = isEditing ? 'Evento actualizado con éxito' : 'Evento creado con éxito';
-      Alert.alert(
-        successTitle,
-        (vipWarning ? `${successBodyBase}\n\n${vipWarning}` : successBodyBase) + (dispatchWarning || ''),
-        [{ text: 'OK', onPress: safeBack }]
-      );
+      setSaveResult({
+        kind: 'success',
+        title: successTitle,
+        message: (vipWarning ? `${successBodyBase}\n\n${vipWarning}` : successBodyBase) + (dispatchWarning || ''),
+        eventId: savedEventId,
+      });
     } catch (error: any) {
       console.error('Error in handleCreate:', error);
       setLoading(false);
-      Alert.alert('Error', getErrorMessage(error) || 'Ocurrió un error al crear el evento');
+      setSaveResult({
+        kind: 'error',
+        title: 'Error',
+        message: getErrorMessage(error) || 'Ocurrió un error al crear el evento',
+      });
     }
   };
+
+  if (saveResult) {
+    return (
+      <PurchaseConfirmation
+        title={saveResult.title}
+        message={saveResult.message}
+        primaryActionTitle={saveResult.kind === 'success' ? 'Volver' : 'Seguir editando'}
+        onPrimaryAction={() => {
+          if (saveResult.kind === 'success') {
+            setSaveResult(null);
+            safeBack();
+            return;
+          }
+          setSaveResult(null);
+        }}
+        secondaryActionTitle={saveResult.kind === 'success' && saveResult.eventId ? 'Ver estadísticas' : 'Volver'}
+        onSecondaryAction={() => {
+          const eventIdToOpen = saveResult.eventId;
+          if (saveResult.kind === 'success' && eventIdToOpen) {
+            setSaveResult(null);
+            router.replace(`/(creator)/event-stats/${eventIdToOpen}`);
+            return;
+          }
+          setSaveResult(null);
+          safeBack();
+        }}
+      />
+    );
+  }
 
   return (
     <View style={styles.container}>
@@ -1135,37 +1263,35 @@ export default function CreateEventScreen() {
                      <MapPin size={24} color={coordinates ? '#22c55e' : Colors.dark.text} />
                   </TouchableOpacity>
                 </View>
-                {coordinates && (
+                {coordinates && Number.isFinite(coordinates.latitude) && Number.isFinite(coordinates.longitude) && (
                   <View style={{ marginTop: 8, marginBottom: 16 }}>
                     <Text style={{ color: Colors.dark.success, fontSize: 12, marginBottom: 8, marginLeft: 4 }}>
                         {t('creator.create_event.location_verified')}
                     </Text>
                     <View style={{ height: 150, borderRadius: 12, overflow: 'hidden', borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)' }}>
-                      <MapView
-                        style={{ flex: 1 }}
-                        initialRegion={{
-                          latitude: coordinates.latitude,
-                          longitude: coordinates.longitude,
-                          latitudeDelta: 0.005,
-                          longitudeDelta: 0.005,
-                        }}
-                        region={{
-                          latitude: coordinates.latitude,
-                          longitude: coordinates.longitude,
-                          latitudeDelta: 0.005,
-                          longitudeDelta: 0.005,
-                        }}
-                        scrollEnabled={false}
-                        zoomEnabled={false}
-                        rotateEnabled={false}
-                        pitchEnabled={false}
-                      >
-                        <Marker coordinate={coordinates} />
-                      </MapView>
-                      <TouchableOpacity 
-                        style={{ ...StyleSheet.absoluteFillObject, backgroundColor: 'transparent' }} 
-                        onPress={() => setShowMapModal(true)}
-                      />
+                      <>
+                        <MapView
+                          style={{ flex: 1 }}
+                          region={sanitizeRegion({
+                            latitude: coordinates.latitude,
+                            longitude: coordinates.longitude,
+                            latitudeDelta: 0.005,
+                            longitudeDelta: 0.005,
+                          })}
+                          scrollEnabled={false}
+                          zoomEnabled={false}
+                          rotateEnabled={false}
+                          pitchEnabled={false}
+                          mapType={Platform.OS === 'ios' ? ('mutedStandard' as any) : ('standard' as any)}
+                          customMapStyle={Platform.OS === 'android' ? (MUTED_MAP_STYLE as any) : undefined}
+                        >
+                          <Marker coordinate={coordinates} />
+                        </MapView>
+                        <TouchableOpacity
+                          style={{ ...StyleSheet.absoluteFillObject, backgroundColor: 'transparent' }}
+                          onPress={() => setShowMapModal(true)}
+                        />
+                      </>
                     </View>
                   </View>
                 )}
@@ -1205,15 +1331,35 @@ export default function CreateEventScreen() {
                         
                         <View style={{ flex: 1, position: 'relative' }}>
                             <MapView
-                                style={{ flex: 1 }}
-                                region={mapRegion}
-                                onRegionChangeComplete={setMapRegion}
-                                showsUserLocation
-                                showsMyLocationButton
+                              ref={mapModalRef}
+                              style={{ flex: 1 }}
+                              initialRegion={mapRegion}
+                              onMapReady={() => setMapModalReady(true)}
+                              onMapLoaded={() => setMapModalReady(true)}
+                              onRegionChangeComplete={(r) => {
+                                const next = sanitizeRegion(r);
+                                mapRegionRef.current = next;
+                              }}
+                              showsUserLocation={mapPermission === 'granted'}
+                              showsMyLocationButton={mapPermission === 'granted'}
+                              rotateEnabled={false}
+                              pitchEnabled={false}
+                              mapType={Platform.OS === 'ios' ? ('mutedStandard' as any) : ('standard' as any)}
+                              customMapStyle={Platform.OS === 'android' ? (MUTED_MAP_STYLE as any) : undefined}
                             />
                             <View style={{ position: 'absolute', top: '50%', left: '50%', marginTop: -24, marginLeft: -24, pointerEvents: 'none' }}>
                                 <MapPin size={48} color={Colors.dark.primary} />
                             </View>
+                            {mapModalTimedOut && !mapModalReady ? (
+                              <View pointerEvents="none" style={{ position: 'absolute', left: 18, right: 18, top: 86 }}>
+                                <GlassView intensity={18} style={{ width: '100%', borderRadius: 18, padding: 14, borderWidth: 1, borderColor: 'rgba(255,255,255,0.12)', backgroundColor: 'rgba(10,10,16,0.72)' }}>
+                                  <Text style={{ color: 'white', fontWeight: '900', textAlign: 'center' }}>Mapa no disponible</Text>
+                                  <Text style={{ marginTop: 8, color: Colors.dark.textSecondary, fontWeight: '700', textAlign: 'center', lineHeight: 18 }}>
+                                    {Platform.OS === 'android' ? 'Revisa Google Play Services y la clave de Google Maps en el build.' : 'Revisa la configuración de mapas.'}
+                                  </Text>
+                                </GlassView>
+                              </View>
+                            ) : null}
                             
                             <View style={{ position: 'absolute', bottom: insets.bottom + 30, left: 20, right: 20 }}>
                                 <ThemedButton 
@@ -1373,7 +1519,9 @@ export default function CreateEventScreen() {
                   variant="outline"
                   style={styles.addTicketButton}
                   disabled={
-                    !!(newTicket.name.trim() || newTicket.price.trim() || newTicket.quantity.trim()) &&
+                    !newTicket.name.trim() ||
+                    !newTicket.price.trim() ||
+                    !newTicket.quantity.trim() ||
                     Object.values(draftValidation.newTicketErrors || {}).some(Boolean)
                   }
                   icon={<Plus size={20} color={Colors.dark.primary} />}
@@ -1610,7 +1758,14 @@ export default function CreateEventScreen() {
                   onPress={handleAddVip}
                   variant="outline"
                   style={styles.vipAddButton}
-                  disabled={vipDraftHasAny(newVip) && Object.values(draftValidation.newVipErrors).some(Boolean)}
+                  disabled={
+                    !newVip.name.trim() ||
+                    !newVip.basePrice.trim() ||
+                    !newVip.capacityPeople.trim() ||
+                    !newVip.includedBottles.trim() ||
+                    !newVip.quantityAvailable.trim() ||
+                    Object.values(draftValidation.newVipErrors).some(Boolean)
+                  }
                   icon={<Plus size={20} color={Colors.dark.primary} />}
                 />
               </View>

@@ -1,9 +1,9 @@
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert } from 'react-native';
-import { useMemo, useState, useEffect } from 'react';
+import { useMemo, useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'expo-router';
 import { useAuth } from '@/lib/AuthContext';
 import { supabase } from '@/lib/supabase';
-import { ChevronLeft, DollarSign, Plus, Minus, CheckCircle, FileText, Share, User, Mail, Calendar, Tag } from '@/lib/icons';
+import { ChevronLeft, DollarSign, Plus, Minus, Share, User, Mail, Calendar, Tag } from '@/lib/icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Colors } from '@/constants/Colors';
 import { GlassView } from '@/components/ui/GlassView';
@@ -11,16 +11,14 @@ import { ThemedButton } from '@/components/ui/ThemedButton';
 import { ThemedInput } from '@/components/ui/ThemedInput';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as Print from 'expo-print';
-import { readAsStringAsync } from 'expo-file-system/legacy';
 import * as MailComposer from 'expo-mail-composer';
 import QRCodeSVG from 'qrcode-svg';
 import * as Sharing from 'expo-sharing';
 // import * as MailComposer from 'expo-mail-composer';
 
 export default function WorkerSell() {
-  const { user, workerProfile } = useAuth();
+  const { workerProfile } = useAuth();
   const router = useRouter();
-  const [loading, setLoading] = useState(true);
   const [events, setEvents] = useState<any[]>([]);
   const [selectedEvent, setSelectedEvent] = useState<any>(null);
   const [ticketTypes, setTicketTypes] = useState<any[]>([]);
@@ -77,53 +75,18 @@ export default function WorkerSell() {
     return errors;
   }, [buyerDetails, selectedEvent]);
 
-  useEffect(() => {
-    fetchAssignedEvents();
-  }, []);
-
-  const fetchAssignedEvents = async () => {
-    if (!workerProfile) return;
-    try {
-      const { data, error } = await supabase
-        .from('events')
-        .select(`
-          id, title, event_date, poster_url, age_restriction,
-          venues (name)
-        `)
-        .eq('creator_id', workerProfile.organizer_id)
-        // Show only future or today's events
-        .gte('event_date', new Date().toISOString())
-        .order('event_date', { ascending: true });
-
-      if (error) throw error;
-
-      if (data) {
-        setEvents(data);
-        if (data.length > 0) {
-          selectEvent(data[0]);
-        }
-      }
-    } catch (error) {
-      console.error('Error fetching events:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const selectEvent = async (event: any) => {
+  const selectEvent = useCallback(async (event: any) => {
     setSelectedEvent(event);
-    setLoading(true);
     setTicketTypes([]);
     setQuantities({});
     setVipReservados([]);
     setVipQty(0);
     setSelectedVipId(null);
-    setBuyerDetails({ name: '', email: '', age: '' }); // Reset buyer form
+    setBuyerDetails({ name: '', email: '', age: '' });
     setSubmitAttempted(false);
     setTouched({});
 
     try {
-      // Fetch REAL ticket types from the database
       const { data, error } = await supabase
         .from('event_ticket_types')
         .select('*')
@@ -152,12 +115,10 @@ export default function WorkerSell() {
             sold: soldByType.get(String(t.id)) ?? Number(t.sold || 0),
           }))
         );
-        // Initialize quantities
         const initialQty: any = {};
         data.forEach((t: any) => (initialQty[t.id] = 0));
         setQuantities(initialQty);
       } else {
-        // Fallback or empty state
         Alert.alert("Aviso", "Este evento no tiene tipos de entrada definidos.");
         setTicketTypes([]);
       }
@@ -184,10 +145,39 @@ export default function WorkerSell() {
     } catch (e) {
       console.error("Error fetching ticket types:", e);
       Alert.alert("Error", "No se pudieron cargar los tipos de entrada.");
-    } finally {
-      setLoading(false);
     }
-  };
+  }, []);
+
+  const fetchAssignedEvents = useCallback(async () => {
+    if (!workerProfile) return;
+    try {
+      const { data, error } = await supabase
+        .from('events')
+        .select(`
+          id, title, event_date, poster_url, age_restriction,
+          venues (name)
+        `)
+        .eq('creator_id', workerProfile.organizer_id)
+        // Show only future or today's events
+        .gte('event_date', new Date().toISOString())
+        .order('event_date', { ascending: true });
+
+      if (error) throw error;
+
+      if (data) {
+        setEvents(data);
+        if (data.length > 0) {
+          selectEvent(data[0]);
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching events:', error);
+    }
+  }, [selectEvent, workerProfile]);
+
+  useEffect(() => {
+    fetchAssignedEvents();
+  }, [fetchAssignedEvents]);
 
   const updateQuantity = (typeId: string, delta: number) => {
     setQuantities(prev => {
@@ -322,7 +312,6 @@ export default function WorkerSell() {
       `;
 
       const { uri } = await Print.printToFileAsync({ html });
-      const pdfBase64 = await readAsStringAsync(uri, { encoding: 'base64' as any });
 
       const buyerEmail = tickets[0].attendee_email || tickets[0].buyer_email;
       const isMailAvailable = await MailComposer.isAvailableAsync();

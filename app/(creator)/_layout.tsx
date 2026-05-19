@@ -1,16 +1,21 @@
-import { Stack, Redirect, useSegments } from 'expo-router';
+import { Stack, Tabs, Redirect, useSegments } from 'expo-router';
 import { useAuth } from '@/lib/AuthContext';
 import { View } from 'react-native';
 import { Colors } from '@/constants/Colors';
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { DiscoLoader } from '@/components/ui/DiscoLoader';
+import { Calendar, QrCode, TrendingUp, User } from '@/lib/icons';
+import { useTranslation } from 'react-i18next';
 
 export default function CreatorLayout() {
   const { loading, user } = useAuth();
   const segments = useSegments();
+  const { t } = useTranslation();
   const [checkingRole, setCheckingRole] = useState(true);
-  const [profileRole, setProfileRole] = useState<string | null>(null);
+  const [profileRole, setProfileRole] = useState<string | null>(
+    (user?.user_metadata as any)?.role ?? null
+  );
   const [verificationStatus, setVerificationStatus] = useState<'pending_verification' | 'verified' | 'rejected' | 'needs_correction' | null>(null);
   const adminEmail = ((process.env.EXPO_PUBLIC_ADMIN_EMAIL as any) ?? '').toString().trim().toLowerCase() || 'aamracorporation@gmail.com';
   const isAdminEmail = !!user?.email && user.email.toLowerCase() === adminEmail;
@@ -93,6 +98,64 @@ export default function CreatorLayout() {
     return <Redirect href="/(creator)/verification" />;
   }
 
+  const isAdmin = isAdminEmail || profileRole === 'admin';
+  const isVerifiedOrganizer = !isAdminEmail && profileRole === 'organizer' && verificationStatus === 'verified';
+
+  if (isVerifiedOrganizer) {
+    return (
+      <Tabs
+        initialRouteName="index"
+        screenOptions={{
+          headerShown: false,
+          tabBarActiveTintColor: '#ffffff',
+          tabBarInactiveTintColor: 'rgba(255,255,255,0.55)',
+          tabBarStyle: {
+            backgroundColor: '#050510',
+            borderTopColor: 'rgba(255,255,255,0.06)',
+            borderTopWidth: 1,
+          },
+        }}
+      >
+        <Tabs.Screen
+          name="index"
+          options={{
+            title: t('creator.tabs.stats', { defaultValue: 'Estadísticas' }),
+            tabBarIcon: ({ color, size }) => <TrendingUp color={color} size={size ?? 22} />,
+          }}
+        />
+        <Tabs.Screen
+          name="manage-events"
+          options={{
+            title: t('creator.manage_events.title_organizer', { defaultValue: 'Mis eventos' }),
+            tabBarIcon: ({ color, size }) => <Calendar color={color} size={size ?? 22} />,
+          }}
+        />
+        <Tabs.Screen
+          name="scan"
+          options={{
+            title: t('creator.scan.title', { defaultValue: 'Acceso' }),
+            tabBarIcon: ({ color, size }) => <QrCode color={color} size={size ?? 22} />,
+          }}
+        />
+        <Tabs.Screen
+          name="organizer-profile"
+          options={{
+            title: t('tabs.profile'),
+            tabBarIcon: ({ color, size }) => <User color={color} size={size ?? 22} />,
+          }}
+        />
+
+        <Tabs.Screen name="create-event" options={{ href: null }} />
+        <Tabs.Screen name="workers" options={{ href: null }} />
+        <Tabs.Screen name="verification" options={{ href: null }} />
+        <Tabs.Screen name="admin-verification" options={{ href: null }} />
+        <Tabs.Screen name="global-stats" options={{ href: null }} />
+        <Tabs.Screen name="stats" options={{ href: null }} />
+        <Tabs.Screen name="event-stats/[id]" options={{ href: null }} />
+      </Tabs>
+    );
+  }
+
   return (
     <Stack
       screenOptions={{
@@ -105,6 +168,9 @@ export default function CreatorLayout() {
       <Stack.Screen name="workers" />
       <Stack.Screen name="verification" />
       <Stack.Screen name="admin-verification" />
+      <Stack.Screen name="scan" />
+      <Stack.Screen name="stats" />
+      <Stack.Screen name="event-stats/[id]" />
     </Stack>
   );
 }

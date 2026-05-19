@@ -10,6 +10,81 @@ export function normalizeWhitespace(input: string) {
   return String(input || '').replace(/\s+/g, ' ').trim();
 }
 
+export function normalizeWhitespaceForInput(input: string) {
+  const raw = String(input || '');
+  let s = raw.replace(/\s+/g, ' ');
+  s = s.replace(/^\s+/, '');
+  return s;
+}
+
+export function normalizeSearchQuery(input: string) {
+  return normalizeWhitespace(String(input || '')).toLowerCase();
+}
+
+export type PasswordRequirements = {
+  minLength: boolean;
+  hasUpper: boolean;
+  hasLower: boolean;
+  hasNumber: boolean;
+  hasSpecial: boolean;
+  onlyAllowedChars: boolean;
+};
+
+export function getPasswordRequirements(password: string): PasswordRequirements {
+  const p = String(password || '');
+  const allowedSpecials = `!@#$%^&*(),.?":{}|<>`;
+  const escaped = allowedSpecials.replace(/[-\\\]^]/g, '\\$&');
+  const specialRe = new RegExp(`[${escaped}]`);
+  const invalidCharRe = new RegExp(`[^A-Za-z0-9${escaped}]`);
+  const hasInvalid = invalidCharRe.test(p);
+  return {
+    minLength: p.length >= 6,
+    hasUpper: /[A-Z]/.test(p),
+    hasLower: /[a-z]/.test(p),
+    hasNumber: /[0-9]/.test(p),
+    hasSpecial: specialRe.test(p),
+    onlyAllowedChars: !hasInvalid,
+  };
+}
+
+export function isPasswordStrong(password: string) {
+  const r = getPasswordRequirements(password);
+  return r.minLength && r.hasUpper && r.hasLower && r.hasNumber && r.hasSpecial && r.onlyAllowedChars;
+}
+
+export function eventMatchesQuery(
+  event: {
+    title?: string | null;
+    location?: string | null;
+    description?: string | null;
+    eventType?: string | null;
+    theme?: string | null;
+    venues?: { name?: string | null } | null;
+  },
+  query: string
+) {
+  const q = normalizeSearchQuery(query);
+  if (!q) return true;
+  const haystack = [
+    event.title,
+    event.location,
+    event.description,
+    event.eventType,
+    event.theme,
+    event.venues?.name,
+  ]
+    .filter(Boolean)
+    .join(' ')
+    .toLowerCase();
+  return haystack.includes(q);
+}
+
+export function filterEventsByQuery<T extends Parameters<typeof eventMatchesQuery>[0]>(events: T[], query: string) {
+  const q = normalizeSearchQuery(query);
+  if (!q) return events;
+  return (events || []).filter((e) => eventMatchesQuery(e, q));
+}
+
 function hasControlChars(s: string) {
   return /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/.test(String(s || ''));
 }
@@ -18,7 +93,7 @@ export function isValidPersonName(input: string) {
   const s = normalizeWhitespace(input);
   if (!s) return false;
   if (hasControlChars(s)) return false;
-  return /^[\p{L}]+(?: [\p{L}]+)*$/u.test(s);
+  return /^[\p{L}]+(?:[ '\-][\p{L}]+)*$/u.test(s);
 }
 
 export function isSafeTextNoEmojis(input: string) {

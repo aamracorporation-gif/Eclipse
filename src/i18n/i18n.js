@@ -76,7 +76,7 @@ export async function initLanguage() {
           useSuspense: false,
         },
         returnNull: false,
-        parseMissingKeyHandler: () => '—',
+        parseMissingKeyHandler: () => '',
       });
     } else {
       await i18next.changeLanguage(initial);

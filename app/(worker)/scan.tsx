@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { StyleSheet, Text, View, TouchableOpacity, Modal, Alert, Vibration } from 'react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { router } from 'expo-router';
@@ -14,8 +14,24 @@ import * as Haptics from 'expo-haptics';
 import * as Location from 'expo-location';
 import { useResponsive } from '@/lib/responsive';
 
+function deg2rad(deg: number) {
+  return deg * (Math.PI / 180);
+}
+
+function getDistanceFromLatLonInKm(lat1: number, lon1: number, lat2: number, lon2: number) {
+  const R = 6371;
+  const dLat = deg2rad(lat2 - lat1);
+  const dLon = deg2rad(lon2 - lon1);
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(deg2rad(lat1)) * Math.cos(deg2rad(lat2)) *
+    Math.sin(dLon / 2) * Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
+}
+
 export default function WorkerScanScreen() {
-  const { user, workerProfile } = useAuth();
+  const { workerProfile } = useAuth();
   const insets = useSafeAreaInsets();
   const { horizontalPadding, maxContentWidth, scaleFont, width } = useResponsive();
   const [permission, requestPermission] = useCameraPermissions();
@@ -34,32 +50,7 @@ export default function WorkerScanScreen() {
     else router.replace('/(worker)');
   };
 
-  useEffect(() => {
-    if (!permission?.granted) {
-      requestPermission();
-    }
-    fetchEventsAndSelectNearest();
-  }, []);
-
-  // Helper to calculate distance in km
-  function getDistanceFromLatLonInKm(lat1: number, lon1: number, lat2: number, lon2: number) {
-    const R = 6371; // Radius of the earth in km
-    const dLat = deg2rad(lat2-lat1);  // deg2rad below
-    const dLon = deg2rad(lon2-lon1); 
-    const a = 
-      Math.sin(dLat/2) * Math.sin(dLat/2) +
-      Math.cos(deg2rad(lat1)) * Math.cos(deg2rad(lat2)) * 
-      Math.sin(dLon/2) * Math.sin(dLon/2)
-      ; 
-    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a)); 
-    return R * c; // Distance in km
-  }
-
-  function deg2rad(deg: number) {
-    return deg * (Math.PI/180)
-  }
-
-  const fetchEventsAndSelectNearest = async () => {
+  const fetchEventsAndSelectNearest = useCallback(async () => {
     if (!workerProfile) return;
     try {
       // 1. Get current location if possible
@@ -132,7 +123,14 @@ export default function WorkerScanScreen() {
     } catch (e) {
       console.error("Error fetching events for scanner:", e);
     }
-  };
+  }, [workerProfile]);
+
+  useEffect(() => {
+    if (!permission?.granted) {
+      requestPermission();
+    }
+    fetchEventsAndSelectNearest();
+  }, [fetchEventsAndSelectNearest, permission?.granted, requestPermission]);
 
   const playFeedback = async (success: boolean) => {
     try {

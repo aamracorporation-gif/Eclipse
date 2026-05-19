@@ -11,6 +11,28 @@ type Body = {
   metadata?: Record<string, unknown>;
 };
 
+function getPasswordReq(password: string) {
+  const p = String(password || "");
+  const allowedSpecials = `!@#$%^&*(),.?":{}|<>`;
+  const escaped = allowedSpecials.replace(/[-\\\]^]/g, "\\$&");
+  const specialRe = new RegExp(`[${escaped}]`);
+  const invalidCharRe = new RegExp(`[^A-Za-z0-9${escaped}]`);
+  const hasInvalid = invalidCharRe.test(p);
+  return {
+    minLength: p.length >= 6,
+    hasUpper: /[A-Z]/.test(p),
+    hasLower: /[a-z]/.test(p),
+    hasNumber: /[0-9]/.test(p),
+    hasSpecial: specialRe.test(p),
+    onlyAllowedChars: !hasInvalid,
+  };
+}
+
+function isPasswordStrong(password: string) {
+  const r = getPasswordReq(password);
+  return r.minLength && r.hasUpper && r.hasLower && r.hasNumber && r.hasSpecial && r.onlyAllowedChars;
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
@@ -38,8 +60,8 @@ Deno.serve(async (req) => {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
-    if (!password || password.length < 6) {
-      return new Response(JSON.stringify({ ok: false, error: "Invalid password." }), {
+    if (!password || !isPasswordStrong(password)) {
+      return new Response(JSON.stringify({ ok: false, error: "Weak password." }), {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });

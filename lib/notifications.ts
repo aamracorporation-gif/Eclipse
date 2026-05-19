@@ -84,13 +84,7 @@ export async function registerForPushNotifications(userId: string | null) {
     return;
   }
 
-  const executionEnvironment = (Constants as any)?.executionEnvironment;
-  const appOwnership = (Constants as any)?.appOwnership;
-  const isExpoGo = executionEnvironment === 'storeClient' || appOwnership === 'expo';
-  if (isExpoGo) {
-    await AsyncStorage.setItem('remote_push_enabled', '0');
-    return;
-  }
+
 
   let token;
   try {

@@ -166,6 +166,80 @@
   "profile": {
     "notification_preferences": "Préférences de notifications",
     "notification_center": "Centre de notifications",
+    "edit_profile": "Modifier le profil",
+    "edit": {
+      "title": "Modifier le profil",
+      "autosave": "Enregistrement auto",
+      "show": "Afficher",
+      "hide": "Masquer",
+      "save_confirm": "Enregistrer les modifications du profil ?",
+      "autosave_prompt": "Vous avez des modifications non enregistrées. Enregistrer maintenant ?",
+      "discard_confirm": "Vous avez des modifications non enregistrées. Les supprimer ?",
+      "discard": "Ignorer",
+      "fix_errors": "Corrigez les erreurs avant d’enregistrer.",
+      "sections": {
+        "account": "Compte",
+        "personal": "Informations personnelles",
+        "contact": "Contact",
+        "organizer": "Organisateur"
+      },
+      "fields": {
+        "full_name": "Nom affiché",
+        "first_name": "Prénom",
+        "last_name": "Nom",
+        "gender": "Genre",
+        "age": "Âge",
+        "city": "Ville",
+        "country": "Pays",
+        "club_name": "Nom du lieu / club",
+        "business_email": "Email professionnel",
+        "instagram": "Instagram",
+        "venue_address": "Adresse du lieu",
+        "fiscal_address": "Adresse de facturation",
+        "postal_code": "Code postal",
+        "responsible_name": "Responsable",
+        "responsible_birthdate": "Naissance du responsable",
+        "iban": "IBAN"
+      },
+      "placeholders": {
+        "full_name": "Votre nom",
+        "first_name": "Prénom",
+        "last_name": "Nom",
+        "gender": "Optionnel",
+        "age": "Optionnel",
+        "phone": "+34…",
+        "city": "Ville",
+        "country": "Pays",
+        "club_name": "Nom du lieu / club",
+        "business_email": "contact@…",
+        "instagram": "@votre_compte",
+        "venue_address": "Adresse du lieu",
+        "fiscal_address": "Adresse de facturation",
+        "postal_code": "00000",
+        "responsible_name": "Nom du responsable",
+        "responsible_birthdate": "YYYY-MM-DD",
+        "iban": "ES…"
+      },
+      "errors": {
+        "name_required": "Saisissez votre nom.",
+        "invalid_name": "Nom invalide.",
+        "invalid_city": "Ville invalide.",
+        "invalid_country": "Pays invalide.",
+        "invalid_gender": "Valeur invalide.",
+        "invalid_age": "Âge invalide.",
+        "invalid_phone": "Téléphone invalide.",
+        "invalid_text": "Les emojis et caractères spéciaux ne sont pas autorisés.",
+        "invalid_email": "Email invalide.",
+        "invalid_instagram": "Instagram invalide.",
+        "invalid_address": "Adresse invalide.",
+        "invalid_postal": "Code postal invalide.",
+        "invalid_birthdate": "Date invalide (YYYY-MM-DD).",
+        "invalid_iban": "IBAN invalide.",
+        "location_incomplete": "Saisissez la ville et le pays pour valider.",
+        "location_not_found": "Ville/pays introuvable. Vérifiez que c’est correct.",
+        "location_check_failed": "Impossible de valider la localisation. Vérifiez votre connexion."
+      }
+    },
     "change_language": "Changer la langue",
     "language": {
       "device": "Langue de l’appareil",
@@ -174,13 +248,28 @@
       "fr": "Français"
     },
     "segment_panel": "Tableau",
-    "segment_account": "Compte",
+    "segment_my_profile": "Mon profil",
+    "segment_account": "Réglages",
+    "section_profile": "Détails du profil",
+    "section_settings": "Préférences de l’app",
+    "section_settings_sub": "Langue et notifications.",
+    "section_privacy": "Confidentialité et sécurité",
+    "section_privacy_sub": "Informations légales et contrôle des données.",
+    "device_language": "Système",
     "section_account": "COMPTE",
     "section_management": "GESTION",
     "section_staff": "PERSONNEL",
     "sign_in_prompt": "Connectez-vous pour accéder à votre profil et gérer vos billets",
     "name": "Nom",
     "email": "E-mail",
+    "full_name": "Nom",
+    "first_name": "Prénom",
+    "last_name": "Nom de famille",
+    "phone": "Téléphone",
+    "city": "Ville",
+    "country": "Pays",
+    "gender": "Genre",
+    "age": "Âge",
     "wallet": "Crédit Eclipse",
     "review_organizers": "Examiner les organisateurs",
     "location_label": "Lieu",
@@ -304,6 +393,9 @@
     }
   },
   "creator": {
+    "tabs": {
+      "stats": "Stats"
+    },
     "dashboard": {
       "hello": "Salut, {{name}}",
       "role_admin": "Admin",
@@ -562,7 +654,19 @@
       }
     },
     "scan": {
-      "title": "Scanner le billet",
+      "title": "Accès",
+      "dashboard_title": "Accès",
+      "dashboard_subtitle": "Validez les billets via QR ou code manuel.",
+      "camera_permission_title": "Autorisation caméra",
+      "actions": {
+        "validate": "Valider",
+        "staff": "Staff"
+      },
+      "staff_subtitle": "Invitez et gérez votre équipe pour le contrôle d’accès.",
+      "manual_hint": "Format : texte du QR sans espaces. Utile si le QR est abîmé ou ne fait pas la mise au point.",
+      "manual_placeholder": "Collez ici le texte du QR",
+      "helper_camera": "Recommandé pour des contrôles rapides à l’entrée.",
+      "helper_manual": "À utiliser si le QR est abîmé ou si le scan ne fait pas la mise au point.",
       "aim_qr": "Visez le QR code du billet",
       "validating": "Validation…",
       "valid_title": "BILLET VALIDE !",
@@ -570,7 +674,7 @@
       "expired_banner": "BILLET EXPIRÉ",
       "not_recognized": "Code non reconnu",
       "next_scan": "Scanner le suivant",
-      "na": "N/A",
+      "na": "Sans données",
       "labels": {
         "event": "Événement :",
         "holder": "Titulaire :",
@@ -683,6 +787,24 @@
     "map_title": "Carte",
     "map_subtitle": "À {{city}}",
     "map_subtitle_generic": "Découvrir par zone",
+    "map_unavailable_title": "Carte indisponible",
+    "map_unavailable_body": "La clé Google Maps n’est pas configurée pour Android.\n\nAjoutez EXPO_PUBLIC_GOOGLE_MAPS_API_KEY dans EAS puis régénérez l’APK.",
+    "map_sheet": {
+      "trending": "Tendance",
+      "view_event": "Voir l’événement",
+      "crowd_label": "Affluence",
+      "attendees_label": "Présents",
+      "distance_label": "Distance",
+      "crowd_info_title": "Que signifie « Affluence » ?",
+      "crowd_info_body": "C’est une estimation du niveau d’affluence (faible/moyenne/pleine) basée sur des signaux comme les ventes, les check-ins et l’activité en temps réel.",
+      "attendees_info_title": "Que signifie « Présents » ?",
+      "attendees_info_body": "C’est une estimation du nombre de personnes pouvant être à l’événement en ce moment.",
+      "level": {
+        "low": "Faible",
+        "medium": "Moyenne",
+        "full": "Pleine"
+      }
+    },
     "get_tickets": "Obtenir des billets",
     "tabs": {
       "concerts": "Concerts",
@@ -711,7 +833,8 @@
       "type": "Type",
       "music": "Musique",
       "age": "Âge",
-      "dress_code": "Dress code"
+      "dress_code": "Dress code",
+      "lineup": "Programmation"
     },
     "actions": {
       "map": "Carte",
@@ -802,7 +925,10 @@
     "empty_no_results_subtitle": "Essayez moins de filtres ou recherchez par nom d'événement.",
     "empty_no_listings": "Aucun billet en revente",
     "empty_no_listings_subtitle": "Lorsque d'autres utilisateurs publient des billets, ils apparaîtront ici avec un achat rapide et sécurisé.",
-    "view_my_tickets": "Voir mes billets"
+    "view_my_tickets": "Voir mes billets",
+    "my_sales_title": "Mes ventes",
+    "my_sales_loading": "Chargement des ventes…",
+    "my_sales_empty": "Vous n'avez aucun billet en revente"
   },
   "tickets_pdf": {
     "ticket_title": "Billet",

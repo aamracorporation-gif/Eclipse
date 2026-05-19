@@ -1,5 +1,5 @@
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, RefreshControl, Platform } from 'react-native';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'expo-router';
 import { useAuth } from '@/lib/AuthContext';
 import { supabase } from '@/lib/supabase';
@@ -31,10 +31,9 @@ function deg2rad(deg: number) {
 }
 
 export default function WorkerDashboard() {
-  const { user, workerProfile, signOut } = useAuth();
+  const { workerProfile, signOut } = useAuth();
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [stats, setStats] = useState({ tickets_sold: 0, unpaid_amount: 0 });
   const [assignedEvents, setAssignedEvents] = useState<any[]>([]);
@@ -42,12 +41,7 @@ export default function WorkerDashboard() {
   const [radius, setRadius] = useState<number | null>(null); // null means "All"
   const { horizontalPadding, maxContentWidth, scaleFont } = useResponsive();
 
-  useEffect(() => {
-    fetchDashboardData();
-    requestLocation();
-  }, []);
-
-  const requestLocation = async () => {
+  const requestLocation = useCallback(async () => {
     if (Platform.OS === 'web') return;
     try {
       const { status } = await Location.requestForegroundPermissionsAsync();
@@ -61,13 +55,13 @@ export default function WorkerDashboard() {
     } catch (e) {
       console.log('Error getting location:', e);
     }
-  };
+  }, []);
 
-  const fetchDashboardData = async () => {
+  const fetchDashboardData = useCallback(async () => {
     if (!workerProfile) return;
     
     try {
-      setLoading(true);
+      setRefreshing(true);
       
       // 1. Fetch Stats (Only Ticket Count)
       const { count } = await supabase
@@ -98,10 +92,14 @@ export default function WorkerDashboard() {
     } catch (error) {
       console.error('Error fetching worker dashboard:', error);
     } finally {
-      setLoading(false);
       setRefreshing(false);
     }
-  };
+  }, [workerProfile]);
+
+  useEffect(() => {
+    fetchDashboardData();
+    requestLocation();
+  }, [fetchDashboardData, requestLocation]);
 
   const handleLogout = async () => {
     try {
@@ -113,7 +111,6 @@ export default function WorkerDashboard() {
   };
 
   const onRefresh = () => {
-    setRefreshing(true);
     fetchDashboardData();
   };
 
@@ -141,7 +138,7 @@ export default function WorkerDashboard() {
         contentContainerStyle={[styles.content, { paddingTop: insets.top + 20, paddingHorizontal: horizontalPadding, alignItems: 'center' }]}
         refreshControl={
           <RefreshControl
-            refreshing={false}
+            refreshing={refreshing}
             onRefresh={onRefresh}
             tintColor="transparent"
             colors={['transparent']}

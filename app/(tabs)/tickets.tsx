@@ -1,4 +1,4 @@
-import { View, Text, StyleSheet, FlatList, Image, TouchableOpacity, RefreshControl, Platform, Modal, Alert, KeyboardAvoidingView, Animated, Easing } from 'react-native';
+import { View, Text, StyleSheet, FlatList, Image, TouchableOpacity, RefreshControl, Platform, Modal, KeyboardAvoidingView, Animated, Easing } from 'react-native';
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { router } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
@@ -24,6 +24,7 @@ import { useResponsive } from '@/lib/responsive';
 import { invokeEdgeFunction } from '@/lib/edgeFunctions';
 import { useTranslation } from 'react-i18next';
 import { useI18n } from '@/lib/I18nContext';
+import { useAppDialog } from '@/components/ui/AppDialog';
 
 type ExtendedTicket = Ticket & { 
   status?: string;
@@ -35,6 +36,7 @@ export default function TicketsScreen() {
   const { t } = useTranslation();
   const { language } = useI18n();
   const { user } = useAuth();
+  const { show: showDialog } = useAppDialog();
   const insets = useSafeAreaInsets();
   const { horizontalPadding, maxContentWidth } = useResponsive();
   const { createResaleListing, cancelResaleListing } = useCredit();
@@ -281,10 +283,7 @@ export default function TicketsScreen() {
 
   const handleSellPress = async (ticket: ExtendedTicket) => {
     if (ticket.scanned_at || ticket.validation_status === 'used' || ticket.status === 'used') {
-      Alert.alert(
-        t('tickets.action_not_allowed_title'),
-        t('tickets.used_ticket_cannot_resell')
-      );
+      showDialog({ title: t('tickets.action_not_allowed_title'), message: t('tickets.used_ticket_cannot_resell') });
       return;
     }
 
@@ -301,10 +300,7 @@ export default function TicketsScreen() {
           const isUsed = !!fresh.scanned_at || fresh.validation_status === 'used' || fresh.status === 'used';
           if (isUsed) {
             setTickets((prev) => prev.map((t) => (t.id === ticket.id ? { ...t, ...fresh } : t)));
-            Alert.alert(
-              t('tickets.action_not_allowed_title'),
-              t('tickets.used_ticket_cannot_resell')
-            );
+            showDialog({ title: t('tickets.action_not_allowed_title'), message: t('tickets.used_ticket_cannot_resell') });
             return;
           }
         }
@@ -319,36 +315,38 @@ export default function TicketsScreen() {
   };
 
   const handleCancelResale = async (ticket: ExtendedTicket) => {
-    Alert.alert(
-      t('tickets.cancel_sale_title'),
-      t('tickets.cancel_sale_body'),
-      [
-        { text: t('common.no'), style: 'cancel' },
-        { 
-          text: t('tickets.cancel_sale_confirm'), 
+    showDialog({
+      title: t('tickets.cancel_sale_title'),
+      message: t('tickets.cancel_sale_body'),
+      actions: [
+        { label: t('common.no'), variant: 'outline' },
+        {
+          label: t('tickets.cancel_sale_confirm'),
+          variant: 'primary',
           onPress: async () => {
-             // Optimistic Update
-             const originalTickets = [...tickets];
-             setTickets(prev => prev.map(t => {
-               if (t.id === ticket.id) {
-                 return { ...t, status: 'valid', resale_listings: [] };
-               }
-               return t;
-             }));
+            const originalTickets = [...tickets];
+            setTickets((prev) =>
+              prev.map((t) => {
+                if (t.id === ticket.id) {
+                  return { ...t, status: 'valid', resale_listings: [] };
+                }
+                return t;
+              })
+            );
 
-             try {
-               await cancelResaleListing(ticket.id);
-               await fetchTickets(); // Sync
-               Alert.alert(t('common.success'), t('tickets.cancel_sale_success'));
-             } catch (error: any) {
-               console.error(error);
-               setTickets(originalTickets); // Revert
-               Alert.alert(t('common.error'), t('tickets.cancel_sale_error'));
-             }
-          }
-        }
-      ]
-    );
+            try {
+              await cancelResaleListing(ticket.id);
+              await fetchTickets();
+              showDialog({ title: t('common.success'), message: t('tickets.cancel_sale_success') });
+            } catch (error: any) {
+              console.error(error);
+              setTickets(originalTickets);
+              showDialog({ title: t('common.error'), message: t('tickets.cancel_sale_error') });
+            }
+          },
+        },
+      ],
+    });
   };
 
   const handleAddToWallet = async (ticket: ExtendedTicket) => {
@@ -392,7 +390,7 @@ export default function TicketsScreen() {
     } catch (err: any) {
       console.error('Wallet error:', err);
       const msg = err.message || t('errors.generic');
-      Alert.alert(t('common.error'), `${msg}\n${t('tickets.wallet_install_hint')}`);
+      showDialog({ title: t('common.error'), message: `${msg}\n${t('tickets.wallet_install_hint')}` });
     } finally {
       setAddingToWallet(null);
     }
@@ -413,7 +411,7 @@ export default function TicketsScreen() {
     const price = Number(normalized);
     const err = resalePriceError();
     if (err) {
-      Alert.alert('Precio inválido', err);
+      showDialog({ title: 'Precio inválido', message: err });
       return;
     }
 
@@ -422,18 +420,18 @@ export default function TicketsScreen() {
     const maxResalePrice = originalPrice * 1.2;
 
     if (Number.isFinite(minResalePrice) && price < minResalePrice) {
-      Alert.alert(
-        t('tickets.action_not_allowed_title'),
-        t('tickets.resale_min_price_body', { price: (minResalePrice || 0).toFixed(2) })
-      );
+      showDialog({
+        title: t('tickets.action_not_allowed_title'),
+        message: t('tickets.resale_min_price_body', { price: (minResalePrice || 0).toFixed(2) }),
+      });
       return;
     }
 
     if (Number.isFinite(maxResalePrice) && price > maxResalePrice) {
-      Alert.alert(
-        t('tickets.action_not_allowed_title'),
-        t('tickets.resale_max_price_body', { price: (maxResalePrice || 0).toFixed(2) })
-      );
+      showDialog({
+        title: t('tickets.action_not_allowed_title'),
+        message: t('tickets.resale_max_price_body', { price: (maxResalePrice || 0).toFixed(2) }),
+      });
       return;
     }
 
@@ -454,7 +452,7 @@ export default function TicketsScreen() {
     }));
 
     setSellModalVisible(false);
-    Alert.alert(t('tickets.processing_title'), t('tickets.processing_body'));
+    showDialog({ title: t('tickets.processing_title'), message: t('tickets.processing_body') });
 
     // 2. Perform operation in background
     try {
@@ -466,7 +464,10 @@ export default function TicketsScreen() {
       // 3. Revert on failure
       console.error("Resale failed:", error);
       setTickets(originalTickets); // Revert UI
-      Alert.alert(t('common.error'), t('tickets.put_on_sale_failed', { error: String(error?.message || t('errors.generic')) }));
+      showDialog({
+        title: t('common.error'),
+        message: t('tickets.put_on_sale_failed', { error: String(error?.message || t('errors.generic')) }),
+      });
     } finally {
       setSelling(false);
     }
@@ -479,7 +480,7 @@ export default function TicketsScreen() {
       (Array.isArray(ticket.resale_listings) && ticket.resale_listings.some((l) => l?.status === 'active'));
 
     if (isOnResale) {
-      Alert.alert(t('tickets.pdf_disabled_resale_title'), t('tickets.pdf_disabled_resale_body'));
+      showDialog({ title: t('tickets.pdf_disabled_resale_title'), message: t('tickets.pdf_disabled_resale_body') });
       return;
     }
 
@@ -628,7 +629,7 @@ export default function TicketsScreen() {
       }
     } catch (error) {
       console.error('Error downloading ticket:', error);
-      Alert.alert('Error', 'No se pudo descargar la entrada');
+      showDialog({ title: 'Error', message: 'No se pudo descargar la entrada' });
     }
   };
 
@@ -917,7 +918,10 @@ export default function TicketsScreen() {
         title={t('auth.login')}
         subtitle={t('tickets.login_required_body')}
         ctaLabel={t('auth.login')}
+        secondaryCtaLabel={t('auth.register')}
         Icon={LogIn}
+        variant="resaleCard"
+        eyebrow={`ECLIPSE · ${String(t('tickets.my_tickets')).toUpperCase()}`}
       />
     );
   }
@@ -1592,7 +1596,13 @@ const styles = StyleSheet.create({
   modalContent: {
     padding: 24,
     borderRadius: 20,
-    backgroundColor: '#1e1b4b',
+    backgroundColor: 'rgba(15, 23, 42, 0.96)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.14)',
+    width: '100%',
+    maxWidth: 560,
+    alignSelf: 'center',
+    elevation: 14,
   },
   modalHeader: {
     flexDirection: 'row',

@@ -7,7 +7,53 @@ async function createEvent({ creatorId, payload }) {
   return data;
 }
 
-async function listEvents() {
+async function listEvents({ bbox } = {}) {
+  if (bbox && bbox.enabled) {
+    const { minLat, maxLat, minLng, maxLng, fromIso, toIso } = bbox;
+
+    const venuesRes = await supabaseAdmin
+      .from('venues')
+      .select('id')
+      .gte('latitude', minLat)
+      .lte('latitude', maxLat)
+      .gte('longitude', minLng)
+      .lte('longitude', maxLng);
+    if (venuesRes.error) throw venuesRes.error;
+    const venueIds = (venuesRes.data || []).map((v) => v.id);
+    if (!venueIds.length) return [];
+
+    let q = supabaseAdmin
+      .from('events')
+      .select(
+        `
+          id,
+          title,
+          description,
+          poster_url,
+          venue_plan_url,
+          event_date,
+          ticket_price,
+          available_tickets,
+          sold_tickets,
+          dress_code,
+          age_restriction,
+          theme,
+          event_type,
+          creator_id,
+          updated_at,
+          venues (name, latitude, longitude)
+        `
+      )
+      .in('venue_id', venueIds);
+
+    if (fromIso) q = q.gte('event_date', fromIso);
+    if (toIso) q = q.lte('event_date', toIso);
+
+    const { data, error } = await q.order('event_date', { ascending: true });
+    if (error) throw error;
+    return data || [];
+  }
+
   const { data, error } = await supabaseAdmin.from('events').select('*').order('event_date', { ascending: true });
   if (error) throw error;
   return data || [];

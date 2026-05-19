@@ -1,4 +1,4 @@
-import { View, Text, StyleSheet, FlatList, Image, TouchableOpacity, Alert, RefreshControl, StatusBar, Animated, Easing } from 'react-native';
+import { View, Text, StyleSheet, FlatList, Image, TouchableOpacity, RefreshControl, StatusBar, Animated, Easing } from 'react-native';
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
 import { Colors } from '@/constants/Colors';
@@ -17,6 +17,7 @@ import { usePaymentSheetHandler } from '@/components/PaymentSheetHandler';
 import { PurchaseConfirmation } from '@/components/PurchaseConfirmation';
 import { useTranslation } from 'react-i18next';
 import { useI18n } from '@/lib/I18nContext';
+import { useAppDialog } from '@/components/ui/AppDialog';
 
 type VipReservado = {
   id: string;
@@ -58,6 +59,7 @@ export default function ResaleScreen() {
   const insets = useSafeAreaInsets();
   const { t } = useTranslation();
   const { language } = useI18n();
+  const { show: showDialog } = useAppDialog();
   const localeTag = language === 'en' ? 'en-US' : language === 'fr' ? 'fr-FR' : 'es-ES';
   const [allListings, setAllListings] = useState<ResaleListing[]>([]);
   const [listings, setListings] = useState<ResaleListing[]>([]);
@@ -130,28 +132,24 @@ export default function ResaleScreen() {
   }, [emptyDrift, emptyEnter, emptyFloat, emptyPulse, listings.length, loading]);
 
   useEffect(() => {
-    applyFilters();
-  }, [filters, allListings]);
-
-  const applyFilters = () => {
     let result = [...allListings];
 
     if (filters.event) {
       const term = filters.event.toLowerCase();
-      result = result.filter(item => 
-        item.ticket.event.title.toLowerCase().includes(term) || 
+      result = result.filter((item) =>
+        item.ticket.event.title.toLowerCase().includes(term) ||
         item.ticket.event.location.toLowerCase().includes(term)
       );
     }
 
     if (filters.date) {
-      result = result.filter(item => 
+      result = result.filter((item) =>
         item.ticket.event.date.includes(filters.date)
       );
     }
 
     if (filters.type) {
-      result = result.filter(item => 
+      result = result.filter((item) =>
         item.ticket.type.toLowerCase().includes(filters.type.toLowerCase())
       );
     }
@@ -159,19 +157,19 @@ export default function ResaleScreen() {
     if (filters.minPrice) {
       const min = parseFloat(filters.minPrice);
       if (!isNaN(min)) {
-        result = result.filter(item => item.price >= min);
+        result = result.filter((item) => item.price >= min);
       }
     }
 
     if (filters.maxPrice) {
       const max = parseFloat(filters.maxPrice);
       if (!isNaN(max)) {
-        result = result.filter(item => item.price <= max);
+        result = result.filter((item) => item.price <= max);
       }
     }
 
     setListings(result);
-  };
+  }, [allListings, filters]);
 
   const clearFilters = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -184,16 +182,16 @@ export default function ResaleScreen() {
     });
   };
 
-  const normalizeNumber = (value: unknown): number | null => {
+  const normalizeNumber = useCallback((value: unknown): number | null => {
     if (typeof value === 'number' && Number.isFinite(value)) return value;
     if (typeof value === 'string' && value.trim().length > 0) {
       const n = Number(value);
       if (Number.isFinite(n)) return n;
     }
     return null;
-  };
+  }, []);
 
-  const getVipMatch = (ticket: any, event: any): VipReservado | null => {
+  const getVipMatch = useCallback((ticket: any, event: any): VipReservado | null => {
     const vipList: VipReservado[] | null | undefined = event?.reservados_vip;
     if (!vipList || vipList.length === 0) return null;
 
@@ -215,7 +213,7 @@ export default function ResaleScreen() {
 
     if (!best || best.score < 4) return null;
     return best.vip;
-  };
+  }, [normalizeNumber]);
 
   const fetchListings = useCallback(async () => {
     try {
@@ -288,7 +286,7 @@ export default function ResaleScreen() {
         if (event.event_date) {
             try {
                 eventDate = new Date(event.event_date);
-            } catch (e) {
+            } catch {
                 console.warn('Invalid date format:', event.event_date);
             }
         }
@@ -325,7 +323,7 @@ export default function ResaleScreen() {
       setLoading(false);
       setRefreshing(false);
     }
-  }, []);
+  }, [getVipMatch, t]);
 
   const scheduleRefresh = useCallback(() => {
     if (refreshTimeoutRef.current) clearTimeout(refreshTimeoutRef.current);
@@ -378,18 +376,19 @@ export default function ResaleScreen() {
     }
 
     if (listing.seller_id === user.id) {
-      Alert.alert(t('common.error'), t('resale.cannot_buy_own'));
+      showDialog({ title: t('common.error'), message: t('resale.cannot_buy_own') });
       return;
     }
 
     const formattedPrice = new Intl.NumberFormat(localeTag, { style: 'currency', currency: 'EUR' }).format(listing.price);
-    Alert.alert(
-      t('resale.confirm_purchase_title'),
-      t('resale.confirm_purchase_body', { price: formattedPrice }),
-      [
-        { text: t('common.cancel'), style: 'cancel' },
+    showDialog({
+      title: t('resale.confirm_purchase_title'),
+      message: t('resale.confirm_purchase_body', { price: formattedPrice }),
+      actions: [
+        { label: t('common.cancel'), variant: 'outline' },
         {
-          text: t('resale.pay_card'),
+          label: t('resale.pay_card'),
+          variant: 'primary',
           onPress: async () => {
             try {
               const result = await present({
@@ -410,12 +409,13 @@ export default function ResaleScreen() {
               fetchListings();
             } catch (error: any) {
               Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-              Alert.alert(t('common.error'), error.message || t('errors.generic'));
+              showDialog({ title: t('common.error'), message: error.message || t('errors.generic') });
             }
           },
         },
         {
-          text: t('resale.pay_wallet'),
+          label: t('resale.pay_wallet'),
+          variant: 'secondary',
           onPress: async () => {
             try {
               if (creditBalance < listing.price) {
@@ -430,12 +430,12 @@ export default function ResaleScreen() {
               fetchListings();
             } catch (error: any) {
               Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-              Alert.alert(t('common.error'), error.message || t('errors.generic'));
+              showDialog({ title: t('common.error'), message: error.message || t('errors.generic') });
             }
           },
         },
-      ]
-    );
+      ],
+    });
   };
 
   const renderItem = ({ item, index }: { item: ResaleListing, index: number }) => (
@@ -770,7 +770,9 @@ export default function ResaleScreen() {
                             style={StyleSheet.absoluteFill}
                           />
                           <View style={styles.emptyCtaRow}>
-                            <Text style={styles.emptyCtaText}>{t('home.clear_filters')}</Text>
+                            <Text style={styles.emptyCtaText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.85}>
+                              {t('home.clear_filters')}
+                            </Text>
                             <ChevronRight size={18} color="rgba(255,255,255,0.85)" />
                           </View>
                         </View>
@@ -800,7 +802,9 @@ export default function ResaleScreen() {
                             style={StyleSheet.absoluteFill}
                           />
                           <View style={styles.emptyCtaRow}>
-                            <Text style={styles.emptyCtaText}>{t('tickets.buy_tickets')}</Text>
+                            <Text style={styles.emptyCtaText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.85}>
+                              {t('tickets.buy_tickets')}
+                            </Text>
                             <ChevronRight size={18} color="rgba(255,255,255,0.85)" />
                           </View>
                         </View>
@@ -824,7 +828,9 @@ export default function ResaleScreen() {
                     >
                       <View style={[styles.emptyCtaInner, { backgroundColor: 'rgba(255,255,255,0.04)' }]}>
                         <View style={styles.emptyCtaRow}>
-                          <Text style={styles.emptyCtaTextSecondary}>{t('resale.view_my_tickets')}</Text>
+                          <Text style={styles.emptyCtaTextSecondary} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.85}>
+                            {t('resale.view_my_tickets')}
+                          </Text>
                           <ChevronRight size={18} color="rgba(255,255,255,0.55)" />
                         </View>
                       </View>
@@ -1260,6 +1266,8 @@ const styles = StyleSheet.create({
   },
   emptyCtaOuter: {
     width: '100%',
+    minWidth: 200,
+    alignSelf: 'center',
     borderRadius: 18,
     shadowColor: '#000',
     shadowOpacity: 0.28,
@@ -1277,12 +1285,13 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.45)',
     justifyContent: 'center',
     overflow: 'hidden',
+    minWidth: 200,
   },
   emptyCtaRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 16,
+    paddingHorizontal: 24,
   },
   emptyCtaText: {
     color: 'white',

@@ -1,19 +1,21 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { View, Text, StyleSheet, FlatList, Image, TouchableOpacity, RefreshControl, Platform, StatusBar, TextInput, Keyboard, Animated, Easing } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, useSegments } from 'expo-router';
 import * as Location from 'expo-location';
 import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
 import { useFocusEffect } from '@react-navigation/native';
-import { MapPin, Calendar, Navigation, Map as MapIcon, Search } from '@/lib/icons';
+import { MapPin, Calendar, Navigation, Search, X } from '@/lib/icons';
 
 import { Colors } from '@/constants/Colors';
 import { useEvents, AppEvent } from '@/lib/EventContext';
+import { useAuth } from '@/lib/AuthContext';
 import { useResponsive } from '@/lib/responsive';
 import { GlassView } from '@/components/ui/GlassView';
 import DateSelector from '@/components/DateSelector';
 import AdvancedFilters, { FilterState } from '@/components/AdvancedFilters';
+import { filterEventsByQuery, normalizeSearchQuery } from '@/lib/validators';
 
 type EventWithDistance = AppEvent & {
   distance?: number;
@@ -34,6 +36,8 @@ function haversineKm(lat1: number, lon1: number, lat2: number, lon2: number): nu
 export default function HomeScreen() {
   const { t } = useTranslation();
   const router = useRouter();
+  const segments = useSegments();
+  const { user } = useAuth();
   const insets = useSafeAreaInsets();
   const { horizontalPadding, maxContentWidth } = useResponsive();
 
@@ -43,6 +47,9 @@ export default function HomeScreen() {
   const [userLocation, setUserLocation] = useState<{ latitude: number; longitude: number } | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [advancedFilters, setAdvancedFilters] = useState<FilterState>({ minAge: null, dressCode: null, musicType: null });
+
+  const inCreator = segments?.[0] === '(creator)';
+  const userRole = (user?.user_metadata as any)?.role ?? null;
 
   const emptyFloat = useRef(new Animated.Value(0)).current;
   const emptyEnter = useRef(new Animated.Value(0)).current;
@@ -64,14 +71,14 @@ export default function HomeScreen() {
     };
   }, []);
 
-  const processedEvents = useMemo(() => {
-    let filtered = [...(contextEvents || [])] as EventWithDistance[];
+  const { processedEvents, baseEventsCount } = useMemo(() => {
+    let base = [...(contextEvents || [])] as EventWithDistance[];
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
-    filtered = filtered.filter((e) => new Date(e.date) >= today);
+    base = base.filter((e) => new Date(e.date) >= today);
 
-    filtered = filtered.filter((event) => {
+    base = base.filter((event) => {
       const eventDate = new Date(event.date);
       return (
         eventDate.getDate() === selectedDate.getDate() &&
@@ -81,7 +88,7 @@ export default function HomeScreen() {
     });
 
     if (advancedFilters.minAge) {
-      filtered = filtered.filter((e) => {
+      base = base.filter((e) => {
         if (!e.ageRestriction) return false;
         const age = parseInt(e.ageRestriction.replace(/\D/g, '')) || 0;
         return age >= advancedFilters.minAge!;
@@ -89,12 +96,12 @@ export default function HomeScreen() {
     }
 
     if (advancedFilters.dressCode) {
-      filtered = filtered.filter((e) => e.dressCode?.toLowerCase().includes(advancedFilters.dressCode!.toLowerCase()));
+      base = base.filter((e) => e.dressCode?.toLowerCase().includes(advancedFilters.dressCode!.toLowerCase()));
     }
 
     if (advancedFilters.musicType) {
       const musicType = advancedFilters.musicType.toLowerCase();
-      filtered = filtered.filter((e) => {
+      base = base.filter((e) => {
         return (
           e.theme?.toLowerCase().includes(musicType) ||
           e.eventType?.toLowerCase().includes(musicType) ||
@@ -104,32 +111,36 @@ export default function HomeScreen() {
       });
     }
 
-    if (searchQuery) {
-      const q = searchQuery.toLowerCase().trim();
-      filtered = filtered.filter((e) =>
-        (e.title?.toLowerCase() || '').includes(q) ||
-        (e.location?.toLowerCase() || '').includes(q) ||
-        (e.description?.toLowerCase() || '').includes(q) ||
-        (e.eventType?.toLowerCase() || '').includes(q)
-      );
-    }
+    const baseCount = base.length;
+    const filtered = filterEventsByQuery(base as any, searchQuery) as EventWithDistance[];
 
     if (userLocation) {
-      filtered = filtered.map((e) => {
+      const withDistance = filtered.map((e) => {
         if (!e.venues) return e;
         const d = haversineKm(userLocation.latitude, userLocation.longitude, Number(e.venues.latitude), Number(e.venues.longitude));
         return { ...e, distance: d };
       });
-      filtered.sort((a, b) => (a.distance || 9999) - (b.distance || 9999));
+      withDistance.sort((a, b) => (a.distance || 9999) - (b.distance || 9999));
+      return { processedEvents: withDistance, baseEventsCount: baseCount };
     }
 
-    return filtered;
+    return { processedEvents: filtered, baseEventsCount: baseCount };
   }, [advancedFilters, contextEvents, searchQuery, selectedDate, userLocation]);
+
+  const emptyState = useMemo(() => {
+    const q = normalizeSearchQuery(searchQuery);
+    if (q && baseEventsCount > 0) return 'no_results' as const;
+    return 'empty' as const;
+  }, [baseEventsCount, searchQuery]);
 
   useFocusEffect(
     useCallback(() => {
       refreshEvents().catch(() => null);
-    }, [refreshEvents])
+
+      if (userRole === 'organizer' && !inCreator) {
+        router.replace('/(creator)');
+      }
+    }, [refreshEvents, userRole, inCreator])
   );
 
   useEffect(() => {
@@ -250,14 +261,24 @@ export default function HomeScreen() {
                 placeholderTextColor={Colors.dark.textSecondary}
                 style={styles.searchInput}
                 value={searchQuery}
-                onChangeText={setSearchQuery}
+                onChangeText={(text) => {
+                  setSearchQuery(text);
+                }}
                 returnKeyType="search"
                 onSubmitEditing={Keyboard.dismiss}
               />
+              {searchQuery.trim().length ? (
+                <TouchableOpacity
+                  activeOpacity={0.8}
+                  onPress={() => {
+                    setSearchQuery('');
+                  }}
+                  style={styles.searchAction}
+                >
+                  <X size={18} color={Colors.dark.textSecondary} />
+                </TouchableOpacity>
+              ) : null}
             </View>
-            <TouchableOpacity style={styles.mapButton} onPress={() => router.push('/(tabs)/party-map')} activeOpacity={0.9}>
-              <MapIcon size={20} color="#FFF" />
-            </TouchableOpacity>
           </View>
         </View>
 
@@ -268,31 +289,39 @@ export default function HomeScreen() {
           </View>
         </View>
 
-        <FlatList
-          data={processedEvents}
-          keyExtractor={(item) => item.id}
-          renderItem={renderEventItem}
-          contentContainerStyle={[styles.listContent, { paddingHorizontal: horizontalPadding }]}
-          showsVerticalScrollIndicator={false}
-          refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Colors.dark.primary} />
-          }
-          ListEmptyComponent={
-            <View style={[styles.emptyWrap, { maxWidth: maxContentWidth, alignSelf: 'center', width: '100%', paddingHorizontal: horizontalPadding }]}>
-              <Animated.View style={{ opacity: emptyEnter, transform: [{ translateY: emptyFloat.interpolate({ inputRange: [0, 1], outputRange: [0, -6] }) }] }}>
-                <GlassView intensity={18} style={styles.emptyCard}>
-                  <Text style={styles.emptyTitle}>{t('home.empty_title')}</Text>
-                  <Text style={styles.emptySubtitle}>{t('home.empty_subtitle')}</Text>
-                  <TouchableOpacity activeOpacity={0.9} onPress={resetDiscovery} style={styles.emptyCta}>
-                    <LinearGradient colors={[Colors.dark.primary, Colors.dark.secondary]} style={styles.emptyCtaGradient}>
-                      <Text style={styles.emptyCtaText}>{t('home.clear_filters')}</Text>
-                    </LinearGradient>
-                  </TouchableOpacity>
-                </GlassView>
-              </Animated.View>
-            </View>
-          }
-        />
+        <View style={styles.body}>
+          <FlatList
+            data={processedEvents}
+            keyExtractor={(item) => item.id}
+            renderItem={renderEventItem}
+            contentContainerStyle={[styles.listContent, { paddingHorizontal: horizontalPadding }]}
+            showsVerticalScrollIndicator={false}
+            refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Colors.dark.primary} />}
+            ListEmptyComponent={
+              <View style={[styles.emptyWrap, { maxWidth: maxContentWidth, alignSelf: 'center', width: '100%', paddingHorizontal: horizontalPadding }]}>
+                <Animated.View style={{ opacity: emptyEnter, transform: [{ translateY: emptyFloat.interpolate({ inputRange: [0, 1], outputRange: [0, -6] }) }] }}>
+                  <GlassView intensity={18} style={styles.emptyCard}>
+                    <Text style={styles.emptyTitle}>
+                      {emptyState === 'no_results'
+                        ? t('home.no_results_title', { defaultValue: 'Sin resultados' })
+                        : t('home.empty_title')}
+                    </Text>
+                    <Text style={styles.emptySubtitle}>
+                      {emptyState === 'no_results'
+                        ? t('home.no_results_subtitle', { defaultValue: 'Prueba con otra ciudad o ajusta los filtros.' })
+                        : t('home.empty_subtitle')}
+                    </Text>
+                    <TouchableOpacity activeOpacity={0.9} onPress={resetDiscovery} style={styles.emptyCta}>
+                      <LinearGradient colors={[Colors.dark.primary, Colors.dark.secondary]} style={styles.emptyCtaGradient}>
+                        <Text style={styles.emptyCtaText}>{t('home.clear_filters')}</Text>
+                      </LinearGradient>
+                    </TouchableOpacity>
+                  </GlassView>
+                </Animated.View>
+              </View>
+            }
+          />
+        </View>
       </SafeAreaView>
     </View>
   );
@@ -331,7 +360,6 @@ const styles = StyleSheet.create({
   searchContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
   },
   searchBar: {
     flex: 1,
@@ -352,23 +380,233 @@ const styles = StyleSheet.create({
     marginLeft: 10,
     fontWeight: '400',
   },
-  mapButton: {
-    width: 50,
-    height: 50,
-    backgroundColor: 'rgba(124,58,237,0.85)',
-    borderRadius: 18,
-    justifyContent: 'center',
+  searchAction: {
+    width: 36,
+    height: 36,
+    borderRadius: 14,
     alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.06)',
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.14)',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.28,
-    shadowRadius: 12,
-    elevation: 10,
+    borderColor: 'rgba(255,255,255,0.10)',
+    marginLeft: 8,
+  },
+  modeToggle: {
+    height: 36,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(124,58,237,0.18)',
+    borderWidth: 1,
+    borderColor: 'rgba(124,58,237,0.28)',
+    marginLeft: 8,
+    paddingHorizontal: 12,
+    flexDirection: 'row',
+    gap: 8,
+  },
+  modeToggleText: {
+    color: Colors.dark.text,
+    fontWeight: '900',
+    fontSize: 12,
+    letterSpacing: -0.2,
   },
   filtersSection: {
     marginBottom: 16,
+  },
+  body: {
+    flex: 1,
+  },
+  mapLayer: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  mapHint: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 18,
+  },
+  mapHintTitle: {
+    color: Colors.dark.text,
+    fontWeight: '900',
+    fontSize: 18,
+    letterSpacing: -0.3,
+  },
+  mapHintBody: {
+    marginTop: 8,
+    color: Colors.dark.textSecondary,
+    fontWeight: '700',
+    lineHeight: 20,
+    textAlign: 'center',
+    maxWidth: 320,
+  },
+  listLayer: {
+    flex: 1,
+  },
+  mapFallbackWrap: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 18,
+  },
+  mapFallbackCard: {
+    width: '100%',
+    maxWidth: 560,
+    borderRadius: 18,
+    padding: 18,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.12)',
+    backgroundColor: 'rgba(10,10,16,0.72)',
+  },
+  mapFallbackTitle: {
+    color: Colors.dark.text,
+    fontWeight: '900',
+    fontSize: 18,
+    textAlign: 'center',
+  },
+  mapFallbackBody: {
+    marginTop: 10,
+    color: Colors.dark.textSecondary,
+    fontWeight: '700',
+    lineHeight: 20,
+    textAlign: 'center',
+  },
+  markerBubble: {
+    minWidth: 38,
+    height: 38,
+    paddingHorizontal: 12,
+    borderRadius: 999,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.18)',
+  },
+  markerText: {
+    color: 'white',
+    fontSize: 14,
+    fontWeight: '900',
+    letterSpacing: -0.2,
+  },
+  markerShadow: {
+    position: 'absolute',
+    width: 44,
+    height: 16,
+    borderRadius: 999,
+    opacity: 0.18,
+    top: 28,
+    zIndex: -1,
+  },
+  mapCardWrap: {
+    position: 'absolute',
+    left: 16,
+    right: 16,
+    bottom: 0,
+  },
+  mapCard: {
+    borderRadius: 24,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.12)',
+    backgroundColor: 'rgba(10,10,16,0.80)',
+  },
+  mapCardContent: {
+    flexDirection: 'row',
+    gap: 12,
+    padding: 12,
+    alignItems: 'center',
+  },
+  mapCardImage: {
+    width: 86,
+    height: 116,
+    borderRadius: 18,
+    backgroundColor: 'rgba(255,255,255,0.06)',
+  },
+  mapCardTitle: {
+    color: 'white',
+    fontWeight: '900',
+    fontSize: 16,
+    letterSpacing: -0.3,
+  },
+  mapCardRow: {
+    flexDirection: 'row',
+    gap: 10,
+    alignItems: 'center',
+  },
+  mapCardPill: {
+    flexDirection: 'row',
+    gap: 8,
+    alignItems: 'center',
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderRadius: 14,
+    backgroundColor: 'rgba(0,0,0,0.22)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.08)',
+  },
+  mapCardPillMuted: {
+    flexDirection: 'row',
+    gap: 8,
+    alignItems: 'center',
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderRadius: 14,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.10)',
+  },
+  mapCardPillText: {
+    color: '#E4E4E7',
+    fontWeight: '800',
+    fontSize: 12,
+  },
+  mapCardPricePill: {
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+    borderRadius: 14,
+    backgroundColor: 'rgba(124,58,237,0.92)',
+  },
+  mapCardPriceText: {
+    color: 'white',
+    fontWeight: '900',
+    fontSize: 12,
+    letterSpacing: -0.2,
+  },
+  mapCardActions: {
+    flexDirection: 'row',
+    gap: 10,
+    alignItems: 'center',
+    marginTop: 2,
+  },
+  mapCardBtnGhost: {
+    height: 42,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 14,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.12)',
+  },
+  mapCardBtnGhostText: {
+    color: 'white',
+    fontWeight: '900',
+    fontSize: 13,
+  },
+  mapCardBtn: {
+    overflow: 'hidden',
+    borderRadius: 16,
+  },
+  mapCardBtnGradient: {
+    height: 42,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 16,
+  },
+  mapCardBtnText: {
+    color: 'white',
+    fontWeight: '900',
+    fontSize: 13,
+    letterSpacing: -0.2,
   },
   listContent: {
     paddingBottom: 140,

@@ -68,20 +68,38 @@ const EventContext = createContext<EventContextType>({
 
 export const useEvents = () => useContext(EventContext);
 
+export function __test_shouldApplyRemoteEvents(prevCount: number, remoteCount: number, lastGoodAtMs: number, nowMs: number) {
+  const seventyTwoHoursMs = 72 * 60 * 60 * 1000;
+  if (remoteCount === 0 && prevCount > 0 && nowMs - lastGoodAtMs < seventyTwoHoursMs) return false;
+  return true;
+}
+
 export function EventProvider({ children }: { children: React.ReactNode }) {
   const [events, setEvents] = useState<AppEvent[]>(INITIAL_EVENTS);
   const refreshTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const fetchInFlightRef = useRef(false);
+  const fetchQueuedRef = useRef(false);
   const cacheKey = 'events_cache_v1';
+  const cacheTsKey = 'events_cache_v1_ts';
+  const lastGoodAtRef = useRef(0);
+  const eventsCountRef = useRef(0);
 
   useEffect(() => {
-    AsyncStorage.getItem(cacheKey)
-      .then((raw) => {
+    eventsCountRef.current = events.length;
+  }, [events.length]);
+
+  useEffect(() => {
+    AsyncStorage.multiGet([cacheKey, cacheTsKey])
+      .then((pairs) => {
+        const map = new Map(pairs);
+        const raw = map.get(cacheKey);
+        const rawTs = map.get(cacheTsKey);
+        const ts = rawTs ? Number(rawTs) : 0;
+        if (Number.isFinite(ts) && ts > 0) lastGoodAtRef.current = ts;
         if (!raw) return;
         try {
           const parsed = JSON.parse(raw);
-          if (Array.isArray(parsed)) {
-            setEvents(parsed as AppEvent[]);
-          }
+          if (Array.isArray(parsed)) setEvents(parsed as AppEvent[]);
         } catch {}
       })
       .catch(() => {});
@@ -106,6 +124,11 @@ export function EventProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const fetchEvents = useCallback(async () => {
+    if (fetchInFlightRef.current) {
+      fetchQueuedRef.current = true;
+      return;
+    }
+    fetchInFlightRef.current = true;
     try {
       let data: any[] | null = null;
       let error: any = null;
@@ -177,11 +200,27 @@ export function EventProvider({ children }: { children: React.ReactNode }) {
             } : undefined
           };
         });
-        setEvents(mappedEvents);
-        AsyncStorage.setItem(cacheKey, JSON.stringify(mappedEvents)).catch(() => {});
+        const nowMs = Date.now();
+        const shouldApply = __test_shouldApplyRemoteEvents(eventsCountRef.current, mappedEvents.length, lastGoodAtRef.current || 0, nowMs);
+        if (shouldApply) {
+          setEvents(mappedEvents);
+          if (mappedEvents.length > 0) {
+            lastGoodAtRef.current = nowMs;
+            AsyncStorage.multiSet([[cacheKey, JSON.stringify(mappedEvents)], [cacheTsKey, String(nowMs)]]).catch(() => {});
+          }
+        }
       }
     } catch (error) {
       console.error('Error fetching events:', error);
+    } finally {
+      fetchInFlightRef.current = false;
+      if (fetchQueuedRef.current) {
+        fetchQueuedRef.current = false;
+        if (refreshTimeoutRef.current) clearTimeout(refreshTimeoutRef.current);
+        refreshTimeoutRef.current = setTimeout(() => {
+          fetchEvents();
+        }, 900);
+      }
     }
   }, [fetchEventsQuery]);
 
@@ -189,7 +228,7 @@ export function EventProvider({ children }: { children: React.ReactNode }) {
     if (refreshTimeoutRef.current) clearTimeout(refreshTimeoutRef.current);
     refreshTimeoutRef.current = setTimeout(() => {
       fetchEvents();
-    }, 250);
+    }, 900);
   }, [fetchEvents]);
 
   useEffect(() => {
@@ -239,6 +278,12 @@ export function EventProvider({ children }: { children: React.ReactNode }) {
       supabase.removeChannel(channel);
     };
   }, [scheduleRefresh]);
+
+  useEffect(() => {
+    return () => {
+      if (refreshTimeoutRef.current) clearTimeout(refreshTimeoutRef.current);
+    };
+  }, []);
 
   const addEvent = async (newEvent: Omit<AppEvent, 'id' | 'sold'>) => {
     try {

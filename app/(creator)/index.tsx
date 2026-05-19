@@ -1,8 +1,8 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, StatusBar, AppState, Linking } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, StatusBar, AppState, Linking, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Calendar, Plus, Ticket, BarChart3, LogOut, ScanLine, Users, CreditCard, ArrowUpRight, Flame, ChevronRight, Menu, Activity, Trash2, FileText } from '@/lib/icons';
+import { Calendar, Plus, Ticket, BarChart3, ScanLine, Users, CreditCard, ArrowUpRight, Flame, ChevronRight, Activity, Trash2, FileText, LogOut } from '@/lib/icons';
 import { router, useFocusEffect } from 'expo-router';
 import { useAuth } from '@/lib/AuthContext';
 import { useEvents } from '@/lib/EventContext';
@@ -33,29 +33,36 @@ export default function CreatorDashboard() {
     horizontalPadding,
     maxContentWidth,
     isTablet,
-    isDesktop,
     isSmallPhone,
     scaleFont,
   } = useResponsive();
-  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const userId = user?.id ?? null;
+  const metadataRole = useMemo(() => ((user?.user_metadata as any)?.role as any) ?? null, [user?.user_metadata]);
   const [timeRange, setTimeRange] = useState<TimeRange>('month');
   const [salesData, setSalesData] = useState<{ date: string; amount: number; qty: number }[]>([]);
   const [loadingStats, setLoadingStats] = useState(true);
   const [verificationStatus, setVerificationStatus] = useState<'pending_verification' | 'verified' | 'rejected' | 'needs_correction' | null>(null);
-  const [profileRole, setProfileRole] = useState<'organizer' | 'attendee' | 'admin' | null>(null);
+  const [profileRole, setProfileRole] = useState<'organizer' | 'attendee' | 'admin' | null>(
+    (user?.user_metadata as any)?.role ?? null
+  );
   const [stripeStats, setStripeStats] = useState<StripeAccountStats | null>(null);
   const [stripeAccountId, setStripeAccountId] = useState<string | null>(null);
   const [onboardingCompleted, setOnboardingCompleted] = useState(false);
   const [loadingOnboarding, setLoadingOnboarding] = useState(false);
-  const [loadingAdminSummary, setLoadingAdminSummary] = useState(false);
-  const [pendingOrganizersCount, setPendingOrganizersCount] = useState(0);
-  const [verifiedOrganizersCount, setVerifiedOrganizersCount] = useState(0);
-  const [rejectedOrganizersCount, setRejectedOrganizersCount] = useState(0);
   const [loadingAdminOverview, setLoadingAdminOverview] = useState(false);
   const [cleaningSystem, setCleaningSystem] = useState(false);
   const [bootstrappingAdmin, setBootstrappingAdmin] = useState(false);
   const [deletingAccount, setDeletingAccount] = useState(false);
   const pendingStripeReturnRef = useRef(false);
+  const stripeAutoRefreshRef = useRef<{ accountId: string | null; attemptedAt: number }>({ accountId: null, attemptedAt: 0 });
+  const salesDataRef = useRef(salesData);
+  const eventsRef = useRef(events);
+  const fetchStatsInFlightRef = useRef(false);
+  const fetchProfileInFlightRef = useRef(false);
+  const lastStatsFetchAtRef = useRef(0);
+  const lastProfileFetchAtRef = useRef(0);
+  const lastStripeStatsFetchAtRef = useRef(0);
+  const [refreshing, setRefreshing] = useState(false);
   const [adminOverview, setAdminOverview] = useState<{
     users: number;
     organizers: number;
@@ -95,28 +102,20 @@ export default function CreatorDashboard() {
   const isAdmin = profileRole === 'admin' || isAdminEmail;
 
   useEffect(() => {
-    if (!user?.id) return;
-    // Force token sync for organizer sessions to avoid missing sale push notifications.
-    registerForPushNotifications(user.id).catch(() => {});
-
-    const sub = AppState.addEventListener('change', (state) => {
-      if (state === 'active') {
-        registerForPushNotifications(user.id).catch(() => {});
-        if (pendingStripeReturnRef.current) {
-          pendingStripeReturnRef.current = false;
-          fetchMyProfile();
-        }
-      }
-    });
-    return () => sub.remove();
-  }, [user?.id]);
+    eventsRef.current = events;
+  }, [events]);
 
   // Function to fetch stats
-  const fetchStats = async () => {
-    if (!user) return;
+  const fetchStats = useCallback(async (opts?: { force?: boolean }) => {
+    if (!userId) return;
+    if (fetchStatsInFlightRef.current) return;
+    const force = !!opts?.force;
+    const now = Date.now();
+    if (!force && now - lastStatsFetchAtRef.current < 3 * 60_000) return;
+    fetchStatsInFlightRef.current = true;
     setLoadingStats(true);
     try {
-      const myEvents = events.filter(e => e.creatorId === user.id);
+      const myEvents = (eventsRef.current || []).filter((e: any) => e.creatorId === userId);
       const myEventIds = myEvents.map(e => e.id);
       
       if (myEventIds.length === 0) {
@@ -139,27 +138,32 @@ export default function CreatorDashboard() {
           qty: Number((t as any).quantity) || 0,
         })));
       }
+      lastStatsFetchAtRef.current = Date.now();
     } catch (error) {
       console.error('Error fetching sales stats:', error);
     } finally {
+      fetchStatsInFlightRef.current = false;
       setLoadingStats(false);
     }
-  };
+  }, [userId]);
 
-  const creatingStripeRef = useRef(false);
-
-  const fetchMyProfile = async () => {
-    if (!user) return;
+  const fetchMyProfile = useCallback(async (opts?: { force?: boolean }) => {
+    if (!userId) return;
+    if (fetchProfileInFlightRef.current) return;
+    const force = !!opts?.force;
+    const now = Date.now();
+    if (!force && now - lastProfileFetchAtRef.current < 60_000) return;
+    fetchProfileInFlightRef.current = true;
     try {
       const { data, error } = await supabase
         .from('profiles')
         .select('verification_status, role, stripe_account_id, stripe_onboarding_completed, stripe_charges_enabled')
-        .eq('id', user.id)
+        .eq('id', userId)
         .maybeSingle();
       if (error) throw error;
 
       setVerificationStatus((data?.verification_status as any) ?? null);
-      const role = (data?.role as any) ?? (user.user_metadata?.role as any) ?? null;
+      const role = (data?.role as any) ?? metadataRole ?? null;
       setProfileRole(role);
       setStripeAccountId(data?.stripe_account_id || null);
       
@@ -169,39 +173,66 @@ export default function CreatorDashboard() {
 
       // AUTO-REFRESH STRIPE STATUS IF NOT COMPLETE
       if (role === 'organizer' && data?.stripe_account_id && !isComplete) {
-        console.log('[DEBUG] Checking real Stripe status...');
-        try {
-          const { refreshStripeConnectStatus } = await import('@/lib/payments/api');
-          const status = await refreshStripeConnectStatus();
-          console.log('[DEBUG] Stripe real status:', status);
-          
-          // Consideramos OK si charges_enabled es true
-          if (status.stripe_charges_enabled || status.stripe_onboarding_completed) {
-            console.log('[DEBUG] Stripe status is now COMPLETED/ENABLED');
-            setOnboardingCompleted(true);
-            // Re-fetch everything after status change to ensure consistency
-            setTimeout(() => fetchMyProfile(), 500);
+        const now = Date.now();
+        const last = stripeAutoRefreshRef.current;
+        const shouldAttempt =
+          last.accountId !== data.stripe_account_id ||
+          now - last.attemptedAt > 60_000;
+
+        if (shouldAttempt) {
+          stripeAutoRefreshRef.current = { accountId: data.stripe_account_id, attemptedAt: now };
+          console.log('[DEBUG] Checking real Stripe status...');
+          try {
+            const { refreshStripeConnectStatus } = await import('@/lib/payments/api');
+            const status = await refreshStripeConnectStatus();
+            console.log('[DEBUG] Stripe real status:', status);
+
+            if (status.stripe_charges_enabled || status.stripe_onboarding_completed) {
+              console.log('[DEBUG] Stripe status is now COMPLETED/ENABLED');
+              setOnboardingCompleted(true);
+            }
+          } catch (e) {
+            console.error('[DEBUG] Failed to auto-refresh Stripe status:', e);
           }
-        } catch (e) {
-          console.error('[DEBUG] Failed to auto-refresh Stripe status:', e);
         }
       }
 
       // FETCH REAL STRIPE STATS - Only if onboarding is completed
       if (role === 'organizer' && data?.stripe_account_id && (isComplete || !!data?.stripe_charges_enabled)) {
-        try {
-          console.log('[DEBUG] Fetching Stripe stats...');
-          const stats = await getStripeAccountStats();
-          console.log('[DEBUG] Stripe stats received:', stats);
-          setStripeStats(stats);
-        } catch (e) {
-          console.error('[DEBUG] Error fetching Stripe stats:', e);
+        const shouldFetchStripe = force || now - lastStripeStatsFetchAtRef.current > 5 * 60_000;
+        if (shouldFetchStripe) {
+          try {
+            console.log('[DEBUG] Fetching Stripe stats...');
+            const stats = await getStripeAccountStats();
+            console.log('[DEBUG] Stripe stats received:', stats);
+            setStripeStats(stats);
+            lastStripeStatsFetchAtRef.current = Date.now();
+          } catch (e) {
+            console.error('[DEBUG] Error fetching Stripe stats:', e);
+          }
         }
       }
+      lastProfileFetchAtRef.current = Date.now();
     } catch (e) {
       console.error('Error in fetchMyProfile:', e);
+    } finally {
+      fetchProfileInFlightRef.current = false;
     }
-  };
+  }, [metadataRole, userId]);
+
+  useEffect(() => {
+    if (!userId) return;
+    registerForPushNotifications(userId).catch(() => {});
+
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state !== 'active') return;
+      registerForPushNotifications(userId).catch(() => {});
+      if (!pendingStripeReturnRef.current) return;
+      pendingStripeReturnRef.current = false;
+      fetchMyProfile();
+    });
+    return () => sub.remove();
+  }, [fetchMyProfile, userId]);
 
   const handleStripeOnboarding = async () => {
     if (loadingOnboarding) return;
@@ -259,43 +290,9 @@ export default function CreatorDashboard() {
     } finally {
       setBootstrappingAdmin(false);
     }
-  }, [adminEmail, bootstrappingAdmin, fetchMyProfile, isAdminEmail]);
+  }, [adminEmail, bootstrappingAdmin, fetchMyProfile, isAdminEmail, t]);
 
-  const fetchAdminSummary = async () => {
-    if (!user) return;
-    setLoadingAdminSummary(true);
-    try {
-      const [{ count: pendingCount }, { count: verifiedCount }, { count: rejectedCount }] = await Promise.all([
-        supabase
-          .from('profiles')
-          .select('id', { count: 'exact', head: true })
-          .or('role.eq.organizer,club_name.not.is.null,business_email.not.is.null,instagram_account.not.is.null')
-          .eq('verification_status', 'pending_verification'),
-        supabase
-          .from('profiles')
-          .select('id', { count: 'exact', head: true })
-          .or('role.eq.organizer,club_name.not.is.null,business_email.not.is.null,instagram_account.not.is.null')
-          .eq('verification_status', 'verified'),
-        supabase
-          .from('profiles')
-          .select('id', { count: 'exact', head: true })
-          .or('role.eq.organizer,club_name.not.is.null,business_email.not.is.null,instagram_account.not.is.null')
-          .eq('verification_status', 'rejected'),
-      ]);
-
-      setPendingOrganizersCount(pendingCount ?? 0);
-      setVerifiedOrganizersCount(verifiedCount ?? 0);
-      setRejectedOrganizersCount(rejectedCount ?? 0);
-    } catch {
-      setPendingOrganizersCount(0);
-      setVerifiedOrganizersCount(0);
-      setRejectedOrganizersCount(0);
-    } finally {
-      setLoadingAdminSummary(false);
-    }
-  };
-
-  const fetchAdminOverview = async () => {
+  const fetchAdminOverview = useCallback(async () => {
     setLoadingAdminOverview(true);
     try {
       const now = new Date();
@@ -378,7 +375,7 @@ export default function CreatorDashboard() {
     } finally {
       setLoadingAdminOverview(false);
     }
-  };
+  }, []);
 
   const handleLogout = async () => {
     try {
@@ -449,42 +446,20 @@ export default function CreatorDashboard() {
     );
   };
 
-  // Force refresh when screen comes into focus
   useFocusEffect(
     useCallback(() => {
-      refreshEvents();
-      if (!isAdmin) fetchStats();
-      fetchMyProfile();
-    }, [isAdmin, user]) // Refresh when user changes
+      if (!userId) return;
+      if (!isAdmin) void fetchStats();
+      void fetchMyProfile();
+      return;
+    }, [fetchMyProfile, fetchStats, isAdmin, userId])
   );
 
-  // Initial fetch
   useEffect(() => {
-    if (!isAdmin) fetchStats();
-    fetchMyProfile();
-  }, [isAdmin, user]);
-
-  // AUTO-REFRESH WHEN APP COMES FROM BACKGROUND (Stripe browser return)
-  useEffect(() => {
-    const subscription = AppState.addEventListener('change', nextAppState => {
-      if (nextAppState === 'active') {
-        console.log('[DEBUG] App returned to active state, refreshing profile...');
-        fetchMyProfile();
-      }
-    });
-
-    return () => {
-      subscription.remove();
-    };
-  }, []);
-
-  useEffect(() => {
-    if (!user) return;
-    if (isAdmin) {
-      fetchAdminSummary();
-      fetchAdminOverview();
-    }
-  }, [isAdmin, user]);
+    if (!userId) return;
+    if (!isAdmin) return;
+    fetchAdminOverview();
+  }, [fetchAdminOverview, isAdmin, userId]);
 
   // Request notification permissions
   useEffect(() => {
@@ -498,72 +473,30 @@ export default function CreatorDashboard() {
     requestPermissions();
   }, [isAdmin]);
 
-  // Realtime subscription for new sales
-  useEffect(() => {
-    if (!user || isAdmin) return;
-
-    // Filter events created by me
-    // IMPORTANT: Keep myEvents and myEventIds in sync with the subscription
-    const myEvents = events.filter(e => e.creatorId === user.id);
-    const myEventIds = myEvents.map(e => e.id);
-
-    if (myEventIds.length === 0) return;
-
-    console.log('Subscribing to sales for events:', myEventIds);
-
-    const channel = supabase
-      .channel('tickets-realtime-dashboard')
-      .on(
-        'postgres_changes',
-        {
-          event: '*', // Listen for ALL events (INSERT, UPDATE)
-          schema: 'public',
-          table: 'tickets',
-        },
-        async (payload) => {
-          // Check if the new/updated ticket belongs to one of my events
-          // For INSERT/UPDATE, we check payload.new.event_id
-          const ticket = payload.new as any;
-          if (ticket && myEventIds.includes(ticket.event_id)) {
-             console.log('Ticket update received:', ticket);
-             
-             // Refresh stats completely to ensure accuracy
-             fetchStats();
-
-             if (payload.eventType === 'INSERT') {
-               const revenue = Number(ticket.total_price || 0);
-               const totalRevenue = salesData.reduce((acc, curr) => acc + curr.amount, 0) + revenue;
-               if (totalRevenue >= 1000 && totalRevenue - revenue < 1000) {
-                 await scheduleLocalNotification(
-                  t('creator.notifications.milestone_title'),
-                  t('creator.notifications.milestone_body', { amount: 1000 }),
-                   { type: 'milestone', amount: 1000 },
-                   2
-                 );
-               }
-             }
-          }
-        }
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [events, isAdmin, user]);
+  const onRefresh = useCallback(async () => {
+    if (!userId) return;
+    if (refreshing) return;
+    setRefreshing(true);
+    try {
+      refreshEvents?.().catch(() => {});
+      await Promise.all([fetchStats({ force: true }), fetchMyProfile({ force: true })]);
+    } finally {
+      setRefreshing(false);
+    }
+  }, [fetchMyProfile, fetchStats, refreshing, refreshEvents, userId]);
 
   useEffect(() => {
-    if (!user || isAdmin) return;
+    if (!userId || isAdmin) return;
 
     const channel = supabase
-      .channel(`organizer-notifications-${user.id}`)
+      .channel(`organizer-notifications-${userId}`)
       .on(
         'postgres_changes',
         {
           event: 'INSERT',
           schema: 'public',
           table: 'notifications',
-          filter: `user_id=eq.${user.id}`,
+          filter: `user_id=eq.${userId}`,
         },
         async (payload) => {
           const n = payload.new as any;
@@ -578,7 +511,11 @@ export default function CreatorDashboard() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [isAdmin, user]);
+  }, [isAdmin, t, userId]);
+
+  useEffect(() => {
+    salesDataRef.current = salesData;
+  }, [salesData]);
 
   const myEvents = events.filter(e => e.creatorId === user?.id);
   
@@ -606,14 +543,6 @@ export default function CreatorDashboard() {
     return { revenue, tickets };
   }, [salesData, timeRange]);
 
-  const totalRevenueAllTime = useMemo(() => {
-    return salesData.reduce((acc, curr) => acc + curr.amount, 0);
-  }, [salesData]);
-
-  // Total stats (always all time for other cards if needed, or consistent)
-  // For "Tickets Sold" card, maybe we want to keep it "Total" or match filter?
-  // Let's match filter for consistency across dashboard
-  
   const topEvent = myEvents.reduce<{ title: string; sold: number } | null>((best, event) => {
     const soldCount = event.ticketTypes?.reduce((tAcc, ticket) => tAcc + ticket.sold, 0) || event.sold || 0;
     if (!best || soldCount > best.sold) {
@@ -621,8 +550,6 @@ export default function CreatorDashboard() {
     }
     return best;
   }, null);
-
-  const isMobile = !isTablet && !isDesktop;
 
   const showStripeOnboardingBlocker = profileRole === 'organizer' && verificationStatus === 'verified' && !onboardingCompleted && !isAdmin;
 
@@ -744,6 +671,7 @@ export default function CreatorDashboard() {
                 { paddingHorizontal: horizontalPadding, maxWidth: maxContentWidth, width: '100%', alignSelf: 'center' }
             ]}
             showsVerticalScrollIndicator={false}
+            refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="transparent" />}
         >
           {/* Header */}
           <View style={styles.header}>
@@ -759,16 +687,7 @@ export default function CreatorDashboard() {
                   })}
                 </Text>
             </View>
-            <TouchableOpacity onPress={handleLogout} style={styles.profileButton}>
-                <LinearGradient
-                    colors={['#8b5cf6', '#ec4899']}
-                    style={styles.profileGradient}
-                >
-                    <Text style={styles.profileInitial}>
-                        {user?.email?.charAt(0).toUpperCase()}
-                    </Text>
-                </LinearGradient>
-            </TouchableOpacity>
+            <View style={styles.headerRight} />
           </View>
 
           {showStripeOnboardingBlocker ? (
@@ -815,14 +734,13 @@ export default function CreatorDashboard() {
                   <TouchableOpacity
                     activeOpacity={0.8}
                     onPress={() => {
-                      fetchAdminSummary();
                       fetchAdminOverview();
                     }}
                     style={styles.adminRefreshButton}
                   >
                     <GlassView intensity={22} style={styles.adminRefreshInner}>
                       <Text style={styles.adminRefreshText}>
-                        {(loadingAdminSummary || loadingAdminOverview) ? t('creator.admin.refreshing') : t('creator.admin.refresh')}
+                        {loadingAdminOverview ? t('creator.admin.refreshing') : t('creator.admin.refresh')}
                       </Text>
                     </GlassView>
                   </TouchableOpacity>
@@ -1012,88 +930,6 @@ export default function CreatorDashboard() {
                 />
               </ScrollView>
 
-              <View style={styles.sectionContainer}>
-                <Text style={styles.sectionTitle}>{t('creator.organizer.control_center_title')}</Text>
-                
-                <View style={styles.gridRow}>
-                  <ActionCard 
-                      title={t('creator.organizer.actions.create_event_title')} 
-                      description={t('creator.organizer.actions.create_event_desc')}
-                      icon={Plus} 
-                      color="#8b5cf6" 
-                      onPress={() => {
-                        if (!canCreateEvents) {
-                          let alertTitle = t('creator.organizer.verification.pending_title');
-                          let alertMsg = t('creator.organizer.verification.pending_body');
-                          
-                          if (verificationStatus === 'needs_correction') {
-                            alertTitle = t('creator.organizer.verification.needs_correction_title');
-                            alertMsg = t('creator.organizer.verification.needs_correction_body');
-                          } else if (verificationStatus === 'rejected') {
-                            alertTitle = t('creator.organizer.verification.rejected_title');
-                            alertMsg = t('creator.organizer.verification.rejected_create_event_body');
-                          }
-                          
-                          Alert.alert(alertTitle, alertMsg);
-                          router.push('/(creator)/verification');
-                          return;
-                        }
-                        router.push('/(creator)/create-event');
-                      }}
-                      style={{ flex: 1 }}
-                  />
-                   <ActionCard 
-                      title={t('creator.organizer.actions.validate_title')} 
-                      description={t('creator.organizer.actions.validate_desc')}
-                      icon={ScanLine} 
-                      color="#4ade80" 
-                      onPress={() => router.push('/(creator)/scan')}
-                      style={{ flex: 1 }}
-                  />
-                </View>
-
-                <View style={styles.gridRow}>
-                  <ActionCard 
-                      title={t('creator.organizer.actions.staff_title')} 
-                      description={t('creator.organizer.actions.staff_desc')}
-                      icon={Users} 
-                      color="#3b82f6" 
-                      onPress={() => router.push('/(creator)/workers')}
-                      style={{ flex: 1 }}
-                  />
-                   <ActionCard 
-                      title={t('creator.organizer.actions.my_events_title')} 
-                      description={t('creator.organizer.actions.my_events_desc')}
-                      icon={Calendar} 
-                      color="#f43f5e" 
-                      onPress={() => router.push('/(creator)/manage-events')}
-                      style={{ flex: 1 }}
-                  />
-                </View>
-
-              </View>
-
-              <View style={styles.sectionContainer}>
-                <Text style={styles.sectionTitle}>{t('creator.organizer.account_section_title')}</Text>
-                <View style={styles.gridRow}>
-                  <ActionCard
-                    title={t('profile.legal_info')}
-                    description={t('creator.organizer.legal_desc')}
-                    icon={FileText}
-                    color="#34d399"
-                    onPress={() => router.push('/legal')}
-                    style={{ flex: 1 }}
-                  />
-                  <ActionCard
-                    title={deletingAccount ? t('profile.deleting') : t('profile.delete_my_account')}
-                    description={t('profile.delete_my_account')}
-                    icon={Trash2}
-                    color="#ef4444"
-                    onPress={handleDeleteAccount}
-                    style={{ flex: 1 }}
-                  />
-                </View>
-              </View>
             </>
           )}
 
@@ -1143,6 +979,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 20,
   },
+  headerRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
   dateText: {
     color: 'rgba(255,255,255,0.6)',
     fontSize: 13,
@@ -1176,6 +1017,26 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 18,
     fontWeight: '700',
+  },
+  headerLogoutButton: {
+    borderRadius: 999,
+    overflow: 'hidden',
+  },
+  headerLogoutInner: {
+    height: 44,
+    paddingHorizontal: 12,
+    borderRadius: 999,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.10)',
+    backgroundColor: 'rgba(255,255,255,0.06)',
+  },
+  headerLogoutText: {
+    color: 'rgba(255,255,255,0.92)',
+    fontWeight: '800',
+    fontSize: 12,
   },
   totalHero: {
     borderRadius: 30,

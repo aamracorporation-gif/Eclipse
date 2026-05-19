@@ -1,4 +1,4 @@
-import { View, Text, StyleSheet, KeyboardAvoidingView, Platform, ScrollView, Alert, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, KeyboardAvoidingView, Platform, ScrollView, TouchableOpacity } from 'react-native';
 import { useMemo, useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -14,12 +14,14 @@ import { ThemedInput } from '@/components/ui/ThemedInput';
 import { GlassView } from '@/components/ui/GlassView';
 import { DiscoLoader } from '@/components/ui/DiscoLoader';
 import { invokeEdgeFunction } from '@/lib/edgeFunctions';
-import { calculateAgeFromDate, isSafeAddressText, isSafeOrgText, isValidIbanES, isValidPersonName, isValidSpanishTaxId, normalizeWhitespace } from '@/lib/validators';
+import { calculateAgeFromDate, getPasswordRequirements, isPasswordStrong, isSafeAddressText, isSafeOrgText, isValidIbanES, isValidPersonName, isValidSpanishTaxId, normalizeWhitespace, normalizeWhitespaceForInput } from '@/lib/validators';
+import { useAppDialog } from '@/components/ui/AppDialog';
 
 export default function RegisterScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { signUp } = useAuth();
+  const { show: showDialog } = useAppDialog();
   
   // Steps:
   // 1. Role Selection
@@ -77,6 +79,44 @@ export default function RegisterScreen() {
 
   const [clubNameUnavailable, setClubNameUnavailable] = useState<string | null>(null);
 
+  const passwordRequirements = useMemo(() => getPasswordRequirements(formData.password), [formData.password]);
+  const passwordStrong = useMemo(() => isPasswordStrong(formData.password), [formData.password]);
+  const passwordHasInvalidChars = useMemo(() => !!formData.password && !passwordRequirements.onlyAllowedChars, [formData.password, passwordRequirements.onlyAllowedChars]);
+  const passwordAllowedSpecials = `!@#$%^&*(),.?":{}|<>`;
+
+  const clearSensitiveFields = useCallback(() => {
+    setShowPassword(false);
+    setSubmitAttempted(false);
+    setTouched({});
+    setFormData((prev) => ({
+      ...prev,
+      password: '',
+      confirmPassword: '',
+    }));
+  }, []);
+
+  const setRole = useCallback(
+    (nextRole: 'attendee' | 'organizer') => {
+      clearSensitiveFields();
+      setBirthDate(null);
+      setResponsibleBirthDate(null);
+      setAcceptedLicenses(false);
+      setAcceptedTerms(false);
+      setAcceptedPrivacy(false);
+      setClubNameUnavailable(null);
+      setManualLocation(false);
+      setLocationStatus('idle');
+      setFormData((prev) => ({
+        ...prev,
+        role: nextRole,
+        ...(nextRole === 'organizer'
+          ? { firstName: '', lastName: '' }
+          : { clubName: '', venueAddress: '', fiscalAddress: '', postalCode: '', responsibleName: '', iban: '', legalName: '', taxIdNumber: '' }),
+      }));
+    },
+    [clearSensitiveFields]
+  );
+
   const sanitizeByAllowed = (text: string, allowed: RegExp) => {
     const raw = String(text || '');
     let out = '';
@@ -101,20 +141,20 @@ export default function RegisterScreen() {
   const setField = (key: string, value: string) => {
     touch(key);
     if (key === 'firstName' || key === 'lastName' || key === 'responsibleName') {
-      updateForm(key, normalizeWhitespace(sanitizeNameText(value)));
+      updateForm(key, normalizeWhitespaceForInput(sanitizeNameText(value)));
       return;
     }
     if (key === 'city' || key === 'country') {
-      updateForm(key, normalizeWhitespace(sanitizeCityCountryText(value)));
+      updateForm(key, normalizeWhitespaceForInput(sanitizeCityCountryText(value)));
       return;
     }
     if (key === 'clubName' || key === 'legalName') {
       setClubNameUnavailable(null);
-      updateForm(key, normalizeWhitespace(sanitizeOrgText(value)));
+      updateForm(key, normalizeWhitespaceForInput(sanitizeOrgText(value)));
       return;
     }
     if (key === 'venueAddress' || key === 'fiscalAddress') {
-      updateForm(key, normalizeWhitespace(sanitizeAddressText(value)));
+      updateForm(key, normalizeWhitespaceForInput(sanitizeAddressText(value)));
       return;
     }
     if (key === 'postalCode') {
@@ -134,38 +174,78 @@ export default function RegisterScreen() {
 
   const detectLocation = useCallback(async () => {
     setLocationStatus('detecting');
+    setManualLocation(false);
     try {
+      const servicesEnabled = await Location.hasServicesEnabledAsync();
+      if (!servicesEnabled) {
+        setLocationStatus('error');
+        setManualLocation(true);
+        showDialog({
+          title: 'GPS desactivado',
+          message: 'Activa la ubicación en tu dispositivo para usar el GPS, o escribe la ubicación manualmente.',
+        });
+        return;
+      }
+
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== 'granted') {
         setLocationStatus('error');
         setManualLocation(true);
+        showDialog({
+          title: 'Permiso requerido',
+          message: 'Necesitamos permiso de ubicación para rellenar ciudad y país automáticamente.',
+        });
         return;
       }
 
-      const location = await Location.getCurrentPositionAsync({});
+      const last = await Location.getLastKnownPositionAsync({ maxAge: 60_000, requiredAccuracy: 120 });
+      const location =
+        last ||
+        (await Location.getCurrentPositionAsync({
+          accuracy: Location.Accuracy.Balanced,
+        }));
+
       const geocode = await Location.reverseGeocodeAsync({
         latitude: location.coords.latitude,
-        longitude: location.coords.longitude
+        longitude: location.coords.longitude,
       });
 
-      if (geocode && geocode.length > 0) {
-        const address = geocode[0];
-        setFormData(prev => ({
-          ...prev,
-          city: address.city || address.subregion || '',
-          country: address.country || ''
-        }));
-        setLocationStatus('success');
-      } else {
+      const address = geocode && geocode.length > 0 ? geocode[0] : null;
+      const city =
+        normalizeWhitespaceForInput(String(address?.city || '')) ||
+        normalizeWhitespaceForInput(String(address?.subregion || '')) ||
+        normalizeWhitespaceForInput(String((address as any)?.district || '')) ||
+        normalizeWhitespaceForInput(String(address?.region || ''));
+      const country =
+        normalizeWhitespaceForInput(String(address?.country || '')) ||
+        normalizeWhitespaceForInput(String((address as any)?.isoCountryCode || ''));
+
+      if (!city && !country) {
         setLocationStatus('error');
         setManualLocation(true);
+        showDialog({
+          title: 'No se pudo detectar',
+          message: 'No pudimos obtener tu ciudad/país con el GPS. Intenta de nuevo o escríbelo manualmente.',
+        });
+        return;
       }
-    } catch (error) {
+
+      setFormData((prev) => ({
+        ...prev,
+        city: city || prev.city,
+        country: country || prev.country,
+      }));
+      setLocationStatus('success');
+    } catch (error: any) {
       console.log('Location error:', error);
       setLocationStatus('error');
       setManualLocation(true);
+      showDialog({
+        title: 'Error de ubicación',
+        message: 'No pudimos obtener tu ubicación. Revisa permisos, GPS y conexión, o escribe la ubicación manualmente.',
+      });
     }
-  }, []);
+  }, [showDialog]);
 
   // Auto-detect location when entering Step 2
   useEffect(() => {
@@ -251,7 +331,7 @@ export default function RegisterScreen() {
       if (formData.email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(formData.email)) errors.email = 'Formato de email inválido.';
 
       required('password', formData.password, 'La contraseña es obligatoria.');
-      if (formData.password && formData.password.length < 6) errors.password = 'Mínimo 6 caracteres.';
+      if (formData.password && !passwordStrong) errors.password = 'La contraseña debe cumplir todos los requisitos.';
 
       required('confirmPassword', formData.confirmPassword, 'Confirma la contraseña.');
       if (formData.confirmPassword && formData.password !== formData.confirmPassword) errors.confirmPassword = 'Las contraseñas no coinciden.';
@@ -270,6 +350,7 @@ export default function RegisterScreen() {
     acceptedTerms,
     acceptedPrivacy,
     clubNameUnavailable,
+    passwordStrong,
   ]);
 
   const showFieldError = (key: string) => (submitAttempted || touched[key]) ? fieldErrors[key] : undefined;
@@ -361,28 +442,31 @@ export default function RegisterScreen() {
     const safeRole = role === 'organizer' ? 'organizer' : 'attendee';
 
     if (!email.trim()) {
-        Alert.alert('Faltan datos', 'Ingresa tu correo electrónico.');
-        return;
+      showDialog({ title: 'Faltan datos', message: 'Ingresa tu correo electrónico.' });
+      return;
     }
 
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(email)) {
-        Alert.alert('Email inválido', 'Por favor ingresa un correo válido.');
-        return;
-    }
-
-    if (password !== confirmPassword) {
-      Alert.alert('Error', 'Las contraseñas no coinciden.');
+      showDialog({ title: 'Email inválido', message: 'Por favor ingresa un correo válido.' });
       return;
     }
 
-    if (password.length < 6) {
-      Alert.alert('Error', 'La contraseña debe tener al menos 6 caracteres.');
+    if (password !== confirmPassword) {
+      showDialog({ title: 'Error', message: 'Las contraseñas no coinciden.' });
+      return;
+    }
+
+    if (!passwordStrong) {
+      showDialog({ title: 'Contraseña insegura', message: 'La contraseña debe cumplir todos los requisitos de seguridad.' });
       return;
     }
 
     if (!acceptedTerms || !acceptedPrivacy) {
-      Alert.alert('Requisitos legales', 'Debes aceptar los Términos y Condiciones y la Política de Privacidad para registrarte.');
+      showDialog({
+        title: 'Requisitos legales',
+        message: 'Debes aceptar los Términos y Condiciones y la Política de Privacidad para registrarte.',
+      });
       return;
     }
 
@@ -422,11 +506,11 @@ export default function RegisterScreen() {
 
       if (error) throw error;
 
-      Alert.alert(
-        'Confirma tu email',
-        'Te enviamos un enlace de confirmación. Revisa tu correo electrónico y confirma tu cuenta para continuar.',
-        [{ text: 'Continuar', onPress: () => setStep(5) }]
-      );
+      showDialog({
+        title: 'Confirma tu email',
+        message: 'Te enviamos un enlace de confirmación. Revisa tu correo electrónico y confirma tu cuenta para continuar.',
+        actions: [{ label: 'Continuar', onPress: () => setStep(5), variant: 'primary' }],
+      });
 
     } catch (error: any) {
       console.log('Register error raw:', error);
@@ -436,10 +520,11 @@ export default function RegisterScreen() {
       if (isEmailRateLimit) {
         const allowDevBypass = __DEV__ && String(process.env.EXPO_PUBLIC_DEV_BYPASS_EMAIL_RATE_LIMIT || '') === '1';
         if (!allowDevBypass) {
-          Alert.alert(
-            'Límite de emails alcanzado',
-            'Supabase ha bloqueado temporalmente el envío de emails de confirmación (rate limit). Para poder registrar más cuentas debes:\n\n- Esperar y reintentar más tarde, o\n- Configurar un proveedor SMTP propio en Supabase (Auth → Email) para aumentar límites.\n\nEn desarrollo puedes activar un bypass con EXPO_PUBLIC_DEV_BYPASS_EMAIL_RATE_LIMIT=1.'
-          );
+          showDialog({
+            title: 'Límite de emails alcanzado',
+            message:
+              'Supabase ha bloqueado temporalmente el envío de emails de confirmación (rate limit). Para poder registrar más cuentas debes:\n\n- Esperar y reintentar más tarde, o\n- Configurar un proveedor SMTP propio en Supabase (Auth → Email) para aumentar límites.\n\nEn desarrollo puedes activar un bypass con EXPO_PUBLIC_DEV_BYPASS_EMAIL_RATE_LIMIT=1.',
+          });
           return;
         }
 
@@ -505,21 +590,22 @@ export default function RegisterScreen() {
 
           await invokeEdgeFunction('record-legal-acceptance', {});
 
-          Alert.alert(
-            'Cuenta creada (DEV)',
-            'Por límite de emails, en desarrollo se creó la cuenta sin enviar el email de confirmación. En producción el email será obligatorio.'
-          );
+          showDialog({
+            title: 'Cuenta creada (DEV)',
+            message:
+              'Por límite de emails, en desarrollo se creó la cuenta sin enviar el email de confirmación. En producción el email será obligatorio.',
+          });
           router.replace(formData.role === 'organizer' ? '/(creator)/verification' : '/(tabs)');
           return;
         } catch (e: any) {
-          Alert.alert('Error de Registro', String(e?.message || 'No se pudo registrar por bypass DEV.'));
+          showDialog({ title: 'Error de Registro', message: String(e?.message || 'No se pudo registrar por bypass DEV.') });
           return;
         }
       }
       const hint = msg.includes('Database error saving new user')
         ? '\n\nSuele indicar que falló un trigger/migración en Supabase (creación de profile/wallet). Aplica las migraciones y refresca el schema cache.'
         : '';
-      Alert.alert('Error de Registro', `${msg}${hint}`);
+      showDialog({ title: 'Error de Registro', message: `${msg}${hint}` });
     } finally {
       setLoading(false);
     }
@@ -531,7 +617,7 @@ export default function RegisterScreen() {
       
       <TouchableOpacity 
         style={[styles.roleCard, formData.role === 'attendee' && styles.activeRoleCard]}
-        onPress={() => updateForm('role', 'attendee')}
+        onPress={() => setRole('attendee')}
       >
         <PartyPopper size={40} color={formData.role === 'attendee' ? Colors.dark.primary : '#ccc'} />
         <Text style={[styles.roleTitle, formData.role === 'attendee' && styles.activeRoleText]}>Soy Fiestero</Text>
@@ -540,7 +626,7 @@ export default function RegisterScreen() {
 
       <TouchableOpacity 
         style={[styles.roleCard, formData.role === 'organizer' && styles.activeRoleCard]}
-        onPress={() => updateForm('role', 'organizer')}
+        onPress={() => setRole('organizer')}
       >
         <Building2 size={40} color={formData.role === 'organizer' ? Colors.dark.primary : '#ccc'} />
         <Text style={[styles.roleTitle, formData.role === 'organizer' && styles.activeRoleText]}>Soy Organizador</Text>
@@ -620,7 +706,7 @@ export default function RegisterScreen() {
 
       <View style={styles.inputContainer}>
         <Text style={styles.label}>Ubicación</Text>
-        {!manualLocation && locationStatus !== 'idle' ? (
+        {!manualLocation && (locationStatus === 'detecting' || locationStatus === 'success') ? (
             <GlassView style={styles.locationCard}>
                 {locationStatus === 'detecting' ? (
                     <View style={styles.locationRow}>
@@ -631,7 +717,7 @@ export default function RegisterScreen() {
                     <View style={styles.locationRow}>
                         <MapPin size={20} color={Colors.dark.success} />
                         <Text style={styles.locationText}>{formData.city}, {formData.country}</Text>
-                        <TouchableOpacity onPress={() => setManualLocation(true)}>
+                        <TouchableOpacity onPress={() => { setManualLocation(true); setLocationStatus('idle'); }}>
                             <Edit2 size={16} color={Colors.dark.textSecondary} />
                         </TouchableOpacity>
                     </View>
@@ -657,7 +743,7 @@ export default function RegisterScreen() {
                   success={showFieldSuccess('country')}
                   icon={Building}
                 />
-                <TouchableOpacity style={styles.retryLocation} onPress={() => { setManualLocation(false); detectLocation(); }}>
+                <TouchableOpacity style={styles.retryLocation} onPress={() => { void detectLocation(); }}>
                     <RefreshCw size={16} color={Colors.dark.primary} />
                     <Text style={styles.retryText}>Usar GPS</Text>
                 </TouchableOpacity>
@@ -802,7 +888,41 @@ export default function RegisterScreen() {
           {showPassword ? <EyeOff size={20} color="#ccc" /> : <Eye size={20} color="#ccc" />}
         </TouchableOpacity>
       } />
-      <ThemedInput placeholder="Confirmar contraseña" value={formData.confirmPassword} onChangeText={(t) => { touch('confirmPassword'); updateForm('confirmPassword', t); }} onBlur={() => touch('confirmPassword')} error={showFieldError('confirmPassword')} secureTextEntry={!showPassword} icon={Lock} />
+      <View style={styles.passwordReqCard}>
+        <Text style={styles.passwordReqTitle}>Requisitos de seguridad</Text>
+        <View style={styles.passwordReqRow}>
+          {passwordRequirements.minLength ? <Check size={16} color={Colors.dark.success} /> : <Text style={styles.passwordReqBullet}>•</Text>}
+          <Text style={[styles.passwordReqText, passwordRequirements.minLength && styles.passwordReqTextOk]}>Mínimo 6 caracteres</Text>
+        </View>
+        <View style={styles.passwordReqRow}>
+          {passwordRequirements.hasUpper ? <Check size={16} color={Colors.dark.success} /> : <Text style={styles.passwordReqBullet}>•</Text>}
+          <Text style={[styles.passwordReqText, passwordRequirements.hasUpper && styles.passwordReqTextOk]}>Al menos una mayúscula</Text>
+        </View>
+        <View style={styles.passwordReqRow}>
+          {passwordRequirements.hasLower ? <Check size={16} color={Colors.dark.success} /> : <Text style={styles.passwordReqBullet}>•</Text>}
+          <Text style={[styles.passwordReqText, passwordRequirements.hasLower && styles.passwordReqTextOk]}>Al menos una minúscula</Text>
+        </View>
+        <View style={styles.passwordReqRow}>
+          {passwordRequirements.hasNumber ? <Check size={16} color={Colors.dark.success} /> : <Text style={styles.passwordReqBullet}>•</Text>}
+          <Text style={[styles.passwordReqText, passwordRequirements.hasNumber && styles.passwordReqTextOk]}>Al menos un número</Text>
+        </View>
+        <View style={styles.passwordReqRow}>
+          {passwordRequirements.hasSpecial ? <Check size={16} color={Colors.dark.success} /> : <Text style={styles.passwordReqBullet}>•</Text>}
+          <Text style={[styles.passwordReqText, passwordRequirements.hasSpecial && styles.passwordReqTextOk]}>
+            Al menos un carácter especial ({passwordAllowedSpecials})
+          </Text>
+        </View>
+        {passwordHasInvalidChars ? (
+          <Text style={styles.passwordReqWarn}>
+            No se permiten emojis ni símbolos fuera de la lista.
+          </Text>
+        ) : null}
+      </View>
+      <ThemedInput placeholder="Confirmar contraseña" value={formData.confirmPassword} onChangeText={(t) => { touch('confirmPassword'); updateForm('confirmPassword', t); }} onBlur={() => touch('confirmPassword')} error={showFieldError('confirmPassword')} secureTextEntry={!showPassword} icon={Lock} rightIcon={
+        <TouchableOpacity onPress={() => setShowPassword(!showPassword)}>
+          {showPassword ? <EyeOff size={20} color="#ccc" /> : <Eye size={20} color="#ccc" />}
+        </TouchableOpacity>
+      } />
 
       <View style={styles.legalBox}>
         <TouchableOpacity activeOpacity={0.8} style={styles.legalRow} onPress={() => setAcceptedTerms(v => !v)}>
@@ -849,7 +969,7 @@ export default function RegisterScreen() {
             await invokeEdgeFunction('record-legal-acceptance', {});
             router.replace(formData.role === 'organizer' ? '/(creator)/verification' : '/(tabs)');
           } catch {
-            Alert.alert('Aún no verificado', 'Confirma el email y vuelve a intentarlo.');
+            showDialog({ title: 'Aún no verificado', message: 'Confirma el email y vuelve a intentarlo.' });
           } finally {
             setEmailConfirmedLoading(false);
           }
@@ -896,7 +1016,7 @@ export default function RegisterScreen() {
 
             <View style={styles.loginLink}>
               <Text style={styles.loginText}>¿Ya tienes cuenta? </Text>
-              <TouchableOpacity onPress={() => router.push('/(auth)/login')}><Text style={styles.loginLinkText}>Inicia Sesión</Text></TouchableOpacity>
+              <TouchableOpacity onPress={() => { clearSensitiveFields(); router.push('/(auth)/login'); }}><Text style={styles.loginLinkText}>Inicia Sesión</Text></TouchableOpacity>
             </View>
           </GlassView>
         </ScrollView>
@@ -938,6 +1058,26 @@ const styles = StyleSheet.create({
   manualLocationContainer: { gap: 10 },
   retryLocation: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginTop: 5 },
   retryText: { color: Colors.dark.primary, marginLeft: 5, fontWeight: '600' },
+  passwordReqCard: {
+    marginTop: -6,
+    marginBottom: 6,
+    padding: 14,
+    borderRadius: 14,
+    backgroundColor: 'rgba(255,255,255,0.04)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.10)',
+  },
+  passwordReqTitle: {
+    color: 'rgba(255,255,255,0.90)',
+    fontWeight: '800',
+    fontSize: 13,
+    marginBottom: 10,
+  },
+  passwordReqRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 8 },
+  passwordReqBullet: { color: 'rgba(255,255,255,0.35)', fontSize: 16, width: 16, textAlign: 'center' },
+  passwordReqText: { color: 'rgba(255,255,255,0.70)', fontWeight: '700', fontSize: 12, flex: 1 },
+  passwordReqTextOk: { color: 'rgba(255,255,255,0.95)' },
+  passwordReqWarn: { color: Colors.dark.error, fontSize: 12, marginTop: 2, fontWeight: '700' },
   genresGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, justifyContent: 'center' },
   genreChip: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.05)', paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20, borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)' },
   activeGenreChip: { backgroundColor: Colors.dark.primary, borderColor: Colors.dark.primary },

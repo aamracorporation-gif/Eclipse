@@ -1,6 +1,6 @@
 import 'react-native-url-polyfill/auto';
-import { useEffect, useState } from 'react';
-import { AppState } from 'react-native';
+import { Component, type ReactNode, useEffect, useState } from 'react';
+import { AppState, StyleSheet, Text, View } from 'react-native';
 import { router, Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useFrameworkReady } from '@/hooks/useFrameworkReady';
@@ -18,6 +18,10 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { DiscoLoader } from '@/components/ui/DiscoLoader';
 import { initNotifications } from '@/lib/notifications';
 import { Colors } from '@/constants/Colors';
+import { GlassView } from '@/components/ui/GlassView';
+import { ThemedButton } from '@/components/ui/ThemedButton';
+import { AppDialogProvider } from '@/components/ui/AppDialog';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 import * as Notifications from 'expo-notifications';
 import * as ExpoLinking from 'expo-linking';
@@ -31,6 +35,46 @@ Notifications.setNotificationHandler({
     shouldShowList: true,
   }),
 });
+
+class AppErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean }> {
+  state = { hasError: false };
+
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+
+  componentDidCatch(error: any, info: any) {
+    try {
+      console.error('[AppErrorBoundary]', error, info);
+    } catch {}
+  }
+
+  render() {
+    if (!this.state.hasError) return this.props.children;
+
+    return (
+      <View style={errorStyles.container}>
+        <View style={StyleSheet.absoluteFill} />
+        <View style={errorStyles.center}>
+          <GlassView intensity={18} style={errorStyles.card}>
+            <Text style={errorStyles.title}>Algo salió mal</Text>
+            <Text style={errorStyles.body}>
+              La app encontró un error inesperado. Puedes volver a cargar la pantalla principal.
+            </Text>
+            <ThemedButton
+              title="Reiniciar"
+              onPress={() => {
+                this.setState({ hasError: false });
+                router.replace('/(tabs)');
+              }}
+              style={{ marginTop: 14 }}
+            />
+          </GlassView>
+        </View>
+      </View>
+    );
+  }
+}
 
 function RootLayoutNav({ fontsLoaded }: { fontsLoaded: boolean }) {
   const { loading } = useAuth();
@@ -82,35 +126,37 @@ function RootLayoutNav({ fontsLoaded }: { fontsLoaded: boolean }) {
   }
 
   return (
-    <StripeProvider>
-      <EventProvider>
-        <CreditProvider>
-          <Stack
-            screenOptions={{
-              headerShown: false,
-              contentStyle: {
-                backgroundColor: Colors.dark.background,
-              },
-            }}
-          >
-            <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-            <Stack.Screen name="(auth)" options={{ headerShown: false }} />
-            <Stack.Screen name="auth/callback" options={{ headerShown: false }} />
-            <Stack.Screen name="(creator)" options={{ headerShown: false }} />
-            <Stack.Screen name="(worker)" options={{ headerShown: false }} />
-            <Stack.Screen 
-              name="notifications" 
-              options={{ 
+    <AppErrorBoundary>
+      <StripeProvider>
+        <EventProvider>
+          <CreditProvider>
+            <Stack
+              screenOptions={{
                 headerShown: false,
-                presentation: 'modal'
-              }} 
-            />
-            <Stack.Screen name="+not-found" />
-          </Stack>
-          <StatusBar style="light" />
-        </CreditProvider>
-      </EventProvider>
-    </StripeProvider>
+                contentStyle: {
+                  backgroundColor: Colors.dark.background,
+                },
+              }}
+            >
+              <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+              <Stack.Screen name="(auth)" options={{ headerShown: false }} />
+              <Stack.Screen name="auth/callback" options={{ headerShown: false }} />
+              <Stack.Screen name="(creator)" options={{ headerShown: false }} />
+              <Stack.Screen name="(worker)" options={{ headerShown: false }} />
+              <Stack.Screen 
+                name="notifications" 
+                options={{ 
+                  headerShown: false,
+                  presentation: 'modal'
+                }} 
+              />
+              <Stack.Screen name="+not-found" />
+            </Stack>
+            <StatusBar style="light" />
+          </CreditProvider>
+        </EventProvider>
+      </StripeProvider>
+    </AppErrorBoundary>
   );
 }
 
@@ -121,6 +167,30 @@ export default function RootLayout() {
     RussoOne_400Regular,
   });
   const [i18nReady, setI18nReady] = useState(false);
+
+  useEffect(() => {
+    const ErrorUtilsAny = (globalThis as any)?.ErrorUtils;
+    const prevHandler = ErrorUtilsAny?.getGlobalHandler?.();
+    if (ErrorUtilsAny?.setGlobalHandler) {
+      ErrorUtilsAny.setGlobalHandler((error: any, isFatal: boolean) => {
+        try {
+          console.error('[GlobalErrorHandler]', { isFatal, error });
+        } catch {}
+        if (typeof prevHandler === 'function') {
+          try {
+            prevHandler(error, isFatal);
+          } catch {}
+        }
+      });
+    }
+    return () => {
+      try {
+        if (ErrorUtilsAny?.setGlobalHandler && typeof prevHandler === 'function') {
+          ErrorUtilsAny.setGlobalHandler(prevHandler);
+        }
+      } catch {}
+    };
+  }, []);
 
   useEffect(() => {
     let mounted = true;
@@ -146,21 +216,41 @@ export default function RootLayout() {
 
   if (!i18nReady) {
     return (
-      <SafeAreaProvider>
-        <DiscoLoader fullScreen size={160} />
-      </SafeAreaProvider>
+      <GestureHandlerRootView style={{ flex: 1 }}>
+        <SafeAreaProvider>
+          <DiscoLoader fullScreen size={160} />
+        </SafeAreaProvider>
+      </GestureHandlerRootView>
     );
   }
 
   return (
-    <SafeAreaProvider>
-      <AuthProvider>
-        <I18nProvider>
-          <NotificationProvider>
-            <RootLayoutNav fontsLoaded={fontsLoaded} />
-          </NotificationProvider>
-        </I18nProvider>
-      </AuthProvider>
-    </SafeAreaProvider>
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <SafeAreaProvider>
+        <AuthProvider>
+          <I18nProvider>
+            <NotificationProvider>
+              <AppDialogProvider>
+                <RootLayoutNav fontsLoaded={fontsLoaded} />
+              </AppDialogProvider>
+            </NotificationProvider>
+          </I18nProvider>
+        </AuthProvider>
+      </SafeAreaProvider>
+    </GestureHandlerRootView>
   );
 }
+
+const errorStyles = StyleSheet.create({
+  container: { flex: 1, backgroundColor: Colors.dark.background },
+  center: { flex: 1, justifyContent: 'center', paddingHorizontal: 16 },
+  card: {
+    borderRadius: 18,
+    padding: 18,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.12)',
+    backgroundColor: 'rgba(15, 23, 42, 0.92)',
+  },
+  title: { color: Colors.dark.text, fontWeight: '900', fontSize: 18 },
+  body: { marginTop: 10, color: Colors.dark.textSecondary, fontWeight: '700', lineHeight: 20 },
+});

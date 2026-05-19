@@ -1,7 +1,6 @@
 import { Tabs } from 'expo-router';
 import { Home, Ticket, User, Repeat, Map as MapIcon } from '@/lib/icons';
 import { Colors } from '@/constants/Colors';
-import { Platform } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { theme } from '@/theme/styles';
@@ -9,6 +8,8 @@ import { theme } from '@/theme/styles';
 export default function TabLayout() {
   const { t } = useTranslation();
   const insets = useSafeAreaInsets();
+  const paddingV = 6;
+  const tabBarHeight = 56 + insets.bottom;
   return (
     <Tabs
       screenOptions={{
@@ -19,12 +20,12 @@ export default function TabLayout() {
           position: 'absolute',
           left: 16,
           right: 16,
-          bottom: insets.bottom + 12,
-          height: 64,
-          paddingTop: 10,
-          paddingBottom: 10,
+          bottom: 0,
+          height: tabBarHeight,
+          paddingTop: paddingV,
+          paddingBottom: insets.bottom + paddingV,
           borderRadius: 22,
-          backgroundColor: 'rgba(10, 10, 16, 0.92)',
+          backgroundColor: '#0A0A10',
           borderWidth: 1,
           borderColor: theme.colors.border,
           shadowColor: '#000',
@@ -34,7 +35,7 @@ export default function TabLayout() {
           elevation: 12,
         },
         tabBarHideOnKeyboard: true,
-        tabBarLabelStyle: { paddingBottom: 2 },
+        tabBarLabelStyle: { paddingBottom: 2, fontSize: 11, fontWeight: '600' },
         tabBarItemStyle: { paddingTop: 2 },
       }}>
       <Tabs.Screen
@@ -50,7 +51,6 @@ export default function TabLayout() {
         name="party-map"
         options={{
           title: t('home.view_map'),
-          href: Platform.OS === 'web' ? undefined : null,
           tabBarIcon: ({ size, color }) => (
             <MapIcon size={size} color={color} />
           ),

@@ -166,6 +166,80 @@
   "profile": {
     "notification_preferences": "Preferencias de notificaciones",
     "notification_center": "Centro de notificaciones",
+    "edit_profile": "Editar perfil",
+    "edit": {
+      "title": "Editar perfil",
+      "autosave": "Auto-guardado",
+      "show": "Mostrar",
+      "hide": "Ocultar",
+      "save_confirm": "¿Guardar los cambios de tu perfil?",
+      "autosave_prompt": "Tienes cambios sin guardar. ¿Guardar ahora?",
+      "discard_confirm": "Tienes cambios sin guardar. ¿Descartarlos?",
+      "discard": "Descartar",
+      "fix_errors": "Corrige los errores antes de guardar.",
+      "sections": {
+        "account": "Cuenta",
+        "personal": "Datos personales",
+        "contact": "Contacto",
+        "organizer": "Organizador"
+      },
+      "fields": {
+        "full_name": "Nombre visible",
+        "first_name": "Nombre",
+        "last_name": "Apellidos",
+        "gender": "Género",
+        "age": "Edad",
+        "city": "Ciudad",
+        "country": "País",
+        "club_name": "Nombre del local",
+        "business_email": "Email de negocio",
+        "instagram": "Instagram",
+        "venue_address": "Dirección del local",
+        "fiscal_address": "Dirección fiscal",
+        "postal_code": "Código postal",
+        "responsible_name": "Responsable",
+        "responsible_birthdate": "Nacimiento responsable",
+        "iban": "IBAN"
+      },
+      "placeholders": {
+        "full_name": "Tu nombre",
+        "first_name": "Nombre",
+        "last_name": "Apellidos",
+        "gender": "Opcional",
+        "age": "Opcional",
+        "phone": "+34…",
+        "city": "Ciudad",
+        "country": "País",
+        "club_name": "Nombre del local",
+        "business_email": "contacto@…",
+        "instagram": "@tu_cuenta",
+        "venue_address": "Dirección del local",
+        "fiscal_address": "Dirección fiscal",
+        "postal_code": "00000",
+        "responsible_name": "Nombre del responsable",
+        "responsible_birthdate": "YYYY-MM-DD",
+        "iban": "ES…"
+      },
+      "errors": {
+        "name_required": "Ingresa tu nombre.",
+        "invalid_name": "Nombre inválido.",
+        "invalid_city": "Ciudad inválida.",
+        "invalid_country": "País inválido.",
+        "invalid_gender": "Valor inválido.",
+        "invalid_age": "Edad inválida.",
+        "invalid_phone": "Teléfono inválido.",
+        "invalid_text": "No se permiten emojis ni caracteres especiales.",
+        "invalid_email": "Email inválido.",
+        "invalid_instagram": "Instagram inválido.",
+        "invalid_address": "Dirección inválida.",
+        "invalid_postal": "Código postal inválido.",
+        "invalid_birthdate": "Fecha inválida (YYYY-MM-DD).",
+        "invalid_iban": "IBAN inválido.",
+        "location_incomplete": "Completa ciudad y país para validar.",
+        "location_not_found": "No se encontró la ciudad/país. Revisa que sea correcto.",
+        "location_check_failed": "No se pudo validar la ubicación. Revisa tu conexión."
+      }
+    },
     "change_language": "Cambiar idioma",
     "language": {
       "device": "Idioma del dispositivo",
@@ -174,13 +248,28 @@
       "fr": "Francés"
     },
     "segment_panel": "Panel",
-    "segment_account": "Cuenta",
+    "segment_my_profile": "Mi perfil",
+    "segment_account": "Ajustes",
+    "section_profile": "Datos del perfil",
+    "section_settings": "Preferencias de la app",
+    "section_settings_sub": "Idioma y notificaciones.",
+    "section_privacy": "Privacidad y seguridad",
+    "section_privacy_sub": "Información legal y control de datos.",
+    "device_language": "Sistema",
     "section_account": "CUENTA",
     "section_management": "GESTIÓN",
     "section_staff": "PERSONAL DE STAFF",
     "sign_in_prompt": "Inicia sesión para acceder a tu perfil y gestionar tus entradas",
     "name": "Nombre",
     "email": "Email",
+    "full_name": "Nombre",
+    "first_name": "Nombre",
+    "last_name": "Apellidos",
+    "phone": "Teléfono",
+    "city": "Ciudad",
+    "country": "País",
+    "gender": "Género",
+    "age": "Edad",
     "wallet": "Crédito Eclipse",
     "review_organizers": "Revisar Organizadores",
     "location_label": "Ubicación",
@@ -304,6 +393,9 @@
     }
   },
   "creator": {
+    "tabs": {
+      "stats": "Estadísticas"
+    },
     "dashboard": {
       "hello": "Hola, {{name}}",
       "role_admin": "Administrador",
@@ -562,7 +654,19 @@
       }
     },
     "scan": {
-      "title": "Escanear entrada",
+      "title": "Acceso",
+      "dashboard_title": "Acceso",
+      "dashboard_subtitle": "Valida entradas con QR o mediante código manual.",
+      "camera_permission_title": "Permiso de cámara",
+      "actions": {
+        "validate": "Validar",
+        "staff": "Staff"
+      },
+      "staff_subtitle": "Invita y gestiona tu equipo para el control de accesos.",
+      "manual_hint": "Formato: texto del QR sin espacios. Útil si el QR está dañado o no enfoca.",
+      "manual_placeholder": "Pega aquí el código del QR",
+      "helper_camera": "Recomendado para accesos rápidos en puerta.",
+      "helper_manual": "Úsalo si el QR está dañado o el lector no enfoca.",
       "aim_qr": "Apunta al código QR de la entrada",
       "validating": "Validando...",
       "valid_title": "¡ENTRADA VÁLIDA!",
@@ -570,7 +674,7 @@
       "expired_banner": "ENTRADA CADUCADA",
       "not_recognized": "Código no reconocido",
       "next_scan": "Siguiente escaneo",
-      "na": "N/A",
+      "na": "Sin datos",
       "labels": {
         "event": "Evento:",
         "holder": "Titular:",
@@ -681,6 +785,24 @@
     "map_title": "Mapa",
     "map_subtitle": "En {{city}}",
     "map_subtitle_generic": "Descubre por zona",
+    "map_unavailable_title": "Mapa no disponible",
+    "map_unavailable_body": "Falta configurar la clave de Google Maps para Android.\n\nAñade EXPO_PUBLIC_GOOGLE_MAPS_API_KEY en EAS y vuelve a generar el APK.",
+    "map_sheet": {
+      "trending": "En tendencia",
+      "view_event": "Ver evento",
+      "crowd_label": "Ambiente",
+      "attendees_label": "Asistencia",
+      "distance_label": "Distancia",
+      "crowd_info_title": "¿Qué significa \"Ambiente\"?",
+      "crowd_info_body": "Es una estimación del nivel de afluencia (bajo/medio/lleno) basada en señales como ventas, check-ins y actividad en tiempo real.",
+      "attendees_info_title": "¿Qué significa \"Asistencia\"?",
+      "attendees_info_body": "Es una estimación del número de personas que podrían estar en el evento en este momento.",
+      "level": {
+        "low": "Bajo",
+        "medium": "Medio",
+        "full": "Lleno"
+      }
+    },
     "get_tickets": "Conseguir entradas",
     "tabs": {
       "concerts": "Conciertos",
@@ -711,7 +833,8 @@
       "type": "Tipo",
       "music": "Música",
       "age": "Edad",
-      "dress_code": "Dress Code"
+      "dress_code": "Dress Code",
+      "lineup": "Programación"
     },
     "actions": {
       "map": "Mapa",
@@ -802,7 +925,10 @@
     "empty_no_results_subtitle": "Prueba con menos filtros o busca por el nombre del evento.",
     "empty_no_listings": "No hay entradas en reventa",
     "empty_no_listings_subtitle": "Cuando otros usuarios publiquen entradas, aparecerán aquí con compra rápida y segura.",
-    "view_my_tickets": "Ver mis entradas"
+    "view_my_tickets": "Ver mis entradas",
+    "my_sales_title": "Mis Ventas",
+    "my_sales_loading": "Cargando ventas…",
+    "my_sales_empty": "No tienes entradas en reventa"
   },
   "tickets_pdf": {
     "ticket_title": "Entrada",

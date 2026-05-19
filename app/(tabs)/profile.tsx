@@ -1,9 +1,9 @@
-import { View, Text, StyleSheet, TouchableOpacity, Alert, Platform, ScrollView, Image, RefreshControl, StatusBar, Modal, TextInput, KeyboardAvoidingView } from 'react-native';
-import { router } from 'expo-router';
+import { View, Text, StyleSheet, TouchableOpacity, Platform, ScrollView, Image, RefreshControl, StatusBar, Modal, TextInput, KeyboardAvoidingView, Switch, Alert, useWindowDimensions } from 'react-native';
+import { router, useSegments } from 'expo-router';
 import { useAuth } from '@/lib/AuthContext';
 import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
-import { User, Ticket, ChevronRight, Tag, TrendingUp, UserPlus, Calendar, Sparkles, CheckCircle2, ShieldCheck, Wallet, QrCode, Clock, MapPin, Pencil, X, FileText } from '@/lib/icons';
+import { User, Ticket, ChevronRight, Tag, TrendingUp, UserPlus, Calendar, Sparkles, CheckCircle2, ShieldCheck, Wallet, QrCode, Clock, MapPin, Pencil, X, FileText, LogOut } from '@/lib/icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Colors } from '@/constants/Colors';
 import { GlassView } from '@/components/ui/GlassView';
@@ -18,20 +18,30 @@ import { useEvents } from '@/lib/EventContext';
 import { useTranslation } from 'react-i18next';
 import { useI18n } from '@/lib/I18nContext';
 import { invokeEdgeFunction } from '@/lib/edgeFunctions';
+import { useAppDialog } from '@/components/ui/AppDialog';
+import { isSafeAddressText, isSafeOrgText, isValidIbanES, isValidPersonName, normalizeWhitespace, normalizeWhitespaceForInput } from '@/lib/validators';
+import * as Location from 'expo-location';
 
 export default function ProfileScreen() {
   const { user, signOut, workerProfile } = useAuth();
   const { events, refreshEvents } = useEvents();
   const { t } = useTranslation();
   const { language, setLanguage, setDeviceLanguage } = useI18n();
+  const { show: showDialog } = useAppDialog();
+  const segments = useSegments();
+  const inCreator = segments?.[0] === '(creator)';
   const localeTag = language === 'en' ? 'en-US' : language === 'fr' ? 'fr-FR' : 'es-ES';
   const insets = useSafeAreaInsets();
+  const { height: windowHeight } = useWindowDimensions();
   const { horizontalPadding, maxContentWidth } = useResponsive();
   
+  const [loadingProfile, setLoadingProfile] = useState(true);
   const [activeTab, setActiveTab] = useState<'profile' | 'panel' | 'account' | 'resale'>('profile');
   const [organizerStats, setOrganizerStats] = useState<{ revenue: number; tickets: number }>({ revenue: 0, tickets: 0 });
   const [verificationStatus, setVerificationStatus] = useState<'pending_verification' | 'verified' | 'rejected' | 'needs_correction' | null>(null);
-  const [profileRole, setProfileRole] = useState<'organizer' | 'attendee' | 'admin' | null>(null);
+  const [profileRole, setProfileRole] = useState<'organizer' | 'attendee' | 'admin' | null>(
+    (user?.user_metadata as any)?.role ?? null
+  );
   const resaleRefreshTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [organizerMeta, setOrganizerMeta] = useState<{
     club_name: string | null;
@@ -50,24 +60,54 @@ export default function ProfileScreen() {
   const [loadingResales, setLoadingResales] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [isCancelling, setIsCancelling] = useState(false);
-  const [editOpen, setEditOpen] = useState(false);
-  const [savingEdit, setSavingEdit] = useState(false);
-  const [editDraft, setEditDraft] = useState({
+
+  const [profileEditOpen, setProfileEditOpen] = useState(false);
+  const [profileEditLoading, setProfileEditLoading] = useState(false);
+  const [profileEditSaving, setProfileEditSaving] = useState(false);
+  const [profileEditAutoSave, setProfileEditAutoSave] = useState(false);
+  const [profileEditShowIban, setProfileEditShowIban] = useState(false);
+  const [profileEditTouched, setProfileEditTouched] = useState<Record<string, boolean>>({});
+  const [profileEditAsyncErrors, setProfileEditAsyncErrors] = useState<Record<string, string>>({});
+  const [profileEditLocationChecking, setProfileEditLocationChecking] = useState(false);
+  const profileEditInitialKeyRef = useRef<string>('');
+  const profileEditAutoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const profileEditLastPromptKeyRef = useRef<string>('');
+  const profileEditLastLocationQueryRef = useRef<string>('');
+  const [profileDraft, setProfileDraft] = useState({
+    full_name: '',
+    first_name: '',
+    last_name: '',
+    phone: '',
+    city: '',
+    country: '',
+    gender: '',
+    age: '',
     club_name: '',
     business_email: '',
     instagram_account: '',
-    city: '',
-    country: '',
-    address: '',
-    phone: '',
+    organizer_venue_address: '',
+    organizer_fiscal_address: '',
+    organizer_postal_code: '',
+    organizer_responsible_name: '',
+    organizer_responsible_birthdate: '',
+    organizer_iban: '',
   });
+
+  const profileEditModalHeight = useMemo(() => {
+    const available = Math.max(0, windowHeight - 32);
+    return Math.max(420, Math.min(760, available));
+  }, [windowHeight]);
 
   const activeListings = useMemo(() => resaleListings.filter(l => l.status === 'active'), [resaleListings]);
 
   useFocusEffect(
     useCallback(() => {
       refreshEvents();
-    }, [refreshEvents])
+      
+      if (profileRole === 'organizer' && !inCreator) {
+        router.replace('/(creator)');
+      }
+    }, [refreshEvents, profileRole, inCreator])
   );
   const soldListings = useMemo(() => resaleListings.filter(l => l.status === 'sold'), [resaleListings]);
 
@@ -82,14 +122,419 @@ export default function ProfileScreen() {
     return user.user_metadata?.full_name || 'Usuario';
   }, [isOrganizer, organizerMeta?.club_name, user]);
 
+  const sanitizeByAllowed = (text: string, allowed: RegExp) => {
+    const raw = String(text || '');
+    let out = '';
+    for (const ch of raw) {
+      if (allowed.test(ch)) out += ch;
+    }
+    return out;
+  };
+
+  const setProfileField = (key: keyof typeof profileDraft, value: string) => {
+    setProfileEditTouched((prev) => ({ ...prev, [key]: true }));
+    if (key === 'first_name' || key === 'last_name' || key === 'organizer_responsible_name') {
+      const v = normalizeWhitespaceForInput(sanitizeByAllowed(value, /^[\p{L}\s]$/u));
+      setProfileDraft((prev) => ({ ...prev, [key]: v }));
+      return;
+    }
+    if (key === 'city' || key === 'country' || key === 'gender') {
+      const v = normalizeWhitespaceForInput(sanitizeByAllowed(value, /^[\p{L}\s]$/u));
+      if (key === 'city' || key === 'country') {
+        setProfileEditAsyncErrors((prev) => {
+          const next = { ...prev };
+          delete next.city;
+          delete next.country;
+          return next;
+        });
+        profileEditLastLocationQueryRef.current = '';
+      }
+      setProfileDraft((prev) => ({ ...prev, [key]: v }));
+      return;
+    }
+    if (key === 'club_name') {
+      const v = normalizeWhitespaceForInput(sanitizeByAllowed(value, /^[\p{L}\p{N}\s.&'’"\-()/#]$/u));
+      setProfileDraft((prev) => ({ ...prev, [key]: v }));
+      return;
+    }
+    if (key === 'organizer_venue_address' || key === 'organizer_fiscal_address') {
+      const v = normalizeWhitespaceForInput(sanitizeByAllowed(value, /^[\p{L}\p{N}\s.,'’"\-#/ºª]$/u));
+      setProfileDraft((prev) => ({ ...prev, [key]: v }));
+      return;
+    }
+    if (key === 'organizer_postal_code') {
+      const v = String(value || '').replace(/[^\d]/g, '').slice(0, 5);
+      setProfileDraft((prev) => ({ ...prev, [key]: v }));
+      return;
+    }
+    if (key === 'organizer_iban') {
+      const v = String(value || '').replace(/[^0-9A-Za-z]/g, '').toUpperCase();
+      setProfileDraft((prev) => ({ ...prev, [key]: v }));
+      return;
+    }
+    if (key === 'business_email') {
+      const v = String(value || '').replace(/\s+/g, '').toLowerCase().slice(0, 140);
+      setProfileDraft((prev) => ({ ...prev, [key]: v }));
+      return;
+    }
+    if (key === 'instagram_account') {
+      const v = String(value || '').replace(/\s+/g, '').slice(0, 60);
+      setProfileDraft((prev) => ({ ...prev, [key]: v }));
+      return;
+    }
+    if (key === 'age') {
+      const v = String(value || '').replace(/[^\d]/g, '').slice(0, 3);
+      setProfileDraft((prev) => ({ ...prev, [key]: v }));
+      return;
+    }
+    if (key === 'organizer_responsible_birthdate') {
+      const v = String(value || '').replace(/[^\d-]/g, '').slice(0, 10);
+      setProfileDraft((prev) => ({ ...prev, [key]: v }));
+      return;
+    }
+    if (key === 'phone') {
+      const v = String(value || '').replace(/[^\d+\s()-]/g, '').slice(0, 24);
+      setProfileDraft((prev) => ({ ...prev, [key]: v }));
+      return;
+    }
+    if (key === 'full_name') {
+      const v = normalizeWhitespaceForInput(String(value || '')).slice(0, 80);
+      setProfileDraft((prev) => ({ ...prev, [key]: v }));
+      return;
+    }
+    setProfileDraft((prev) => ({ ...prev, [key]: String(value || '') }));
+  };
+
+  const profileEditErrors = useMemo(() => {
+    const errors: Record<string, string> = {};
+    const nonEmpty = (s: string) => normalizeWhitespace(s).length > 0;
+    const emailOk = (s: string) => /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/i.test(String(s || ''));
+    const dateOk = (s: string) => {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return false;
+      const d = new Date(`${s}T00:00:00.000Z`);
+      if (Number.isNaN(d.getTime())) return false;
+      if (d.getUTCFullYear() < 1900) return false;
+      if (d.getTime() > Date.now()) return false;
+      return true;
+    };
+
+    const full = normalizeWhitespace(profileDraft.full_name);
+    const first = normalizeWhitespace(profileDraft.first_name);
+    const last = normalizeWhitespace(profileDraft.last_name);
+    if (!full && !(first && last)) errors.full_name = t('profile.edit.errors.name_required', { defaultValue: 'Ingresa tu nombre.' });
+    if (nonEmpty(first) && !isValidPersonName(first)) errors.first_name = t('profile.edit.errors.invalid_name', { defaultValue: 'Nombre inválido.' });
+    if (nonEmpty(last) && !isValidPersonName(last)) errors.last_name = t('profile.edit.errors.invalid_name', { defaultValue: 'Apellido inválido.' });
+
+    if (nonEmpty(profileDraft.city) && !isValidPersonName(profileDraft.city)) errors.city = t('profile.edit.errors.invalid_city', { defaultValue: 'Ciudad inválida.' });
+    if (nonEmpty(profileDraft.country) && !isValidPersonName(profileDraft.country)) errors.country = t('profile.edit.errors.invalid_country', { defaultValue: 'País inválido.' });
+    if (nonEmpty(profileDraft.gender) && !isValidPersonName(profileDraft.gender)) errors.gender = t('profile.edit.errors.invalid_gender', { defaultValue: 'Valor inválido.' });
+
+    if (nonEmpty(profileDraft.age)) {
+      const n = Number(profileDraft.age);
+      if (!Number.isFinite(n) || n < 1 || n > 120) errors.age = t('profile.edit.errors.invalid_age', { defaultValue: 'Edad inválida.' });
+    }
+
+    const phone = normalizeWhitespace(profileDraft.phone);
+    if (nonEmpty(phone) && !/^[0-9+\s()-]{6,24}$/.test(phone)) errors.phone = t('profile.edit.errors.invalid_phone', { defaultValue: 'Teléfono inválido.' });
+
+    if (nonEmpty(profileDraft.club_name) && !isSafeOrgText(profileDraft.club_name)) errors.club_name = t('profile.edit.errors.invalid_text', { defaultValue: 'No se permiten emojis ni caracteres especiales.' });
+    if (nonEmpty(profileDraft.business_email) && !emailOk(profileDraft.business_email)) errors.business_email = t('profile.edit.errors.invalid_email', { defaultValue: 'Email inválido.' });
+    if (nonEmpty(profileDraft.instagram_account) && !/^@?[A-Za-z0-9_.]{1,30}$/.test(profileDraft.instagram_account)) errors.instagram_account = t('profile.edit.errors.invalid_instagram', { defaultValue: 'Instagram inválido.' });
+
+    if (nonEmpty(profileDraft.organizer_venue_address) && !isSafeAddressText(profileDraft.organizer_venue_address)) errors.organizer_venue_address = t('profile.edit.errors.invalid_address', { defaultValue: 'Dirección inválida.' });
+    if (nonEmpty(profileDraft.organizer_fiscal_address) && !isSafeAddressText(profileDraft.organizer_fiscal_address)) errors.organizer_fiscal_address = t('profile.edit.errors.invalid_address', { defaultValue: 'Dirección inválida.' });
+    if (nonEmpty(profileDraft.organizer_postal_code) && profileDraft.organizer_postal_code.length !== 5) errors.organizer_postal_code = t('profile.edit.errors.invalid_postal', { defaultValue: 'Código postal inválido.' });
+    if (nonEmpty(profileDraft.organizer_responsible_name) && !isValidPersonName(profileDraft.organizer_responsible_name)) errors.organizer_responsible_name = t('profile.edit.errors.invalid_name', { defaultValue: 'Nombre inválido.' });
+    if (nonEmpty(profileDraft.organizer_responsible_birthdate) && !dateOk(profileDraft.organizer_responsible_birthdate)) errors.organizer_responsible_birthdate = t('profile.edit.errors.invalid_birthdate', { defaultValue: 'Fecha inválida (YYYY-MM-DD).' });
+    if (nonEmpty(profileDraft.organizer_iban) && !isValidIbanES(profileDraft.organizer_iban)) errors.organizer_iban = t('profile.edit.errors.invalid_iban', { defaultValue: 'IBAN inválido.' });
+
+    return errors;
+  }, [profileDraft, t]);
+
+  const buildProfileEditKey = useCallback((draft: typeof profileDraft) => {
+    const normalize = (v: string) => normalizeWhitespace(v);
+    return JSON.stringify({
+      full_name: normalize(draft.full_name),
+      first_name: normalize(draft.first_name),
+      last_name: normalize(draft.last_name),
+      phone: normalize(draft.phone),
+      city: normalize(draft.city),
+      country: normalize(draft.country),
+      gender: normalize(draft.gender),
+      age: String(draft.age || '').trim(),
+      club_name: normalize(draft.club_name),
+      business_email: String(draft.business_email || '').trim().toLowerCase(),
+      instagram_account: String(draft.instagram_account || '').trim(),
+      organizer_venue_address: normalize(draft.organizer_venue_address),
+      organizer_fiscal_address: normalize(draft.organizer_fiscal_address),
+      organizer_postal_code: String(draft.organizer_postal_code || '').trim(),
+      organizer_responsible_name: normalize(draft.organizer_responsible_name),
+      organizer_responsible_birthdate: String(draft.organizer_responsible_birthdate || '').trim(),
+      organizer_iban: String(draft.organizer_iban || '').trim().toUpperCase(),
+    });
+  }, []);
+
+  const profileEditKey = useMemo(() => {
+    return buildProfileEditKey(profileDraft);
+  }, [buildProfileEditKey, profileDraft]);
+
+  const profileEditDirty = profileEditKey !== profileEditInitialKeyRef.current;
+  const profileEditHasErrors = Object.keys(profileEditErrors).length > 0 || Object.keys(profileEditAsyncErrors).length > 0;
+
+  const validateCityCountry = useCallback(async () => {
+    const city = normalizeWhitespace(profileDraft.city);
+    const country = normalizeWhitespace(profileDraft.country);
+
+    if (!city && !country) {
+      setProfileEditAsyncErrors((prev) => {
+        const next = { ...prev };
+        delete next.city;
+        delete next.country;
+        return next;
+      });
+      return true;
+    }
+
+    if (!city || !country) {
+      setProfileEditAsyncErrors((prev) => ({
+        ...prev,
+        city: t('profile.edit.errors.location_incomplete', { defaultValue: 'Completa ciudad y país para validar.' }),
+        country: t('profile.edit.errors.location_incomplete', { defaultValue: 'Completa ciudad y país para validar.' }),
+      }));
+      return false;
+    }
+
+    const query = `${city}, ${country}`;
+    if (profileEditLastLocationQueryRef.current === query) return Object.keys(profileEditAsyncErrors).length === 0;
+
+    setProfileEditLocationChecking(true);
+    try {
+      const timeoutMs = 6000;
+      const timeout = new Promise<never>((_, rej) => setTimeout(() => rej(new Error('timeout')), timeoutMs));
+      const res = (await Promise.race([Location.geocodeAsync(query), timeout])) as Location.LocationGeocodedLocation[];
+      if (!res || !Array.isArray(res) || res.length === 0) {
+        setProfileEditAsyncErrors((prev) => ({
+          ...prev,
+          city: t('profile.edit.errors.location_not_found', { defaultValue: 'No se encontró la ciudad/país. Revisa que sea correcto.' }),
+          country: t('profile.edit.errors.location_not_found', { defaultValue: 'No se encontró la ciudad/país. Revisa que sea correcto.' }),
+        }));
+        profileEditLastLocationQueryRef.current = query;
+        return false;
+      }
+
+      setProfileEditAsyncErrors((prev) => {
+        const next = { ...prev };
+        delete next.city;
+        delete next.country;
+        return next;
+      });
+      profileEditLastLocationQueryRef.current = query;
+      return true;
+    } catch {
+      setProfileEditAsyncErrors((prev) => ({
+        ...prev,
+        city: t('profile.edit.errors.location_check_failed', { defaultValue: 'No se pudo validar la ubicación. Revisa tu conexión.' }),
+        country: t('profile.edit.errors.location_check_failed', { defaultValue: 'No se pudo validar la ubicación. Revisa tu conexión.' }),
+      }));
+      profileEditLastLocationQueryRef.current = query;
+      return false;
+    } finally {
+      setProfileEditLocationChecking(false);
+    }
+  }, [profileDraft.city, profileDraft.country, profileEditAsyncErrors, t]);
+
+  const closeProfileEdit = () => {
+    if (!profileEditDirty) {
+      setProfileEditOpen(false);
+      setProfileEditShowIban(false);
+      return;
+    }
+    Alert.alert(
+      t('common.confirm', { defaultValue: 'Confirmar' }),
+      t('profile.edit.discard_confirm', { defaultValue: 'Tienes cambios sin guardar. ¿Descartarlos?' }),
+      [
+        { text: t('common.cancel', { defaultValue: 'Cancelar' }), style: 'cancel' },
+        {
+          text: t('profile.edit.discard', { defaultValue: 'Descartar' }),
+          style: 'destructive',
+          onPress: () => {
+            setProfileEditOpen(false);
+            setProfileEditShowIban(false);
+          },
+        },
+      ],
+      { cancelable: true }
+    );
+  };
+
+  const openProfileEdit = useCallback(async () => {
+    if (!user?.id) return;
+    setProfileEditOpen(true);
+    setProfileEditLoading(true);
+    setProfileEditTouched({});
+    setProfileEditAsyncErrors({});
+    setProfileEditLocationChecking(false);
+    profileEditLastLocationQueryRef.current = '';
+    setProfileEditShowIban(false);
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select(
+          'full_name, first_name, last_name, phone, city, country, gender, age, club_name, business_email, instagram_account, address, organizer_venue_address, organizer_fiscal_address, organizer_postal_code, organizer_responsible_name, organizer_responsible_birthdate, organizer_iban'
+        )
+        .eq('id', user.id)
+        .maybeSingle();
+      if (error) throw error;
+
+      const next = {
+        full_name: String((data as any)?.full_name ?? user.user_metadata?.full_name ?? ''),
+        first_name: String((data as any)?.first_name ?? user.user_metadata?.first_name ?? ''),
+        last_name: String((data as any)?.last_name ?? user.user_metadata?.last_name ?? ''),
+        phone: String((data as any)?.phone ?? ''),
+        city: String((data as any)?.city ?? ''),
+        country: String((data as any)?.country ?? ''),
+        gender: String((data as any)?.gender ?? ''),
+        age: (data as any)?.age != null ? String((data as any).age) : '',
+        club_name: String((data as any)?.club_name ?? ''),
+        business_email: String((data as any)?.business_email ?? ''),
+        instagram_account: String((data as any)?.instagram_account ?? ''),
+        organizer_venue_address: String((data as any)?.organizer_venue_address ?? (data as any)?.address ?? ''),
+        organizer_fiscal_address: String((data as any)?.organizer_fiscal_address ?? ''),
+        organizer_postal_code: String((data as any)?.organizer_postal_code ?? ''),
+        organizer_responsible_name: String((data as any)?.organizer_responsible_name ?? ''),
+        organizer_responsible_birthdate: String((data as any)?.organizer_responsible_birthdate ?? ''),
+        organizer_iban: String((data as any)?.organizer_iban ?? ''),
+      };
+
+      setProfileDraft(next);
+      profileEditInitialKeyRef.current = buildProfileEditKey(next);
+    } catch (e: any) {
+      Alert.alert(t('common.error'), String(e?.message || t('common.error')));
+    } finally {
+      setProfileEditLoading(false);
+    }
+  }, [buildProfileEditKey, t, user?.id, user?.user_metadata?.first_name, user?.user_metadata?.full_name, user?.user_metadata?.last_name]);
+
+  const doSaveProfileEdit = useCallback(async () => {
+    if (!user?.id) return;
+    if (profileEditSaving) return;
+    if (profileEditHasErrors) {
+      Alert.alert(t('common.error'), t('profile.edit.fix_errors', { defaultValue: 'Corrige los errores antes de guardar.' }));
+      return;
+    }
+    const locationOk = await validateCityCountry();
+    if (!locationOk) {
+      Alert.alert(t('common.error'), t('profile.edit.errors.location_not_found', { defaultValue: 'No se encontró la ciudad/país. Revisa que sea correcto.' }));
+      return;
+    }
+    setProfileEditSaving(true);
+    try {
+      const normalizeOrNull = (v: string) => {
+        const s = normalizeWhitespace(v);
+        return s.length ? s : null;
+      };
+      const normalizeTrimOrNull = (v: string) => {
+        const s = String(v || '').trim();
+        return s.length ? s : null;
+      };
+      const ageNum = String(profileDraft.age || '').trim().length ? Number(profileDraft.age) : null;
+
+      const payload: any = {
+        full_name: normalizeOrNull(profileDraft.full_name) || normalizeOrNull(`${profileDraft.first_name} ${profileDraft.last_name}`),
+        first_name: normalizeOrNull(profileDraft.first_name),
+        last_name: normalizeOrNull(profileDraft.last_name),
+        phone: normalizeTrimOrNull(profileDraft.phone),
+        city: normalizeOrNull(profileDraft.city),
+        country: normalizeOrNull(profileDraft.country),
+        gender: normalizeOrNull(profileDraft.gender),
+        age: ageNum != null && Number.isFinite(ageNum) ? ageNum : null,
+        club_name: normalizeOrNull(profileDraft.club_name),
+        business_email: normalizeTrimOrNull(profileDraft.business_email)?.toLowerCase() ?? null,
+        instagram_account: normalizeTrimOrNull(profileDraft.instagram_account),
+        organizer_venue_address: normalizeOrNull(profileDraft.organizer_venue_address),
+        organizer_fiscal_address: normalizeOrNull(profileDraft.organizer_fiscal_address),
+        organizer_postal_code: normalizeTrimOrNull(profileDraft.organizer_postal_code),
+        organizer_responsible_name: normalizeOrNull(profileDraft.organizer_responsible_name),
+        organizer_responsible_birthdate: normalizeTrimOrNull(profileDraft.organizer_responsible_birthdate),
+        organizer_iban: normalizeTrimOrNull(profileDraft.organizer_iban)?.toUpperCase() ?? null,
+        updated_at: new Date().toISOString(),
+      };
+
+      if (isOrganizer) {
+        payload.address = payload.organizer_venue_address;
+      }
+
+      const { error } = await supabase.from('profiles').update(payload).eq('id', user.id);
+      if (error) throw error;
+
+      if (payload.full_name) {
+        try {
+          await supabase.auth.updateUser({ data: { full_name: payload.full_name } });
+        } catch {}
+      }
+
+      if (isOrganizer) {
+        setOrganizerMeta((prev) =>
+          prev
+            ? {
+                ...prev,
+                club_name: payload.club_name,
+                business_email: payload.business_email,
+                instagram_account: payload.instagram_account,
+                city: payload.city,
+                country: payload.country,
+                address: payload.address,
+                phone: payload.phone,
+              }
+            : prev
+        );
+      }
+
+      profileEditInitialKeyRef.current = profileEditKey;
+      setProfileEditOpen(false);
+      setProfileEditShowIban(false);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } catch (e: any) {
+      Alert.alert(t('common.error'), String(e?.message || t('common.error')));
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+    } finally {
+      setProfileEditSaving(false);
+    }
+  }, [isOrganizer, profileDraft, profileEditHasErrors, profileEditKey, profileEditSaving, t, user?.id, validateCityCountry]);
+
+  const requestSaveProfileEdit = useCallback(
+    (reason: 'manual' | 'autosave') => {
+      if (!profileEditDirty) return;
+      if (profileEditHasErrors) return;
+      const message =
+        reason === 'autosave'
+          ? t('profile.edit.autosave_prompt', { defaultValue: 'Tienes cambios sin guardar. ¿Guardar ahora?' })
+          : t('profile.edit.save_confirm', { defaultValue: '¿Guardar los cambios de tu perfil?' });
+      Alert.alert(
+        t('common.confirm', { defaultValue: 'Confirmar' }),
+        message,
+        [
+          { text: t('common.cancel', { defaultValue: 'Cancelar' }), style: 'cancel' },
+          { text: t('common.save', { defaultValue: 'Guardar' }), onPress: () => void doSaveProfileEdit() },
+        ],
+        { cancelable: true }
+      );
+    },
+    [doSaveProfileEdit, profileEditDirty, profileEditHasErrors, t]
+  );
+
   const openLanguagePicker = () => {
-    Alert.alert(t('profile.change_language'), undefined, [
-      { text: t('profile.language.device'), onPress: () => void setDeviceLanguage() },
-      { text: t('profile.language.es'), onPress: () => void setLanguage('es') },
-      { text: t('profile.language.en'), onPress: () => void setLanguage('en') },
-      { text: t('profile.language.fr'), onPress: () => void setLanguage('fr') },
-      { text: t('common.cancel'), style: 'cancel' },
-    ]);
+    showDialog({
+      title: t('profile.change_language'),
+      message: '',
+      actions: [
+        { label: t('profile.language.device'), onPress: () => void setDeviceLanguage(), variant: 'primary' },
+        { label: t('profile.language.es'), onPress: () => void setLanguage('es'), variant: 'outline' },
+        { label: t('profile.language.en'), onPress: () => void setLanguage('en'), variant: 'outline' },
+        { label: t('profile.language.fr'), onPress: () => void setLanguage('fr'), variant: 'outline' },
+        { label: t('common.cancel'), variant: 'secondary' },
+      ],
+    });
   };
 
   // Shared Values for Animations (Commented out for debugging)
@@ -153,11 +598,18 @@ export default function ProfileScreen() {
     setActiveTab(tab);
   };
 
+  useEffect(() => {
+    if (profileRole === 'organizer' && !inCreator && activeTab === 'profile') {
+      setActiveTab('panel');
+    }
+  }, []);
+
   // Fetch Profile Stats
   useEffect(() => {
     if (!user?.id) return;
 
     const fetchStats = async () => {
+      setLoadingProfile(true);
       try {
         const { data } = await supabase
           .from('profiles')
@@ -208,6 +660,8 @@ export default function ProfileScreen() {
         }
       } catch (e) {
         console.error('Error fetching stats:', e);
+      } finally {
+        setLoadingProfile(false);
       }
     };
 
@@ -253,11 +707,14 @@ export default function ProfileScreen() {
 
   useEffect(() => {
     if (!profileRole) return;
-    if (profileRole === 'organizer' && activeTab === 'profile') setActiveTab('panel');
+    if (profileRole === 'organizer') {
+      if (inCreator && activeTab !== 'profile') setActiveTab('profile');
+      if (!inCreator && activeTab === 'profile') setActiveTab('panel');
+    }
     if (profileRole !== 'organizer' && activeTab === 'panel') setActiveTab('profile');
     if (profileRole === 'organizer' && activeTab === 'account') return;
     if (profileRole !== 'organizer' && activeTab === 'account') setActiveTab('profile');
-  }, [profileRole, activeTab]);
+  }, [profileRole, activeTab, inCreator]);
 
   const myOrganizerEvents = useMemo(() => {
     if (!user?.id) return [];
@@ -357,79 +814,41 @@ export default function ProfileScreen() {
     }
   }, [activeTab, fetchResales, refreshEvents]);
 
-  const openEditOrganizer = () => {
-    if (!isOrganizer) return;
-    setEditDraft({
-      club_name: organizerMeta?.club_name ?? '',
-      business_email: organizerMeta?.business_email ?? '',
-      instagram_account: organizerMeta?.instagram_account ?? '',
-      city: organizerMeta?.city ?? '',
-      country: organizerMeta?.country ?? '',
-      address: (organizerMeta?.address as any) ?? '',
-      phone: (organizerMeta?.phone as any) ?? '',
-    });
-    setEditOpen(true);
-  };
-
-  const saveOrganizerEdits = async () => {
-    if (!user?.id) return;
-    setSavingEdit(true);
-    try {
-      const normalize = (v: string) => {
-        const t = (v || '').trim();
-        return t.length ? t : null;
-      };
-
-      const payload = {
-        club_name: normalize(editDraft.club_name),
-        business_email: normalize(editDraft.business_email),
-        instagram_account: normalize(editDraft.instagram_account),
-        city: normalize(editDraft.city),
-        country: normalize(editDraft.country),
-        address: normalize(editDraft.address),
-        phone: normalize(editDraft.phone),
-        updated_at: new Date().toISOString(),
-      };
-
-      const { error } = await supabase.from('profiles').update(payload).eq('id', user.id);
-      if (error) throw error;
-      setOrganizerMeta((prev) =>
-        prev
-          ? {
-              ...prev,
-              club_name: payload.club_name,
-              business_email: payload.business_email,
-              instagram_account: payload.instagram_account,
-              city: payload.city,
-              country: payload.country,
-              address: payload.address,
-              phone: payload.phone,
-            }
-          : prev
-      );
-      setEditOpen(false);
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    } catch (e: any) {
-      Alert.alert(t('common.error'), e?.message ? String(e.message) : t('profile.organizer.edit_save_failed'));
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-    } finally {
-      setSavingEdit(false);
-    }
-  };
+  useEffect(() => {
+    if (!profileEditOpen) return;
+    if (!profileEditAutoSave) return;
+    if (!profileEditDirty) return;
+    if (profileEditHasErrors) return;
+    if (profileEditAutoSaveTimerRef.current) clearTimeout(profileEditAutoSaveTimerRef.current);
+    profileEditAutoSaveTimerRef.current = setTimeout(() => {
+      if (!profileEditOpen) return;
+      if (!profileEditAutoSave) return;
+      if (!profileEditDirty) return;
+      if (profileEditHasErrors) return;
+      if (profileEditLastPromptKeyRef.current === profileEditKey) return;
+      profileEditLastPromptKeyRef.current = profileEditKey;
+      requestSaveProfileEdit('autosave');
+    }, 1200);
+    return () => {
+      if (profileEditAutoSaveTimerRef.current) clearTimeout(profileEditAutoSaveTimerRef.current);
+      profileEditAutoSaveTimerRef.current = null;
+    };
+  }, [profileEditAutoSave, profileEditDirty, profileEditHasErrors, profileEditKey, profileEditOpen, requestSaveProfileEdit]);
 
   const handleCancelResale = async (_listingId: string, ticketId: string) => {
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
-    Alert.alert(
-      t('tickets.cancel_sale_title'),
-      t('tickets.cancel_sale_body'),
-      [
-        { text: t('common.no'), style: 'cancel' },
+    showDialog({
+      title: t('tickets.cancel_sale_title'),
+      message: t('tickets.cancel_sale_body'),
+      actions: [
+        { label: t('common.no'), variant: 'outline' },
         {
-          text: t('tickets.cancel_sale_confirm'),
+          label: t('tickets.cancel_sale_confirm'),
+          variant: 'primary',
           onPress: async () => {
             try {
               setIsCancelling(true);
-              
+
               if (!ticketId) throw new Error(t('profile.resale.invalid_ticket'));
 
               const { error } = await supabase.rpc('cancel_resale_listing_secure', {
@@ -437,20 +856,20 @@ export default function ProfileScreen() {
               });
 
               if (error) throw error;
-              
+
               Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
               fetchResales();
             } catch (error: any) {
               console.error('Cancel Resale Error:', error);
               Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-              Alert.alert(t('common.error'), t('tickets.cancel_sale_error'));
+              showDialog({ title: t('common.error'), message: t('tickets.cancel_sale_error') });
             } finally {
               setIsCancelling(false);
             }
-          }
-        }
-      ]
-    );
+          },
+        },
+      ],
+    });
   };
 
   const handleSignOut = async () => {
@@ -464,38 +883,38 @@ export default function ProfileScreen() {
         router.replace('/(auth)/login');
       }
     } else {
-      Alert.alert(
-        t('profile.logout'),
-        t('profile.logout_confirm'),
-        [
-          { text: t('common.cancel'), style: 'cancel' },
+      showDialog({
+        title: t('profile.logout'),
+        message: t('profile.logout_confirm'),
+        actions: [
+          { label: t('common.cancel'), variant: 'outline' },
           {
-            text: t('profile.logout'),
-            style: 'destructive',
+            label: t('profile.logout'),
+            variant: 'secondary',
             onPress: async () => {
               try {
                 await signOut();
                 router.replace('/(auth)/login');
-              } catch (error) {
-                Alert.alert(t('common.error'), t('profile.logout_failed'));
+              } catch {
+                showDialog({ title: t('common.error'), message: t('profile.logout_failed') });
               }
             },
           },
-        ]
-      );
+        ],
+      });
     }
   };
 
   const handleDeleteAccount = () => {
     if (deletingAccount) return;
-    Alert.alert(
-      t('profile.delete_account_title'),
-      t('profile.delete_account_body'),
-      [
-        { text: t('common.cancel'), style: 'cancel' },
+    showDialog({
+      title: t('profile.delete_account_title'),
+      message: t('profile.delete_account_body'),
+      actions: [
+        { label: t('common.cancel'), variant: 'outline' },
         {
-          text: t('profile.delete_account_confirm'),
-          style: 'destructive',
+          label: t('profile.delete_account_confirm'),
+          variant: 'secondary',
           onPress: async () => {
             try {
               setDeletingAccount(true);
@@ -504,14 +923,14 @@ export default function ProfileScreen() {
               await signOut();
               router.replace('/(auth)/login');
             } catch (e: any) {
-              Alert.alert(t('common.error'), String(e?.message || t('profile.delete_account_failed')));
+              showDialog({ title: t('common.error'), message: String(e?.message || t('profile.delete_account_failed')) });
             } finally {
               setDeletingAccount(false);
             }
           },
         },
-      ]
-    );
+      ],
+    });
   };
 
   if (!user) {
@@ -520,8 +939,19 @@ export default function ProfileScreen() {
         title={t('tabs.profile')}
         subtitle={t('profile.sign_in_prompt')}
         ctaLabel={t('auth.login')}
+        secondaryCtaLabel={t('auth.register')}
         Icon={User}
+        variant="resaleCard"
+        eyebrow={`ECLIPSE · ${String(t('tabs.profile')).toUpperCase()}`}
       />
+    );
+  }
+
+  if (loadingProfile) {
+    return (
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: Colors.dark.background }}>
+        <DiscoLoader label="Cargando perfil…" size={160} />
+      </View>
     );
   }
 
@@ -601,10 +1031,10 @@ export default function ProfileScreen() {
                   <TouchableOpacity
                     activeOpacity={0.85}
                     onPress={() => {
-                      Alert.alert(
-                        t('profile.organizer.suspended_title'),
-                        organizerMeta?.suspended_reason ? organizerMeta.suspended_reason : t('profile.organizer.suspended_body')
-                      );
+                      showDialog({
+                        title: t('profile.organizer.suspended_title'),
+                        message: organizerMeta?.suspended_reason ? organizerMeta.suspended_reason : t('profile.organizer.suspended_body'),
+                      });
                     }}
                     style={{ marginTop: 10, alignSelf: 'stretch', maxWidth: '100%' }}
                   >
@@ -625,21 +1055,29 @@ export default function ProfileScreen() {
                       if (verificationStatus === 'verified') return;
                       if (verificationStatus === 'rejected') {
                         const reason = organizerMeta?.verification_rejection_reason?.toString().trim();
-                        Alert.alert(
-                          t('profile.organizer.verification.rejected_title'),
-                          reason
+                        showDialog({
+                          title: t('profile.organizer.verification.rejected_title'),
+                          message: reason
                             ? t('profile.organizer.verification.rejected_body_with_reason', { reason })
-                            : t('profile.organizer.verification.rejected_body')
-                        );
+                            : t('profile.organizer.verification.rejected_body'),
+                        });
                         return;
                       }
                       if (verificationStatus === 'needs_correction') {
                         const note = organizerMeta?.verification_rejection_reason?.toString().trim();
                         if (note) {
-                          Alert.alert(t('profile.organizer.verification.needs_correction_title'), note, [
-                            { text: t('profile.organizer.verification.go_to_verification'), onPress: () => router.push('/(creator)/verification') },
-                            { text: t('common.cancel'), style: 'cancel' },
-                          ]);
+                          showDialog({
+                            title: t('profile.organizer.verification.needs_correction_title'),
+                            message: note,
+                            actions: [
+                              {
+                                label: t('profile.organizer.verification.go_to_verification'),
+                                onPress: () => router.push('/(creator)/verification'),
+                                variant: 'primary',
+                              },
+                              { label: t('common.cancel'), variant: 'outline' },
+                            ],
+                          });
                           return;
                         }
                       }
@@ -682,8 +1120,8 @@ export default function ProfileScreen() {
             </View>
           </GlassView>
 
-          {/* Floating Segmented Control - Visible only for Clients */}
-          {profileRole && (
+          {/* Floating Segmented Control */}
+          {profileRole && !(profileRole === 'organizer' && segments?.[0] === '(creator)') && (
             <View style={styles.segmentedControlContainer}>
               <GlassView intensity={14} style={[styles.segmentedControlCard, styles.premiumCard]}>
                 <View style={styles.segmentedControl}>
@@ -701,6 +1139,19 @@ export default function ProfileScreen() {
                         />
                       )}
                       <Text style={[styles.segmentText, activeTab === 'panel' && styles.segmentTextActive]}>{t('profile.segment_panel')}</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={styles.segmentButtonWrapper}
+                      onPress={() => handleTabChange('profile')}
+                      activeOpacity={0.8}
+                    >
+                      {activeTab === 'profile' && (
+                        <LinearGradient
+                          colors={['rgba(124,58,237,0.95)', 'rgba(6,182,212,0.60)']}
+                          style={styles.activeSegmentBg}
+                        />
+                      )}
+                      <Text style={[styles.segmentText, activeTab === 'profile' && styles.segmentTextActive]}>{t('profile.segment_my_profile')}</Text>
                     </TouchableOpacity>
                     <TouchableOpacity
                       style={styles.segmentButtonWrapper}
@@ -824,12 +1275,12 @@ export default function ProfileScreen() {
                             activeOpacity={0.75}
                             onPress={() => {
                               if (!canOrganizerPublish) {
-                                Alert.alert(
-                                  t('profile.organizer.action_unavailable_title'),
-                                  isOrganizerSuspended
+                                showDialog({
+                                  title: t('profile.organizer.action_unavailable_title'),
+                                  message: isOrganizerSuspended
                                     ? t('profile.organizer.action_unavailable_suspended')
-                                    : t('profile.organizer.action_unavailable_needs_verification')
-                                );
+                                    : t('profile.organizer.action_unavailable_needs_verification'),
+                                });
                                 router.push('/(creator)/verification');
                                 return;
                               }
@@ -931,18 +1382,145 @@ export default function ProfileScreen() {
                         </GlassView>
                       </View>
                     </>
+                  ) : activeTab === 'profile' ? (
+                    <>
+                      {inCreator ? (
+                        <>
+                          <GlassView intensity={18} style={[styles.organizerHeroCard, styles.premiumCard]}>
+                            <LinearGradient
+                              colors={['rgba(255,255,255,0.08)', 'rgba(48, 209, 88, 0.16)', 'transparent']}
+                              style={StyleSheet.absoluteFill}
+                            />
+                            <Text style={styles.organizerHeroLabel}>{t('creator.tabs.stats', { defaultValue: 'Estadísticas' })}</Text>
+                            <Text style={styles.organizerHeroValue} numberOfLines={1} adjustsFontSizeToFit>
+                              {new Intl.NumberFormat(localeTag, { style: 'currency', currency: 'EUR' }).format(Number(organizerStats.revenue) || 0)}
+                            </Text>
+                          </GlassView>
+
+                          <View style={styles.iosGroup}>
+                            <GlassView intensity={14} style={[styles.iosGroupContainer, styles.premiumCard]}>
+                              <View style={styles.iosRow}>
+                                <View style={styles.iosLabelContainer}>
+                                  <Text style={styles.iosLabel}>{t('profile.organizer.total_generated')}</Text>
+                                </View>
+                                <View style={styles.iosValueContainer}>
+                                  <Text style={styles.iosValue} numberOfLines={1}>
+                                    {new Intl.NumberFormat(localeTag, { style: 'currency', currency: 'EUR' }).format(Number(organizerStats.revenue) || 0)}
+                                  </Text>
+                                </View>
+                              </View>
+                              <View style={styles.iosDivider} />
+                              <View style={styles.iosRow}>
+                                <View style={styles.iosLabelContainer}>
+                                  <Text style={styles.iosLabel}>{t('creator.organizer.metrics.tickets_sold')}</Text>
+                                </View>
+                                <View style={styles.iosValueContainer}>
+                                  <Text style={styles.iosValue} numberOfLines={1}>{String(organizerStats.tickets || 0)}</Text>
+                                </View>
+                              </View>
+                            </GlassView>
+                          </View>
+
+                          <View style={{ marginTop: 12 }}>
+                            <ThemedButton title={t('creator.tabs.stats', { defaultValue: 'Estadísticas' })} onPress={() => router.push('/(creator)/stats')} />
+                          </View>
+                        </>
+                      ) : (
+                        <>
+                          <View style={styles.iosGroup}>
+                            <GlassView intensity={14} style={[styles.iosGroupContainer, styles.premiumCard]}>
+                              <TouchableOpacity onPress={openProfileEdit} activeOpacity={0.7} style={styles.iosButtonRow}>
+                                <View style={[styles.iosIcon, { backgroundColor: '#0A84FF' }]}>
+                                  <Pencil size={16} color="#FFF" />
+                                </View>
+                                <Text style={styles.iosButtonText}>{t('profile.edit_profile')}</Text>
+                                <ChevronRight size={16} color="#8E8E93" />
+                              </TouchableOpacity>
+                            </GlassView>
+                          </View>
+
+                          <View style={styles.premiumHeaderRow}>
+                            <View style={styles.premiumIconWrap}>
+                              <LinearGradient
+                                colors={['rgba(124,58,237,0.85)', 'rgba(6,182,212,0.55)', 'rgba(255,255,255,0.10)']}
+                                style={styles.premiumIconRing}
+                              >
+                                <View style={styles.premiumIconInner}>
+                                  <Tag size={16} color="white" />
+                                </View>
+                              </LinearGradient>
+                            </View>
+                            <View style={{ flex: 1 }}>
+                              <Text style={styles.premiumTitle}>{t('profile.organizer.business_title')}</Text>
+                              <Text style={styles.premiumSubtitle}>{t('profile.organizer.business_subtitle')}</Text>
+                            </View>
+                          </View>
+                          <View style={styles.iosGroup}>
+                            <GlassView intensity={14} style={[styles.iosGroupContainer, styles.premiumCard]}>
+                              <View style={styles.iosRow}>
+                                <View style={styles.iosLabelContainer}>
+                                  <Text style={styles.iosLabel}>{t('profile.organizer.business.club_label')}</Text>
+                                </View>
+                                <View style={styles.iosValueContainer}>
+                                  <Text style={styles.iosValue} numberOfLines={1}>{organizerMeta?.club_name || t('profile.not_specified')}</Text>
+                                </View>
+                              </View>
+                              <View style={styles.iosDivider} />
+                              <View style={styles.iosRow}>
+                                <View style={styles.iosLabelContainer}>
+                                  <Text style={styles.iosLabel}>{t('profile.organizer.business.business_email_label')}</Text>
+                                </View>
+                                <View style={styles.iosValueContainer}>
+                                  <Text style={styles.iosValue} numberOfLines={1}>{organizerMeta?.business_email || t('profile.not_specified')}</Text>
+                                </View>
+                              </View>
+                              <View style={styles.iosDivider} />
+                              <View style={styles.iosRow}>
+                                <View style={styles.iosLabelContainer}>
+                                  <Text style={styles.iosLabel}>{t('profile.organizer.business.instagram_label')}</Text>
+                                </View>
+                                <View style={styles.iosValueContainer}>
+                                  <Text style={styles.iosValue} numberOfLines={1}>{organizerMeta?.instagram_account || t('profile.not_specified')}</Text>
+                                </View>
+                              </View>
+                              <View style={styles.iosDivider} />
+                              <View style={styles.iosRow}>
+                                <View style={styles.iosLabelContainer}>
+                                  <Text style={styles.iosLabel}>{t('profile.location_label')}</Text>
+                                </View>
+                                <View style={styles.iosValueContainer}>
+                                  <Text style={styles.iosValue} numberOfLines={1}>
+                                    {[organizerMeta?.city, organizerMeta?.country].filter(Boolean).join(', ') || t('profile.not_specified')}
+                                  </Text>
+                                </View>
+                              </View>
+                              <View style={styles.iosDivider} />
+                              <View style={styles.iosRow}>
+                                <View style={styles.iosLabelContainer}>
+                                  <Text style={styles.iosLabel}>{t('profile.address_label')}</Text>
+                                </View>
+                                <View style={styles.iosValueContainer}>
+                                  <Text style={styles.iosValue} numberOfLines={2}>{(organizerMeta?.address as any) || t('profile.not_specified')}</Text>
+                                </View>
+                              </View>
+                              <View style={styles.iosDivider} />
+                              <View style={styles.iosRow}>
+                                <View style={styles.iosLabelContainer}>
+                                  <Text style={styles.iosLabel}>{t('profile.phone_label')}</Text>
+                                </View>
+                                <View style={styles.iosValueContainer}>
+                                  <Text style={styles.iosValue} numberOfLines={1}>{(organizerMeta?.phone as any) || t('profile.not_specified')}</Text>
+                                </View>
+                              </View>
+                            </GlassView>
+                          </View>
+                        </>
+                      )}
+                    </>
                   ) : (
                     <>
                       <View style={styles.iosGroup}>
                         <GlassView intensity={14} style={[styles.iosGroupContainer, styles.premiumCard]}>
-                          <TouchableOpacity onPress={openEditOrganizer} activeOpacity={0.7} style={styles.iosButtonRow}>
-                            <View style={[styles.iosIcon, { backgroundColor: '#0A84FF' }]}>
-                              <Pencil size={16} color="#FFF" />
-                            </View>
-                            <Text style={styles.iosButtonText}>{t('profile.organizer.settings.edit_club_profile')}</Text>
-                            <ChevronRight size={16} color="#8E8E93" />
-                          </TouchableOpacity>
-                          <View style={styles.iosDivider} />
                           <TouchableOpacity onPress={() => router.push('/(creator)/verification')} activeOpacity={0.7} style={styles.iosButtonRow}>
                             <View style={[styles.iosIcon, { backgroundColor: '#F59E0B' }]}>
                               <ShieldCheck size={16} color="#000" />
@@ -983,82 +1561,14 @@ export default function ProfileScreen() {
                             <Text style={styles.iosButtonText}>{t('profile.legal_info')}</Text>
                             <ChevronRight size={16} color="#8E8E93" />
                           </TouchableOpacity>
-                        </GlassView>
-                      </View>
-
-                      <View style={styles.premiumHeaderRow}>
-                        <View style={styles.premiumIconWrap}>
-                          <LinearGradient
-                            colors={['rgba(124,58,237,0.85)', 'rgba(6,182,212,0.55)', 'rgba(255,255,255,0.10)']}
-                            style={styles.premiumIconRing}
-                          >
-                            <View style={styles.premiumIconInner}>
-                              <Tag size={16} color="white" />
-                            </View>
-                          </LinearGradient>
-                        </View>
-                        <View style={{ flex: 1 }}>
-                          <Text style={styles.premiumTitle}>{t('profile.organizer.business_title')}</Text>
-                          <Text style={styles.premiumSubtitle}>{t('profile.organizer.business_subtitle')}</Text>
-                        </View>
-                      </View>
-                      <View style={styles.iosGroup}>
-                        <GlassView intensity={14} style={[styles.iosGroupContainer, styles.premiumCard]}>
-                          <View style={styles.iosRow}>
-                            <View style={styles.iosLabelContainer}>
-                              <Text style={styles.iosLabel}>{t('profile.organizer.business.club_label')}</Text>
-                            </View>
-                            <View style={styles.iosValueContainer}>
-                              <Text style={styles.iosValue} numberOfLines={1}>{organizerMeta?.club_name || t('profile.not_specified')}</Text>
-                            </View>
-                          </View>
                           <View style={styles.iosDivider} />
-                          <View style={styles.iosRow}>
-                            <View style={styles.iosLabelContainer}>
-                              <Text style={styles.iosLabel}>{t('profile.organizer.business.business_email_label')}</Text>
+                          <TouchableOpacity onPress={handleSignOut} activeOpacity={0.7} style={styles.iosButtonRow}>
+                            <View style={[styles.iosIcon, { backgroundColor: '#ef4444' }]}>
+                              <LogOut size={16} color="#FFF" />
                             </View>
-                            <View style={styles.iosValueContainer}>
-                              <Text style={styles.iosValue} numberOfLines={1}>{organizerMeta?.business_email || t('profile.not_specified')}</Text>
-                            </View>
-                          </View>
-                          <View style={styles.iosDivider} />
-                          <View style={styles.iosRow}>
-                            <View style={styles.iosLabelContainer}>
-                              <Text style={styles.iosLabel}>{t('profile.organizer.business.instagram_label')}</Text>
-                            </View>
-                            <View style={styles.iosValueContainer}>
-                              <Text style={styles.iosValue} numberOfLines={1}>{organizerMeta?.instagram_account || t('profile.not_specified')}</Text>
-                            </View>
-                          </View>
-                          <View style={styles.iosDivider} />
-                          <View style={styles.iosRow}>
-                            <View style={styles.iosLabelContainer}>
-                              <Text style={styles.iosLabel}>{t('profile.location_label')}</Text>
-                            </View>
-                            <View style={styles.iosValueContainer}>
-                              <Text style={styles.iosValue} numberOfLines={1}>
-                                {[organizerMeta?.city, organizerMeta?.country].filter(Boolean).join(', ') || t('profile.not_specified')}
-                              </Text>
-                            </View>
-                          </View>
-                          <View style={styles.iosDivider} />
-                          <View style={styles.iosRow}>
-                            <View style={styles.iosLabelContainer}>
-                              <Text style={styles.iosLabel}>{t('profile.address_label')}</Text>
-                            </View>
-                            <View style={styles.iosValueContainer}>
-                              <Text style={styles.iosValue} numberOfLines={2}>{(organizerMeta?.address as any) || t('profile.not_specified')}</Text>
-                            </View>
-                          </View>
-                          <View style={styles.iosDivider} />
-                          <View style={styles.iosRow}>
-                            <View style={styles.iosLabelContainer}>
-                              <Text style={styles.iosLabel}>{t('profile.phone_label')}</Text>
-                            </View>
-                            <View style={styles.iosValueContainer}>
-                              <Text style={styles.iosValue} numberOfLines={1}>{(organizerMeta?.phone as any) || t('profile.not_specified')}</Text>
-                            </View>
-                          </View>
+                            <Text style={styles.iosButtonText}>{t('profile.logout')}</Text>
+                            <ChevronRight size={16} color="#8E8E93" />
+                          </TouchableOpacity>
                         </GlassView>
                       </View>
                     </>
@@ -1086,6 +1596,14 @@ export default function ProfileScreen() {
                           <Text style={styles.iosValue} numberOfLines={1}>{user.email}</Text>
                         </View>
                       </View>
+                      <View style={styles.iosDivider} />
+                      <TouchableOpacity onPress={openProfileEdit} activeOpacity={0.7} style={styles.iosButtonRow}>
+                        <View style={[styles.iosIcon, { backgroundColor: '#0A84FF' }]}>
+                          <Pencil size={16} color="#FFF" />
+                        </View>
+                        <Text style={styles.iosButtonText}>{t('profile.edit_profile')}</Text>
+                        <ChevronRight size={16} color="#8E8E93" />
+                      </TouchableOpacity>
                     </GlassView>
                   </View>
 
@@ -1105,6 +1623,22 @@ export default function ProfileScreen() {
                           <Ticket size={16} color="#FFF" />
                         </View>
                         <Text style={styles.iosButtonText}>{t('tickets.my_tickets')}</Text>
+                        <ChevronRight size={16} color="#8E8E93" />
+                      </TouchableOpacity>
+                      <View style={styles.iosDivider} />
+                      <TouchableOpacity onPress={() => router.push('/notification-preferences')} activeOpacity={0.7} style={styles.iosButtonRow}>
+                        <View style={[styles.iosIcon, { backgroundColor: '#60a5fa' }]}>
+                          <Sparkles size={16} color="#000" />
+                        </View>
+                        <Text style={styles.iosButtonText}>{t('profile.notification_preferences')}</Text>
+                        <ChevronRight size={16} color="#8E8E93" />
+                      </TouchableOpacity>
+                      <View style={styles.iosDivider} />
+                      <TouchableOpacity onPress={() => router.push('/notifications')} activeOpacity={0.7} style={styles.iosButtonRow}>
+                        <View style={[styles.iosIcon, { backgroundColor: '#22c55e' }]}>
+                          <Clock size={16} color="#000" />
+                        </View>
+                        <Text style={styles.iosButtonText}>{t('profile.notification_center')}</Text>
                         <ChevronRight size={16} color="#8E8E93" />
                       </TouchableOpacity>
                       <View style={styles.iosDivider} />
@@ -1321,105 +1855,328 @@ export default function ProfileScreen() {
         </View>
       </ScrollView>
 
-      <Modal visible={editOpen} transparent animationType="fade" onRequestClose={() => setEditOpen(false)}>
+      <Modal visible={profileEditOpen} transparent animationType="fade" onRequestClose={closeProfileEdit}>
         <View style={styles.modalBackdrop}>
-          <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ width: '100%', maxWidth: 560 }}>
-            <GlassView intensity={14} style={[styles.modalCard, styles.premiumCard]}>
+          <KeyboardAvoidingView
+            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+            style={{ width: '100%', maxWidth: 560, alignSelf: 'center' }}
+          >
+            <GlassView
+              intensity={14}
+              style={[styles.modalCard, styles.premiumCard, { maxHeight: profileEditModalHeight, paddingBottom: insets.bottom + 12 }]}
+              contentContainerStyle={{ flex: 1 }}
+            >
               <View style={styles.modalHeaderRow}>
-                <Text style={styles.modalTitle}>{t('profile.organizer.edit_modal.title')}</Text>
-                <TouchableOpacity onPress={() => setEditOpen(false)} style={styles.modalClose}>
+                <TouchableOpacity onPress={closeProfileEdit} style={styles.modalCancel}>
+                  <Text style={styles.modalCancelText}>{t('common.cancel', { defaultValue: 'Cancelar' })}</Text>
+                </TouchableOpacity>
+                <Text style={styles.modalTitle}>{t('profile.edit.title', { defaultValue: 'Editar perfil' })}</Text>
+                <TouchableOpacity onPress={closeProfileEdit} style={styles.modalClose} accessibilityLabel={t('common.cancel', { defaultValue: 'Cerrar' })}>
                   <X size={18} color="white" />
                 </TouchableOpacity>
               </View>
 
-              <View style={{ gap: 10 }}>
-                <View style={styles.modalField}>
-                  <Text style={styles.modalLabel}>{t('profile.organizer.edit_modal.club_name_label')}</Text>
-                  <TextInput
-                    value={editDraft.club_name}
-                    onChangeText={(v) => setEditDraft((p) => ({ ...p, club_name: v }))}
-                    placeholder={t('profile.organizer.edit_modal.club_name_placeholder')}
-                    placeholderTextColor="rgba(255,255,255,0.4)"
-                    style={styles.modalInput}
-                  />
+              {profileEditLoading ? (
+                <View style={{ paddingVertical: 24, alignItems: 'center' }}>
+                  <DiscoLoader label={t('common.loading')} size={90} />
                 </View>
-                <View style={styles.modalField}>
-                  <Text style={styles.modalLabel}>{t('profile.organizer.edit_modal.business_email_label')}</Text>
-                  <TextInput
-                    value={editDraft.business_email}
-                    onChangeText={(v) => setEditDraft((p) => ({ ...p, business_email: v }))}
-                    placeholder={t('profile.organizer.edit_modal.business_email_placeholder')}
-                    placeholderTextColor="rgba(255,255,255,0.4)"
-                    autoCapitalize="none"
-                    keyboardType="email-address"
-                    style={styles.modalInput}
-                  />
-                </View>
-                <View style={styles.modalField}>
-                  <Text style={styles.modalLabel}>{t('profile.organizer.edit_modal.instagram_label')}</Text>
-                  <TextInput
-                    value={editDraft.instagram_account}
-                    onChangeText={(v) => setEditDraft((p) => ({ ...p, instagram_account: v }))}
-                    placeholder={t('profile.organizer.edit_modal.instagram_placeholder')}
-                    placeholderTextColor="rgba(255,255,255,0.4)"
-                    autoCapitalize="none"
-                    style={styles.modalInput}
-                  />
-                </View>
-                <View style={styles.modalFieldRow}>
-                  <View style={[styles.modalField, { flex: 1 }]}>
-                    <Text style={styles.modalLabel}>{t('profile.organizer.edit_modal.city_label')}</Text>
-                    <TextInput
-                      value={editDraft.city}
-                      onChangeText={(v) => setEditDraft((p) => ({ ...p, city: v }))}
-                      placeholder={t('profile.organizer.edit_modal.city_placeholder')}
-                      placeholderTextColor="rgba(255,255,255,0.4)"
-                      style={styles.modalInput}
-                    />
-                  </View>
-                  <View style={[styles.modalField, { flex: 1 }]}>
-                    <Text style={styles.modalLabel}>{t('profile.organizer.edit_modal.country_label')}</Text>
-                    <TextInput
-                      value={editDraft.country}
-                      onChangeText={(v) => setEditDraft((p) => ({ ...p, country: v }))}
-                      placeholder={t('profile.organizer.edit_modal.country_placeholder')}
-                      placeholderTextColor="rgba(255,255,255,0.4)"
-                      style={styles.modalInput}
-                    />
-                  </View>
-                </View>
-                <View style={styles.modalField}>
-                  <Text style={styles.modalLabel}>{t('profile.organizer.edit_modal.address_label')}</Text>
-                  <TextInput
-                    value={editDraft.address}
-                    onChangeText={(v) => setEditDraft((p) => ({ ...p, address: v }))}
-                    placeholder={t('profile.organizer.edit_modal.address_placeholder')}
-                    placeholderTextColor="rgba(255,255,255,0.4)"
-                    style={styles.modalInput}
-                  />
-                </View>
-                <View style={styles.modalField}>
-                  <Text style={styles.modalLabel}>{t('profile.organizer.edit_modal.phone_label')}</Text>
-                  <TextInput
-                    value={editDraft.phone}
-                    onChangeText={(v) => setEditDraft((p) => ({ ...p, phone: v }))}
-                    placeholder={t('profile.organizer.edit_modal.phone_placeholder')}
-                    placeholderTextColor="rgba(255,255,255,0.4)"
-                    keyboardType="phone-pad"
-                    style={styles.modalInput}
-                  />
-                </View>
-              </View>
+              ) : (
+                <>
+                  <ScrollView
+                    style={{ flex: 1 }}
+                    contentContainerStyle={{ paddingBottom: 16 }}
+                    keyboardShouldPersistTaps="handled"
+                    keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'none'}
+                    showsVerticalScrollIndicator={false}
+                  >
+                    <Text style={styles.modalSectionTitle}>{t('profile.edit.sections.account', { defaultValue: 'Cuenta' })}</Text>
+                    <View style={styles.modalField}>
+                      <Text style={styles.modalLabel}>{t('profile.email')}</Text>
+                      <View style={[styles.modalInput, { justifyContent: 'center' }]}>
+                        <Text style={{ color: 'rgba(255,255,255,0.85)', fontWeight: '800' }} numberOfLines={1}>
+                          {user?.email || ''}
+                        </Text>
+                      </View>
+                    </View>
 
-              <View style={{ marginTop: 14, flexDirection: 'row', gap: 10 }}>
-                <ThemedButton title={t('common.cancel')} variant="outline" onPress={() => setEditOpen(false)} style={{ flex: 1 }} />
-                <ThemedButton
-                  title={savingEdit ? t('profile.saving') : t('common.save')}
-                  onPress={saveOrganizerEdits}
-                  disabled={savingEdit}
-                  style={{ flex: 1 }}
-                />
-              </View>
+                    <Text style={styles.modalSectionTitle}>{t('profile.edit.sections.personal', { defaultValue: 'Datos personales' })}</Text>
+                    <View style={styles.modalField}>
+                      <Text style={styles.modalLabel}>{t('profile.edit.fields.full_name', { defaultValue: 'Nombre visible' })}</Text>
+                      <TextInput
+                        value={profileDraft.full_name}
+                        onChangeText={(v) => setProfileField('full_name', v)}
+                        placeholder={t('profile.edit.placeholders.full_name', { defaultValue: 'Tu nombre' })}
+                        placeholderTextColor="rgba(255,255,255,0.4)"
+                        style={[styles.modalInput, profileEditTouched.full_name && profileEditErrors.full_name ? styles.modalInputError : null]}
+                        editable={!profileEditSaving}
+                        autoCorrect={false}
+                        autoCapitalize="words"
+                      />
+                      {profileEditTouched.full_name && profileEditErrors.full_name ? <Text style={styles.modalErrorText}>{profileEditErrors.full_name}</Text> : null}
+                    </View>
+
+                    <View style={styles.modalFieldRow}>
+                      <View style={[styles.modalField, { flex: 1 }]}>
+                        <Text style={styles.modalLabel}>{t('profile.edit.fields.first_name', { defaultValue: 'Nombre' })}</Text>
+                        <TextInput
+                          value={profileDraft.first_name}
+                          onChangeText={(v) => setProfileField('first_name', v)}
+                          placeholder={t('profile.edit.placeholders.first_name', { defaultValue: 'Nombre' })}
+                          placeholderTextColor="rgba(255,255,255,0.4)"
+                          style={[styles.modalInput, profileEditTouched.first_name && profileEditErrors.first_name ? styles.modalInputError : null]}
+                        />
+                        {profileEditTouched.first_name && profileEditErrors.first_name ? <Text style={styles.modalErrorText}>{profileEditErrors.first_name}</Text> : null}
+                      </View>
+                      <View style={[styles.modalField, { flex: 1 }]}>
+                        <Text style={styles.modalLabel}>{t('profile.edit.fields.last_name', { defaultValue: 'Apellidos' })}</Text>
+                        <TextInput
+                          value={profileDraft.last_name}
+                          onChangeText={(v) => setProfileField('last_name', v)}
+                          placeholder={t('profile.edit.placeholders.last_name', { defaultValue: 'Apellidos' })}
+                          placeholderTextColor="rgba(255,255,255,0.4)"
+                          style={[styles.modalInput, profileEditTouched.last_name && profileEditErrors.last_name ? styles.modalInputError : null]}
+                        />
+                        {profileEditTouched.last_name && profileEditErrors.last_name ? <Text style={styles.modalErrorText}>{profileEditErrors.last_name}</Text> : null}
+                      </View>
+                    </View>
+
+                    <View style={styles.modalFieldRow}>
+                      <View style={[styles.modalField, { flex: 1 }]}>
+                        <Text style={styles.modalLabel}>{t('profile.edit.fields.gender', { defaultValue: 'Género' })}</Text>
+                        <TextInput
+                          value={profileDraft.gender}
+                          onChangeText={(v) => setProfileField('gender', v)}
+                          placeholder={t('profile.edit.placeholders.gender', { defaultValue: 'Opcional' })}
+                          placeholderTextColor="rgba(255,255,255,0.4)"
+                          style={[styles.modalInput, profileEditTouched.gender && profileEditErrors.gender ? styles.modalInputError : null]}
+                        />
+                        {profileEditTouched.gender && profileEditErrors.gender ? <Text style={styles.modalErrorText}>{profileEditErrors.gender}</Text> : null}
+                      </View>
+                      <View style={[styles.modalField, { flex: 1 }]}>
+                        <Text style={styles.modalLabel}>{t('profile.edit.fields.age', { defaultValue: 'Edad' })}</Text>
+                        <TextInput
+                          value={profileDraft.age}
+                          onChangeText={(v) => setProfileField('age', v)}
+                          placeholder={t('profile.edit.placeholders.age', { defaultValue: 'Opcional' })}
+                          placeholderTextColor="rgba(255,255,255,0.4)"
+                          keyboardType="number-pad"
+                          style={[styles.modalInput, profileEditTouched.age && profileEditErrors.age ? styles.modalInputError : null]}
+                        />
+                        {profileEditTouched.age && profileEditErrors.age ? <Text style={styles.modalErrorText}>{profileEditErrors.age}</Text> : null}
+                      </View>
+                    </View>
+
+                    <Text style={styles.modalSectionTitle}>{t('profile.edit.sections.contact', { defaultValue: 'Contacto' })}</Text>
+                    <View style={styles.modalField}>
+                      <Text style={styles.modalLabel}>{t('profile.phone_label')}</Text>
+                      <TextInput
+                        value={profileDraft.phone}
+                        onChangeText={(v) => setProfileField('phone', v)}
+                        placeholder={t('profile.edit.placeholders.phone', { defaultValue: '+34…' })}
+                        placeholderTextColor="rgba(255,255,255,0.4)"
+                        keyboardType="phone-pad"
+                        style={[styles.modalInput, profileEditTouched.phone && profileEditErrors.phone ? styles.modalInputError : null]}
+                      />
+                      {profileEditTouched.phone && profileEditErrors.phone ? <Text style={styles.modalErrorText}>{profileEditErrors.phone}</Text> : null}
+                    </View>
+                    <View style={styles.modalFieldRow}>
+                      <View style={[styles.modalField, { flex: 1 }]}>
+                        <Text style={styles.modalLabel}>{t('profile.edit.fields.city')}</Text>
+                        <TextInput
+                          value={profileDraft.city}
+                          onChangeText={(v) => setProfileField('city', v)}
+                          onBlur={() => {
+                            setProfileEditTouched((p) => ({ ...p, city: true, country: true }));
+                            void validateCityCountry();
+                          }}
+                          placeholder={t('profile.edit.placeholders.city', { defaultValue: 'Ciudad' })}
+                          placeholderTextColor="rgba(255,255,255,0.4)"
+                          style={[
+                            styles.modalInput,
+                            profileEditTouched.city && (profileEditErrors.city || profileEditAsyncErrors.city) ? styles.modalInputError : null,
+                          ]}
+                        />
+                        {profileEditTouched.city && (profileEditErrors.city || profileEditAsyncErrors.city) ? (
+                          <Text style={styles.modalErrorText}>{profileEditErrors.city || profileEditAsyncErrors.city}</Text>
+                        ) : null}
+                      </View>
+                      <View style={[styles.modalField, { flex: 1 }]}>
+                        <Text style={styles.modalLabel}>{t('profile.edit.fields.country', { defaultValue: 'País' })}</Text>
+                        <TextInput
+                          value={profileDraft.country}
+                          onChangeText={(v) => setProfileField('country', v)}
+                          onBlur={() => {
+                            setProfileEditTouched((p) => ({ ...p, city: true, country: true }));
+                            void validateCityCountry();
+                          }}
+                          placeholder={t('profile.edit.placeholders.country', { defaultValue: 'País' })}
+                          placeholderTextColor="rgba(255,255,255,0.4)"
+                          style={[
+                            styles.modalInput,
+                            profileEditTouched.country && (profileEditErrors.country || profileEditAsyncErrors.country) ? styles.modalInputError : null,
+                          ]}
+                        />
+                        {profileEditTouched.country && (profileEditErrors.country || profileEditAsyncErrors.country) ? (
+                          <Text style={styles.modalErrorText}>{profileEditErrors.country || profileEditAsyncErrors.country}</Text>
+                        ) : null}
+                      </View>
+                    </View>
+
+                    {isOrganizer ? (
+                      <>
+                        <Text style={styles.modalSectionTitle}>{t('profile.edit.sections.organizer', { defaultValue: 'Organizador' })}</Text>
+                        <View style={styles.modalField}>
+                          <Text style={styles.modalLabel}>{t('profile.edit.fields.club_name', { defaultValue: 'Nombre del local' })}</Text>
+                          <TextInput
+                            value={profileDraft.club_name}
+                            onChangeText={(v) => setProfileField('club_name', v)}
+                            placeholder={t('profile.edit.placeholders.club_name', { defaultValue: 'Nombre del local' })}
+                            placeholderTextColor="rgba(255,255,255,0.4)"
+                            style={[styles.modalInput, profileEditTouched.club_name && profileEditErrors.club_name ? styles.modalInputError : null]}
+                          />
+                          {profileEditTouched.club_name && profileEditErrors.club_name ? <Text style={styles.modalErrorText}>{profileEditErrors.club_name}</Text> : null}
+                        </View>
+                        <View style={styles.modalFieldRow}>
+                          <View style={[styles.modalField, { flex: 1 }]}>
+                            <Text style={styles.modalLabel}>{t('profile.edit.fields.business_email', { defaultValue: 'Email de negocio' })}</Text>
+                            <TextInput
+                              value={profileDraft.business_email}
+                              onChangeText={(v) => setProfileField('business_email', v)}
+                              placeholder={t('profile.edit.placeholders.business_email', { defaultValue: 'contacto@…' })}
+                              placeholderTextColor="rgba(255,255,255,0.4)"
+                              autoCapitalize="none"
+                              keyboardType="email-address"
+                              style={[styles.modalInput, profileEditTouched.business_email && profileEditErrors.business_email ? styles.modalInputError : null]}
+                            />
+                            {profileEditTouched.business_email && profileEditErrors.business_email ? <Text style={styles.modalErrorText}>{profileEditErrors.business_email}</Text> : null}
+                          </View>
+                          <View style={[styles.modalField, { flex: 1 }]}>
+                            <Text style={styles.modalLabel}>{t('profile.edit.fields.instagram', { defaultValue: 'Instagram' })}</Text>
+                            <TextInput
+                              value={profileDraft.instagram_account}
+                              onChangeText={(v) => setProfileField('instagram_account', v)}
+                              placeholder={t('profile.edit.placeholders.instagram', { defaultValue: '@tu_cuenta' })}
+                              placeholderTextColor="rgba(255,255,255,0.4)"
+                              autoCapitalize="none"
+                              style={[styles.modalInput, profileEditTouched.instagram_account && profileEditErrors.instagram_account ? styles.modalInputError : null]}
+                            />
+                            {profileEditTouched.instagram_account && profileEditErrors.instagram_account ? <Text style={styles.modalErrorText}>{profileEditErrors.instagram_account}</Text> : null}
+                          </View>
+                        </View>
+                        <View style={styles.modalField}>
+                          <Text style={styles.modalLabel}>{t('profile.edit.fields.venue_address', { defaultValue: 'Dirección del local' })}</Text>
+                          <TextInput
+                            value={profileDraft.organizer_venue_address}
+                            onChangeText={(v) => setProfileField('organizer_venue_address', v)}
+                            placeholder={t('profile.edit.placeholders.venue_address', { defaultValue: 'Dirección del local' })}
+                            placeholderTextColor="rgba(255,255,255,0.4)"
+                            style={[styles.modalInput, profileEditTouched.organizer_venue_address && profileEditErrors.organizer_venue_address ? styles.modalInputError : null]}
+                          />
+                          {profileEditTouched.organizer_venue_address && profileEditErrors.organizer_venue_address ? <Text style={styles.modalErrorText}>{profileEditErrors.organizer_venue_address}</Text> : null}
+                        </View>
+                        <View style={styles.modalFieldRow}>
+                          <View style={[styles.modalField, { flex: 1 }]}>
+                            <Text style={styles.modalLabel}>{t('profile.edit.fields.fiscal_address', { defaultValue: 'Dirección fiscal' })}</Text>
+                            <TextInput
+                              value={profileDraft.organizer_fiscal_address}
+                              onChangeText={(v) => setProfileField('organizer_fiscal_address', v)}
+                              placeholder={t('profile.edit.placeholders.fiscal_address', { defaultValue: 'Dirección fiscal' })}
+                              placeholderTextColor="rgba(255,255,255,0.4)"
+                              style={[styles.modalInput, profileEditTouched.organizer_fiscal_address && profileEditErrors.organizer_fiscal_address ? styles.modalInputError : null]}
+                            />
+                            {profileEditTouched.organizer_fiscal_address && profileEditErrors.organizer_fiscal_address ? <Text style={styles.modalErrorText}>{profileEditErrors.organizer_fiscal_address}</Text> : null}
+                          </View>
+                          <View style={[styles.modalField, { flex: 1 }]}>
+                            <Text style={styles.modalLabel}>{t('profile.edit.fields.postal_code', { defaultValue: 'Código postal' })}</Text>
+                            <TextInput
+                              value={profileDraft.organizer_postal_code}
+                              onChangeText={(v) => setProfileField('organizer_postal_code', v)}
+                              placeholder={t('profile.edit.placeholders.postal_code', { defaultValue: '00000' })}
+                              placeholderTextColor="rgba(255,255,255,0.4)"
+                              keyboardType="number-pad"
+                              style={[styles.modalInput, profileEditTouched.organizer_postal_code && profileEditErrors.organizer_postal_code ? styles.modalInputError : null]}
+                            />
+                            {profileEditTouched.organizer_postal_code && profileEditErrors.organizer_postal_code ? <Text style={styles.modalErrorText}>{profileEditErrors.organizer_postal_code}</Text> : null}
+                          </View>
+                        </View>
+                        <View style={styles.modalFieldRow}>
+                          <View style={[styles.modalField, { flex: 1 }]}>
+                            <Text style={styles.modalLabel}>{t('profile.edit.fields.responsible_name', { defaultValue: 'Responsable' })}</Text>
+                            <TextInput
+                              value={profileDraft.organizer_responsible_name}
+                              onChangeText={(v) => setProfileField('organizer_responsible_name', v)}
+                              placeholder={t('profile.edit.placeholders.responsible_name', { defaultValue: 'Nombre del responsable' })}
+                              placeholderTextColor="rgba(255,255,255,0.4)"
+                              style={[styles.modalInput, profileEditTouched.organizer_responsible_name && profileEditErrors.organizer_responsible_name ? styles.modalInputError : null]}
+                            />
+                            {profileEditTouched.organizer_responsible_name && profileEditErrors.organizer_responsible_name ? <Text style={styles.modalErrorText}>{profileEditErrors.organizer_responsible_name}</Text> : null}
+                          </View>
+                          <View style={[styles.modalField, { flex: 1 }]}>
+                            <Text style={styles.modalLabel}>{t('profile.edit.fields.responsible_birthdate', { defaultValue: 'Nacimiento responsable' })}</Text>
+                            <TextInput
+                              value={profileDraft.organizer_responsible_birthdate}
+                              onChangeText={(v) => setProfileField('organizer_responsible_birthdate', v)}
+                              placeholder={t('profile.edit.placeholders.responsible_birthdate', { defaultValue: 'YYYY-MM-DD' })}
+                              placeholderTextColor="rgba(255,255,255,0.4)"
+                              keyboardType="numbers-and-punctuation"
+                              style={[styles.modalInput, profileEditTouched.organizer_responsible_birthdate && profileEditErrors.organizer_responsible_birthdate ? styles.modalInputError : null]}
+                            />
+                            {profileEditTouched.organizer_responsible_birthdate && profileEditErrors.organizer_responsible_birthdate ? <Text style={styles.modalErrorText}>{profileEditErrors.organizer_responsible_birthdate}</Text> : null}
+                          </View>
+                        </View>
+                        <View style={styles.modalField}>
+                          <Text style={styles.modalLabel}>{t('profile.edit.fields.iban', { defaultValue: 'IBAN' })}</Text>
+                          <View style={styles.modalInputRow}>
+                            <TextInput
+                              value={profileDraft.organizer_iban}
+                              onChangeText={(v) => setProfileField('organizer_iban', v)}
+                              placeholder={t('profile.edit.placeholders.iban', { defaultValue: 'ES…' })}
+                              placeholderTextColor="rgba(255,255,255,0.4)"
+                              autoCapitalize="characters"
+                              style={[
+                                styles.modalInput,
+                                { flex: 1 },
+                                profileEditTouched.organizer_iban && profileEditErrors.organizer_iban ? styles.modalInputError : null,
+                              ]}
+                              secureTextEntry={!profileEditShowIban}
+                            />
+                            <TouchableOpacity
+                              onPress={() => setProfileEditShowIban((v) => !v)}
+                              activeOpacity={0.8}
+                              style={styles.modalInlineBtn}
+                            >
+                              <Text style={styles.modalInlineBtnText}>
+                                {profileEditShowIban ? t('profile.edit.hide', { defaultValue: 'Ocultar' }) : t('profile.edit.show', { defaultValue: 'Mostrar' })}
+                              </Text>
+                            </TouchableOpacity>
+                          </View>
+                          {profileEditTouched.organizer_iban && profileEditErrors.organizer_iban ? <Text style={styles.modalErrorText}>{profileEditErrors.organizer_iban}</Text> : null}
+                        </View>
+                      </>
+                    ) : null}
+                  </ScrollView>
+
+                  <View style={styles.modalAutosaveRow}>
+                    <Text style={styles.modalAutosaveText}>{t('profile.edit.autosave', { defaultValue: 'Auto-guardado' })}</Text>
+                    <Switch
+                      value={profileEditAutoSave}
+                      onValueChange={setProfileEditAutoSave}
+                      trackColor={{ false: 'rgba(255,255,255,0.12)', true: Colors.dark.primary }}
+                      thumbColor={'#fff'}
+                    />
+                  </View>
+
+                  <View style={{ marginTop: 12, flexDirection: 'row', gap: 10 }}>
+                    <ThemedButton title={t('common.cancel')} variant="outline" onPress={closeProfileEdit} style={{ flex: 1 }} />
+                    <ThemedButton
+                      title={profileEditSaving ? t('profile.saving') : t('common.save')}
+                      onPress={() => requestSaveProfileEdit('manual')}
+                      disabled={profileEditSaving || profileEditHasErrors || profileEditLocationChecking || !profileEditDirty}
+                      style={{ flex: 1 }}
+                    />
+                  </View>
+                </>
+              )}
             </GlassView>
           </KeyboardAvoidingView>
         </View>
@@ -1661,6 +2418,8 @@ const styles = StyleSheet.create({
     padding: 16,
     borderRadius: 24,
     overflow: 'hidden',
+    width: '100%',
+    alignSelf: 'center',
   },
   modalHeaderRow: {
     flexDirection: 'row',
@@ -1672,6 +2431,8 @@ const styles = StyleSheet.create({
     color: 'white',
     fontWeight: '900',
     fontSize: 16,
+    flex: 1,
+    textAlign: 'center',
   },
   modalClose: {
     width: 34,
@@ -1680,6 +2441,20 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.10)',
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  modalCancel: {
+    height: 34,
+    width: 88,
+    paddingHorizontal: 10,
+    borderRadius: 12,
+    backgroundColor: 'rgba(255,255,255,0.10)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modalCancelText: {
+    color: 'rgba(255,255,255,0.90)',
+    fontWeight: '900',
+    fontSize: 12,
   },
   modalField: {
     gap: 6,
@@ -1702,6 +2477,56 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255,255,255,0.10)',
     color: 'white',
     fontWeight: '800',
+  },
+  modalSectionTitle: {
+    marginTop: 12,
+    marginBottom: 8,
+    color: 'rgba(255,255,255,0.85)',
+    fontWeight: '900',
+    fontSize: 12,
+    letterSpacing: 0.7,
+  },
+  modalErrorText: {
+    color: '#fb7185',
+    fontWeight: '800',
+    fontSize: 12,
+  },
+  modalInputError: {
+    borderColor: 'rgba(251,113,133,0.65)',
+  },
+  modalInputRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  modalInlineBtn: {
+    height: 44,
+    paddingHorizontal: 12,
+    borderRadius: 14,
+    backgroundColor: 'rgba(255,255,255,0.10)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.10)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modalInlineBtnText: {
+    color: 'rgba(255,255,255,0.85)',
+    fontWeight: '900',
+    fontSize: 12,
+  },
+  modalAutosaveRow: {
+    marginTop: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(255,255,255,0.06)',
+  },
+  modalAutosaveText: {
+    color: 'rgba(255,255,255,0.80)',
+    fontWeight: '900',
+    fontSize: 13,
   },
 
   // Auth Prompt

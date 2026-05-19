@@ -24,6 +24,16 @@ type Settings = {
   stock_threshold_alerts?: boolean | null;
 };
 
+const ORGANIZER_ONLY_KEYS = ['stock_alerts', 'realtime_sales', 'daily_summary', 'stock_threshold_alerts'] as const;
+const COMMON_KEYS = ['purchase_updates', 'event_reminders', 'resale_updates'] as const;
+type PreferenceKey = (typeof ORGANIZER_ONLY_KEYS)[number] | (typeof COMMON_KEYS)[number];
+
+export function __test_getVisiblePreferenceKeys(role: string | null | undefined): PreferenceKey[] {
+  const r = String(role || '').toLowerCase();
+  if (r === 'organizer') return [...COMMON_KEYS, ...ORGANIZER_ONLY_KEYS];
+  return [...COMMON_KEYS];
+}
+
 export default function NotificationPreferencesScreen() {
   const router = useRouter();
   const { user } = useAuth();
@@ -31,8 +41,10 @@ export default function NotificationPreferencesScreen() {
   const [loading, setLoading] = useState(true);
   const [savingKey, setSavingKey] = useState<string | null>(null);
   const [settings, setSettings] = useState<Settings | null>(null);
+  const [profileRole, setProfileRole] = useState<string | null>(null);
 
   const userId = user?.id || null;
+  const isOrganizer = profileRole === 'organizer';
 
   useEffect(() => {
     let mounted = true;
@@ -42,26 +54,43 @@ export default function NotificationPreferencesScreen() {
         return;
       }
       try {
-        const { data, error } = await supabase
-          .from('notification_settings')
-          .select('*')
-          .eq('user_id', userId)
-          .maybeSingle();
-        if (error) throw error;
+        const [settingsRes, profileRes] = await Promise.all([
+          supabase.from('notification_settings').select('*').eq('user_id', userId).maybeSingle(),
+          supabase.from('profiles').select('role').eq('id', userId).maybeSingle(),
+        ]);
+
+        if (settingsRes.error) throw settingsRes.error;
+        const inferredRole =
+          (profileRes.data as any)?.role ??
+          (settingsRes.data as any)?.role ??
+          (user as any)?.user_metadata?.role ??
+          null;
+        const nextRole = String(inferredRole || '').toLowerCase() || null;
+        if (mounted) setProfileRole(nextRole);
+
         if (!mounted) return;
-        if (data) {
-          setSettings(data as any);
+        if (settingsRes.data) {
+          setSettings(settingsRes.data as any);
         } else {
-          const defaults: Settings = {
-            user_id: userId,
-            event_reminders: true,
-            purchase_updates: true,
-            resale_updates: true,
-            stock_alerts: true,
-            realtime_sales: true,
-            daily_summary: true,
-            stock_threshold_alerts: true,
-          };
+          const defaults: Settings = nextRole === 'organizer'
+            ? {
+                user_id: userId,
+                role: 'organizer',
+                event_reminders: true,
+                purchase_updates: true,
+                resale_updates: true,
+                stock_alerts: true,
+                realtime_sales: true,
+                daily_summary: true,
+                stock_threshold_alerts: true,
+              }
+            : {
+                user_id: userId,
+                role: nextRole,
+                event_reminders: true,
+                purchase_updates: true,
+                resale_updates: true,
+              };
           const up = await supabase.from('notification_settings').upsert(defaults, { onConflict: 'user_id' }).select('*').single();
           if (up.error) throw up.error;
           setSettings(up.data as any);
@@ -78,19 +107,22 @@ export default function NotificationPreferencesScreen() {
   }, [userId]);
 
   const items = useMemo(() => {
-    return [
-      { key: 'purchase_updates', label: t('notification_preferences.items.purchase.label'), desc: t('notification_preferences.items.purchase.desc') },
-      { key: 'event_reminders', label: t('notification_preferences.items.reminders.label'), desc: t('notification_preferences.items.reminders.desc') },
-      { key: 'resale_updates', label: t('notification_preferences.items.resale.label'), desc: t('notification_preferences.items.resale.desc') },
-      { key: 'stock_alerts', label: t('notification_preferences.items.stock.label'), desc: t('notification_preferences.items.stock.desc') },
-      { key: 'realtime_sales', label: t('notification_preferences.items.realtime_sales.label'), desc: t('notification_preferences.items.realtime_sales.desc') },
-      { key: 'daily_summary', label: t('notification_preferences.items.daily_summary.label'), desc: t('notification_preferences.items.daily_summary.desc') },
-      { key: 'stock_threshold_alerts', label: t('notification_preferences.items.thresholds.label'), desc: t('notification_preferences.items.thresholds.desc') },
-    ] as const;
-  }, [t]);
+    const visible = __test_getVisiblePreferenceKeys(profileRole);
+    const all = {
+      purchase_updates: { label: t('notification_preferences.items.purchase.label'), desc: t('notification_preferences.items.purchase.desc') },
+      event_reminders: { label: t('notification_preferences.items.reminders.label'), desc: t('notification_preferences.items.reminders.desc') },
+      resale_updates: { label: t('notification_preferences.items.resale.label'), desc: t('notification_preferences.items.resale.desc') },
+      stock_alerts: { label: t('notification_preferences.items.stock.label'), desc: t('notification_preferences.items.stock.desc') },
+      realtime_sales: { label: t('notification_preferences.items.realtime_sales.label'), desc: t('notification_preferences.items.realtime_sales.desc') },
+      daily_summary: { label: t('notification_preferences.items.daily_summary.label'), desc: t('notification_preferences.items.daily_summary.desc') },
+      stock_threshold_alerts: { label: t('notification_preferences.items.thresholds.label'), desc: t('notification_preferences.items.thresholds.desc') },
+    } as const;
+    return visible.map((key) => ({ key, ...all[key] })) as { key: PreferenceKey; label: string; desc: string }[];
+  }, [profileRole, t]);
 
   const updateSetting = async (key: SettingsKey, value: boolean) => {
     if (!userId) return;
+    if (!isOrganizer && (ORGANIZER_ONLY_KEYS as readonly string[]).includes(key)) return;
     setSavingKey(key);
     try {
       const next = { ...(settings || { user_id: userId }), [key]: value } as any;
