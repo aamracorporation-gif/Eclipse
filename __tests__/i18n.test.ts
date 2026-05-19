@@ -48,4 +48,22 @@ describe('i18n initialization and change', () => {
     expect(lang).toBe('en');
     expect(i18n.language).toBe('en');
   });
+
+  it('includes key organizer UX strings in Spanish', async () => {
+    await initLanguage();
+    const keys = [
+      'creator.tabs.stats',
+      'creator.scan.title',
+      'tabs.profile',
+      'profile.logout',
+      'profile.legal_info',
+      'profile.delete_my_account',
+    ];
+
+    for (const k of keys) {
+      const value = i18n.t(k);
+      expect(value).toBeTruthy();
+      expect(value).not.toBe(k);
+    }
+  });
 });
