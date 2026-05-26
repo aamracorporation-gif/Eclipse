@@ -96,6 +96,23 @@ export default function CreateEventScreen() {
   const [showTimePicker, setShowTimePicker] = useState(false);
   const [hasDateSelected, setHasDateSelected] = useState(false);
   const [hasTimeSelected, setHasTimeSelected] = useState(false);
+
+  const pickerMinDate = useMemo(() => {
+    const now = new Date();
+    return new Date(now.getFullYear() - 1, now.getMonth(), now.getDate());
+  }, []);
+
+  const pickerMaxDate = useMemo(() => {
+    const now = new Date();
+    return new Date(now.getFullYear() + 10, 11, 31);
+  }, []);
+
+  const safePickerValue = useCallback((value: Date) => {
+    if (!value || !Number.isFinite(value.getTime())) return new Date();
+    if (value.getFullYear() < 2000) return new Date();
+    if (value.getFullYear() > 2100) return new Date();
+    return value;
+  }, []);
   
   // Manual input states
   const [dateText, setDateText] = useState('');
@@ -466,6 +483,41 @@ export default function CreateEventScreen() {
   };
 
   useEffect(() => {
+    if (isEditing) return;
+    setRemovedVipIds([]);
+    setFormData({
+      title: '',
+      description: '',
+      location: '',
+      imageUrl: '',
+      venuePlanUrl: '',
+      theme: '',
+      ageRestriction: '18',
+      dressCode: '',
+      eventType: 'party',
+    });
+    setTicketTypes([]);
+    setVipTypes([]);
+    setNewTicket({ name: '', price: '', quantity: '' } as any);
+    setNewVip({
+      name: '',
+      description: '',
+      basePrice: '',
+      capacityPeople: '',
+      includedBottles: '',
+      extraBottlePrice: '',
+      quantityAvailable: '',
+    });
+    setCoordinates(null);
+    const now = new Date();
+    setDate(now);
+    setHasDateSelected(false);
+    setHasTimeSelected(false);
+    setDateText('');
+    setTimeText('');
+  }, [isEditing, eventId]);
+
+  useEffect(() => {
     if (isEditing && eventId) {
       const event = getEventById(eventId);
       if (event) {
@@ -490,18 +542,44 @@ export default function CreateEventScreen() {
           dressCode: event.dressCode || '',
           eventType: event.eventType || 'party',
         });
-        // Parse date and time strings back to Date object if needed
-        if (event.date && event.time) {
-          const dateTime = new Date(`${event.date}T${event.time}`);
-          if (!isNaN(dateTime.getTime())) {
-             setDate(dateTime);
-             setHasDateSelected(true);
-             setHasTimeSelected(true);
-             
-             // Init manual inputs
-             setDateText(dateTime.toLocaleDateString(localeTag, { day: '2-digit', month: '2-digit', year: 'numeric' }));
-             setTimeText(dateTime.toLocaleTimeString(localeTag, { hour: '2-digit', minute: '2-digit' }));
+        const toEditDateTime = () => {
+          const iso = (event as any)?.startsAt;
+          if (iso) {
+            const d = new Date(iso);
+            if (Number.isFinite(d.getTime()) && d.getFullYear() > 1971) return d;
           }
+
+          const dateStr = String((event as any)?.date || '').trim();
+          const timeStr = String((event as any)?.time || '').trim();
+
+          const m = dateStr.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+          const tm = timeStr.match(/^(\d{2}):(\d{2})$/);
+          if (m && tm) {
+            const y = Number(m[1]);
+            const mo = Number(m[2]);
+            const da = Number(m[3]);
+            const hh = Number(tm[1]);
+            const mm = Number(tm[2]);
+            const d = new Date(y, mo - 1, da, hh, mm, 0, 0);
+            if (Number.isFinite(d.getTime()) && d.getFullYear() > 1971) return d;
+          }
+          return null;
+        };
+
+        const dateTime = toEditDateTime();
+        if (dateTime) {
+          setDate(dateTime);
+          setHasDateSelected(true);
+          setHasTimeSelected(true);
+          setDateText(dateTime.toLocaleDateString(localeTag, { day: '2-digit', month: '2-digit', year: 'numeric' }));
+          setTimeText(dateTime.toLocaleTimeString(localeTag, { hour: '2-digit', minute: '2-digit' }));
+        } else {
+          const now = new Date();
+          setDate(now);
+          setHasDateSelected(false);
+          setHasTimeSelected(false);
+          setDateText('');
+          setTimeText('');
         }
         if (event.ticketTypes) {
           setTicketTypes(event.ticketTypes as any);
@@ -554,11 +632,15 @@ export default function CreateEventScreen() {
       setShowDatePicker(false);
     }
     
-    if (selectedDate) {
+    const picked =
+      selectedDate ||
+      (typeof event?.nativeEvent?.timestamp === 'number' ? new Date(event.nativeEvent.timestamp) : undefined);
+
+    if (picked && Number.isFinite(picked.getTime()) && picked.getFullYear() >= 2000) {
       setHasDateSelected(true);
       setDate(currentDate => {
         const newDate = new Date(currentDate);
-        newDate.setFullYear(selectedDate.getFullYear(), selectedDate.getMonth(), selectedDate.getDate());
+        newDate.setFullYear(picked.getFullYear(), picked.getMonth(), picked.getDate());
         setDateText(newDate.toLocaleDateString(localeTag, { day: '2-digit', month: '2-digit', year: 'numeric' }));
         return newDate;
       });
@@ -570,11 +652,15 @@ export default function CreateEventScreen() {
       setShowTimePicker(false);
     }
     
-    if (selectedDate) {
+    const picked =
+      selectedDate ||
+      (typeof event?.nativeEvent?.timestamp === 'number' ? new Date(event.nativeEvent.timestamp) : undefined);
+
+    if (picked && Number.isFinite(picked.getTime())) {
       setHasTimeSelected(true);
       setDate(currentDate => {
         const newDate = new Date(currentDate);
-        newDate.setHours(selectedDate.getHours(), selectedDate.getMinutes());
+        newDate.setHours(picked.getHours(), picked.getMinutes());
         setTimeText(newDate.toLocaleTimeString(localeTag, { hour: '2-digit', minute: '2-digit' }));
         return newDate;
       });
@@ -864,7 +950,8 @@ export default function CreateEventScreen() {
     const finalLongitude = coordinates ? coordinates.longitude : mockLongitude;
 
     try {
-      const formattedDate = finalDate.toISOString().split('T')[0];
+      const pad2 = (n: number) => String(n).padStart(2, '0');
+      const formattedDate = `${finalDate.getFullYear()}-${pad2(finalDate.getMonth() + 1)}-${pad2(finalDate.getDate())}`;
       // Ensure 24-hour format HH:MM
       const hours = finalDate.getHours().toString().padStart(2, '0');
       const minutes = finalDate.getMinutes().toString().padStart(2, '0');
@@ -1176,16 +1263,18 @@ export default function CreateEventScreen() {
 
               {Platform.OS === 'android' && showDatePicker && (
                 <DateTimePicker
-                  value={date}
+                  value={safePickerValue(date)}
                   mode="date"
                   display="default"
                   onChange={onDateChange}
+                  minimumDate={pickerMinDate}
+                  maximumDate={pickerMaxDate}
                 />
               )}
 
               {Platform.OS === 'android' && showTimePicker && (
                 <DateTimePicker
-                  value={date}
+                  value={safePickerValue(date)}
                   mode="time"
                   display="default"
                   onChange={onTimeChange}
@@ -1207,12 +1296,14 @@ export default function CreateEventScreen() {
                         </TouchableOpacity>
                       </View>
                       <DateTimePicker
-                  value={date}
+                  value={safePickerValue(date)}
                   mode={showDatePicker ? 'date' : 'time'}
                   display="spinner"
                   onChange={showDatePicker ? onDateChange : onTimeChange}
                   textColor={Colors.dark.text}
                   themeVariant="dark"
+                  minimumDate={showDatePicker ? pickerMinDate : undefined}
+                  maximumDate={showDatePicker ? pickerMaxDate : undefined}
                 />
                     </View>
                   </View>

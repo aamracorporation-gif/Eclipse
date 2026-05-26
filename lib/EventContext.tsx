@@ -79,10 +79,36 @@ export function EventProvider({ children }: { children: React.ReactNode }) {
   const refreshTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const fetchInFlightRef = useRef(false);
   const fetchQueuedRef = useRef(false);
-  const cacheKey = 'events_cache_v1';
-  const cacheTsKey = 'events_cache_v1_ts';
+  const cacheKey = 'events_cache_v2';
+  const cacheTsKey = 'events_cache_v2_ts';
   const lastGoodAtRef = useRef(0);
   const eventsCountRef = useRef(0);
+
+  const buildLocalDateTime = useCallback((dateStr: string, timeStr: string) => {
+    const date = String(dateStr || '').trim();
+    const time = String(timeStr || '').trim();
+
+    const m = date.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    const tm = time.match(/^(\d{2}):(\d{2})$/);
+    if (m && tm) {
+      const y = Number(m[1]);
+      const mo = Number(m[2]);
+      const d = Number(m[3]);
+      const hh = Number(tm[1]);
+      const mm = Number(tm[2]);
+      const dt = new Date(y, mo - 1, d, hh, mm, 0, 0);
+      if (Number.isFinite(dt.getTime()) && dt.getFullYear() >= 2000 && dt.getFullYear() <= 2100) return dt;
+    }
+
+    const fallback = new Date(`${date}T${time}`);
+    if (!Number.isFinite(fallback.getTime())) {
+      throw new Error('Fecha u hora inválida.');
+    }
+    if (fallback.getFullYear() < 2000 || fallback.getFullYear() > 2100) {
+      throw new Error('Fecha fuera de rango.');
+    }
+    return fallback;
+  }, []);
 
   useEffect(() => {
     eventsCountRef.current = events.length;
@@ -99,7 +125,13 @@ export function EventProvider({ children }: { children: React.ReactNode }) {
         if (!raw) return;
         try {
           const parsed = JSON.parse(raw);
-          if (Array.isArray(parsed)) setEvents(parsed as AppEvent[]);
+          if (Array.isArray(parsed)) {
+            const normalized = (parsed as any[]).map((e) => ({
+              ...e,
+              eventType: String((e as any)?.eventType || '').trim() || 'party',
+            }));
+            setEvents(normalized as AppEvent[]);
+          }
         } catch {}
       })
       .catch(() => {});
@@ -172,7 +204,7 @@ export function EventProvider({ children }: { children: React.ReactNode }) {
             theme: e.theme,
             ageRestriction: e.age_restriction?.toString(),
             dressCode: e.dress_code,
-            eventType: e.event_type,
+            eventType: String(e.event_type || '').trim() || 'party',
             creatorId: e.creator_id, // Ensure this is mapped
             creatorProfile: creatorProfile
               ? {
@@ -334,7 +366,7 @@ export function EventProvider({ children }: { children: React.ReactNode }) {
       if (venueError) throw venueError;
 
       // 2. Create Event
-      const eventDate = new Date(`${newEvent.date}T${newEvent.time}`);
+      const eventDate = buildLocalDateTime(newEvent.date, newEvent.time);
       
       const { data: eventData, error: eventError } = await supabase
         .from('events')
@@ -400,7 +432,7 @@ export function EventProvider({ children }: { children: React.ReactNode }) {
       if (updates.imageUrl !== undefined) dbUpdates.poster_url = updates.imageUrl;
       if (updates.venuePlanUrl !== undefined) dbUpdates.venue_plan_url = updates.venuePlanUrl;
       if (updates.date !== undefined && updates.time !== undefined) {
-        dbUpdates.event_date = new Date(`${updates.date}T${updates.time}`).toISOString();
+        dbUpdates.event_date = buildLocalDateTime(updates.date, updates.time).toISOString();
       }
       if (Array.isArray(updates.ticketTypes) && updates.ticketTypes.length > 0) {
         const minPrice = Math.min(...updates.ticketTypes.map((t) => Number(t.price) || 0));

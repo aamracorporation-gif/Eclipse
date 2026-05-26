@@ -31,6 +31,16 @@ export async function checkNearbyEvents(userId: string) {
     const location = await Location.getCurrentPositionAsync({});
     const { latitude, longitude } = location.coords;
 
+    const now = Date.now();
+    const notifiedKey = `nearby_events_notified_${userId}`;
+    let notified: Record<string, number> = {};
+    try {
+      const raw = await AsyncStorage.getItem(notifiedKey);
+      notified = raw ? (JSON.parse(raw) as any) : {};
+    } catch {
+      notified = {};
+    }
+
     // Get upcoming events with venue details
     const { data: events } = await supabase
       .from('events')
@@ -51,20 +61,30 @@ export async function checkNearbyEvents(userId: string) {
 
         // If event is within 10km
         if (distance <= 10) {
-          // Check if we already notified about this event recently to avoid spam
-          // For now, we'll rely on the backend rate limiting or just schedule local notification
-          
+          const eid = String(event.id || '');
+          if (eid) {
+            const last = Number((notified as any)[eid] || 0);
+            if (last && now - last < 1000 * 60 * 60 * 24) {
+              continue;
+            }
+            (notified as any)[eid] = now;
+          }
+
           await Notifications.scheduleNotificationAsync({
             content: {
               title: "¡Fiesta cerca de ti! 🎉",
               body: `${event.title} está a solo ${distance.toFixed(1)}km. ¡No te lo pierdas!`,
-              data: { eventId: event.id, url: `/(tabs)/event/${event.id}` },
+              data: { eventId: event.id, url: `event/${event.id}` },
             },
             trigger: null, // Show immediately
           });
         }
       }
     }
+
+    try {
+      await AsyncStorage.setItem(notifiedKey, JSON.stringify(notified));
+    } catch {}
   } catch (error) {
     console.log('Error checking nearby events:', error);
   }

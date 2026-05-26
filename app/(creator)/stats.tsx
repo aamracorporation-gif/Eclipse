@@ -44,15 +44,43 @@ export default function OrganizerStatsScreen() {
       }
 
       try {
-        const { data, error } = await supabase
-          .from('tickets')
-          .select('total_price, quantity, event_id')
-          .in('event_id', myEventIds);
-        if (error) throw error;
+        const [{ data: ticketsRows, error: ticketsErr }, { data: vipRows, error: vipErr }] = await Promise.all([
+          supabase
+            .from('tickets')
+            .select('total_price, quantity, event_id, ticket_type_id')
+            .in('event_id', myEventIds),
+          supabase
+            .from('reservados_vip')
+            .select('event_id')
+            .in('event_id', myEventIds),
+        ]);
 
-        const rows = (data ?? []) as any[];
-        const revenue = rows.reduce((acc, r) => acc + (Number(r.total_price) || 0), 0);
-        const tickets = rows.reduce((acc, r) => acc + (Number(r.quantity) || 0), 0);
+        if (ticketsErr) throw ticketsErr;
+        if (vipErr) throw vipErr;
+
+        const eventsWithVip = new Set(((vipRows ?? []) as any[]).map((r) => String(r?.event_id || '')).filter(Boolean));
+
+        const parseQty = (value: any): number => {
+          if (value == null) return 1;
+          const n = Number(value);
+          if (!Number.isFinite(n)) return 1;
+          if (n <= 0) return 0;
+          return n;
+        };
+        const parsePrice = (value: any): number => {
+          if (value == null) return 0;
+          const n = Number(value);
+          return Number.isFinite(n) ? n : 0;
+        };
+
+        const rows = (ticketsRows ?? []) as any[];
+        const revenue = rows.reduce((acc, r) => acc + parsePrice(r.total_price), 0);
+        const tickets = rows.reduce((acc, r) => {
+          const eventId = String(r?.event_id || '');
+          const isUntyped = !r?.ticket_type_id;
+          if (isUntyped && eventId && eventsWithVip.has(eventId)) return acc + 1;
+          return acc + parseQty(r.quantity);
+        }, 0);
         if (!cancelled) setTotals({ revenue, tickets });
       } catch {
         if (!cancelled) setTotals({ revenue: 0, tickets: 0 });

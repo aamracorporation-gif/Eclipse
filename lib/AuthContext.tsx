@@ -182,13 +182,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const signUp = async (email: string, password: string, metadata: any = {}) => {
     try {
+      const emailRedirectTo =
+        String((process.env.EXPO_PUBLIC_EMAIL_REDIRECT_URL as any) || '').trim() ||
+        Linking.createURL('auth/callback');
+
       const { data, error } = await withTimeout(
         supabase.auth.signUp({
           email,
           password,
           options: {
             data: metadata,
-            emailRedirectTo: 'eclipse://auth/callback',
+            emailRedirectTo,
           },
         }),
         20000,
@@ -209,7 +213,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       const { error } = await withTimeout(
         supabase.auth.resetPasswordForEmail(email, {
-          redirectTo: 'https://example.com/update-password', // Update with actual deep link if needed
+          redirectTo:
+            String((process.env.EXPO_PUBLIC_EMAIL_REDIRECT_URL as any) || '').trim() ||
+            Linking.createURL('auth/callback'),
         }),
         20000,
         'Reset password'

@@ -124,16 +124,22 @@ function PrimaryButton(props: { label: string; onPress: () => void; disabled?: b
   );
 }
 
-function SecondaryButton(props: { label: string; onPress: () => void; disabled?: boolean }) {
+function SecondaryButton(props: { label: string; onPress: () => void; disabled?: boolean; selected?: boolean }) {
   return (
     <Pressable
       onPress={props.onPress}
       disabled={!!props.disabled}
       accessibilityRole="button"
       accessibilityLabel={props.label}
-      style={({ pressed }) => [ui.button, ui.buttonSecondary, pressed && !props.disabled ? ui.buttonPressed : null, props.disabled ? ui.buttonDisabled : null]}
+      style={({ pressed }) => [
+        ui.button,
+        ui.buttonSecondary,
+        props.selected ? ui.buttonSelected : null,
+        pressed && !props.disabled ? ui.buttonPressed : null,
+        props.disabled ? ui.buttonDisabled : null,
+      ]}
     >
-      <Text style={ui.buttonText}>{props.label}</Text>
+      <Text style={[ui.buttonText, props.selected ? ui.buttonTextSelected : null]}>{props.label}</Text>
     </Pressable>
   );
 }
@@ -640,9 +646,9 @@ export default function OrganizerProfileTab() {
                 <Text style={ui.kvValue}>{language === 'en' ? 'English' : language === 'fr' ? 'Français' : 'Español'}</Text>
               </View>
               <View style={{ flexDirection: 'row', gap: 10 }}>
-                <SecondaryButton label="ES" onPress={() => setLanguage('es')} />
-                <SecondaryButton label="EN" onPress={() => setLanguage('en')} />
-                <SecondaryButton label="FR" onPress={() => setLanguage('fr')} />
+                <SecondaryButton label="ES" selected={language === 'es'} onPress={() => setLanguage('es')} />
+                <SecondaryButton label="EN" selected={language === 'en'} onPress={() => setLanguage('en')} />
+                <SecondaryButton label="FR" selected={language === 'fr'} onPress={() => setLanguage('fr')} />
                 <SecondaryButton label={t('profile.device_language', { defaultValue: 'Sistema' })} onPress={setDeviceLanguage} />
               </View>
 
@@ -1015,9 +1021,11 @@ const ui = StyleSheet.create({
   buttonPrimary: { backgroundColor: Colors.dark.primary, borderColor: alpha(Colors.dark.primary, 0.35) },
   buttonDanger: { backgroundColor: '#ef4444', borderColor: 'rgba(239,68,68,0.45)' },
   buttonSecondary: { backgroundColor: 'rgba(255,255,255,0.06)', borderColor: 'rgba(255,255,255,0.14)' },
+  buttonSelected: { backgroundColor: alpha(Colors.dark.primary, 0.22), borderColor: alpha(Colors.dark.primary, 0.55) },
   buttonPressed: { transform: [{ scale: 0.99 }] },
   buttonDisabled: { opacity: 0.5 },
   buttonText: { color: Colors.dark.text, fontWeight: '900', fontSize: 14 },
+  buttonTextSelected: { color: 'white' },
   loadingText: { color: 'rgba(255,255,255,0.70)', fontWeight: '800', textAlign: 'center' },
   modalBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.82)', justifyContent: 'center', alignItems: 'center' },
   modalCard: {

@@ -1,4 +1,4 @@
-import { View, Text, StyleSheet, KeyboardAvoidingView, Platform, ScrollView, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, KeyboardAvoidingView, Platform, ScrollView, TouchableOpacity, Modal } from 'react-native';
 import { useMemo, useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -38,6 +38,7 @@ export default function RegisterScreen() {
   const [responsibleBirthDate, setResponsibleBirthDate] = useState<Date | null>(null);
   const [activeDateField, setActiveDateField] = useState<'attendee' | 'responsible'>('attendee');
   const [showDatePicker, setShowDatePicker] = useState(false);
+  const [datePickerDraft, setDatePickerDraft] = useState<Date>(new Date(2000, 0, 1));
 
   // Location State
   const [locationStatus, setLocationStatus] = useState<'idle' | 'detecting' | 'success' | 'error'>('idle');
@@ -254,16 +255,39 @@ export default function RegisterScreen() {
     }
   }, [detectLocation, locationStatus, step]);
 
-  const onDateChange = (event: any, selectedDate?: Date) => {
+  const onDateChange = (_event: any, selectedDate?: Date) => {
+    if (!selectedDate) return;
+    if (Platform.OS === 'ios') {
+      setDatePickerDraft(selectedDate);
+      return;
+    }
     setShowDatePicker(false);
-    if (selectedDate) {
-      if (activeDateField === 'attendee') {
-        touch('birthDate');
-        setBirthDate(selectedDate);
-      } else {
-        touch('responsibleBirthDate');
-        setResponsibleBirthDate(selectedDate);
-      }
+    if (activeDateField === 'attendee') {
+      touch('birthDate');
+      setBirthDate(selectedDate);
+    } else {
+      touch('responsibleBirthDate');
+      setResponsibleBirthDate(selectedDate);
+    }
+  };
+
+  const openDatePicker = (field: 'attendee' | 'responsible') => {
+    setActiveDateField(field);
+    const current = field === 'attendee' ? birthDate : responsibleBirthDate;
+    setDatePickerDraft(current || new Date(2000, 0, 1));
+    if (field === 'attendee') touch('birthDate');
+    else touch('responsibleBirthDate');
+    setShowDatePicker(true);
+  };
+
+  const confirmIOSDate = () => {
+    setShowDatePicker(false);
+    if (activeDateField === 'attendee') {
+      touch('birthDate');
+      setBirthDate(datePickerDraft);
+    } else {
+      touch('responsibleBirthDate');
+      setResponsibleBirthDate(datePickerDraft);
     }
   };
 
@@ -795,9 +819,7 @@ export default function RegisterScreen() {
             <TouchableOpacity
               style={styles.dateButton}
               onPress={() => {
-                setActiveDateField('responsible');
-                touch('responsibleBirthDate');
-                setShowDatePicker(true);
+                openDatePicker('responsible');
               }}
             >
                 <Calendar size={20} color={Colors.dark.textSecondary} />
@@ -808,8 +830,14 @@ export default function RegisterScreen() {
             {(submitAttempted || touched['responsibleBirthDate']) && fieldErrors.responsibleBirthDate ? (
               <Text style={styles.errorText}>{fieldErrors.responsibleBirthDate}</Text>
             ) : null}
-            {showDatePicker && activeDateField === 'responsible' && (
-                <DateTimePicker value={responsibleBirthDate || new Date(1990, 0, 1)} mode="date" display={Platform.OS === 'ios' ? 'spinner' : 'default'} onChange={onDateChange} maximumDate={new Date()} />
+            {showDatePicker && activeDateField === 'responsible' && Platform.OS !== 'ios' && (
+              <DateTimePicker
+                value={responsibleBirthDate || new Date(1990, 0, 1)}
+                mode="date"
+                display="default"
+                onChange={onDateChange}
+                maximumDate={new Date()}
+              />
             )}
           </View>
 
@@ -848,9 +876,7 @@ export default function RegisterScreen() {
             <TouchableOpacity
               style={styles.dateButton}
               onPress={() => {
-                setActiveDateField('attendee');
-                touch('birthDate');
-                setShowDatePicker(true);
+                openDatePicker('attendee');
               }}
             >
                 <Calendar size={20} color={Colors.dark.textSecondary} />
@@ -859,8 +885,14 @@ export default function RegisterScreen() {
             {(submitAttempted || touched['birthDate']) && fieldErrors.birthDate ? (
               <Text style={styles.errorText}>{fieldErrors.birthDate}</Text>
             ) : null}
-            {showDatePicker && activeDateField === 'attendee' && (
-                <DateTimePicker value={birthDate || new Date(2000, 0, 1)} mode="date" display={Platform.OS === 'ios' ? 'spinner' : 'default'} onChange={onDateChange} maximumDate={new Date()} />
+            {showDatePicker && activeDateField === 'attendee' && Platform.OS !== 'ios' && (
+              <DateTimePicker
+                value={birthDate || new Date(2000, 0, 1)}
+                mode="date"
+                display="default"
+                onChange={onDateChange}
+                maximumDate={new Date()}
+              />
             )}
           </View>
         </>
@@ -981,6 +1013,33 @@ export default function RegisterScreen() {
   return (
     <View style={styles.container}>
       <LinearGradient colors={[Colors.dark.background, '#1a1a2e']} style={StyleSheet.absoluteFill} />
+
+      {showDatePicker && Platform.OS === 'ios' ? (
+        <Modal transparent visible animationType="fade" onRequestClose={confirmIOSDate}>
+          <View style={styles.iosDateBackdrop}>
+            <View style={styles.iosDateCard}>
+              <View style={styles.iosDateHeader}>
+                <Text style={styles.iosDateTitle}>
+                  {activeDateField === 'attendee' ? 'Fecha de nacimiento' : 'Nacimiento del responsable'}
+                </Text>
+                <TouchableOpacity onPress={confirmIOSDate} activeOpacity={0.85}>
+                  <Text style={styles.iosDateDone}>Hecho</Text>
+                </TouchableOpacity>
+              </View>
+              <DateTimePicker
+                value={datePickerDraft}
+                mode="date"
+                display="spinner"
+                onChange={onDateChange}
+                maximumDate={new Date()}
+                themeVariant="dark"
+                textColor={Colors.dark.text as any}
+              />
+            </View>
+          </View>
+        </Modal>
+      ) : null}
+
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
         <ScrollView contentContainerStyle={[styles.scrollContent, { paddingTop: insets.top + 20 }]} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
           <View style={styles.header}>
@@ -1109,5 +1168,10 @@ const styles = StyleSheet.create({
   },
   checkboxChecked: { backgroundColor: Colors.dark.primary, borderColor: Colors.dark.primary },
   legalText: { flex: 1, color: 'rgba(255,255,255,0.86)', fontSize: 13, lineHeight: 18 },
-  legalLink: { color: Colors.dark.primary, fontWeight: '700' }
+  legalLink: { color: Colors.dark.primary, fontWeight: '700' },
+  iosDateBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.65)', justifyContent: 'center', padding: 18 },
+  iosDateCard: { borderRadius: 16, overflow: 'hidden', backgroundColor: '#0B0B0F', borderWidth: 1, borderColor: 'rgba(255,255,255,0.12)' },
+  iosDateHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 14, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.10)' },
+  iosDateTitle: { color: 'rgba(255,255,255,0.9)', fontWeight: '800' },
+  iosDateDone: { color: Colors.dark.primary, fontWeight: '900' },
 });

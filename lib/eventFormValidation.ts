@@ -287,10 +287,22 @@ export function validateEventDraft(input: EventDraftValidationInput): EventDraft
       const dt = new Date(rd.date);
       dt.setHours(rt.hours, rt.minutes, 0, 0);
       dateTime = dt;
+      if (!Number.isFinite(dt.getTime()) || dt.getFullYear() < 2000 || dt.getFullYear() > 2100) {
+        errors.push({ field: 'date', code: EVENT_VALIDATION_CODES.DATE_INVALID, message: 'Selecciona una fecha válida.' });
+        fieldErrors.date = 'Selecciona una fecha válida.';
+        dateTime = null;
+      }
       if (dt.getTime() <= Date.now()) {
         errors.push({ field: 'dateTime', code: EVENT_VALIDATION_CODES.DATETIME_PAST, message: 'La fecha y hora deben ser futuras.' });
         fieldErrors.date = 'La fecha debe ser futura.';
         fieldErrors.time = 'La hora debe ser futura.';
+      }
+      const maxFuture = new Date();
+      maxFuture.setFullYear(maxFuture.getFullYear() + 10);
+      if (dateTime && dateTime.getTime() > maxFuture.getTime()) {
+        errors.push({ field: 'date', code: EVENT_VALIDATION_CODES.DATE_INVALID, message: 'La fecha es demasiado lejana.' });
+        fieldErrors.date = 'La fecha es demasiado lejana.';
+        dateTime = null;
       }
     }
   }

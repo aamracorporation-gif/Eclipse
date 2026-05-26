@@ -137,7 +137,7 @@ serve(async (req) => {
         body: `Hubo cambios en "${title}". Revisa los nuevos detalles antes de ir.`,
         priority: "high",
         status: "pending",
-        data: { event_id: String(eventId), event_title: title, event_url: `/event/${String(eventId)}` },
+        data: { event_id: String(eventId), event_title: title, url: `event/${String(eventId)}`, event_url: `event/${String(eventId)}` },
         channels: ["in_app", "push"],
       }));
 

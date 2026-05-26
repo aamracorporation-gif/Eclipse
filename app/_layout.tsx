@@ -82,6 +82,44 @@ function RootLayoutNav({ fontsLoaded }: { fontsLoaded: boolean }) {
   const [isAppReady, setIsAppReady] = useState(false);
 
   useEffect(() => {
+    const errorUtils = (global as any)?.ErrorUtils;
+    const prevHandler = errorUtils?.getGlobalHandler?.();
+    if (errorUtils?.setGlobalHandler) {
+      errorUtils.setGlobalHandler((error: any, isFatal?: boolean) => {
+        try {
+          console.error('[GlobalError]', { isFatal: !!isFatal, message: error?.message, stack: error?.stack });
+        } catch {}
+        if (typeof prevHandler === 'function') {
+          try {
+            prevHandler(error, isFatal);
+          } catch {}
+        }
+      });
+    }
+
+    const prevRejection = (globalThis as any).onunhandledrejection;
+    (globalThis as any).onunhandledrejection = (event: any) => {
+      try {
+        console.error('[UnhandledRejection]', event?.reason || event);
+      } catch {}
+      if (typeof prevRejection === 'function') {
+        try {
+          prevRejection(event);
+        } catch {}
+      }
+    };
+
+    return () => {
+      if (errorUtils?.setGlobalHandler && typeof prevHandler === 'function') {
+        try {
+          errorUtils.setGlobalHandler(prevHandler);
+        } catch {}
+      }
+      (globalThis as any).onunhandledrejection = prevRejection;
+    };
+  }, []);
+
+  useEffect(() => {
     if (fontsLoaded && !loading) {
       setIsAppReady(true);
     }
@@ -103,14 +141,57 @@ function RootLayoutNav({ fontsLoaded }: { fontsLoaded: boolean }) {
       const path = (parsed?.path || '').replace(/^\/+/, '');
       if (!path) return;
 
-      if (path.startsWith('event/')) {
-        const eventId = path.split('/')[1];
-        if (eventId) router.push(`/(tabs)/event/${eventId}`);
+      const normalizedPath = path.replace(/^\/+/, '');
+      const match = normalizedPath.match(/(^|\/)event\/([^/?#]+)/i);
+      if (match?.[2]) {
+        router.push(`/(tabs)/event/${match[2]}`);
+        return;
       }
     };
 
     ExpoLinking.getInitialURL().then(handleUrl);
     const sub = ExpoLinking.addEventListener('url', (event) => handleUrl(event.url));
+    return () => sub.remove();
+  }, [isAppReady]);
+
+  useEffect(() => {
+    if (!isAppReady) return;
+
+    const navigateFromNotification = (data: any) => {
+      const eventId = String(data?.eventId || data?.event_id || '');
+      if (eventId) {
+        router.push(`/(tabs)/event/${eventId}`);
+        return;
+      }
+
+      const urlRaw = String(data?.url || data?.event_url || data?.link || '');
+      const url = urlRaw.trim();
+      if (!url) return;
+
+      const cleaned = url.replace(/^\/+/, '');
+      const match = cleaned.match(/(^|\/)event\/([^/?#]+)/i);
+      if (match?.[2]) {
+        router.push(`/(tabs)/event/${match[2]}`);
+        return;
+      }
+
+      if (cleaned.startsWith('(tabs)/') || cleaned.startsWith('(creator)/') || cleaned.startsWith('(auth)/')) {
+        router.push(`/${cleaned}` as any);
+      }
+    };
+
+    Notifications.getLastNotificationResponseAsync()
+      .then((response) => {
+        const data = (response as any)?.notification?.request?.content?.data;
+        if (data) navigateFromNotification(data);
+      })
+      .catch(() => {});
+
+    const sub = Notifications.addNotificationResponseReceivedListener((response) => {
+      const data = (response as any)?.notification?.request?.content?.data;
+      if (data) navigateFromNotification(data);
+    });
+
     return () => sub.remove();
   }, [isAppReady]);
 

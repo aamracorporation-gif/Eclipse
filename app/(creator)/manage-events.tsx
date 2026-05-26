@@ -44,6 +44,28 @@ export default function ManageEventsScreen() {
   const isAdminDb = profileRole === 'admin';
   const isAdmin = isAdminDb || isAdminEmail;
 
+  const createEventLabel = useMemo(() => {
+    const translated = String(t('creator.create_event.create_cta', { defaultValue: 'Crear evento' }) || '').trim();
+    return translated || 'Crear evento';
+  }, [t]);
+
+  const CreateEventCta = ({ compact }: { compact?: boolean }) => (
+    <TouchableOpacity
+      activeOpacity={0.8}
+      onPress={() => router.push('/(creator)/create-event')}
+      style={[compact ? styles.createCtaCompact : styles.createCta]}
+    >
+      <View style={styles.createCtaSurface}>
+        <View style={styles.createCtaIcon}>
+          <Plus size={18} color={Colors.dark.primary} />
+        </View>
+        <View style={styles.createCtaTextWrap}>
+          <Text style={styles.createCtaLabel}>{createEventLabel}</Text>
+        </View>
+      </View>
+    </TouchableOpacity>
+  );
+
   const baseEvents = useMemo(() => {
     if (isAdminDb) return events;
     return events.filter((e) => e.creatorId === user?.id);
@@ -260,12 +282,7 @@ export default function ManageEventsScreen() {
                     {t('creator.organizer.actions.my_events_desc', { defaultValue: 'Centraliza la creación y la gestión de tus eventos.' })}
                   </Text>
                   <View style={styles.dashboardActionsRow}>
-                    <ThemedButton
-                      title={t('creator.create_event.create_title')}
-                      onPress={() => router.push('/(creator)/create-event')}
-                      icon={<Plus size={20} color={Colors.dark.text} />}
-                      style={styles.dashboardActionBtn}
-                    />
+                    <CreateEventCta compact />
                     <ThemedButton
                       title={t('creator.organizer.actions.my_events_title', { defaultValue: 'Mis eventos' })}
                       onPress={() => {
@@ -285,12 +302,7 @@ export default function ManageEventsScreen() {
             <GlassView intensity={10} style={styles.emptyContainer}>
               <Text style={styles.emptyText}>{isAdmin ? t('creator.manage_events.empty_admin') : t('creator.manage_events.empty_organizer')}</Text>
               {!isAdmin && (
-                <ThemedButton 
-                  title={t('creator.manage_events.create_first')}
-                  onPress={() => router.push('/(creator)/create-event')}
-                  icon={<Plus size={20} color={Colors.dark.text} />}
-                  style={styles.createButton}
-                />
+                <CreateEventCta />
               )}
             </GlassView>
           }
@@ -428,6 +440,47 @@ const styles = StyleSheet.create({
   },
   dashboardActionBtn: {
     flex: 1,
+  },
+  createCta: {
+    width: '100%',
+  },
+  createCtaCompact: {
+    flex: 1,
+  },
+  createCtaSurface: {
+    width: '100%',
+    minHeight: 52,
+    borderRadius: 18,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.10)',
+  },
+  createCtaTextWrap: {
+    flex: 1,
+    minWidth: 0,
+  },
+  createCtaIcon: {
+    width: 30,
+    height: 30,
+    borderRadius: 999,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.06)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.16)',
+  },
+  createCtaLabel: {
+    color: 'white',
+    fontSize: 14,
+    fontWeight: '700',
+    letterSpacing: 0.1,
+    flexShrink: 1,
+    lineHeight: 18,
   },
   listContent: {
     padding: 24,

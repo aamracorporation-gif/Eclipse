@@ -103,7 +103,18 @@ serve(async (req) => {
       const eventRow = eventRes.data;
       if (!eventRow?.id) return jsonResponse({ ok: false, error: "Event not found" }, 404);
 
-      if (!isAdmin) {
+      const status = String((eventRow as any).status || "");
+      const isCancelled = Boolean((eventRow as any).is_cancelled);
+      if (status === "cancelled" || isCancelled) {
+        return jsonResponse({ ok: false, error: "Event cancelled" }, 410);
+      }
+      const eventDate = new Date(String((eventRow as any).event_date || ""));
+      if (Number.isFinite(eventDate.getTime()) && eventDate.getTime() <= Date.now()) {
+        return jsonResponse({ ok: false, error: "Event expired" }, 410);
+      }
+      const accessPolicy = String((eventRow as any).access_policy || "");
+      const isPrivate = accessPolicy && accessPolicy.toLowerCase() === "private";
+      if (isPrivate && !isAdmin) {
         if (!isOrganizer || String(eventRow.creator_id || "") !== callerId) {
           return jsonResponse({ ok: false, error: "Forbidden" }, 403);
         }

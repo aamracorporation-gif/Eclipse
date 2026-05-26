@@ -1,7 +1,7 @@
 const appJson = require('./app.json');
 
 const getHttpsHost = () => {
-  const baseUrl = process.env.EXPO_PUBLIC_WEB_BASE_URL;
+  const baseUrl = process.env.EXPO_PUBLIC_WEB_BASE_URL || process.env.EXPO_PUBLIC_API_URL;
   if (!baseUrl || typeof baseUrl !== 'string') return null;
   if (!baseUrl.startsWith('https://')) return null;
   try {
@@ -25,6 +25,11 @@ module.exports = () => {
           scheme: 'https',
           host,
           pathPrefix: '/event',
+        },
+        {
+          scheme: 'https',
+          host,
+          pathPrefix: '/evento',
         },
       ],
       category: ['BROWSABLE', 'DEFAULT'],

@@ -51,6 +51,22 @@ export default function HomeScreen() {
   const inCreator = segments?.[0] === '(creator)';
   const userRole = (user?.user_metadata as any)?.role ?? null;
 
+  const translateEventType = useCallback((raw: any) => {
+    const value = String(raw || '').trim();
+    if (!value) return 'Fiesta';
+    const slug = value
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-z0-9]+/g, '_')
+      .replace(/^_+|_+$/g, '');
+    const translated = t(`event.types.${slug}`);
+    const cleaned = String(translated || '').trim();
+    if (!cleaned) return value;
+    if (cleaned === `event.types.${slug}`) return value;
+    return cleaned;
+  }, [t]);
+
   const emptyFloat = useRef(new Animated.Value(0)).current;
   const emptyEnter = useRef(new Animated.Value(0)).current;
 
@@ -193,7 +209,7 @@ export default function HomeScreen() {
       <View style={styles.cardContent}>
         <View style={styles.cardTopRow}>
           <GlassView intensity={22} style={styles.categoryBadge}>
-            <Text style={styles.categoryText}>{item.eventType || t('home.unknown_type')}</Text>
+            <Text style={styles.categoryText}>{translateEventType(item.eventType)}</Text>
           </GlassView>
           {item.distance != null && (
             <GlassView intensity={22} style={styles.distanceBadge}>
@@ -245,83 +261,89 @@ export default function HomeScreen() {
       />
 
       <SafeAreaView style={styles.safeArea}>
-        <View style={[styles.header, { paddingTop: Platform.OS === 'android' ? Math.max(10, insets.top) : insets.top, paddingHorizontal: horizontalPadding }]}>
-          <View style={styles.headerTopRow}>
+        <FlatList
+          data={processedEvents}
+          keyExtractor={(item) => item.id}
+          renderItem={renderEventItem}
+          contentContainerStyle={[styles.listContent, { paddingHorizontal: horizontalPadding }]}
+          showsVerticalScrollIndicator={false}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Colors.dark.primary} />}
+          ListHeaderComponent={
             <View>
-              <Text style={styles.headerSubtitle}>{t('common.greeting')}</Text>
-              <Text style={styles.headerTitle}>{t('common.explore')}</Text>
-            </View>
-          </View>
+              <View
+                style={[
+                  styles.header,
+                  { paddingTop: Platform.OS === 'android' ? Math.max(10, insets.top) : insets.top, paddingHorizontal: horizontalPadding },
+                ]}
+              >
+                <View style={styles.headerTopRow}>
+                  <View>
+                    <Text style={styles.headerSubtitle}>{t('common.greeting')}</Text>
+                    <Text style={styles.headerTitle}>{t('common.explore')}</Text>
+                  </View>
+                </View>
 
-          <View style={styles.searchContainer}>
-            <View style={styles.searchBar}>
-              <Search size={20} color={Colors.dark.primary} />
-              <TextInput
-                placeholder={t('home.search_placeholder')}
-                placeholderTextColor={Colors.dark.textSecondary}
-                style={styles.searchInput}
-                value={searchQuery}
-                onChangeText={(text) => {
-                  setSearchQuery(text);
-                }}
-                returnKeyType="search"
-                onSubmitEditing={Keyboard.dismiss}
-              />
-              {searchQuery.trim().length ? (
-                <TouchableOpacity
-                  activeOpacity={0.8}
-                  onPress={() => {
-                    setSearchQuery('');
-                  }}
-                  style={styles.searchAction}
-                >
-                  <X size={18} color={Colors.dark.textSecondary} />
-                </TouchableOpacity>
-              ) : null}
-            </View>
-          </View>
-        </View>
-
-        <View style={styles.filtersSection}>
-          <DateSelector selectedDate={selectedDate} onSelectDate={setSelectedDate} />
-          <View style={{ paddingHorizontal: horizontalPadding, marginTop: 14 }}>
-            <AdvancedFilters filters={advancedFilters} onFilterChange={setAdvancedFilters} />
-          </View>
-        </View>
-
-        <View style={styles.body}>
-          <FlatList
-            data={processedEvents}
-            keyExtractor={(item) => item.id}
-            renderItem={renderEventItem}
-            contentContainerStyle={[styles.listContent, { paddingHorizontal: horizontalPadding }]}
-            showsVerticalScrollIndicator={false}
-            refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Colors.dark.primary} />}
-            ListEmptyComponent={
-              <View style={[styles.emptyWrap, { maxWidth: maxContentWidth, alignSelf: 'center', width: '100%', paddingHorizontal: horizontalPadding }]}>
-                <Animated.View style={{ opacity: emptyEnter, transform: [{ translateY: emptyFloat.interpolate({ inputRange: [0, 1], outputRange: [0, -6] }) }] }}>
-                  <GlassView intensity={18} style={styles.emptyCard}>
-                    <Text style={styles.emptyTitle}>
-                      {emptyState === 'no_results'
-                        ? t('home.no_results_title', { defaultValue: 'Sin resultados' })
-                        : t('home.empty_title')}
-                    </Text>
-                    <Text style={styles.emptySubtitle}>
-                      {emptyState === 'no_results'
-                        ? t('home.no_results_subtitle', { defaultValue: 'Prueba con otra ciudad o ajusta los filtros.' })
-                        : t('home.empty_subtitle')}
-                    </Text>
-                    <TouchableOpacity activeOpacity={0.9} onPress={resetDiscovery} style={styles.emptyCta}>
-                      <LinearGradient colors={[Colors.dark.primary, Colors.dark.secondary]} style={styles.emptyCtaGradient}>
-                        <Text style={styles.emptyCtaText}>{t('home.clear_filters')}</Text>
-                      </LinearGradient>
-                    </TouchableOpacity>
-                  </GlassView>
-                </Animated.View>
+                <View style={styles.searchContainer}>
+                  <View style={styles.searchBar}>
+                    <Search size={20} color={Colors.dark.primary} />
+                    <TextInput
+                      placeholder={t('home.search_placeholder')}
+                      placeholderTextColor={Colors.dark.textSecondary}
+                      style={styles.searchInput}
+                      value={searchQuery}
+                      onChangeText={(text) => {
+                        setSearchQuery(text);
+                      }}
+                      returnKeyType="search"
+                      onSubmitEditing={Keyboard.dismiss}
+                    />
+                    {searchQuery.trim().length ? (
+                      <TouchableOpacity
+                        activeOpacity={0.8}
+                        onPress={() => {
+                          setSearchQuery('');
+                        }}
+                        style={styles.searchAction}
+                      >
+                        <X size={18} color={Colors.dark.textSecondary} />
+                      </TouchableOpacity>
+                    ) : null}
+                  </View>
+                </View>
               </View>
-            }
-          />
-        </View>
+
+              <View style={styles.filtersSection}>
+                <DateSelector selectedDate={selectedDate} onSelectDate={setSelectedDate} />
+                <View style={{ paddingHorizontal: horizontalPadding, marginTop: 14 }}>
+                  <AdvancedFilters filters={advancedFilters} onFilterChange={setAdvancedFilters} />
+                </View>
+              </View>
+            </View>
+          }
+          ListEmptyComponent={
+            <View style={[styles.emptyWrap, { maxWidth: maxContentWidth, alignSelf: 'center', width: '100%', paddingHorizontal: horizontalPadding }]}>
+              <Animated.View style={{ opacity: emptyEnter, transform: [{ translateY: emptyFloat.interpolate({ inputRange: [0, 1], outputRange: [0, -6] }) }] }}>
+                <GlassView intensity={18} style={styles.emptyCard}>
+                  <Text style={styles.emptyTitle}>
+                    {emptyState === 'no_results'
+                      ? t('home.no_results_title', { defaultValue: 'Sin resultados' })
+                      : t('home.empty_title')}
+                  </Text>
+                  <Text style={styles.emptySubtitle}>
+                    {emptyState === 'no_results'
+                      ? t('home.no_results_subtitle', { defaultValue: 'Prueba con otra ciudad o ajusta los filtros.' })
+                      : t('home.empty_subtitle')}
+                  </Text>
+                  <TouchableOpacity activeOpacity={0.9} onPress={resetDiscovery} style={styles.emptyCta}>
+                    <LinearGradient colors={[Colors.dark.primary, Colors.dark.secondary]} style={styles.emptyCtaGradient}>
+                      <Text style={styles.emptyCtaText}>{t('home.clear_filters')}</Text>
+                    </LinearGradient>
+                  </TouchableOpacity>
+                </GlassView>
+              </Animated.View>
+            </View>
+          }
+        />
       </SafeAreaView>
     </View>
   );

@@ -23,6 +23,7 @@ import { scheduleLocalNotification } from '@/lib/notifications';
 import { invokeEdgeFunctionStrict } from '@/lib/edgeFunctions';
 import { useAppDialog } from '@/components/ui/AppDialog';
 import { useFocusEffect } from '@react-navigation/native';
+import * as ExpoLinking from 'expo-linking';
 
 export default function EventDetailScreen() {
   const { id } = useLocalSearchParams();
@@ -60,7 +61,13 @@ export default function EventDetailScreen() {
 
   const translateEventType = (raw: any) => {
     const value = String(raw || '').trim();
-    if (!value) return '';
+    if (!value) {
+      const fallback = t('event.types.party', { defaultValue: 'Fiesta' });
+      const s = String(fallback || '').trim();
+      if (!s) return 'Fiesta';
+      if (s === 'event.types.party') return 'Fiesta';
+      return s;
+    }
     const slug = value
       .toLowerCase()
       .normalize('NFD')
@@ -68,7 +75,10 @@ export default function EventDetailScreen() {
       .replace(/[^a-z0-9]+/g, '_')
       .replace(/^_+|_+$/g, '');
     const translated = t(`event.types.${slug}`);
-    return translated === '—' ? value : translated;
+    if (!String(translated || '').trim()) return value;
+    if (translated === '—') return value;
+    if (translated === `event.types.${slug}`) return value;
+    return translated;
   };
 
   const eventId = Array.isArray(id) ? id[0] : id;
@@ -223,7 +233,22 @@ export default function EventDetailScreen() {
         vipRows = [];
       }
 
-      setEvent({ ...(data || {}), reservados_vip: vipRows } as any);
+      const normalizedEvent: any = { ...(data || {}) };
+      if (!String(normalizedEvent?.event_type || '').trim()) {
+        normalizedEvent.event_type = 'party';
+      }
+
+      if (__DEV__) {
+        try {
+          console.log('[EVENT]', {
+            id: String(normalizedEvent?.id || ''),
+            event_type: normalizedEvent?.event_type,
+            theme: normalizedEvent?.theme,
+          });
+        } catch {}
+      }
+
+      setEvent({ ...normalizedEvent, reservados_vip: vipRows } as any);
     } catch (error) {
       console.error('Error fetching event:', error);
     } finally {
@@ -255,18 +280,46 @@ export default function EventDetailScreen() {
 
   const shareEvent = async () => {
     if (!event?.id) return;
+    const title = String(event.title || '').trim() || 'Evento';
+    const webBaseUrlRaw = String((process.env.EXPO_PUBLIC_WEB_BASE_URL as any) || (process.env.EXPO_PUBLIC_API_URL as any) || '')
+      .trim()
+      .replace(/\/$/, '');
+    const webBaseUrl = webBaseUrlRaw.startsWith('https://') ? webBaseUrlRaw : '';
+    const supabaseUrl = String(process.env.EXPO_PUBLIC_SUPABASE_URL || '').replace(/\/$/, '');
+
+    const sharePayload = async (message: string, primaryUrl?: string) => {
+      const url = String(primaryUrl || '').trim();
+      const isHttpUrl = /^https?:\/\//i.test(url);
+      const payload = Platform.OS === 'ios' && isHttpUrl ? { message, url } : { message };
+      await Share.share(payload as any);
+    };
     try {
       const result: any = await invokeEdgeFunctionStrict('event-share', { action: 'create', eventId: event.id });
-      const url = String(result?.url || '');
-      if (!url) throw new Error('No se pudo generar el enlace.');
+      const token = String(result?.token || '').trim();
+      const webUrl =
+        token && webBaseUrl
+          ? `${webBaseUrl}/evento/${token}`
+          : token && supabaseUrl
+          ? `${supabaseUrl}/functions/v1/event-share/evento/${token}`
+          : String(result?.url || '').trim();
+      if (!webUrl) throw new Error('No se pudo generar el enlace.');
 
-      await Share.share({ message: url, url });
+      const deepLink = token ? ExpoLinking.createURL(`evento/${token}`) : ExpoLinking.createURL(`event/${event.id}`);
+      const message = `${title}\n\nAbrir en la app:\n${deepLink}\n\nEnlace:\n${webUrl}`;
+      await sharePayload(message, webUrl);
       return;
-    } catch {
-      showDialog({
-        title: 'No se pudo compartir',
-        message: 'No se pudo generar el enlace de compartición. Inténtalo de nuevo.',
-      });
+    } catch (e) {
+      const fallback = ExpoLinking.createURL(`event/${event.id}`);
+      try {
+        const message = `${title}\n\nAbrir en la app:\n${fallback}`;
+        await sharePayload(message, undefined);
+      } catch (inner) {
+        const msg = getErrorMessage(inner || e);
+        showDialog({
+          title: 'No se pudo compartir',
+          message: msg || 'No se pudo compartir el evento. Inténtalo de nuevo.',
+        });
+      }
     }
   };
 
@@ -755,8 +808,10 @@ export default function EventDetailScreen() {
           <View style={styles.detailsGrid}>
             <GlassView intensity={15} style={styles.detailItem}>
               <PartyPopper size={24} color={Colors.dark.primary} style={styles.detailIcon} />
-              <Text style={styles.detailLabel}>{t('event.details.type')}</Text>
-              <Text style={styles.detailValue}>{translateEventType(event.event_type)}</Text>
+              <Text style={styles.detailLabel}>{t('event.details.type', { defaultValue: 'Tipo de fiesta' })}</Text>
+              <Text style={styles.detailValue}>
+                {String(translateEventType(event.event_type) || '').trim() || 'Fiesta'}
+              </Text>
             </GlassView>
             
             <GlassView intensity={15} style={styles.detailItem}>

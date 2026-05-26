@@ -641,16 +641,42 @@ export default function ProfileScreen() {
               return;
             }
 
-            const { data: ticketsRows, error: ticketsError } = await supabase
-              .from('tickets')
-              .select('total_price, quantity, event_id, purchase_date')
-              .in('event_id', myEventIds);
+            const [{ data: ticketsRows, error: ticketsError }, { data: vipRows, error: vipErr }] = await Promise.all([
+              supabase
+                .from('tickets')
+                .select('total_price, quantity, event_id, purchase_date, ticket_type_id')
+                .in('event_id', myEventIds),
+              supabase
+                .from('reservados_vip')
+                .select('event_id')
+                .in('event_id', myEventIds),
+            ]);
 
             if (ticketsError) throw ticketsError;
+            if (vipErr) throw vipErr;
+
+            const eventsWithVip = new Set(((vipRows ?? []) as any[]).map((r) => String(r?.event_id || '')).filter(Boolean));
+            const parseQty = (value: any): number => {
+              if (value == null) return 1;
+              const n = Number(value);
+              if (!Number.isFinite(n)) return 1;
+              if (n <= 0) return 0;
+              return n;
+            };
+            const parsePrice = (value: any): number => {
+              if (value == null) return 0;
+              const n = Number(value);
+              return Number.isFinite(n) ? n : 0;
+            };
 
             const rows = (ticketsRows ?? []) as any[];
-            const revenue = rows.reduce((acc, r) => acc + (Number(r.total_price) || 0), 0);
-            const tickets = rows.reduce((acc, r) => acc + (Number(r.quantity) || 0), 0);
+            const revenue = rows.reduce((acc, r) => acc + parsePrice(r.total_price), 0);
+            const tickets = rows.reduce((acc, r) => {
+              const eventId = String(r?.event_id || '');
+              const isUntyped = !r?.ticket_type_id;
+              if (isUntyped && eventId && eventsWithVip.has(eventId)) return acc + 1;
+              return acc + parseQty(r.quantity);
+            }, 0);
             setOrganizerStats({ revenue, tickets });
           } else {
             setOrganizerStats({ revenue: 0, tickets: 0 });
@@ -2193,9 +2219,10 @@ const styles = StyleSheet.create({
   scrollContent: {
     paddingBottom: 100,
     alignItems: 'center',
+    flexGrow: 1,
   },
   perfilContainer: {
-    flex: 1,
+    width: '100%',
   },
   
   // Ambient Glow

@@ -7,7 +7,7 @@
     "icon": "./assets/images/Icon.png",
     "scheme": "eclipse",
     "userInterfaceStyle": "automatic",
-    "newArchEnabled": false,
+    "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.achraf.eclipse",
@@ -22,6 +22,7 @@
     },
     "plugins": [
       "expo-router",
+      "expo-asset",
       "expo-font",
       "expo-web-browser",
       [
@@ -73,11 +74,7 @@
         "android.permission.POST_NOTIFICATIONS",
         "android.permission.WAKE_LOCK",
         "android.permission.RECEIVE_BOOT_COMPLETED"
-      ],
-      "navigationBar": {
-        "backgroundColor": "#0f0f1a",
-        "barStyle": "light-content"
-      }
+      ]
     },
     "owner": "ashhhhhhhh"
   }

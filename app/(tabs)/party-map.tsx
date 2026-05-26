@@ -21,7 +21,10 @@ type EventWithGeo = AppEvent & { _lat: number; _lng: number; _distanceKm: number
 
 const VIEWPORT_DEBOUNCE_MS = 520;
 const EVENT_FOCUS_DELTA = 0.035;
-const MAX_MARKERS_RENDERED = 260;
+const MAX_MARKERS_RENDERED = 180;
+const FETCH_HORIZON_DAYS = 45;
+const MAX_EVENTS_CACHE = 2500;
+const MAX_EVENT_CACHE_AGE_MS = 1000 * 60 * 20;
 
 type ClusterItem =
   | { kind: 'cluster'; key: string; center: { latitude: number; longitude: number }; count: number; color: string }
@@ -165,6 +168,13 @@ export default function PartyMapScreen() {
   const { show: showDialog } = useAppDialog();
   const params = useLocalSearchParams<{ q?: string }>();
 
+  const debugLog = useCallback((...args: any[]) => {
+    if (!__DEV__) return;
+    try {
+      console.log('[MAP]', ...args);
+    } catch {}
+  }, []);
+
   const mapsApiKey = process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY;
   const hasMapsKey =
     Platform.OS !== 'android' || (Constants as any)?.appOwnership === 'expo' || (!!mapsApiKey && !mapsApiKey.includes('TU_CLAVE_API'));
@@ -307,9 +317,10 @@ export default function PartyMapScreen() {
       if (signature === lastClustersSignatureRef.current) return;
       lastClustersSignatureRef.current = signature;
       setVisibleClusters(clustered);
+      debugLog('clusters', { visible: visible.length, clustered: clustered.length, cacheSize: allEventsRef.current.size });
       bumpMarkerTracking();
     },
-    [bumpMarkerTracking, clusterForRegion]
+    [bumpMarkerTracking, clusterForRegion, debugLog]
   );
 
   const bboxForRegion = useCallback((r: Region) => {
@@ -358,7 +369,7 @@ export default function PartyMapScreen() {
           theme: raw.theme ?? null,
           ageRestriction: raw.age_restriction != null ? String(raw.age_restriction) : undefined,
           dressCode: raw.dress_code ?? null,
-          eventType: raw.event_type ?? null,
+          eventType: String(raw.event_type ?? '').trim() || 'party',
           creatorId: raw.creator_id ?? undefined,
           ticketTypes: [],
           venues: { latitude: lat, longitude: lng, name: String(venue.name || '') },
@@ -389,7 +400,16 @@ export default function PartyMapScreen() {
   );
 
   const pruneAllEvents = useCallback((regionForViewport: Region) => {
-    const maxKeep = 12000;
+    const maxKeep = MAX_EVENTS_CACHE;
+    const now = Date.now();
+
+    for (const [id, e] of allEventsRef.current.entries()) {
+      const seen = Number((e as any)?._seenAt || 0);
+      if (seen && now - seen > MAX_EVENT_CACHE_AGE_MS) {
+        allEventsRef.current.delete(id);
+      }
+    }
+
     if (allEventsRef.current.size <= maxKeep) return;
     const { minLat, maxLat, minLng, maxLng } = bboxForRegion(regionForViewport);
     const farMinLat = minLat - regionForViewport.latitudeDelta * 3;
@@ -426,7 +446,7 @@ export default function PartyMapScreen() {
       const todayStart = new Date();
       todayStart.setHours(0, 0, 0, 0);
       const fromIso = todayStart.toISOString();
-      const toIso = new Date(todayStart.getTime() + 1000 * 60 * 60 * 24 * 180).toISOString();
+      const toIso = new Date(todayStart.getTime() + 1000 * 60 * 60 * 24 * FETCH_HORIZON_DAYS).toISOString();
 
       const bboxKey = `${minLat.toFixed(4)}|${maxLat.toFixed(4)}|${minLng.toFixed(4)}|${maxLng.toFixed(4)}|${safe.latitudeDelta.toFixed(4)}`;
       if (bboxKey === inFlightBboxKeyRef.current) return;
@@ -454,6 +474,7 @@ export default function PartyMapScreen() {
           `&venues.longitude=${encodeURIComponent(`gte.${minLng}`)}` +
           `&venues.longitude=${encodeURIComponent(`lte.${maxLng}`)}`;
 
+        debugLog('fetch:start', { bboxKey, fromIso, toIso });
         const res = await withTimeout(
           fetch(url, {
             method: 'GET',
@@ -468,6 +489,7 @@ export default function PartyMapScreen() {
         if (seq !== fetchSeqRef.current) return;
         if (!res.ok) throw new Error(`http_${res.status}`);
         const remote = await res.json();
+        debugLog('fetch:done', { bboxKey, count: Array.isArray(remote) ? remote.length : 0 });
         if (!Array.isArray(remote)) return;
         mergeRemoteEvents(remote, { latitude: safe.latitude, longitude: safe.longitude });
         lastSuccessBboxKeyRef.current = bboxKey;
@@ -476,13 +498,19 @@ export default function PartyMapScreen() {
         computeVisibleClusters(safe);
       } catch (e: any) {
         if (e?.name === 'AbortError') return;
+        debugLog('fetch:error', { bboxKey, message: String(e?.message || e) });
         computeVisibleClusters(safe);
       } finally {
         if (inFlightBboxKeyRef.current === bboxKey) inFlightBboxKeyRef.current = '';
       }
     },
-    [bboxForRegion, computeVisibleClusters, mergeRemoteEvents, pruneAllEvents, sanitizeRegion, supabaseAnonKey, supabaseUrl, withTimeout]
+    [bboxForRegion, computeVisibleClusters, debugLog, mergeRemoteEvents, pruneAllEvents, sanitizeRegion, supabaseAnonKey, supabaseUrl, withTimeout]
   );
+
+  useEffect(() => {
+    debugLog('mount');
+    return () => debugLog('unmount');
+  }, [debugLog]);
 
   useEffect(() => {
     let mounted = true;
@@ -554,10 +582,11 @@ export default function PartyMapScreen() {
 
   useEffect(() => {
     if (!mapReady) return;
+    debugLog('ready');
     mapEverReadyRef.current = true;
     if (mapInitTimerRef.current) clearTimeout(mapInitTimerRef.current);
     setMapInitTimedOut(false);
-  }, [mapReady]);
+  }, [debugLog, mapReady]);
 
   useEffect(() => {
     if (!mapReady) return;
