@@ -31,6 +31,80 @@ function createApp() {
 
   app.get('/health', (req, res) => res.json({ ok: true }));
 
+  // iOS Universal Links - Apple App Site Association
+  app.get('/.well-known/apple-app-site-association', (req, res) => {
+    const appleTeamId = process.env.APPLE_TEAM_ID || 'PLACEHOLDER';
+    const iosBundleId = process.env.IOS_BUNDLE_ID || 'com.achraf.eclipse';
+
+    const appleAppSiteAssociation = {
+      applinks: {
+        apps: [],
+        details: [
+          {
+            appID: `${appleTeamId}.${iosBundleId}`,
+            paths: ['/evento/*', '/api/stripe/callback']
+          }
+        ]
+      },
+      webcredentials: {
+        apps: [`${appleTeamId}.${iosBundleId}`]
+      }
+    };
+
+    res.setHeader('Content-Type', 'application/json');
+    res.status(200).json(appleAppSiteAssociation);
+  });
+
+  // Android App Links - Asset Links
+  app.get('/.well-known/assetlinks.json', (req, res) => {
+    const androidPackageName = process.env.ANDROID_PACKAGE_NAME || 'com.achraf.eclipse';
+    const androidSha256Fingerprints = (process.env.ANDROID_SHA256_CERT_FINGERPRINTS || '').split(',').filter(Boolean);
+
+    const assetLinks = [
+      {
+        relation: ['delegate_permission/common.handle_all_urls'],
+        target: {
+          namespace: 'android_app',
+          package_name: androidPackageName,
+          sha256_cert_fingerprints: androidSha256Fingerprints
+        }
+      }
+    ];
+
+    res.setHeader('Content-Type', 'application/json');
+    res.status(200).json(assetLinks);
+  });
+
+  // Deep Link proxy - Evento compartido
+  app.get('/evento/:token', async (req, res) => {
+    try {
+      const { token } = req.params;
+      
+      // Proxy hacia Supabase event-share
+      const supabaseUrl = process.env.SUPABASE_URL || 'https://your-supabase-url.supabase.co';
+      const supabaseAnonKey = process.env.SUPABASE_ANON_KEY || '';
+      
+      const response = await fetch(`${supabaseUrl}/functions/v1/event-share/evento/${token}`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${supabaseAnonKey}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      const data = await response.json();
+      
+      if (!response.ok) {
+        return res.status(response.status).json(data);
+      }
+
+      res.status(200).json(data);
+    } catch (error) {
+      console.error('Error proxying evento request:', error);
+      res.status(500).json({ ok: false, error: 'Failed to fetch evento' });
+    }
+  });
+
   app.use('/api/stripe', stripeWebhookRoutes);
   app.use(express.json({ limit: '1mb' }));
 
@@ -46,3 +120,4 @@ function createApp() {
 }
 
 module.exports = { createApp };
+
