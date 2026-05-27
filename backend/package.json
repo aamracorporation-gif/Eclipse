@@ -4,6 +4,7 @@
   "private": true,
   "main": "src/index.js",
   "scripts": {
+    "api": "node backend/src/index.js",
     "dev": "nodemon src/index.js",
     "start": "node src/index.js"
   },
