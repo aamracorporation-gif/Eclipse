@@ -281,11 +281,6 @@ export default function EventDetailScreen() {
   const shareEvent = async () => {
     if (!event?.id) return;
     const title = String(event.title || '').trim() || 'Evento';
-    const webBaseUrlRaw = String((process.env.EXPO_PUBLIC_WEB_BASE_URL as any) || (process.env.EXPO_PUBLIC_API_URL as any) || '')
-      .trim()
-      .replace(/\/$/, '');
-    const webBaseUrl = webBaseUrlRaw.startsWith('https://') ? webBaseUrlRaw : '';
-    const supabaseUrl = String(process.env.EXPO_PUBLIC_SUPABASE_URL || '').replace(/\/$/, '');
 
     const sharePayload = async (message: string, primaryUrl?: string) => {
       const url = String(primaryUrl || '').trim();
@@ -293,22 +288,26 @@ export default function EventDetailScreen() {
       const payload = Platform.OS === 'ios' && isHttpUrl ? { message, url } : { message };
       await Share.share(payload as any);
     };
+
     try {
       const result: any = await invokeEdgeFunctionStrict('event-share', { action: 'create', eventId: event.id });
       const token = String(result?.token || '').trim();
-      const webUrl =
-        token && webBaseUrl
-          ? `${webBaseUrl}/evento/${token}`
-          : token && supabaseUrl
-          ? `${supabaseUrl}/functions/v1/event-share/evento/${token}`
-          : String(result?.url || '').trim();
-      if (!webUrl) throw new Error('No se pudo generar el enlace.');
+      
+      if (!token) throw new Error('No se pudo generar el enlace.');
 
-      const deepLink = token ? ExpoLinking.createURL(`evento/${token}`) : ExpoLinking.createURL(`event/${event.id}`);
+      // Usar siempre el dominio HTTPS en todos los entornos
+      const webUrl = `https://api.weareeclipseoficial.com/evento/${token}`;
+      
+      // Deep link para la app (eclipse:// para builds, exp:// para Expo Go)
+      const deepLink = Platform.OS === 'ios' || Platform.OS === 'android'
+        ? `eclipse://evento/${token}`
+        : ExpoLinking.createURL(`evento/${token}`);
+
       const message = `${title}\n\nAbrir en la app:\n${deepLink}\n\nEnlace:\n${webUrl}`;
       await sharePayload(message, webUrl);
       return;
     } catch (e) {
+      // Fallback: usar deep link de Expo
       const fallback = ExpoLinking.createURL(`event/${event.id}`);
       try {
         const message = `${title}\n\nAbrir en la app:\n${fallback}`;
@@ -607,13 +606,13 @@ export default function EventDetailScreen() {
       await fetchEvent();
       setPurchaseSuccess({
         title: '¡VIP confirmado!',
-        message: 'Tu reservado VIP se ha comprado correctamente.',
+        message: 'Tu reservado VIP ha sido confirmado. ¡Que disfrutes!',
         variant: 'vip',
       });
       try {
         await scheduleLocalNotification(
           '¡VIP confirmado!',
-          'Tu reservado VIP se ha comprado correctamente.',
+          `Tu reservado VIP para ${event?.title || ''} ha sido confirmado.`,
           { type: 'vip_purchase', eventId: event?.id },
           1
         );
@@ -639,1522 +638,691 @@ export default function EventDetailScreen() {
     }
   };
 
-  const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
-    return date.toLocaleDateString(localeTag, {
-      weekday: 'long',
-      day: 'numeric',
-      month: 'long',
-      year: 'numeric',
-    });
-  };
-
-  const formatTime = (dateString: string) => {
-    const date = new Date(dateString);
-    return date.toLocaleTimeString(localeTag, {
-      hour: '2-digit',
-      minute: '2-digit',
-    });
-  };
-
   if (loading) {
     return (
-      <View style={styles.loadingContainer}>
-        <DiscoLoader label="Cargando evento…" subLabel="Afinando luces y sonido" size={160} />
+      <View style={[styles.container, { paddingTop: insets.top }]}>
+        <DiscoLoader />
       </View>
-    );
-  }
-
-  if (purchaseSuccess) {
-    return (
-      <PurchaseConfirmation
-        title={purchaseSuccess.title}
-        message={purchaseSuccess.message}
-        variant={purchaseSuccess.variant}
-        onPrimaryAction={() => {
-          setPurchaseSuccess(null);
-          router.push('/(tabs)/tickets');
-        }}
-        onSecondaryAction={() => {
-          setPurchaseSuccess(null);
-          router.push('/(tabs)');
-        }}
-      />
     );
   }
 
   if (!event) {
     return (
-      <View style={styles.loadingContainer}>
-        <Text style={styles.errorText}>Evento no encontrado</Text>
-        <ThemedButton title="Volver" onPress={safeBack} style={{ marginTop: 20, width: 200 }} />
+      <View style={[styles.container, { paddingTop: insets.top }]}>
+        <View style={styles.header}>
+          <TouchableOpacity onPress={safeBack}>
+            <ArrowLeft size={24} color={Colors.light.text} />
+          </TouchableOpacity>
+        </View>
+        <View style={styles.emptyState}>
+          <Text style={styles.emptyText}>Evento no encontrado</Text>
+        </View>
       </View>
     );
   }
 
-  const selectedType = event.event_ticket_types?.find(t => t.id === selectedTicketType);
-  const currentPrice = selectedType ? selectedType.price : event.ticket_price;
-  const currentAvailable = selectedType 
-    ? (selectedType.quantity - (selectedType.sold || 0))
-    : event.available_tickets;
-
-  const safeQty = Math.max(1, parseInt(quantity || '1') || 1);
-  const total = currentPrice * safeQty;
-  const hasVip = !!(event.reservados_vip && event.reservados_vip.length > 0);
-  const selectedVip = event.reservados_vip?.find((v) => v.id === selectedVipReservadoId) ?? null;
-  const vipAvailable = selectedVip ? (selectedVip.quantity_available ?? 0) : 0;
-  const formatEuro = (value: any): string => {
-    if (value === null || value === undefined) return '—';
-    const n = typeof value === 'number' ? value : Number(value);
-    if (!Number.isFinite(n)) return `${String(value)}€`;
-    const decimals = Math.abs(n % 1) < 0.000001 ? 0 : 2;
-    return `${n.toFixed(decimals)}€`;
-  };
+  const eventTypeLabel = translateEventType(event.event_type);
+  const creatorName = event.profiles?.club_name || event.profiles?.full_name || 'Organizador';
+  const availableTickets = event.available_tickets || 0;
+  const isSoldOut = availableTickets <= 0;
 
   return (
-    <View style={styles.container}>
-      <LinearGradient
-        colors={[Colors.dark.background, '#0f172a']}
-        style={StyleSheet.absoluteFill}
-      />
-      
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: insets.bottom + 120 }}>
-        {/* Header Image */}
-        <View style={styles.imageContainer}>
-          <Image
-            source={{ uri: event.poster_url || 'https://images.pexels.com/photos/1190298/pexels-photo-1190298.jpeg' }}
-            style={styles.posterImage}
-          />
-          <LinearGradient
-            colors={['rgba(15, 23, 42, 0)', 'rgba(15, 23, 42, 0.68)']}
-            style={styles.imageOverlay}
-          />
-          
-          <TouchableOpacity 
-            style={[styles.backButton, { top: insets.top + 10, left: horizontalPadding }]}
-            onPress={safeBack}
-            activeOpacity={0.8}>
-            <GlassView intensity={40} style={styles.backButtonGlass}>
-              <ArrowLeft size={24} color={Colors.dark.text} />
-            </GlassView>
+    <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.container}>
+      <ScrollView
+        style={[styles.scrollView, { paddingTop: insets.top }]}
+        contentContainerStyle={{ paddingBottom: insets.bottom + 20 }}
+        showsVerticalScrollIndicator={false}
+      >
+        <View style={styles.header}>
+          <TouchableOpacity onPress={safeBack}>
+            <ArrowLeft size={24} color={Colors.light.text} />
           </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[styles.shareButton, { top: insets.top + 10, right: horizontalPadding }]}
-            onPress={shareEvent}
-            activeOpacity={0.8}
-          >
-            <GlassView intensity={40} style={styles.backButtonGlass}>
-              <Share2 size={22} color={Colors.dark.text} />
-            </GlassView>
+          <TouchableOpacity onPress={shareEvent}>
+            <Share2 size={24} color={Colors.light.text} />
           </TouchableOpacity>
-
-          {event.available_tickets <= 0 && (
-            <View style={[styles.soldBadgeContainer, { right: horizontalPadding }]}>
-              <GlassView intensity={40} style={[styles.soldBadge, { backgroundColor: Colors.dark.error }]}>
-                <Text style={[styles.soldText, { color: 'white' }]}>SOLD OUT</Text>
-              </GlassView>
-            </View>
-          )}
         </View>
 
+        {event.image_url && (
+          <Image
+            source={{ uri: event.image_url }}
+            style={styles.eventImage}
+            resizeMode="cover"
+          />
+        )}
+
         <View style={[styles.content, { paddingHorizontal: horizontalPadding }]}>
-          <View style={{ width: '100%', maxWidth: maxContentWidth, alignSelf: 'center' }}>
-          <Text style={[styles.title, { fontSize: scaleFont(32) }]}>{event.title}</Text>
-          <Text style={styles.description}>{event.description}</Text>
-
-          {/* Key Info */}
-          <GlassView intensity={20} style={styles.infoCard}>
-            <View style={styles.infoRow}>
-              <View style={styles.iconBox}>
-                <Calendar size={20} color={Colors.dark.primary} />
-              </View>
-              <View style={styles.infoContent}>
-                <Text style={styles.infoLabel}>{t('event.details.date')}</Text>
-                <Text style={styles.infoValue}>{formatDate(event.event_date)}</Text>
-              </View>
+          <View style={styles.titleSection}>
+            <Text style={styles.eventTitle}>{event.title}</Text>
+            <View style={styles.eventTypeBadge}>
+              <Text style={styles.eventTypeText}>{eventTypeLabel}</Text>
             </View>
-            
-            <View style={styles.divider} />
-
-            <View style={styles.infoRow}>
-              <View style={styles.iconBox}>
-                <Clock size={20} color={Colors.dark.secondary} />
-              </View>
-              <View style={styles.infoContent}>
-                <Text style={styles.infoLabel}>{t('event.details.time')}</Text>
-                <Text style={styles.infoValue}>{formatTime(event.event_date)}</Text>
-              </View>
-            </View>
-
-            <View style={styles.divider} />
-
-            <View style={styles.infoRow}>
-              <View style={styles.iconBox}>
-                <MapPin size={20} color={Colors.dark.success} />
-              </View>
-              <View style={styles.infoContent}>
-                <Text style={styles.infoLabel}>{t('event.details.place')}</Text>
-                <Text style={styles.infoValue}>{event.venues?.name}</Text>
-                <Text style={styles.addressText} numberOfLines={2}>
-                  {event.venues?.address}
-                </Text>
-              </View>
-            </View>
-          </GlassView>
-
-          {/* Details Grid */}
-          <Text style={[styles.sectionTitle, { fontSize: scaleFont(20) }]}>{t('event.details.title')}</Text>
-          <View style={styles.detailsGrid}>
-            <GlassView intensity={15} style={styles.detailItem}>
-              <PartyPopper size={24} color={Colors.dark.primary} style={styles.detailIcon} />
-              <Text style={styles.detailLabel}>{t('event.details.type', { defaultValue: 'Tipo de fiesta' })}</Text>
-              <Text style={styles.detailValue}>
-                {String(translateEventType(event.event_type) || '').trim() || 'Fiesta'}
-              </Text>
-            </GlassView>
-            
-            <GlassView intensity={15} style={styles.detailItem}>
-              <Music size={24} color={Colors.dark.secondary} style={styles.detailIcon} />
-              <Text style={styles.detailLabel}>{t('event.details.music')}</Text>
-              <Text style={styles.detailValue}>{event.theme}</Text>
-            </GlassView>
-            
-            <GlassView intensity={15} style={styles.detailItem}>
-              <Users size={24} color={Colors.dark.success} style={styles.detailIcon} />
-              <Text style={styles.detailLabel}>{t('event.details.age')}</Text>
-              <Text style={styles.detailValue}>
-                {event.age_restriction === 0 ? t('common.all') : `${event.age_restriction}+`}
-              </Text>
-            </GlassView>
-            
-            <GlassView intensity={15} style={styles.detailItem}>
-              <Shirt size={24} color="#F472B6" style={styles.detailIcon} />
-              <Text style={styles.detailLabel}>{t('event.details.dress_code')}</Text>
-              <Text style={styles.detailValue}>{event.dress_code}</Text>
-            </GlassView>
           </View>
 
-          <View style={styles.actionButtons}>
-            <ThemedButton
-              title={t('event.actions.map')}
-              onPress={openMaps}
-              variant="outline"
-              style={{ flex: 1 }}
-              icon={<MapPin size={20} color={Colors.dark.primary} />}
-            />
-            {event.venue_plan_url && (
-              <ThemedButton
-                title={t('event.actions.view_plan')}
-                onPress={() => setShowVenuePlan(true)}
-                variant="outline"
-                style={{ flex: 1 }}
-                icon={<ImageIcon size={20} color="white" />}
-              />
+          <View style={styles.creatorSection}>
+            <View style={styles.creatorInfo}>
+              <UserIcon size={16} color={Colors.light.textSecondary} />
+              <Text style={styles.creatorName}>{creatorName}</Text>
+            </View>
+          </View>
+
+          {event.description && (
+            <View style={styles.descriptionSection}>
+              <Text style={styles.description}>{event.description}</Text>
+            </View>
+          )}
+
+          <View style={styles.detailsGrid}>
+            {event.venues && (
+              <TouchableOpacity style={styles.detailItem} onPress={openMaps}>
+                <MapPin size={20} color={Colors.light.primary} />
+                <View style={styles.detailContent}>
+                  <Text style={styles.detailLabel}>Ubicación</Text>
+                  <Text style={styles.detailValue}>{event.venues.name}</Text>
+                </View>
+              </TouchableOpacity>
+            )}
+
+            {event.event_date && (
+              <View style={styles.detailItem}>
+                <Calendar size={20} color={Colors.light.primary} />
+                <View style={styles.detailContent}>
+                  <Text style={styles.detailLabel}>Fecha</Text>
+                  <Text style={styles.detailValue}>
+                    {new Date(event.event_date).toLocaleDateString(localeTag, {
+                      weekday: 'short',
+                      year: 'numeric',
+                      month: 'short',
+                      day: 'numeric',
+                    })}
+                  </Text>
+                </View>
+              </View>
+            )}
+
+            {event.event_time && (
+              <View style={styles.detailItem}>
+                <Clock size={20} color={Colors.light.primary} />
+                <View style={styles.detailContent}>
+                  <Text style={styles.detailLabel}>Hora</Text>
+                  <Text style={styles.detailValue}>{event.event_time}</Text>
+                </View>
+              </View>
+            )}
+
+            {event.ticket_price !== undefined && (
+              <View style={styles.detailItem}>
+                <Euro size={20} color={Colors.light.primary} />
+                <View style={styles.detailContent}>
+                  <Text style={styles.detailLabel}>Precio</Text>
+                  <Text style={styles.detailValue}>€{event.ticket_price.toFixed(2)}</Text>
+                </View>
+              </View>
+            )}
+
+            {availableTickets > 0 && (
+              <View style={styles.detailItem}>
+                <Ticket size={20} color={Colors.light.primary} />
+                <View style={styles.detailContent}>
+                  <Text style={styles.detailLabel}>Disponibles</Text>
+                  <Text style={styles.detailValue}>{availableTickets}</Text>
+                </View>
+              </View>
             )}
           </View>
 
-          {/* Purchase Section */}
-          <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-            <GlassView intensity={22} style={styles.purchaseCard}>
-              <LinearGradient
-                colors={['rgba(255,255,255,0.06)', 'rgba(124,58,237,0.16)', 'rgba(6,182,212,0.10)']}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-                style={StyleSheet.absoluteFill}
-              />
-              <View style={styles.purchaseHeader}>
-                <View style={{ flex: 1 }}>
-                  <Text style={[styles.purchaseTitle, { fontSize: scaleFont(22) }]}>{t('event.purchase.title')}</Text>
-                  <Text style={styles.purchaseSubtitle}>{hasVip ? t('event.purchase.subtitle_tickets_vip') : t('event.purchase.subtitle_tickets')}</Text>
-                </View>
-                <View style={styles.purchaseHeaderIcon}>
-                  <Ticket size={18} color="white" />
-                </View>
-              </View>
+          {isSoldOut && (
+            <View style={styles.soldOutBanner}>
+              <Text style={styles.soldOutText}>Entradas agotadas</Text>
+            </View>
+          )}
 
-              {!user && (
-                <View style={styles.authNotice}>
-                  <UserIcon size={16} color="white" />
-                  <Text style={styles.authNoticeText}>{t('event.purchase.sign_in_to_buy')}</Text>
-                </View>
-              )}
+          {vipLoadError && (
+            <View style={styles.errorBanner}>
+              <Text style={styles.errorText}>{vipLoadError}</Text>
+            </View>
+          )}
 
-              {vipLoadError && (
-                <View style={styles.authNotice}>
-                  <Text style={styles.authNoticeText}>
-                    {vipLoadError.includes('PGRST205')
-                      ? t('event.vip.load_failed')
-                      : t('event.vip.load_failed')}
+          <View style={styles.purchaseSection}>
+            <View style={styles.tabButtons}>
+              <TouchableOpacity
+                style={[styles.tabButton, purchaseTab === 'tickets' && styles.tabButtonActive]}
+                onPress={() => setPurchaseTab('tickets')}
+              >
+                <Text style={[styles.tabButtonText, purchaseTab === 'tickets' && styles.tabButtonTextActive]}>
+                  Entradas
+                </Text>
+              </TouchableOpacity>
+              {event.reservados_vip && event.reservados_vip.length > 0 && (
+                <TouchableOpacity
+                  style={[styles.tabButton, purchaseTab === 'vip' && styles.tabButtonActive]}
+                  onPress={() => setPurchaseTab('vip')}
+                >
+                  <Sparkles size={16} color={purchaseTab === 'vip' ? Colors.light.primary : Colors.light.textSecondary} />
+                  <Text style={[styles.tabButtonText, purchaseTab === 'vip' && styles.tabButtonTextActive]}>
+                    VIP
                   </Text>
-                </View>
+                </TouchableOpacity>
               )}
+            </View>
 
-              <View style={styles.segmentWrap}>
-                <View style={styles.segment}>
-                  <TouchableOpacity
-                    style={[styles.segmentItem, purchaseTab === 'tickets' && styles.segmentItemActive]}
-                    onPress={() => setPurchaseTab('tickets')}
-                    activeOpacity={0.9}
-                  >
-                    <Text style={[styles.segmentText, purchaseTab === 'tickets' && styles.segmentTextActive]}>{t('event.purchase.tab_tickets')}</Text>
-                  </TouchableOpacity>
-                  {hasVip && (
+            {purchaseTab === 'tickets' ? (
+              <View style={styles.ticketsPurchaseForm}>
+                <ThemedInput
+                  placeholder="Tu nombre"
+                  value={buyerName}
+                  onChangeText={setBuyerName}
+                  editable={!purchasing}
+                />
+                <ThemedInput
+                  placeholder="Tu email"
+                  value={buyerEmail}
+                  onChangeText={setBuyerEmail}
+                  keyboardType="email-address"
+                  editable={!purchasing}
+                />
+
+                {event.event_ticket_types && event.event_ticket_types.length > 0 && (
+                  <View style={styles.ticketTypeSelector}>
+                    <Text style={styles.label}>Tipo de entrada</Text>
+                    <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.ticketTypeScroll}>
+                      {event.event_ticket_types.map((type) => {
+                        const available = type.quantity - (type.sold || 0);
+                        const isSelected = selectedTicketType === type.id;
+                        return (
+                          <TouchableOpacity
+                            key={type.id}
+                            style={[styles.ticketTypeButton, isSelected && styles.ticketTypeButtonSelected]}
+                            onPress={() => setSelectedTicketType(type.id)}
+                            disabled={purchasing}
+                          >
+                            <Text style={[styles.ticketTypeButtonText, isSelected && styles.ticketTypeButtonTextSelected]}>
+                              {type.name}
+                            </Text>
+                            <Text style={[styles.ticketTypePrice, isSelected && styles.ticketTypePriceSelected]}>
+                              €{type.price.toFixed(2)}
+                            </Text>
+                            {available <= 0 ? (
+                              <Text style={[styles.ticketTypeAvailable, styles.soldOut]}>Agotado</Text>
+                            ) : (
+                              <Text style={[styles.ticketTypeAvailable, isSelected && styles.ticketTypeAvailableSelected]}>
+                                {available} disponibles
+                              </Text>
+                            )}
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </ScrollView>
+                  </View>
+                )}
+
+                <View style={styles.quantitySection}>
+                  <Text style={styles.label}>Cantidad</Text>
+                  <View style={styles.quantityControl}>
                     <TouchableOpacity
-                      style={[styles.segmentItem, purchaseTab === 'vip' && styles.segmentItemActive]}
-                      onPress={() => setPurchaseTab('vip')}
-                      activeOpacity={0.9}
+                      style={styles.quantityButton}
+                      onPress={() => setQuantity(Math.max(1, parseInt(quantity) - 1).toString())}
+                      disabled={purchasing || parseInt(quantity) <= 1}
                     >
-                      <View style={styles.segmentVipPill}>
-                        <Sparkles size={14} color={purchaseTab === 'vip' ? '#0b1020' : '#fef3c7'} />
-                        <Text style={[styles.segmentText, purchaseTab === 'vip' && styles.segmentTextActive]}>{t('event.purchase.tab_vip')}</Text>
-                      </View>
+                      <Minus size={20} color={Colors.light.text} />
                     </TouchableOpacity>
-                  )}
+                    <TextInput
+                      style={styles.quantityInput}
+                      value={quantity}
+                      onChangeText={(text) => {
+                        const num = parseInt(text) || 1;
+                        setQuantity(Math.max(1, num).toString());
+                      }}
+                      keyboardType="number-pad"
+                      editable={!purchasing}
+                    />
+                    <TouchableOpacity
+                      style={styles.quantityButton}
+                      onPress={() => setQuantity((parseInt(quantity) + 1).toString())}
+                      disabled={purchasing}
+                    >
+                      <Plus size={20} color={Colors.light.text} />
+                    </TouchableOpacity>
+                  </View>
                 </View>
-              </View>
 
-              {purchaseTab === 'vip' && hasVip && (
-                <View style={styles.vipContainer}>
-                  <View style={styles.vipHeaderRow}>
-                    <Text style={styles.inputLabel}>{t('event.vip.section_title')}</Text>
-                    <View style={styles.vipBadge}>
-                      <Text style={styles.vipBadgeText}>PREMIUM</Text>
+                <View style={styles.walletToggle}>
+                  <View style={styles.walletToggleLeft}>
+                    <Wallet size={20} color={Colors.light.primary} />
+                    <View>
+                      <Text style={styles.walletLabel}>Usar cartera</Text>
+                      <Text style={styles.walletBalance}>Saldo: €{creditBalance.toFixed(2)}</Text>
                     </View>
                   </View>
+                  <Switch
+                    value={payWithWallet}
+                    onValueChange={setPayWithWallet}
+                    disabled={purchasing || creditLoading}
+                  />
+                </View>
 
-                  <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 10 }}>
-                    {(event.reservados_vip ?? []).map((vip) => {
-                      const isSelected = selectedVipReservadoId === vip.id;
-                      const available = vip.quantity_available ?? 0;
-                      const showExtraBottle = vip.extra_bottle_price !== null && vip.extra_bottle_price !== undefined;
-                      return (
-                        <TouchableOpacity
-                          key={vip.id}
-                          onPress={() => setSelectedVipReservadoId(vip.id)}
-                          style={[
-                            styles.vipCard,
-                            isSelected && styles.vipCardSelected,
-                            available <= 0 && styles.vipCardDisabled,
-                          ]}
-                          disabled={available <= 0}
-                          activeOpacity={0.9}
-                        >
-                          <LinearGradient
-                            colors={
-                              isSelected
-                                ? ['rgba(251,191,36,0.22)', 'rgba(124,58,237,0.18)', 'rgba(6,182,212,0.10)']
-                                : ['rgba(124,58,237,0.14)', 'rgba(6,182,212,0.08)', 'rgba(255,255,255,0.04)']
-                            }
-                            start={{ x: 0, y: 0 }}
-                            end={{ x: 1, y: 1 }}
-                            style={StyleSheet.absoluteFill}
-                          />
-
-                          <View style={styles.vipCardHeaderRow}>
-                            <View style={[styles.vipTag, isSelected && styles.vipTagSelected]}>
-                              <Sparkles size={12} color={isSelected ? '#0b1020' : '#fef3c7'} />
-                              <Text style={[styles.vipTagText, isSelected && styles.vipTagTextSelected]}>VIP</Text>
-                            </View>
-                            <View
-                              style={[
-                                styles.vipStockPill,
-                                available <= 0 && styles.vipStockPillSoldOut,
-                                isSelected && styles.vipStockPillSelected,
-                              ]}
+                <ThemedButton
+                  title={purchasing ? 'Procesando...' : isSoldOut ? 'Agotado' : 'Comprar entradas'}
+                  onPress={handlePurchase}
+                  disabled={purchasing || isSoldOut || creditLoading}
+                  loading={purchasing}
+                />
+              </View>
+            ) : (
+              <View style={styles.vipPurchaseForm}>
+                {event.reservados_vip && event.reservados_vip.length > 0 ? (
+                  <>
+                    <View style={styles.vipSelector}>
+                      <Text style={styles.label}>Selecciona tu reservado VIP</Text>
+                      <ScrollView style={styles.vipList}>
+                        {event.reservados_vip.map((vip) => {
+                          const isSelected = selectedVipReservadoId === vip.id;
+                          const available = vip.quantity_available ?? 0;
+                          return (
+                            <TouchableOpacity
+                              key={vip.id}
+                              style={[styles.vipCard, isSelected && styles.vipCardSelected]}
+                              onPress={() => setSelectedVipReservadoId(vip.id)}
+                              disabled={vipPurchasing}
                             >
-                              <Text
-                                style={[
-                                  styles.vipStockText,
-                                  available <= 0 && styles.vipStockTextSoldOut,
-                                  isSelected && styles.vipStockTextSelected,
-                                ]}
-                              >
-                                {available > 0 ? t('event.tickets.available', { count: available }) : t('event.tickets.sold_out')}
-                              </Text>
-                            </View>
-                          </View>
-
-                          <View style={styles.vipCardMainRow}>
-                            <View style={{ flex: 1 }}>
-                              <Text style={[styles.vipName, isSelected && styles.vipNameSelected]} numberOfLines={1}>
-                                {vip.name}
-                              </Text>
-                              {!!vip.description && (
-                                <Text style={[styles.vipDescription, isSelected && styles.vipDescriptionSelected]} numberOfLines={2}>
+                              <View style={styles.vipCardContent}>
+                                <Text style={[styles.vipCardTitle, isSelected && styles.vipCardTitleSelected]}>
+                                  {vip.name}
+                                </Text>
+                                <Text style={[styles.vipCardDescription, isSelected && styles.vipCardDescriptionSelected]}>
                                   {vip.description}
                                 </Text>
-                              )}
-                            </View>
-                            <View style={styles.vipPriceWrap}>
-                              <Text style={styles.vipPriceLabel}>{t('event.purchase.total')}</Text>
-                              <Text style={[styles.vipPrice, isSelected && styles.vipPriceSelected]}>{formatEuro(vip.base_price)}</Text>
-                            </View>
-                          </View>
-
-                          <View style={styles.vipPillsRow}>
-                            <View style={[styles.vipPill, isSelected && styles.vipPillSelected]}>
-                              <Users size={14} color={isSelected ? '#0b1020' : 'rgba(255,255,255,0.92)'} />
-                              <Text style={[styles.vipPillText, isSelected && styles.vipPillTextSelected]}>{vip.capacity_people}p</Text>
-                            </View>
-                            <View style={[styles.vipPill, isSelected && styles.vipPillSelected]}>
-                              <Sparkles size={14} color={isSelected ? '#0b1020' : 'rgba(255,255,255,0.92)'} />
-                              <Text style={[styles.vipPillText, isSelected && styles.vipPillTextSelected]}>
-                                {t('event.vip.bottles', { count: vip.included_bottles })}
-                              </Text>
-                            </View>
-                            {showExtraBottle && (
-                              <View style={[styles.vipPill, isSelected && styles.vipPillSelected]}>
-                                <Euro size={14} color={isSelected ? '#0b1020' : 'rgba(255,255,255,0.92)'} />
-                                <Text style={[styles.vipPillText, isSelected && styles.vipPillTextSelected]}>
-                                  {t('event.vip.extra_bottle', { price: formatEuro(vip.extra_bottle_price) })}
-                                </Text>
+                                <View style={styles.vipCardFooter}>
+                                  <Text style={[styles.vipCardPrice, isSelected && styles.vipCardPriceSelected]}>
+                                    €{vip.base_price.toFixed(2)}
+                                  </Text>
+                                  {available <= 0 ? (
+                                    <Text style={[styles.vipCardAvailable, styles.soldOut]}>Agotado</Text>
+                                  ) : (
+                                    <Text style={[styles.vipCardAvailable, isSelected && styles.vipCardAvailableSelected]}>
+                                      {available} disponibles
+                                    </Text>
+                                  )}
+                                </View>
                               </View>
-                            )}
-                          </View>
-                        </TouchableOpacity>
-                      );
-                    })}
-                  </ScrollView>
-
-                  <View style={styles.vipCheckoutCard}>
-                    <LinearGradient
-                      colors={['rgba(255,255,255,0.06)', 'rgba(251,191,36,0.16)', 'rgba(124,58,237,0.10)']}
-                      start={{ x: 0, y: 0 }}
-                      end={{ x: 1, y: 1 }}
-                      style={StyleSheet.absoluteFill}
-                    />
-                    <Animated.View
-                      pointerEvents="none"
-                      style={[
-                        styles.vipLuxuryGlow,
-                        {
-                          opacity: vipGlow.interpolate({ inputRange: [0, 1], outputRange: [0.25, 0.65] }),
-                          transform: [{ scale: vipGlow.interpolate({ inputRange: [0, 1], outputRange: [1, 1.06] }) }],
-                        },
-                      ]}
-                    >
-                      <LinearGradient
-                        colors={['rgba(251,191,36,0.22)', 'rgba(255,255,255,0.08)', 'rgba(6,182,212,0.10)']}
-                        start={{ x: 0, y: 0 }}
-                        end={{ x: 1, y: 1 }}
-                        style={StyleSheet.absoluteFill}
-                      />
-                    </Animated.View>
-                    <Animated.View
-                      pointerEvents="none"
-                      style={[
-                        styles.vipLuxuryShimmer,
-                        {
-                          opacity: vipShimmer.interpolate({ inputRange: [0, 1], outputRange: [0.15, 0.45] }),
-                          transform: [
-                            {
-                              translateX: vipShimmer.interpolate({ inputRange: [0, 1], outputRange: [-140, 260] }),
-                            },
-                            { rotate: '-12deg' },
-                          ],
-                        },
-                      ]}
-                    >
-                      <LinearGradient
-                        colors={['transparent', 'rgba(255,255,255,0.16)', 'transparent']}
-                        start={{ x: 0, y: 0 }}
-                        end={{ x: 1, y: 0 }}
-                        style={StyleSheet.absoluteFill}
-                      />
-                    </Animated.View>
-                    <View style={styles.vipCheckoutTopRow}>
-                      <View style={{ flex: 1 }}>
-                        <Text style={styles.vipCheckoutLabel}>{t('event.vip.your_vip')}</Text>
-                        <Text style={styles.vipCheckoutName} numberOfLines={1}>
-                          {selectedVip?.name || '—'}
-                        </Text>
-                        {!!selectedVip?.description && (
-                          <Text style={styles.vipCheckoutDesc} numberOfLines={2}>
-                            {selectedVip.description}
-                          </Text>
-                        )}
-                      </View>
-                      <View style={styles.vipCheckoutRight}>
-                        <Text style={styles.vipCheckoutLabel}>{t('event.purchase.total')}</Text>
-                        <Text style={styles.vipCheckoutPrice}>{selectedVip ? formatEuro(selectedVip.base_price) : '—'}</Text>
-                        {!!selectedVip && (
-                          <View style={[styles.vipCheckoutStatusPill, vipAvailable > 0 ? null : styles.vipCheckoutStatusPillSoldOut]}>
-                            <Text style={[styles.vipCheckoutStatusText, vipAvailable > 0 ? null : styles.vipCheckoutStatusTextSoldOut]}>
-                              {vipAvailable > 0 ? t('event.vip.available') : t('event.tickets.sold_out')}
-                            </Text>
-                          </View>
-                        )}
-                      </View>
+                            </TouchableOpacity>
+                          );
+                        })}
+                      </ScrollView>
                     </View>
 
-                    {!!selectedVip && (
-                      <View style={styles.vipCheckoutPills}>
-                        <View style={styles.vipCheckoutPill}>
-                          <Users size={14} color="rgba(255,255,255,0.92)" />
-                          <Text style={styles.vipCheckoutPillText}>{t('event.vip.people', { count: selectedVip.capacity_people })}</Text>
-                        </View>
-                        <View style={styles.vipCheckoutPill}>
-                          <Sparkles size={14} color="rgba(255,255,255,0.92)" />
-                          <Text style={styles.vipCheckoutPillText}>{t('event.vip.bottles_included', { count: selectedVip.included_bottles })}</Text>
-                        </View>
-                        {(selectedVip.extra_bottle_price !== null && selectedVip.extra_bottle_price !== undefined) && (
-                          <View style={styles.vipCheckoutPill}>
-                            <Euro size={14} color="rgba(255,255,255,0.92)" />
-                            <Text style={styles.vipCheckoutPillText}>{t('event.vip.extra_bottle', { price: formatEuro(selectedVip.extra_bottle_price) })}</Text>
-                          </View>
-                        )}
-                      </View>
-                    )}
-                  </View>
-
-                  {user && !!selectedVip && (
-                    <View style={[styles.walletPayContainer, styles.walletPayContainerVip]}>
-                      <View style={styles.walletPayHeader}>
-                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                          <Wallet size={18} color={payVipWithWallet ? '#fbbf24' : Colors.dark.textSecondary} />
-                          <Text style={styles.walletPayLabel}>{t('event.purchase.pay_with_wallet')}</Text>
-                        </View>
-                        <Switch
-                          value={payVipWithWallet}
-                          onValueChange={setPayVipWithWallet}
-                          disabled={creditLoading}
-                          trackColor={{ false: '#767577', true: '#fbbf24' }}
-                          thumbColor={payVipWithWallet ? '#ffffff' : '#f4f3f4'}
-                        />
-                      </View>
-                      <Text style={styles.walletBalanceText}>
-                        {creditLoading ? t('event.purchase.balance_loading') : t('event.purchase.balance', { amount: creditBalance.toFixed(2) })}
-                      </Text>
-                      {payVipWithWallet && creditBalance <= 0 && (
-                        <Text style={styles.insufficientFundsText}>{t('event.purchase.no_wallet_balance')}</Text>
-                      )}
-                      {payVipWithWallet && creditBalance > 0 && creditBalance < selectedVip.base_price && (
-                        <Text style={styles.insufficientFundsText}>
-                          {t('event.purchase.wallet_split', { wallet: creditBalance.toFixed(2), card: (selectedVip.base_price - creditBalance).toFixed(2) })}
-                        </Text>
-                      )}
-                    </View>
-                  )}
-
-                  <ThemedButton
-                    title={
-                      vipAvailable <= 0
-                        ? t('event.tickets.sold_out')
-                        : user
-                          ? payVipWithWallet
-                            ? selectedVip && creditBalance > 0 && creditBalance < selectedVip.base_price
-                              ? t('event.purchase.pay_split')
-                              : t('event.purchase.pay_wallet')
-                            : t('event.purchase.pay_card')
-                          : t('auth.login')
-                    }
-                    onPress={handleVipPurchase}
-                    loading={vipPurchasing || stripeLoading}
-                    disabled={
-                      vipPurchasing ||
-                      stripeLoading ||
-                      !selectedVipReservadoId ||
-                      vipAvailable <= 0
-                    }
-                    style={styles.vipBuyButton}
-                    variant="primary"
-                    icon={
-                      user && vipAvailable > 0 ? (
-                        payVipWithWallet ? <Wallet size={18} color="white" /> : <CreditCard size={18} color="white" />
-                      ) : undefined
-                    }
-                  />
-                </View>
-              )}
-
-              {/* Ticket Type Selector */}
-              {purchaseTab === 'tickets' && event.event_ticket_types && event.event_ticket_types.length > 0 && (
-                <View style={styles.ticketTypeContainer}>
-                  <Text style={styles.inputLabel}>{t('event.tickets.ticket_type')}</Text>
-                  <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
-                    {event.event_ticket_types.map((type) => {
-                       const isSelected = selectedTicketType === type.id;
-                       const available = type.quantity - (type.sold || 0);
-                       return (
-                         <TouchableOpacity
-                           key={type.id}
-                           onPress={() => setSelectedTicketType(type.id)}
-                           style={[
-                             styles.ticketTypeCard,
-                             isSelected && styles.ticketTypeCardSelected,
-                             available <= 0 && styles.ticketTypeCardDisabled
-                           ]}
-                           disabled={available <= 0}
-                           activeOpacity={0.9}
-                         >
-                           <LinearGradient
-                             colors={
-                               isSelected
-                                 ? ['rgba(124,58,237,0.22)', 'rgba(6,182,212,0.10)', 'rgba(255,255,255,0.04)']
-                                : ['rgba(255,255,255,0.10)', 'rgba(255,255,255,0.04)', 'rgba(124,58,237,0.06)']
-                             }
-                             start={{ x: 0, y: 0 }}
-                             end={{ x: 1, y: 1 }}
-                             style={StyleSheet.absoluteFill}
-                           />
-                           <View style={styles.ticketTypeTopRow}>
-                             <Text style={[styles.ticketTypeName, isSelected && styles.ticketTypeNameSelected]} numberOfLines={1}>
-                               {type.name}
-                             </Text>
-                             <View
-                               style={[
-                                 styles.ticketTypeAvailPill,
-                                 available <= 0 && styles.ticketTypeAvailPillSoldOut,
-                                 isSelected && available > 0 && styles.ticketTypeAvailPillSelected,
-                               ]}
-                             >
-                               <Text
-                                 style={[
-                                   styles.ticketTypeAvailText,
-                                   available <= 0 && styles.ticketTypeAvailTextSoldOut,
-                                   isSelected && available > 0 && styles.ticketTypeAvailTextSelected,
-                                 ]}
-                               >
-                                 {available <= 0 ? t('event.tickets.sold_out') : t('event.tickets.remaining', { count: available })}
-                               </Text>
-                             </View>
-                           </View>
-                           <View style={styles.ticketTypeBottomRow}>
-                             <Text style={[styles.ticketTypePrice, isSelected && styles.ticketTypePriceSelected]}>
-                               {formatEuro(type.price)}
-                             </Text>
-                             <Text style={styles.ticketTypeUnit}>{t('event.tickets.per_ticket')}</Text>
-                           </View>
-                         </TouchableOpacity>
-                       );
-                    })}
-                  </ScrollView>
-                </View>
-              )}
-
-              {purchaseTab === 'tickets' && (
-                <>
-                  <View style={styles.priceRow}>
-                    <View style={{ flex: 1 }}>
-                      <Text style={styles.priceLabel}>{t('event.tickets.price')}</Text>
-                      <Text style={[styles.availableText, currentAvailable > 0 ? null : { color: Colors.dark.error }]}>
-                        {currentAvailable > 0 ? t('event.tickets.available', { count: currentAvailable }) : t('event.tickets.sold_out')}
-                      </Text>
-                    </View>
-                    <Text style={styles.priceValue}>{formatEuro(currentPrice)}</Text>
-                  </View>
-
-                  <View style={styles.inputsContainer}>
                     <ThemedInput
-                      placeholder={t('event.tickets.full_name_placeholder')}
+                      placeholder="Tu nombre"
                       value={buyerName}
                       onChangeText={setBuyerName}
-                      icon={UserIcon}
-                      editable={!!user && currentAvailable > 0}
-                      style={styles.purchaseInput}
+                      editable={!vipPurchasing}
                     />
-
                     <ThemedInput
-                      placeholder={t('event.tickets.email_placeholder')}
+                      placeholder="Tu email"
                       value={buyerEmail}
                       onChangeText={setBuyerEmail}
-                      icon={Mail}
                       keyboardType="email-address"
-                      autoCapitalize="none"
-                      editable={!!user && currentAvailable > 0}
-                      style={styles.purchaseInput}
+                      editable={!vipPurchasing}
                     />
 
-                    <View style={styles.stepperRow}>
-                      <Text style={styles.stepperLabel}>{t('event.tickets.quantity')}</Text>
-                      <View style={styles.stepper}>
-                        <TouchableOpacity
-                          style={[styles.stepperButton, (safeQty <= 1 || currentAvailable <= 0) && styles.stepperButtonDisabled]}
-                          onPress={() => setQuantity(String(Math.max(1, safeQty - 1)))}
-                          disabled={safeQty <= 1 || currentAvailable <= 0}
-                          activeOpacity={0.85}
-                        >
-                          <Minus size={16} color="white" />
-                        </TouchableOpacity>
-                        <View style={styles.stepperValue}>
-                          <Text style={styles.stepperValueText}>{safeQty}</Text>
+                    <View style={styles.walletToggle}>
+                      <View style={styles.walletToggleLeft}>
+                        <Wallet size={20} color={Colors.light.primary} />
+                        <View>
+                          <Text style={styles.walletLabel}>Usar cartera</Text>
+                          <Text style={styles.walletBalance}>Saldo: €{creditBalance.toFixed(2)}</Text>
                         </View>
-                        <TouchableOpacity
-                          style={[styles.stepperButton, (safeQty >= Math.min(10, currentAvailable) || currentAvailable <= 0) && styles.stepperButtonDisabled]}
-                          onPress={() => setQuantity(String(Math.min(Math.min(10, currentAvailable), safeQty + 1)))}
-                          disabled={safeQty >= Math.min(10, currentAvailable) || currentAvailable <= 0}
-                          activeOpacity={0.85}
-                        >
-                          <Plus size={16} color="white" />
-                        </TouchableOpacity>
                       </View>
+                      <Switch
+                        value={payVipWithWallet}
+                        onValueChange={setPayVipWithWallet}
+                        disabled={vipPurchasing || creditLoading}
+                      />
                     </View>
-                  </View>
 
-                  {user && (
-                    <View style={styles.walletPayContainer}>
-                      <View style={styles.walletPayHeader}>
-                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                          <Wallet size={18} color={payWithWallet ? Colors.dark.primary : Colors.dark.textSecondary} />
-                          <Text style={styles.walletPayLabel}>{t('event.purchase.pay_with_wallet')}</Text>
-                        </View>
-                        <Switch
-                          value={payWithWallet}
-                          onValueChange={setPayWithWallet}
-                          disabled={creditLoading}
-                          trackColor={{ false: '#767577', true: Colors.dark.primary }}
-                          thumbColor={payWithWallet ? '#ffffff' : '#f4f3f4'}
-                        />
-                      </View>
-                      <Text style={styles.walletBalanceText}>
-                        {creditLoading ? t('event.purchase.balance_loading') : t('event.purchase.balance', { amount: creditBalance.toFixed(2) })}
-                      </Text>
-                      {payWithWallet && creditBalance <= 0 && (
-                        <Text style={styles.insufficientFundsText}>{t('event.purchase.no_wallet_balance')}</Text>
-                      )}
-                      {payWithWallet && creditBalance > 0 && creditBalance < total && (
-                        <Text style={styles.insufficientFundsText}>
-                          {t('event.purchase.wallet_split', { wallet: creditBalance.toFixed(2), card: (total - creditBalance).toFixed(2) })}
-                        </Text>
-                      )}
-                    </View>
-                  )}
-
-                  <View style={styles.totalContainer}>
-                    <Text style={styles.totalLabel}>{t('event.purchase.total')}</Text>
-                    <Text style={styles.totalAmount}>{formatEuro(total)}</Text>
-                  </View>
-
-                  <ThemedButton
-                    title={
-                      currentAvailable <= 0
-                        ? t('event.tickets.sold_out')
-                        : user
-                          ? payWithWallet
-                            ? creditBalance > 0 && creditBalance < total
-                              ? t('event.purchase.pay_split')
-                              : t('event.purchase.pay_wallet')
-                            : t('event.purchase.pay_card')
-                          : t('auth.login')
-                    }
-                    onPress={handlePurchase}
-                    loading={purchasing || stripeLoading}
-                    disabled={purchasing || stripeLoading || currentAvailable <= 0 || (payWithWallet && creditLoading)}
-                    style={[styles.confirmButton, currentAvailable <= 0 && { opacity: 0.5 }]}
-                    variant={user ? 'secondary' : 'primary'}
-                  />
-                </>
-              )}
-            </GlassView>
-          </KeyboardAvoidingView>
+                    <ThemedButton
+                      title={vipPurchasing ? 'Procesando...' : 'Comprar VIP'}
+                      onPress={handleVipPurchase}
+                      disabled={vipPurchasing || creditLoading}
+                      loading={vipPurchasing}
+                    />
+                  </>
+                ) : (
+                  <Text style={styles.noVipText}>No hay reservados VIP disponibles</Text>
+                )}
+              </View>
+            )}
           </View>
         </View>
       </ScrollView>
 
-      <Modal
-        visible={showVenuePlan}
-        transparent={true}
-        animationType="fade"
-        onRequestClose={() => setShowVenuePlan(false)}
-      >
-        <View style={styles.modalContainer}>
-          <TouchableOpacity 
-            style={[styles.modalCloseButton, { top: insets.top + 10 }]} 
-            onPress={() => setShowVenuePlan(false)}
-          >
-            <GlassView intensity={40} style={styles.closeButtonGlass}>
-              <X size={24} color="white" />
-            </GlassView>
-          </TouchableOpacity>
-          <Image 
-            source={{ uri: event.venue_plan_url }} 
-            style={styles.fullScreenImage} 
-            resizeMode="contain" 
-          />
-        </View>
-      </Modal>
-    </View>
+      {purchaseSuccess && (
+        <PurchaseConfirmation
+          title={purchaseSuccess.title}
+          message={purchaseSuccess.message}
+          variant={purchaseSuccess.variant}
+          onClose={() => setPurchaseSuccess(null)}
+        />
+      )}
+    </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.dark.background,
+    backgroundColor: Colors.light.background,
   },
-  loadingContainer: {
+  scrollView: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: Colors.dark.background,
   },
-  errorText: {
-    color: Colors.dark.text,
-    fontSize: 18,
-    marginBottom: 20,
-  },
-  imageContainer: {
-    height: 400,
-    width: '100%',
-    position: 'relative',
-  },
-  posterImage: {
-    width: '100%',
-    height: '100%',
-    resizeMode: 'cover',
-  },
-  imageOverlay: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    height: 200,
-  },
-  backButton: {
-    position: 'absolute',
-    top: 50,
-    left: 20,
-    zIndex: 10,
-  },
-  shareButton: {
-    position: 'absolute',
-    top: 50,
-    right: 20,
-    zIndex: 10,
-  },
-  backButtonGlass: {
-    borderRadius: 50,
-    padding: 12,
-    backgroundColor: 'rgba(0,0,0,0.30)',
-    borderWidth: 0,
-  },
-  soldBadgeContainer: {
-    position: 'absolute',
-    bottom: 40,
-    right: 20,
-  },
-  soldBadge: {
+  header: {
     flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: 8,
     paddingHorizontal: 16,
-    borderRadius: 20,
-    gap: 8,
-    backgroundColor: 'rgba(0,0,0,0.6)',
+    paddingVertical: 12,
   },
-  soldText: {
-    color: Colors.dark.success,
-    fontWeight: 'bold',
-    fontSize: 14,
+  eventImage: {
+    width: '100%',
+    height: 300,
+    backgroundColor: Colors.light.cardBackground,
   },
   content: {
-    padding: 24,
-    marginTop: -40,
+    paddingVertical: 20,
   },
-  title: {
-    fontSize: 32,
-    fontWeight: '800',
-    color: Colors.dark.text,
-    marginBottom: 12,
-    letterSpacing: -0.4,
-  },
-  verifiedRow: {
-    alignSelf: 'flex-start',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 999,
-    backgroundColor: 'rgba(34, 197, 94, 0.12)',
-    borderWidth: 1,
-    borderColor: 'rgba(34, 197, 94, 0.25)',
-    marginBottom: 12,
-    maxWidth: '100%',
-  },
-  verifiedText: {
-    color: '#4ade80',
-    fontWeight: '800',
-    fontSize: 12,
-    letterSpacing: 0.2,
-  },
-  description: {
-    fontSize: 16,
-    color: Colors.dark.textSecondary,
-    lineHeight: 24,
-    marginBottom: 24,
-  },
-  infoCard: {
-    marginBottom: 32,
-    padding: 0, // Reset padding as inner views handle it
-  },
-  infoRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 16,
-  },
-  divider: {
-    height: 1,
-    backgroundColor: Colors.dark.border,
-    marginLeft: 56,
-  },
-  iconBox: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
-    backgroundColor: 'rgba(107, 78, 255, 0.10)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 16,
-  },
-  infoContent: {
-    flex: 1,
-  },
-  infoLabel: {
-    fontSize: 12,
-    color: Colors.dark.textSecondary,
-    marginBottom: 4,
-  },
-  infoValue: {
-    fontSize: 18,
-    color: Colors.dark.text,
-    fontWeight: 'bold',
-    flexWrap: 'wrap',
-  },
-  addressText: {
-    fontSize: 14,
-    color: Colors.dark.textSecondary,
-    marginTop: 2,
-  },
-  sectionTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: Colors.dark.text,
+  titleSection: {
     marginBottom: 16,
   },
-  detailsGrid: {
+  eventTitle: {
+    fontSize: 28,
+    fontWeight: '800',
+    color: Colors.light.text,
+    marginBottom: 12,
+  },
+  eventTypeBadge: {
+    alignSelf: 'flex-start',
+    backgroundColor: Colors.light.primary,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+  },
+  eventTypeText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '600',
+    textTransform: 'capitalize',
+  },
+  creatorSection: {
+    marginBottom: 20,
+  },
+  creatorInfo: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
+    alignItems: 'center',
+    gap: 8,
+  },
+  creatorName: {
+    fontSize: 14,
+    color: Colors.light.textSecondary,
+  },
+  descriptionSection: {
+    marginBottom: 20,
+  },
+  description: {
+    fontSize: 14,
+    color: Colors.light.textSecondary,
+    lineHeight: 20,
+  },
+  detailsGrid: {
     gap: 12,
-    marginBottom: 24,
+    marginBottom: 20,
   },
   detailItem: {
-    width: '48%',
-    alignItems: 'center',
-    padding: 16,
-    backgroundColor: 'rgba(255,255,255,0.05)',
-    borderRadius: 18,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.10)',
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 12,
+    padding: 12,
+    backgroundColor: Colors.light.cardBackground,
+    borderRadius: 12,
   },
-  detailIcon: {
-    marginBottom: 8,
+  detailContent: {
+    flex: 1,
   },
   detailLabel: {
     fontSize: 12,
-    color: Colors.dark.textSecondary,
+    color: Colors.light.textSecondary,
     marginBottom: 4,
   },
   detailValue: {
     fontSize: 14,
-    color: Colors.dark.text,
-    fontWeight: 'bold',
+    fontWeight: '600',
+    color: Colors.light.text,
+  },
+  soldOutBanner: {
+    backgroundColor: '#ff4444',
+    padding: 12,
+    borderRadius: 8,
+    marginBottom: 20,
+  },
+  soldOutText: {
+    color: '#fff',
+    fontWeight: '600',
     textAlign: 'center',
   },
-  actionButtons: {
-    flexDirection: 'row',
-    gap: 12,
-    marginBottom: 32,
-  },
-  modalContainer: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.9)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  modalCloseButton: {
-    position: 'absolute',
-    top: 50,
-    right: 20,
-    zIndex: 10,
-  },
-  closeButtonGlass: {
-    borderRadius: 50,
+  errorBanner: {
+    backgroundColor: '#ffebee',
     padding: 12,
-    backgroundColor: 'rgba(255,255,255,0.1)',
+    borderRadius: 8,
+    marginBottom: 20,
+    borderLeftWidth: 4,
+    borderLeftColor: '#ff4444',
   },
-  fullScreenImage: {
-    width: '100%',
-    height: '80%',
-  },
-  vipContainer: {
-    marginBottom: 24,
-  },
-  vipHeaderRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 12,
-  },
-  vipBadge: {
-    borderRadius: 999,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderWidth: 1,
-    borderColor: 'rgba(212,175,55,0.55)',
-    backgroundColor: 'rgba(255,255,255,0.06)',
-  },
-  vipBadgeText: {
-    color: '#fef3c7',
-    fontWeight: '900',
-    fontSize: 11,
-    letterSpacing: 2,
-  },
-  vipCard: {
-    padding: 14,
-    borderRadius: 18,
-    backgroundColor: 'rgba(255,255,255,0.05)',
-    minWidth: 240,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.14)',
-    overflow: 'hidden',
-  },
-  vipCardSelected: {
-    borderColor: 'rgba(251,191,36,0.55)',
-  },
-  vipCardDisabled: {
-    opacity: 0.5,
-  },
-  vipCardHeaderRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 10,
-    marginBottom: 10,
-  },
-  vipTag: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 999,
-    backgroundColor: 'rgba(0,0,0,0.22)',
-    borderWidth: 1,
-    borderColor: 'rgba(251,191,36,0.38)',
-  },
-  vipTagSelected: {
-    backgroundColor: 'rgba(251,191,36,0.95)',
-    borderColor: 'rgba(251,191,36,0.95)',
-  },
-  vipTagText: {
-    color: '#fef3c7',
-    fontWeight: '900',
-    fontSize: 11,
-    letterSpacing: 1.4,
-  },
-  vipTagTextSelected: {
-    color: '#0b1020',
-  },
-  vipStockPill: {
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 999,
-    backgroundColor: 'rgba(255,255,255,0.08)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.10)',
-  },
-  vipStockPillSelected: {
-    backgroundColor: 'rgba(0,0,0,0.25)',
-    borderColor: 'rgba(0,0,0,0.20)',
-  },
-  vipStockPillSoldOut: {
-    backgroundColor: 'rgba(239,68,68,0.16)',
-    borderColor: 'rgba(239,68,68,0.30)',
-  },
-  vipStockText: {
-    color: 'rgba(255,255,255,0.88)',
+  errorText: {
+    color: '#c62828',
     fontSize: 12,
-    fontWeight: '800',
   },
-  vipStockTextSelected: {
-    color: 'rgba(255,255,255,0.92)',
+  purchaseSection: {
+    gap: 16,
   },
-  vipStockTextSoldOut: {
-    color: '#fecaca',
-  },
-  vipCardMainRow: {
+  tabButtons: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 12,
-  },
-  vipName: {
-    color: 'white',
-    fontSize: 16,
-    fontWeight: '900',
-  },
-  vipNameSelected: {
-    color: 'white',
-  },
-  vipDescription: {
-    marginTop: 6,
-    color: 'rgba(255,255,255,0.74)',
-    fontSize: 12,
-    fontWeight: '600',
-    lineHeight: 16,
-  },
-  vipDescriptionSelected: {
-    color: 'rgba(255,255,255,0.86)',
-  },
-  vipPriceWrap: {
-    alignItems: 'flex-end',
-  },
-  vipPriceLabel: {
-    color: 'rgba(255,255,255,0.70)',
-    fontSize: 12,
-    fontWeight: '800',
-  },
-  vipPrice: {
-    color: '#fef3c7',
-    fontSize: 18,
-    fontWeight: '900',
-    marginTop: 2,
-  },
-  vipPriceSelected: {
-    color: '#fbbf24',
-  },
-  vipPillsRow: {
-    marginTop: 12,
-    flexDirection: 'row',
-    flexWrap: 'wrap',
     gap: 8,
-  },
-  vipPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    borderRadius: 12,
-    backgroundColor: 'rgba(255,255,255,0.06)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.12)',
-  },
-  vipPillSelected: {
-    backgroundColor: 'rgba(251,191,36,0.92)',
-    borderColor: 'rgba(251,191,36,0.92)',
-  },
-  vipPillText: {
-    color: 'rgba(255,255,255,0.92)',
-    fontSize: 12,
-    fontWeight: '800',
-  },
-  vipPillTextSelected: {
-    color: '#0b1020',
-  },
-  vipBuyButton: {
-    marginTop: 12,
-  },
-  vipCheckoutCard: {
-    marginTop: 14,
-    padding: 16,
-    borderRadius: 20,
-    backgroundColor: 'rgba(255,255,255,0.06)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.16)',
-    overflow: 'hidden',
-  },
-  vipLuxuryGlow: {
-    position: 'absolute',
-    top: -80,
-    left: -80,
-    right: -80,
-    bottom: -80,
-  },
-  vipLuxuryShimmer: {
-    position: 'absolute',
-    top: -40,
-    bottom: -40,
-    width: 140,
-  },
-  vipCheckoutTopRow: {
-    flexDirection: 'row',
-    gap: 12,
-    alignItems: 'flex-start',
-  },
-  vipCheckoutRight: {
-    alignItems: 'flex-end',
-    minWidth: 96,
-  },
-  vipCheckoutLabel: {
-    color: 'rgba(255,255,255,0.78)',
-    fontSize: 12,
-    fontWeight: '800',
-  },
-  vipCheckoutName: {
-    marginTop: 6,
-    color: 'white',
-    fontSize: 16,
-    fontWeight: '900',
-  },
-  vipCheckoutDesc: {
-    marginTop: 6,
-    color: 'rgba(255,255,255,0.70)',
-    fontSize: 12,
-    fontWeight: '600',
-    lineHeight: 16,
-  },
-  vipCheckoutPrice: {
-    marginTop: 6,
-    color: '#fef3c7',
-    fontSize: 20,
-    fontWeight: '900',
-  },
-  vipCheckoutStatusPill: {
-    marginTop: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 999,
-    backgroundColor: 'rgba(16,185,129,0.16)',
-    borderWidth: 1,
-    borderColor: 'rgba(16,185,129,0.28)',
-  },
-  vipCheckoutStatusPillSoldOut: {
-    backgroundColor: 'rgba(239,68,68,0.16)',
-    borderColor: 'rgba(239,68,68,0.30)',
-  },
-  vipCheckoutStatusText: {
-    color: '#bbf7d0',
-    fontSize: 12,
-    fontWeight: '900',
-  },
-  vipCheckoutStatusTextSoldOut: {
-    color: '#fecaca',
-  },
-  vipCheckoutPills: {
-    marginTop: 14,
-    gap: 10,
-  },
-  vipCheckoutPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    borderRadius: 14,
-    backgroundColor: 'rgba(255,255,255,0.06)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.10)',
-  },
-  vipCheckoutPillText: {
-    flex: 1,
-    color: 'rgba(255,255,255,0.90)',
-    fontSize: 13,
-    fontWeight: '700',
-  },
-  ticketTypeContainer: {
-    marginBottom: 20,
-  },
-  ticketTypeCard: {
-    padding: 14,
-    borderRadius: 18,
-    backgroundColor: 'rgba(255,255,255,0.06)',
-    minWidth: 190,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.18)',
-    overflow: 'hidden',
-  },
-  ticketTypeCardSelected: {
-    borderColor: Colors.dark.primary,
-  },
-  ticketTypeCardDisabled: {
-    opacity: 0.5,
-  },
-  ticketTypeTopRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    justifyContent: 'space-between',
-    gap: 10,
-  },
-  ticketTypeAvailPill: {
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 999,
-    backgroundColor: 'rgba(255,255,255,0.08)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.10)',
-  },
-  ticketTypeAvailPillSelected: {
-    backgroundColor: 'rgba(124,58,237,0.20)',
-    borderColor: 'rgba(124,58,237,0.35)',
-  },
-  ticketTypeAvailPillSoldOut: {
-    backgroundColor: 'rgba(239,68,68,0.16)',
-    borderColor: 'rgba(239,68,68,0.30)',
-  },
-  ticketTypeAvailText: {
-    color: 'rgba(255,255,255,0.86)',
-    fontSize: 12,
-    fontWeight: '800',
-  },
-  ticketTypeAvailTextSelected: {
-    color: 'rgba(255,255,255,0.92)',
-  },
-  ticketTypeAvailTextSoldOut: {
-    color: '#fecaca',
-  },
-  ticketTypeName: {
-    color: 'white',
-    fontSize: 15,
-    fontWeight: '900',
-    flex: 1,
-  },
-  ticketTypeNameSelected: {
-    color: 'white',
-  },
-  ticketTypePrice: {
-    color: 'white',
-    fontSize: 20,
-    fontWeight: '900',
-  },
-  ticketTypePriceSelected: {
-    color: '#c4b5fd',
-  },
-  ticketTypeBottomRow: {
-    marginTop: 12,
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    justifyContent: 'space-between',
-    gap: 10,
-  },
-  ticketTypeUnit: {
-    color: 'rgba(255,255,255,0.68)',
-    fontSize: 12,
-    fontWeight: '700',
-    paddingBottom: 3,
-  },
-  purchaseCard: {
-    borderRadius: 24,
-    padding: 18,
-    marginTop: 18,
-    marginBottom: 36,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.18)',
-    overflow: 'hidden',
-    backgroundColor: 'rgba(255,255,255,0.06)',
-  },
-  purchaseHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 20,
-  },
-  purchaseTitle: {
-    fontSize: 22,
-    fontWeight: 'bold',
-    color: 'white',
-  },
-  purchaseSubtitle: {
-    marginTop: 6,
-    color: 'rgba(255,255,255,0.70)',
-    fontSize: 13,
-    fontWeight: '600',
-  },
-  purchaseHeaderIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'rgba(255,255,255,0.10)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.10)',
-  },
-  authNotice: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(255,255,255,0.2)',
-    padding: 12,
-    borderRadius: 12,
-    marginBottom: 20,
-    gap: 10,
-  },
-  authNoticeText: {
-    color: 'white',
-    fontSize: 14,
-    fontWeight: '500',
-  },
-  segmentWrap: {
     marginBottom: 16,
   },
-  segment: {
-    flexDirection: 'row',
-    backgroundColor: 'rgba(255,255,255,0.06)',
-    borderRadius: 14,
-    padding: 4,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.14)',
-  },
-  segmentItem: {
+  tabButton: {
     flex: 1,
-    paddingVertical: 10,
-    borderRadius: 11,
-    alignItems: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    backgroundColor: Colors.light.cardBackground,
+    flexDirection: 'row',
     justifyContent: 'center',
-  },
-  segmentItemActive: {
-    backgroundColor: 'rgba(255,255,255,0.12)',
-  },
-  segmentText: {
-    color: 'rgba(255,255,255,0.72)',
-    fontWeight: '800',
-    fontSize: 13,
-    letterSpacing: 0.2,
-  },
-  segmentTextActive: {
-    color: 'white',
-  },
-  segmentVipPill: {
-    flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: 8,
   },
-  priceRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 24,
-    backgroundColor: 'rgba(255,255,255,0.06)',
-    padding: 16,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.10)',
+  tabButtonActive: {
+    backgroundColor: Colors.light.primary,
   },
-  priceLabel: {
-    color: 'rgba(255,255,255,0.8)',
+  tabButtonText: {
     fontSize: 14,
+    fontWeight: '600',
+    color: Colors.light.textSecondary,
   },
-  inputLabel: {
-    color: 'white',
-    fontSize: 16,
-    fontWeight: 'bold',
-    marginBottom: 12,
+  tabButtonTextActive: {
+    color: '#fff',
   },
-  availableText: {
-    color: Colors.dark.success,
-    fontSize: 12,
-    fontWeight: 'bold',
-    marginTop: 4,
+  ticketsPurchaseForm: {
+    gap: 12,
   },
-  priceValue: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    color: 'white',
+  ticketTypeSelector: {
+    gap: 8,
   },
-  inputsContainer: {
-    marginBottom: 20,
+  label: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: Colors.light.text,
   },
-  purchaseInput: {
-    backgroundColor: 'rgba(255,255,255,0.06)',
-    borderColor: 'rgba(255,255,255,0.12)',
+  ticketTypeScroll: {
+    marginHorizontal: -16,
+    paddingHorizontal: 16,
   },
-  stepperRow: {
-    marginTop: 14,
-    padding: 14,
-    borderRadius: 16,
-    backgroundColor: 'rgba(255,255,255,0.06)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.12)',
-    flexDirection: 'row',
+  ticketTypeButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    backgroundColor: Colors.light.cardBackground,
+    marginRight: 8,
+    minWidth: 100,
     alignItems: 'center',
-    justifyContent: 'space-between',
   },
-  stepperLabel: {
-    color: 'rgba(255,255,255,0.78)',
+  ticketTypeButtonSelected: {
+    backgroundColor: Colors.light.primary,
+  },
+  ticketTypeButtonText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: Colors.light.text,
+  },
+  ticketTypeButtonTextSelected: {
+    color: '#fff',
+  },
+  ticketTypePrice: {
     fontSize: 14,
     fontWeight: '700',
+    color: Colors.light.primary,
+    marginTop: 4,
   },
-  stepper: {
+  ticketTypePriceSelected: {
+    color: '#fff',
+  },
+  ticketTypeAvailable: {
+    fontSize: 10,
+    color: Colors.light.textSecondary,
+    marginTop: 2,
+  },
+  ticketTypeAvailableSelected: {
+    color: 'rgba(255,255,255,0.8)',
+  },
+  soldOut: {
+    color: '#ff4444',
+  },
+  quantitySection: {
+    gap: 8,
+  },
+  quantityControl: {
     flexDirection: 'row',
     alignItems: 'center',
-    borderRadius: 14,
-    backgroundColor: 'rgba(255,255,255,0.08)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.10)',
-    overflow: 'hidden',
+    gap: 8,
+    backgroundColor: Colors.light.cardBackground,
+    borderRadius: 8,
+    paddingHorizontal: 8,
   },
-  stepperButton: {
-    width: 36,
-    height: 36,
-    alignItems: 'center',
-    justifyContent: 'center',
+  quantityButton: {
+    padding: 8,
   },
-  stepperButtonDisabled: {
-    opacity: 0.45,
-  },
-  stepperValue: {
-    width: 46,
-    height: 36,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'rgba(255,255,255,0.06)',
-  },
-  stepperValueText: {
-    color: 'white',
-    fontWeight: '900',
-    fontSize: 14,
-  },
-  totalContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 24,
-    paddingTop: 16,
-    borderTopWidth: 1,
-    borderTopColor: 'rgba(255,255,255,0.2)',
-  },
-  totalLabel: {
-    fontSize: 18,
-    color: 'white',
-    fontWeight: '600',
-  },
-  totalAmount: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: 'white',
-  },
-  confirmButton: {
-    marginTop: 8,
-  },
-  walletPayContainer: {
-    backgroundColor: 'rgba(255,255,255,0.07)',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 24,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.10)',
-  },
-  walletPayContainerVip: {
-    borderColor: 'rgba(251,191,36,0.28)',
-    backgroundColor: 'rgba(251,191,36,0.08)',
-    marginTop: 24,
-  },
-  walletPayHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  walletPayLabel: {
-    color: 'white',
+  quantityInput: {
+    flex: 1,
+    textAlign: 'center',
     fontSize: 16,
     fontWeight: '600',
+    color: Colors.light.text,
+    paddingVertical: 8,
   },
-  walletBalanceText: {
-    color: Colors.dark.textSecondary,
+  walletToggle: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 12,
+    backgroundColor: Colors.light.cardBackground,
+    borderRadius: 8,
+  },
+  walletToggleLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  walletLabel: {
     fontSize: 14,
+    fontWeight: '600',
+    color: Colors.light.text,
   },
-  insufficientFundsText: {
-    color: Colors.dark.error,
+  walletBalance: {
     fontSize: 12,
-    marginTop: 8,
+    color: Colors.light.textSecondary,
+    marginTop: 2,
+  },
+  vipPurchaseForm: {
+    gap: 12,
+  },
+  vipSelector: {
+    gap: 8,
+  },
+  vipList: {
+    maxHeight: 300,
+  },
+  vipCard: {
+    padding: 12,
+    backgroundColor: Colors.light.cardBackground,
+    borderRadius: 8,
+    marginBottom: 8,
+    borderWidth: 2,
+    borderColor: 'transparent',
+  },
+  vipCardSelected: {
+    borderColor: Colors.light.primary,
+    backgroundColor: 'rgba(124, 58, 237, 0.1)',
+  },
+  vipCardContent: {
+    gap: 8,
+  },
+  vipCardTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: Colors.light.text,
+  },
+  vipCardTitleSelected: {
+    color: Colors.light.primary,
+  },
+  vipCardDescription: {
+    fontSize: 12,
+    color: Colors.light.textSecondary,
+  },
+  vipCardDescriptionSelected: {
+    color: Colors.light.text,
+  },
+  vipCardFooter: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  vipCardPrice: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: Colors.light.primary,
+  },
+  vipCardPriceSelected: {
+    color: Colors.light.primary,
+  },
+  vipCardAvailable: {
+    fontSize: 10,
+    color: Colors.light.textSecondary,
+  },
+  vipCardAvailableSelected: {
+    color: Colors.light.primary,
+  },
+  noVipText: {
+    textAlign: 'center',
+    color: Colors.light.textSecondary,
+    fontSize: 14,
+    paddingVertical: 20,
+  },
+  emptyState: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  emptyText: {
+    fontSize: 16,
+    color: Colors.light.textSecondary,
   },
 });
+
