@@ -49,7 +49,10 @@ function createApp() {
   app.use(morgan(env.nodeEnv === 'production' ? 'combined' : 'dev'));
 
   app.get('/', (req, res) => res.send('Eclipse API viva 🚀'));
-  app.get('/health', (req, res) => res.json({ ok: true }));
+  app.get('/health', (req, res) => {
+    res.setHeader('X-Eclipse-Proxy', 'health-v2');
+    return res.json({ ok: true, service: 'backend', version: 'health-v2' });
+  });
   app.get('/.well-known/apple-app-site-association', (req, res) => {
     const teamId = String(process.env.APPLE_TEAM_ID || '').trim();
     const bundleId = String(process.env.IOS_BUNDLE_ID || 'com.achraf.eclipse').trim();
@@ -101,6 +104,42 @@ function createApp() {
       )
     );
   });
+  app.get('/event/:id', (req, res) => {
+    const id = String(req.params.id || '').trim();
+    if (!id) return res.status(400).send('Missing id');
+    const deepLink = `eclipse://event/${encodeURIComponent(id)}`;
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    return res.status(200).send(`<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Abrir evento</title>
+    <style>
+      body { margin:0; font-family: -apple-system, BlinkMacSystemFont, Segoe UI, Roboto, Arial, sans-serif; background:#0f0f1a; color:#fff; }
+      .wrap { min-height:100vh; display:flex; align-items:center; justify-content:center; padding:24px; }
+      .card { max-width:520px; width:100%; background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.12); border-radius:18px; padding:22px; }
+      h1 { margin:0 0 10px; font-size:22px; }
+      p { margin:0 0 16px; color:rgba(255,255,255,0.78); line-height:1.45; }
+      a.btn { display:inline-block; background:#7c3aed; color:#fff; text-decoration:none; padding:12px 16px; border-radius:14px; font-weight:800; }
+      .muted { margin-top:10px; font-size:12px; color:rgba(255,255,255,0.55); }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <div class="card">
+        <h1>Abrir evento</h1>
+        <p>Si tienes la app instalada, se abrirá automáticamente.</p>
+        <a class="btn" href="${deepLink}">Abrir en la app</a>
+        <div class="muted">Si no se abre automáticamente, pulsa el botón.</div>
+      </div>
+    </div>
+    <script>
+      setTimeout(function(){ window.location.href = ${JSON.stringify(deepLink)}; }, 350);
+    </script>
+  </body>
+</html>`);
+  });
   app.get('/evento/:token', async (req, res) => {
     try {
       const token = String(req.params.token || '').trim();
@@ -108,9 +147,18 @@ function createApp() {
       const supabaseUrl = String(env.supabaseUrl || '').replace(/\/$/, '');
       const target = `${supabaseUrl}/functions/v1/event-share/evento/${encodeURIComponent(token)}`;
       if (typeof fetch !== 'function') return res.status(500).send('Server fetch not available');
-      const upstream = await fetch(target, { method: 'GET', headers: { accept: 'text/html' } });
+      const upstream = await fetch(target, {
+        method: 'GET',
+        headers: {
+          accept: 'text/html',
+          apikey: env.supabaseAnonKey,
+          Authorization: `Bearer ${env.supabaseAnonKey}`,
+        },
+      });
       const html = await upstream.text().catch(() => '');
       res.setHeader('Content-Type', upstream.headers.get('content-type') || 'text/html; charset=utf-8');
+      res.setHeader('X-Eclipse-Proxy', 'evento-v2');
+      res.setHeader('X-Eclipse-Upstream-Status', String(upstream.status));
       return res.status(upstream.status).send(html);
     } catch {
       return res.status(500).send('Failed to resolve share link');

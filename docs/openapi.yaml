@@ -10,6 +10,63 @@ servers:
       projectRef:
         default: your-project-ref
 paths:
+  /functions/v1/event-share:
+    post:
+      summary: Crea o convierte enlaces de compartición de eventos
+      description: |
+        Endpoint multipropósito. Enviar `action=create` para generar/reutilizar token, o `action=convert` para registrar conversiones.
+        Requiere JWT de sesión (Supabase) en Authorization: Bearer <token>.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                action: { type: string, enum: [create, convert] }
+                eventId: { type: string, format: uuid }
+                token: { type: string, format: uuid }
+                kind: { type: string, default: open }
+      responses:
+        "200": { description: OK }
+        "401": { description: JWT inválido o faltante }
+        "403": { description: Sin permisos (p. ej. evento privado) }
+        "404": { description: Recurso no encontrado }
+        "410": { description: Enlace o evento expirado/cancelado }
+  /functions/v1/event-share/resolve:
+    get:
+      summary: Resuelve un token de compartición a un evento (público)
+      description: No requiere JWT. Retorna metadatos mínimos y enlaces deep link/web.
+      parameters:
+        - name: token
+          in: query
+          required: true
+          schema: { type: string, format: uuid }
+        - name: eventId
+          in: query
+          required: false
+          schema: { type: string, format: uuid }
+      responses:
+        "200": { description: OK }
+        "403": { description: Evento privado }
+        "404": { description: Enlace no encontrado }
+        "410": { description: Enlace o evento expirado/cancelado }
+  /functions/v1/event-share/evento/{token}:
+    get:
+      summary: HTML puente para abrir el evento desde navegador
+      description: Devuelve HTML con deep link a la app y fallback a la tienda.
+      parameters:
+        - name: token
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200": { description: HTML }
+        "400": { description: Token faltante/ inválido }
+        "404": { description: Enlace no encontrado }
+        "410": { description: Enlace o evento expirado/cancelado }
   /functions/v1/dispatch-notifications:
     post:
       summary: Procesa la cola de notificaciones (push/email/sms)

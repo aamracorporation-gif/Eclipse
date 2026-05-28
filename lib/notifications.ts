@@ -74,7 +74,15 @@ export async function checkNearbyEvents(userId: string) {
             content: {
               title: "¡Fiesta cerca de ti! 🎉",
               body: `${event.title} está a solo ${distance.toFixed(1)}km. ¡No te lo pierdas!`,
-              data: { eventId: event.id, url: `event/${event.id}` },
+              data: {
+                eventId: event.id,
+                url: (() => {
+                  const base = String(process.env.EXPO_PUBLIC_WEB_BASE_URL || process.env.EXPO_PUBLIC_API_URL || '').trim().replace(/\/$/, '');
+                  const path = `event/${event.id}`;
+                  return base && /^https?:\/\//i.test(base) ? `${base}/${path}` : path;
+                })(),
+                path: `event/${event.id}`,
+              },
             },
             trigger: null, // Show immediately
           });

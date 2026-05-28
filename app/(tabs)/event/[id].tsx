@@ -281,10 +281,17 @@ export default function EventDetailScreen() {
   const shareEvent = async () => {
     if (!event?.id) return;
     const title = String(event.title || '').trim() || 'Evento';
-    const webBaseUrlRaw = String((process.env.EXPO_PUBLIC_WEB_BASE_URL as any) || (process.env.EXPO_PUBLIC_API_URL as any) || '')
-      .trim()
-      .replace(/\/$/, '');
-    const webBaseUrl = webBaseUrlRaw.startsWith('https://') ? webBaseUrlRaw : '';
+    const normalizeHttpsBase = (input: string) => {
+      const raw = String(input || '').trim().replace(/\/$/, '');
+      if (!raw) return '';
+      if (/^https:\/\//i.test(raw)) return raw;
+      if (/^http:\/\//i.test(raw)) return raw.replace(/^http:\/\//i, 'https://');
+      if (/^[a-z0-9.-]+\.[a-z]{2,}(?::\d+)?(\/.*)?$/i.test(raw)) return `https://${raw.replace(/\/$/, '')}`;
+      return '';
+    };
+    const webBaseUrl = normalizeHttpsBase(
+      String((process.env.EXPO_PUBLIC_WEB_BASE_URL as any) || (process.env.EXPO_PUBLIC_API_URL as any) || '')
+    );
     const supabaseUrl = String(process.env.EXPO_PUBLIC_SUPABASE_URL || '').replace(/\/$/, '');
 
     const sharePayload = async (message: string, primaryUrl?: string) => {
@@ -304,15 +311,16 @@ export default function EventDetailScreen() {
           : String(result?.url || '').trim();
       if (!webUrl) throw new Error('No se pudo generar el enlace.');
 
-      const deepLink = token ? ExpoLinking.createURL(`evento/${token}`) : ExpoLinking.createURL(`event/${event.id}`);
-      const message = `${title}\n\nAbrir en la app:\n${deepLink}\n\nEnlace:\n${webUrl}`;
+      const message = `${title}\n\n${webUrl}`;
       await sharePayload(message, webUrl);
       return;
     } catch (e) {
-      const fallback = ExpoLinking.createURL(`event/${event.id}`);
       try {
-        const message = `${title}\n\nAbrir en la app:\n${fallback}`;
-        await sharePayload(message, undefined);
+        const fallbackWebUrl = webBaseUrl ? `${webBaseUrl}/event/${event.id}` : '';
+        const fallbackDeepLink = ExpoLinking.createURL(`event/${event.id}`);
+        const url = fallbackWebUrl || fallbackDeepLink;
+        const message = `${title}\n\n${url}`;
+        await sharePayload(message, fallbackWebUrl || undefined);
       } catch (inner) {
         const msg = getErrorMessage(inner || e);
         showDialog({

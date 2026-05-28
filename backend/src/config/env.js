@@ -35,4 +35,15 @@ if (!Number.isFinite(env.stripeCommissionRate) || env.stripeCommissionRate < 0 |
   throw new Error('Invalid STRIPE_COMMISSION_RATE, expected a number between 0 and 1');
 }
 
+if (env.nodeEnv === 'production') {
+  const s = String(env.jwtSecret || '');
+  if (s.length < 32) {
+    throw new Error('Invalid JWT_SECRET: must be at least 32 characters in production');
+  }
+  const lower = s.toLowerCase();
+  if (lower === 'secret' || lower === 'changeme' || lower === 'password') {
+    throw new Error('Invalid JWT_SECRET: looks too weak for production');
+  }
+}
+
 module.exports = { env };

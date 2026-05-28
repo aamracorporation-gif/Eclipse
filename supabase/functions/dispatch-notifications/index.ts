@@ -43,6 +43,7 @@ serve(async (req) => {
   try {
     const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
     const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const WEB_BASE_URL = String(Deno.env.get("NOTIFICATIONS_WEB_BASE_URL") || Deno.env.get("WEB_BASE_URL") || "").replace(/\/$/, "");
     const { limit = 50, eventId = null, enqueueEventUpdate = false } = await req.json().catch(() => ({ limit: 50 }));
 
     const authHeader = req.headers.get("authorization") || req.headers.get("Authorization") || "";
@@ -129,6 +130,8 @@ serve(async (req) => {
       }
 
       const title = String((eventRow as any).title || "").trim() || "Evento";
+      const eventPath = `event/${String(eventId)}`;
+      const webUrl = WEB_BASE_URL ? `${WEB_BASE_URL}/${eventPath}` : eventPath;
       const rows = Array.from(userIds).map((uid) => ({
         user_id: uid,
         role: "attendee",
@@ -137,7 +140,7 @@ serve(async (req) => {
         body: `Hubo cambios en "${title}". Revisa los nuevos detalles antes de ir.`,
         priority: "high",
         status: "pending",
-        data: { event_id: String(eventId), event_title: title, url: `event/${String(eventId)}`, event_url: `event/${String(eventId)}` },
+        data: { event_id: String(eventId), event_title: title, url: webUrl, event_url: webUrl, path: eventPath },
         channels: ["in_app", "push"],
       }));
 
