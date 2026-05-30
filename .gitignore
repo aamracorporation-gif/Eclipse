@@ -5,3 +5,13 @@
 expo-env.d.ts
 # @end expo-cli
 node_modules
+
+# Build artifacts / caches
+.expo/
+.expo-home/
+backend/.expo/
+coverage/
+
+# OS / editor
+.DS_Store
+Thumbs.db
