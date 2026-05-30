@@ -12,6 +12,10 @@ node_modules
 backend/.expo/
 coverage/
 
+# Local env files (never commit secrets)
+.env
+backend/.env
+
 # OS / editor
 .DS_Store
 Thumbs.db

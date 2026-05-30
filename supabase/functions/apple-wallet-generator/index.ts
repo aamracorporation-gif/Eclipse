@@ -29,11 +29,25 @@ Deno.serve(async (req) => {
     const SIGNER_CERT = Deno.env.get("APPLE_PASS_CERT")!;
     const SIGNER_KEY = Deno.env.get("APPLE_PASS_KEY")!;
     const KEY_PASSWORD = Deno.env.get("APPLE_PASS_KEY_PASSWORD") || "";
+    const PASS_ICON_PNG_BASE64 = String(Deno.env.get("PASS_ICON_PNG_BASE64") || "").trim();
+    const PASS_LOGO_PNG_BASE64 = String(Deno.env.get("PASS_LOGO_PNG_BASE64") || "").trim();
 
     if (!WWDR_CERT || !SIGNER_CERT || !SIGNER_KEY) {
       console.error("[ERROR] Certificados Apple no configurados en secretos de Supabase.");
       throw new Error("Missing Apple Certificates in Environment Variables.");
     }
+    if (!PASS_ICON_PNG_BASE64) {
+      console.error("[ERROR] Falta PASS_ICON_PNG_BASE64 en secretos de Supabase.");
+      throw new Error("Missing PASS_ICON_PNG_BASE64.");
+    }
+
+    const decodeBase64ToUint8Array = (b64: string) => {
+      const clean = String(b64 || "").trim().replace(/^data:.*;base64,/, "");
+      const bin = atob(clean);
+      const out = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+      return out;
+    };
 
     // 3. Validación de JWT (Sesión del Usuario)
     const authHeader = req.headers.get("Authorization");
@@ -95,7 +109,18 @@ Deno.serve(async (req) => {
 
     // 6. Configuración de Passkit
     console.log("[INFO] Construyendo pass.json...");
-    const pass = new PKPass({}, {
+    const files: Record<string, Uint8Array> = {
+      "icon.png": decodeBase64ToUint8Array(PASS_ICON_PNG_BASE64),
+      "icon@2x.png": decodeBase64ToUint8Array(PASS_ICON_PNG_BASE64),
+      "icon@3x.png": decodeBase64ToUint8Array(PASS_ICON_PNG_BASE64),
+    };
+    if (PASS_LOGO_PNG_BASE64) {
+      files["logo.png"] = decodeBase64ToUint8Array(PASS_LOGO_PNG_BASE64);
+      files["logo@2x.png"] = decodeBase64ToUint8Array(PASS_LOGO_PNG_BASE64);
+      files["logo@3x.png"] = decodeBase64ToUint8Array(PASS_LOGO_PNG_BASE64);
+    }
+
+    const pass = new PKPass(files, {
       wwdr: WWDR_CERT,
       signerCert: SIGNER_CERT,
       signerKey: SIGNER_KEY,
@@ -147,6 +172,14 @@ Deno.serve(async (req) => {
       messageEncoding: "iso-8859-1",
       altText: ticket.id.substring(0, 8).toUpperCase()
     });
+
+    try {
+      const eventDateIso = String(ticket.events.event_date || "");
+      const eventDate = eventDateIso ? new Date(eventDateIso) : null;
+      if (eventDate && Number.isFinite(eventDate.getTime())) {
+        (pass as any).relevantDate = eventDate.toISOString();
+      }
+    } catch {}
 
     // 7. Exportación a Buffer y Base64 Seguro
     console.log("[INFO] Firmando y exportando .pkpass...");

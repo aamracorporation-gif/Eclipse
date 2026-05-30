@@ -372,7 +372,11 @@ export default function TicketsScreen() {
         });
         
         // 3. Open native Apple Wallet dialog
-        await Sharing.shareAsync(fileUri);
+        await Sharing.shareAsync(fileUri, {
+          mimeType: 'application/vnd.apple.pkpass',
+          UTI: 'com.apple.pkpass',
+          dialogTitle: t('tickets.add_to_wallet'),
+        });
       } else {
         // Android Google Wallet handling
         const { data, error } = await invokeEdgeFunction<{ url?: string }>('generate-wallet-pass', { ticket_id: ticket.id, platform: 'android' });
