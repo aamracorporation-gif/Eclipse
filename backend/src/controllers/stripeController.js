@@ -1,5 +1,6 @@
 const { z } = require('zod');
 const { asyncHandler } = require('../utils/asyncHandler');
+const { env } = require('../config/env');
 const {
   createExpressAccount,
   createAccountLink,
@@ -7,6 +8,14 @@ const {
   autoCompleteConnectOnboardingInTestMode,
   constructWebhookEvent,
 } = require('../services/stripeService');
+
+function requireStripe(res) {
+  if (!env.stripeSecretKey) {
+    res.status(503).json({ ok: false, error: 'Stripe is not configured on this server' });
+    return false;
+  }
+  return true;
+}
 const {
   getProfileById,
   setStripeAccountForUser,
@@ -20,6 +29,7 @@ const {
 } = require('../services/paymentService');
 
 const createAccount = asyncHandler(async (req, res) => {
+  if (!requireStripe(res)) return;
   const user = await getProfileById(req.auth.userId);
   if (!user) return res.status(404).json({ ok: false, error: 'User not found' });
 
@@ -37,6 +47,7 @@ const onboardingLinkSchema = z.object({
 });
 
 const onboardingLink = asyncHandler(async (req, res) => {
+  if (!requireStripe(res)) return;
   const input = onboardingLinkSchema.parse(req.body || {});
   const user = await getProfileById(req.auth.userId);
   if (!user) return res.status(404).json({ ok: false, error: 'User not found' });
@@ -49,6 +60,7 @@ const onboardingLink = asyncHandler(async (req, res) => {
 });
 
 const accountStatus = asyncHandler(async (req, res) => {
+  if (!requireStripe(res)) return;
   const user = await getProfileById(req.auth.userId);
   if (!user) return res.status(404).json({ ok: false, error: 'User not found' });
   if (!user.stripe_account_id) return res.status(409).json({ ok: false, error: 'Stripe account not found' });
@@ -72,6 +84,9 @@ const accountStatus = asyncHandler(async (req, res) => {
 });
 
 function webhookHandler(req, res) {
+  if (!env.stripeWebhookSecret) {
+    return res.status(503).json({ ok: false, error: 'Stripe webhooks are not configured on this server' });
+  }
   const signature = String(req.headers['stripe-signature'] || '');
   let event;
   try {

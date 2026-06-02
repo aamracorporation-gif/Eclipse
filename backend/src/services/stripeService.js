@@ -1,9 +1,28 @@
 const Stripe = require('stripe');
 const { env } = require('../config/env');
 
-const stripe = new Stripe(env.stripeSecretKey, {
-  apiVersion: '2024-06-20',
-  typescript: false,
+let _stripe = null;
+
+function getStripe() {
+  if (!env.stripeSecretKey) {
+    const err = new Error('Stripe is not configured: missing STRIPE_SECRET_KEY');
+    err.status = 503;
+    throw err;
+  }
+  if (!_stripe) {
+    _stripe = new Stripe(env.stripeSecretKey, {
+      apiVersion: '2024-06-20',
+      typescript: false,
+    });
+  }
+  return _stripe;
+}
+
+// Kept for backwards-compat with any direct `stripe.*` usage in this file.
+const stripe = new Proxy({}, {
+  get(_target, prop) {
+    return getStripe()[prop];
+  },
 });
 
 async function createExpressAccount(params) {
@@ -182,7 +201,12 @@ async function createPaymentIntent(params, options) {
 }
 
 function constructWebhookEvent(rawBody, signature) {
-  return stripe.webhooks.constructEvent(rawBody, signature, env.stripeWebhookSecret);
+  if (!env.stripeWebhookSecret) {
+    const err = new Error('Stripe is not configured: missing STRIPE_WEBHOOK_SECRET');
+    err.status = 503;
+    throw err;
+  }
+  return getStripe().webhooks.constructEvent(rawBody, signature, env.stripeWebhookSecret);
 }
 
 module.exports = {
