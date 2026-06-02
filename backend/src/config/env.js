@@ -25,8 +25,8 @@ const env = {
   supabaseAnonKey: mustGet('SUPABASE_ANON_KEY'),
   supabaseServiceRoleKey: process.env.SUPABASE_SERVICE_ROLE_KEY || '',
   jwtSecret: mustGet('JWT_SECRET'),
-  stripeSecretKey: mustGet('STRIPE_SECRET_KEY'),
-  stripeWebhookSecret: mustGet('STRIPE_WEBHOOK_SECRET'),
+  stripeSecretKey: process.env.STRIPE_SECRET_KEY || '',
+  stripeWebhookSecret: process.env.STRIPE_WEBHOOK_SECRET || '',
   publicAppUrl: mustGet('PUBLIC_APP_URL'),
   stripeCommissionRate: Number(process.env.STRIPE_COMMISSION_RATE || '0.10'),
 };
