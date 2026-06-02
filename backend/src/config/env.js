@@ -2,48 +2,50 @@ const path = require('path');
 
 require('dotenv').config({ path: path.join(__dirname, '..', '..', '.env') });
 
-function mustGet(name) {
-  const value = process.env[name];
-  if (!value) {
-    throw new Error(`Missing env var: ${name}`);
-  }
-  return value;
+function getString(name, fallback = '') {
+  const raw = process.env[name];
+  if (typeof raw !== 'string') return fallback;
+  const v = raw.trim();
+  return v || fallback;
+}
+
+function getNumber(name, fallback) {
+  const raw = process.env[name];
+  if (typeof raw !== 'string' || !raw.trim()) return fallback;
+  const n = Number(raw);
+  return Number.isFinite(n) ? n : fallback;
 }
 
 function getInt(name, fallback) {
-  const raw = process.env[name];
-  if (!raw) return fallback;
-  const n = Number(raw);
-  if (!Number.isFinite(n)) return fallback;
+  const n = getNumber(name, fallback);
+  return Number.isInteger(n) ? n : fallback;
+}
+
+function getStripeCommissionRate() {
+  const n = getNumber('STRIPE_COMMISSION_RATE', 0.1);
+  if (!Number.isFinite(n)) return 0.1;
+  if (n < 0) return 0.1;
+  if (n > 1) return 0.1;
   return n;
 }
 
-const env = {
-  nodeEnv: process.env.NODE_ENV || 'development',
-  port: getInt('PORT', 8081),
-  supabaseUrl: mustGet('SUPABASE_URL'),
-  supabaseAnonKey: mustGet('SUPABASE_ANON_KEY'),
-  supabaseServiceRoleKey: process.env.SUPABASE_SERVICE_ROLE_KEY || '',
-  jwtSecret: mustGet('JWT_SECRET'),
-  stripeSecretKey: mustGet('STRIPE_SECRET_KEY'),
-  stripeWebhookSecret: mustGet('STRIPE_WEBHOOK_SECRET'),
-  publicAppUrl: mustGet('PUBLIC_APP_URL'),
-  stripeCommissionRate: Number(process.env.STRIPE_COMMISSION_RATE || '0.10'),
-};
+const env = {};
+Object.defineProperties(env, {
+  nodeEnv: { enumerable: true, get: () => getString('NODE_ENV', 'development') || 'development' },
+  port: { enumerable: true, get: () => getInt('PORT', 8081) },
 
-if (!Number.isFinite(env.stripeCommissionRate) || env.stripeCommissionRate < 0 || env.stripeCommissionRate > 1) {
-  throw new Error('Invalid STRIPE_COMMISSION_RATE, expected a number between 0 and 1');
-}
+  supabaseUrl: { enumerable: true, get: () => getString('SUPABASE_URL', '') },
+  supabaseAnonKey: { enumerable: true, get: () => getString('SUPABASE_ANON_KEY', '') },
+  supabaseServiceRoleKey: { enumerable: true, get: () => getString('SUPABASE_SERVICE_ROLE_KEY', '') },
 
-if (env.nodeEnv === 'production') {
-  const s = String(env.jwtSecret || '');
-  if (s.length < 32) {
-    throw new Error('Invalid JWT_SECRET: must be at least 32 characters in production');
-  }
-  const lower = s.toLowerCase();
-  if (lower === 'secret' || lower === 'changeme' || lower === 'password') {
-    throw new Error('Invalid JWT_SECRET: looks too weak for production');
-  }
-}
+  jwtSecret: { enumerable: true, get: () => getString('JWT_SECRET', '') },
 
-module.exports = { env };
+  stripeSecretKey: { enumerable: true, get: () => getString('STRIPE_SECRET_KEY', '') },
+  stripeWebhookSecret: { enumerable: true, get: () => getString('STRIPE_WEBHOOK_SECRET', '') },
+
+  publicAppUrl: { enumerable: true, get: () => getString('PUBLIC_APP_URL', '') },
+
+  stripeCommissionRate: { enumerable: true, get: () => getStripeCommissionRate() },
+});
+
+module.exports = { env, getString, getInt, getNumber };

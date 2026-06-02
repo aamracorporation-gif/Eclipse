@@ -1,10 +1,180 @@
 const { env } = require('../config/env');
 const { supabaseAdmin } = require('./supabaseService');
-const { createPaymentIntent } = require('./stripeService');
+const {
+  createPaymentIntent,
+  createExpressAccount,
+  createAccountLink,
+  retrieveAccount,
+  autoCompleteConnectOnboardingInTestMode,
+  constructWebhookEvent,
+  deleteStripeAccount,
+} = require('./stripeService');
+const {
+  getProfileById,
+  setStripeAccountForUser,
+  setOnboardingCompletedByUserId,
+  setOnboardingCompletedByStripeAccountId,
+} = require('./userService');
 
 function computeCommission(amountCents) {
   const rate = env.stripeCommissionRate;
   return Math.round(Number(amountCents) * rate);
+}
+
+async function createStripeAccountForUser(userId) {
+  const user = await getProfileById(userId);
+  if (!user) {
+    const err = new Error('User not found');
+    err.status = 404;
+    throw err;
+  }
+
+  if (user.stripe_account_id) return { stripe_account_id: user.stripe_account_id };
+
+  const account = await createExpressAccount({ email: user.email, metadata: { user_id: user.id } });
+  await setStripeAccountForUser(user.id, account.id);
+  return { stripe_account_id: account.id };
+}
+
+async function createStripeOnboardingLinkForUser({ userId, stripeAccountId }) {
+  const user = await getProfileById(userId);
+  if (!user) {
+    const err = new Error('User not found');
+    err.status = 404;
+    throw err;
+  }
+
+  const accountId = String(stripeAccountId || user.stripe_account_id || '').trim();
+  if (!accountId) {
+    const err = new Error('Stripe account not found');
+    err.status = 409;
+    throw err;
+  }
+
+  const link = await createAccountLink(accountId);
+  return { url: link.url };
+}
+
+async function getStripeAccountStatusForUser(userId) {
+  const user = await getProfileById(userId);
+  if (!user) {
+    const err = new Error('User not found');
+    err.status = 404;
+    throw err;
+  }
+  if (!user.stripe_account_id) {
+    const err = new Error('Stripe account not found');
+    err.status = 409;
+    throw err;
+  }
+
+  let account = await retrieveAccount(user.stripe_account_id);
+  if (!(account.charges_enabled && account.payouts_enabled)) {
+    try {
+      account = await autoCompleteConnectOnboardingInTestMode(user.stripe_account_id);
+    } catch {}
+  }
+
+  const completed = Boolean(account.charges_enabled && account.payouts_enabled);
+  await setOnboardingCompletedByUserId(user.id, completed);
+  return {
+    stripe_account_id: user.stripe_account_id,
+    charges_enabled: Boolean(account.charges_enabled),
+    payouts_enabled: Boolean(account.payouts_enabled),
+    onboarding_completed: completed,
+  };
+}
+
+async function syncStripeOnboardingCompletionFromStripeAccountId(stripeAccountId) {
+  const id = String(stripeAccountId || '').trim();
+  if (!id) return { ok: false };
+  const account = await retrieveAccount(id);
+  const completed = Boolean(account.charges_enabled && account.payouts_enabled);
+  await setOnboardingCompletedByStripeAccountId(id, completed);
+  return { ok: true, onboarding_completed: completed };
+}
+
+function handleStripeWebhook(rawBody, signature) {
+  let event;
+  try {
+    event = constructWebhookEvent(rawBody, signature);
+  } catch (e) {
+    return { status: 400, text: `Webhook Error: ${(e && e.message) || 'Invalid signature'}` };
+  }
+
+  function errorText(e) {
+    return [e?.message, e?.details, e?.hint, e?.error_description].filter(Boolean).join(' ');
+  }
+
+  function isNonFatalWebhookError(e) {
+    const msg = errorText(e).toLowerCase();
+    return (
+      msg.includes('payment transaction not found') ||
+      msg.includes('does not exist') ||
+      msg.includes('row level security') ||
+      msg.includes('permission denied') ||
+      msg.includes('rls') ||
+      msg.includes('jwt')
+    );
+  }
+
+  return Promise.resolve()
+    .then(async () => {
+      if (event.type === 'payment_intent.succeeded') {
+        const pi = event.data.object;
+        const paymentIntentId = String(pi.id || '');
+        const metadata = pi.metadata || {};
+        let userId = String(metadata.user_id || metadata.supabase_user_id || metadata.userId || '');
+
+        if (!userId && paymentIntentId) {
+          try {
+            const tx = await getPaymentTransactionByIntentId(paymentIntentId);
+            userId = String(tx?.user_id || '');
+          } catch {}
+        }
+
+        if (paymentIntentId && userId) {
+          try {
+            await fulfillPaymentForUser(paymentIntentId, userId);
+          } catch (e) {
+            if (!isNonFatalWebhookError(e)) throw e;
+          }
+        }
+      } else if (event.type === 'payment_intent.payment_failed') {
+        const pi = event.data.object;
+        const paymentIntentId = String(pi.id || '');
+        if (paymentIntentId) {
+          try {
+            await markPaymentStatusByIntentId(paymentIntentId, 'failed');
+          } catch {}
+        }
+      } else if (event.type === 'account.updated') {
+        const account = event.data.object;
+        const completed = Boolean(account.charges_enabled && account.payouts_enabled);
+        try {
+          await setOnboardingCompletedByStripeAccountId(account.id, completed);
+        } catch (e) {
+          if (!isNonFatalWebhookError(e)) throw e;
+        }
+      }
+    })
+    .then(() => ({ status: 200, json: { received: true } }))
+    .catch(() => ({ status: 500, json: { received: true } }));
+}
+
+async function deleteStripeAccountForUser(userId) {
+  const profile = await getProfileById(userId);
+  if (!profile) {
+    const err = new Error('User not found');
+    err.status = 404;
+    throw err;
+  }
+
+  const stripeAccountId = String(profile.stripe_account_id || '');
+  if (stripeAccountId) {
+    await deleteStripeAccount(stripeAccountId);
+  }
+  return { ok: true };
 }
 
 async function createIntentForEvent({ eventId, userId, quantity = 1, ticketTypeId = null }) {
@@ -124,4 +294,10 @@ module.exports = {
   getPaymentTransactionByIntentId,
   markPaymentStatusByIntentId,
   fulfillPaymentForUser,
+  createStripeAccountForUser,
+  createStripeOnboardingLinkForUser,
+  getStripeAccountStatusForUser,
+  syncStripeOnboardingCompletionFromStripeAccountId,
+  handleStripeWebhook,
+  deleteStripeAccountForUser,
 };

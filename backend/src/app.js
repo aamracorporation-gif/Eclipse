@@ -12,8 +12,7 @@ const { stripeRoutes } = require('./routes/stripeRoutes');
 const { stripeWebhookRoutes } = require('./routes/stripeWebhookRoutes');
 const { testRoutes } = require('./routes/testRoutes');
 const { organizerRoutes } = require('./routes/organizerRoutes');
-const { retrieveAccount } = require('./services/stripeService');
-const { setOnboardingCompletedByStripeAccountId } = require('./services/userService');
+const { syncStripeOnboardingCompletionFromStripeAccountId } = require('./services/paymentService');
 
 function createApp() {
   const app = express();
@@ -171,9 +170,7 @@ function createApp() {
 
     if (isValid) {
       try {
-        const acct = await retrieveAccount(account);
-        const completed = Boolean(acct.charges_enabled && acct.payouts_enabled);
-        await setOnboardingCompletedByStripeAccountId(account, completed);
+        await syncStripeOnboardingCompletionFromStripeAccountId(account);
       } catch {}
     }
 

@@ -427,10 +427,12 @@ Deno.serve(async (req) => {
       const ev = await restGet(
         SUPABASE_URL,
         SUPABASE_SERVICE_ROLE_KEY,
-        `events?id=eq.${encodeURIComponent(eventId)}&select=id,title,creator_id`,
+        `events?id=eq.${encodeURIComponent(eventId)}&select=id,title,creator_id,allow_resale`,
       );
       if (!ev.ok || !Array.isArray(ev.json) || ev.json.length === 0) return jsonResponse({ ok: false, error: "Event not found" });
       const eventRow = ev.json[0];
+      const allowResale = eventRow?.allow_resale ?? true;
+      if (allowResale === false) return jsonResponse({ ok: false, error: "Resale not allowed for this event" });
 
       const priceEur = Number(listing.price ?? 0);
       const amountCents = Math.round(priceEur * 100);

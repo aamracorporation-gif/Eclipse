@@ -1,12 +1,8 @@
-const Stripe = require('stripe');
 const { env } = require('../config/env');
-
-const stripe = new Stripe(env.stripeSecretKey, {
-  apiVersion: '2024-06-20',
-  typescript: false,
-});
+const { getStripeClient, getStripeWebhookSecret } = require('./stripe/stripeClient');
 
 async function createExpressAccount(params) {
+  const stripe = getStripeClient();
   if (env.nodeEnv === 'production') {
     const account = await stripe.accounts.create({
       type: 'express',
@@ -31,7 +27,9 @@ async function createExpressAccount(params) {
 }
 
 async function createAccountLink(accountId) {
-  const completeUrl = 'https://api.weareeclipseoficial.com/stripe/complete';
+  const base = String(env.publicAppUrl || '').trim().replace(/\/$/, '');
+  const completeUrl = base ? `${base}/stripe/complete` : 'https://api.weareeclipseoficial.com/stripe/complete';
+  const stripe = getStripeClient();
   const link = await stripe.accountLinks.create({
     account: accountId,
     type: 'account_onboarding',
@@ -42,6 +40,7 @@ async function createAccountLink(accountId) {
 }
 
 async function retrieveAccount(accountId) {
+  const stripe = getStripeClient();
   return stripe.accounts.retrieve(accountId);
 }
 
@@ -102,6 +101,7 @@ async function autoCompleteConnectOnboardingInTestMode(accountId) {
     throw err;
   }
 
+  const stripe = getStripeClient();
   const acct = await stripe.accounts.retrieve(accountId);
   const country = String(acct.country || 'US').toUpperCase();
   const currency = String(acct.default_currency || 'usd').toLowerCase();
@@ -178,19 +178,26 @@ async function autoCompleteConnectOnboardingInTestMode(accountId) {
 }
 
 async function createPaymentIntent(params, options) {
+  const stripe = getStripeClient();
   return stripe.paymentIntents.create(params, options);
 }
 
 function constructWebhookEvent(rawBody, signature) {
-  return stripe.webhooks.constructEvent(rawBody, signature, env.stripeWebhookSecret);
+  const stripe = getStripeClient();
+  return stripe.webhooks.constructEvent(rawBody, signature, getStripeWebhookSecret());
+}
+
+async function deleteStripeAccount(accountId) {
+  const stripe = getStripeClient();
+  return stripe.accounts.del(accountId);
 }
 
 module.exports = {
-  stripe,
   createExpressAccount,
   createAccountLink,
   retrieveAccount,
   autoCompleteConnectOnboardingInTestMode,
   createPaymentIntent,
   constructWebhookEvent,
+  deleteStripeAccount,
 };
