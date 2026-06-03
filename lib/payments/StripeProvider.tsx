@@ -27,6 +27,10 @@ export function StripeProvider({ children }: { children: ReactElement | ReactEle
   const publishableKey = useMemo(() => getPublishableKey(), []);
   const urlScheme = useMemo(() => getUrlScheme(), []);
 
+  if (!publishableKey) {
+    return <>{children}</>;
+  }
+
   return (
     <NativeStripeProvider
       publishableKey={publishableKey}
