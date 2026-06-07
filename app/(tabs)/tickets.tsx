@@ -282,6 +282,12 @@ export default function TicketsScreen() {
   };
 
   const handleSellPress = async (ticket: ExtendedTicket) => {
+    const allowResaleForEvent = (ticket as any)?.events?.allow_resale ?? true;
+    if (!allowResaleForEvent) {
+      showDialog({ title: t('tickets.action_not_allowed_title'), message: t('tickets.resale_disabled_event') });
+      return;
+    }
+
     if (ticket.scanned_at || ticket.validation_status === 'used' || ticket.status === 'used') {
       showDialog({ title: t('tickets.action_not_allowed_title'), message: t('tickets.used_ticket_cannot_resell') });
       return;
@@ -885,7 +891,7 @@ export default function TicketsScreen() {
                         </TouchableOpacity>
                         )}
 
-                        {!isResale ? (
+                        {!isResale && ((item as any)?.events?.allow_resale ?? true) ? (
                         <TouchableOpacity 
                             style={[styles.actionButton, styles.actionButtonPrimary, isUsed && styles.actionButtonDisabled, { flex: 1 }]} 
                             onPress={() => !isUsed && void handleSellPress(item)}
@@ -896,12 +902,12 @@ export default function TicketsScreen() {
                                 {isUsed ? t('tickets.used') : t('tickets.sell')}
                             </Text>
                         </TouchableOpacity>
-                        ) : (
+                        ) : isResale ? (
                         <TouchableOpacity style={[styles.actionButton, styles.actionButtonDanger, { flex: 1 }]} onPress={() => handleCancelResale(item)}>
                             <X size={14} color="#ef4444" />
                             <Text style={[styles.actionButtonText, styles.actionButtonTextDanger]}>{t('common.cancel')}</Text>
                         </TouchableOpacity>
-                        )}
+                        ) : null}
                     </View>
 
                     {/* Barcode Strip Simulation */}

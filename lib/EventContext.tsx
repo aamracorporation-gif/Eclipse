@@ -20,6 +20,7 @@ export type AppEvent = {
   updatedAt?: string;
   date: string; // YYYY-MM-DD
   time: string;
+  allowResale?: boolean;
   location: string;
   price: string;
   capacity: number;
@@ -84,31 +85,84 @@ export function EventProvider({ children }: { children: React.ReactNode }) {
   const lastGoodAtRef = useRef(0);
   const eventsCountRef = useRef(0);
 
-  const buildLocalDateTime = useCallback((dateStr: string, timeStr: string) => {
+  const EVENT_TIMEZONE = ((process.env as any)?.EXPO_PUBLIC_EVENT_TIMEZONE ?? 'Europe/Madrid') as string;
+  const isMadridTimezone = EVENT_TIMEZONE === 'Europe/Madrid';
+
+  const lastSundayOfMonthUtc = useCallback((year: number, month0: number) => {
+    const d = new Date(Date.UTC(year, month0 + 1, 0, 0, 0, 0, 0));
+    const dow = d.getUTCDay();
+    d.setUTCDate(d.getUTCDate() - dow);
+    return d;
+  }, []);
+
+  const madridDstWindowUtc = useCallback(
+    (year: number) => {
+      const start = lastSundayOfMonthUtc(year, 2);
+      start.setUTCHours(1, 0, 0, 0);
+      const end = lastSundayOfMonthUtc(year, 9);
+      end.setUTCHours(1, 0, 0, 0);
+      return { startUtcMs: start.getTime(), endUtcMs: end.getTime() };
+    },
+    [lastSundayOfMonthUtc]
+  );
+
+  const madridOffsetMinutesForUtcMs = useCallback(
+    (utcMs: number) => {
+      const y = new Date(utcMs).getUTCFullYear();
+      const { startUtcMs, endUtcMs } = madridDstWindowUtc(y);
+      const inDst = utcMs >= startUtcMs && utcMs < endUtcMs;
+      return inDst ? 120 : 60;
+    },
+    [madridDstWindowUtc]
+  );
+
+  const madridOffsetMinutesForLocalWallClock = useCallback(
+    (year: number, month0: number, day: number, hours: number, minutes: number) => {
+      const wallClockUtcMs = Date.UTC(year, month0, day, hours, minutes, 0, 0);
+      let offset = 60;
+      for (let i = 0; i < 2; i++) {
+        const utcMs = wallClockUtcMs - offset * 60_000;
+        offset = madridOffsetMinutesForUtcMs(utcMs);
+      }
+      return offset;
+    },
+    [madridOffsetMinutesForUtcMs]
+  );
+
+  const buildEventDateUtc = useCallback((dateStr: string, timeStr: string) => {
     const date = String(dateStr || '').trim();
     const time = String(timeStr || '').trim();
 
     const m = date.match(/^(\d{4})-(\d{2})-(\d{2})$/);
     const tm = time.match(/^(\d{2}):(\d{2})$/);
-    if (m && tm) {
-      const y = Number(m[1]);
-      const mo = Number(m[2]);
-      const d = Number(m[3]);
-      const hh = Number(tm[1]);
-      const mm = Number(tm[2]);
-      const dt = new Date(y, mo - 1, d, hh, mm, 0, 0);
-      if (Number.isFinite(dt.getTime()) && dt.getFullYear() >= 2000 && dt.getFullYear() <= 2100) return dt;
-    }
-
-    const fallback = new Date(`${date}T${time}`);
-    if (!Number.isFinite(fallback.getTime())) {
+    if (!m || !tm) {
       throw new Error('Fecha u hora inválida.');
     }
-    if (fallback.getFullYear() < 2000 || fallback.getFullYear() > 2100) {
+
+    const y = Number(m[1]);
+    const mo = Number(m[2]);
+    const d = Number(m[3]);
+    const hh = Number(tm[1]);
+    const mm = Number(tm[2]);
+
+    const month0 = mo - 1;
+    const wallClockUtcMs = Date.UTC(y, month0, d, hh, mm, 0, 0);
+    let utcMs = wallClockUtcMs;
+    if (isMadridTimezone) {
+      const offsetMin = madridOffsetMinutesForLocalWallClock(y, month0, d, hh, mm);
+      utcMs = wallClockUtcMs - offsetMin * 60_000;
+    } else {
+      const local = new Date(y, month0, d, hh, mm, 0, 0);
+      const offsetMin = local.getTimezoneOffset();
+      utcMs = wallClockUtcMs + offsetMin * 60_000;
+    }
+
+    const utc = new Date(utcMs);
+    if (!Number.isFinite(utc.getTime()) || utc.getFullYear() < 2000 || utc.getFullYear() > 2100) {
       throw new Error('Fecha fuera de rango.');
     }
-    return fallback;
-  }, []);
+    return utc;
+  }, [isMadridTimezone, madridOffsetMinutesForLocalWallClock]);
 
   useEffect(() => {
     eventsCountRef.current = events.length;
@@ -181,19 +235,27 @@ export function EventProvider({ children }: { children: React.ReactNode }) {
 
       if (data) {
         const mappedEvents: AppEvent[] = data.map((e: any) => {
-          const lang = String(i18n.language || 'es').split('-')[0];
-          const localeTag = lang === 'en' ? 'en-US' : lang === 'fr' ? 'fr-FR' : 'es-ES';
-          const eventDate = new Date(e.event_date);
+          const rawMs = new Date(e.event_date).getTime();
+          const eventDate = Number.isFinite(rawMs)
+            ? isMadridTimezone
+              ? new Date(rawMs + madridOffsetMinutesForUtcMs(rawMs) * 60_000)
+              : new Date(rawMs)
+            : new Date(e.event_date);
           const creatorProfile = Array.isArray(e.profiles) ? e.profiles[0] : e.profiles;
           const pad2 = (n: number) => String(n).padStart(2, '0');
-          const localDate = `${eventDate.getFullYear()}-${pad2(eventDate.getMonth() + 1)}-${pad2(eventDate.getDate())}`;
+          const localDate = isMadridTimezone
+            ? `${eventDate.getUTCFullYear()}-${pad2(eventDate.getUTCMonth() + 1)}-${pad2(eventDate.getUTCDate())}`
+            : `${eventDate.getFullYear()}-${pad2(eventDate.getMonth() + 1)}-${pad2(eventDate.getDate())}`;
           return {
             id: e.id,
             title: e.title,
             startsAt: e.event_date,
             updatedAt: e.updated_at || null,
             date: localDate,
-            time: eventDate.toLocaleTimeString(localeTag, { hour: '2-digit', minute: '2-digit' }),
+            time: isMadridTimezone
+              ? `${pad2(eventDate.getUTCHours())}:${pad2(eventDate.getUTCMinutes())}`
+              : `${pad2(eventDate.getHours())}:${pad2(eventDate.getMinutes())}`,
+            allowResale: e.allow_resale ?? true,
             location: e.venues?.name || 'Ubicación desconocida',
             price: e.ticket_price.toString(),
             capacity: e.available_tickets, // Use actual available count
@@ -366,7 +428,7 @@ export function EventProvider({ children }: { children: React.ReactNode }) {
       if (venueError) throw venueError;
 
       // 2. Create Event
-      const eventDate = buildLocalDateTime(newEvent.date, newEvent.time);
+      const eventDate = buildEventDateUtc(newEvent.date, newEvent.time);
       
       const { data: eventData, error: eventError } = await supabase
         .from('events')
@@ -384,7 +446,8 @@ export function EventProvider({ children }: { children: React.ReactNode }) {
           dress_code: newEvent.dressCode,
           age_restriction: parseInt(newEvent.ageRestriction || '18'),
           theme: newEvent.theme,
-          event_type: newEvent.eventType
+          event_type: newEvent.eventType,
+          allow_resale: newEvent.allowResale ?? true,
         })
         .select()
         .single();
@@ -432,7 +495,8 @@ export function EventProvider({ children }: { children: React.ReactNode }) {
       if (updates.imageUrl !== undefined) dbUpdates.poster_url = updates.imageUrl;
       if (updates.venuePlanUrl !== undefined) dbUpdates.venue_plan_url = updates.venuePlanUrl;
       if (updates.date !== undefined && updates.time !== undefined) {
-        dbUpdates.event_date = buildLocalDateTime(updates.date, updates.time).toISOString();
+        const built = buildEventDateUtc(updates.date, updates.time);
+        dbUpdates.event_date = built.toISOString();
       }
       if (Array.isArray(updates.ticketTypes) && updates.ticketTypes.length > 0) {
         const minPrice = Math.min(...updates.ticketTypes.map((t) => Number(t.price) || 0));
@@ -452,6 +516,7 @@ export function EventProvider({ children }: { children: React.ReactNode }) {
       if (updates.ageRestriction !== undefined) dbUpdates.age_restriction = parseInt(updates.ageRestriction);
       if (updates.theme !== undefined) dbUpdates.theme = updates.theme;
       if (updates.eventType !== undefined) dbUpdates.event_type = updates.eventType;
+      if (updates.allowResale !== undefined) dbUpdates.allow_resale = updates.allowResale;
 
       const doUpdate = async (useUpdatedAt: boolean) => {
         let q = supabase.from('events').update(dbUpdates).eq('id', id);

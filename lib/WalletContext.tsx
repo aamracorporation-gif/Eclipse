@@ -137,7 +137,15 @@ export function CreditProvider({ children }: { children: React.ReactNode }) {
     try {
       const { data: ticket, error: ticketError } = await supabase
         .from('tickets')
-        .select('status, scanned_at, validation_status, total_price')
+        .select(
+          `
+          status,
+          scanned_at,
+          validation_status,
+          total_price,
+          events ( allow_resale )
+          `
+        )
         .eq('id', ticketId)
         .eq('user_id', user.id)
         .single();
@@ -148,6 +156,11 @@ export function CreditProvider({ children }: { children: React.ReactNode }) {
 
       if (ticket.status === 'used' || ticket.scanned_at || ticket.validation_status === 'used') {
         throw new Error('No se puede revender una entrada que ya ha sido utilizada.');
+      }
+
+      const allowResaleForEvent = (ticket as any)?.events?.allow_resale ?? true;
+      if (!allowResaleForEvent) {
+        throw new Error('La reventa está desactivada para este evento.');
       }
 
       const original = typeof ticket.total_price === 'string' ? Number(ticket.total_price) : ticket.total_price;

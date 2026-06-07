@@ -101,26 +101,6 @@ Recomendado:
 
 Cobertura mínima (notificaciones): 90% (configurada para `lib/notificationSchema.ts`).
 
-## Validación de formularios (eventos)
-Implementación principal:
-- Reglas + códigos: `lib/eventFormValidation.ts` (`EVT_*`)
-- Integración UI (tiempo real, por campo, bloqueo submit): `app/(creator)/create-event.tsx`
-
-Reglas aplicadas (resumen):
-- Obligatorios: nombre, ubicación, imagen, fecha y hora; al menos 1 tipo de entrada.
-- Numéricos:
-  - Edad mínima: entero positivo.
-  - Precios: numéricos y mínimo 1,00 €.
-  - Cantidades: enteros (mínimo 1); en edición no permite bajar por debajo de lo vendido.
-- Texto:
-  - Longitud mínima/máxima (nombre, ubicación, etc.).
-  - Caracteres permitidos (sin controles; sin saltos de línea en campos cortos).
-- Fecha/hora: formato correcto (DD/MM/AAAA, HH:MM) y siempre futuro.
-- Duplicados: no permite tipos de entrada duplicados (mismo nombre + precio).
-
-Logs:
-- Cuando el formulario falla, se registra `event_form_validation_failed` con `{ field, code, message }` por error.
-
 ## Compartición de eventos (enlace persistente + deep link)
 Objetivo:
 - Compartir un enlace único por evento con formato: `https://weareeclipseoficial.com/evento/<token>`

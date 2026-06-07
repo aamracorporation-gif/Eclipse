@@ -1,6 +1,8 @@
 const appJson = require('./app.json');
 
 const getHttpsHost = () => {
+  const enableAssociatedDomains = process.env.EXPO_PUBLIC_ENABLE_ASSOCIATED_DOMAINS === '1';
+  if (!enableAssociatedDomains) return null;
   const baseUrl = process.env.EXPO_PUBLIC_WEB_BASE_URL || process.env.EXPO_PUBLIC_API_URL;
   if (!baseUrl || typeof baseUrl !== 'string') return null;
   if (!baseUrl.startsWith('https://')) return null;
