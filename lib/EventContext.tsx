@@ -10,6 +10,8 @@ export type TicketType = {
   price: number;
   quantity: number;
   sold: number;
+  category?: string;
+  metadata?: Record<string, any>;
 };
 
 // Extended Event type to include local-only fields if needed, or just match Supabase
@@ -285,6 +287,8 @@ export function EventProvider({ children }: { children: React.ReactNode }) {
                     price: t.price,
                     quantity: t.quantity,
                     sold: t.sold,
+                    category: t.category || undefined,
+                    metadata: t.metadata || undefined,
                   }))
               : [],
             venues: e.venues ? {
@@ -461,7 +465,9 @@ export function EventProvider({ children }: { children: React.ReactNode }) {
           name: t.name,
           price: t.price,
           quantity: t.quantity,
-          sold: 0
+          sold: 0,
+          category: (t as any).category || null,
+          metadata: (t as any).metadata || {},
         }));
 
         const { error: ticketsError } = await supabase

@@ -87,6 +87,8 @@ export type Event = {
     price: number;
     quantity: number;
     sold: number;
+    category?: string | null;
+    metadata?: Record<string, any> | null;
   }[];
   reservados_vip?: VipReservado[];
 };
@@ -102,6 +104,8 @@ export type Ticket = {
   purchase_date: string;
   qr_code: string;
   qr_token?: string; // New Secure Token
+  wallet_added?: boolean;
+  wallet_pass_id?: string | null;
   ticket_type_id?: string | null;
   ticket_status?: string | null;
   validation_status?: 'valid' | 'used' | 'expired' | 'revoked';

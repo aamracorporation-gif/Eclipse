@@ -44,6 +44,12 @@
           "locationWhenInUsePermission": "Allow $(PRODUCT_NAME) to access your location to verify event addresses."
         }
       ],
+      [
+        "expo-passkite",
+        {
+          "passTypeIdentifiers": ["$(TeamIdentifierPrefix)*"]
+        }
+      ],
       "expo-mail-composer",
       "@react-native-community/datetimepicker",
       "expo-notifications"

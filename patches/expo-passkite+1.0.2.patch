@@ -1,0 +1,17 @@
+diff --git a/node_modules/expo-passkite/ios/ExpoPasskiteModule.swift b/node_modules/expo-passkite/ios/ExpoPasskiteModule.swift
+index 576a861..e6e23e0 100644
+--- a/node_modules/expo-passkite/ios/ExpoPasskiteModule.swift
++++ b/node_modules/expo-passkite/ios/ExpoPasskiteModule.swift
+@@ -107,10 +107,10 @@ public class ExpoPasskiteModule: Module {
+ 
+                     viewController.present(addPassController, animated: true)
+                 }
+-            } catch {
++            } catch let error as NSError {
+                 promise.resolve([
+                     "success": false,
+-                    "error": "Failed to parse pass data: \(error.localizedDescription)"
++                    "error": "Failed to parse pass data: \(error.localizedDescription) [domain=\(error.domain) code=\(error.code) userInfo=\(String(describing: error.userInfo))]"
+                 ])
+             }
+         }.runOnQueue(.main)

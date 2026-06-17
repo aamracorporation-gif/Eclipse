@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
+import { SignJWT, importPKCS8 } from "https://esm.sh/jose@5.9.6";
 
 function jsonResponse(body: any, status = 200) {
   return new Response(JSON.stringify(body), {
@@ -64,10 +65,14 @@ serve(async (req) => {
         user_id,
         status,
         ticket_status,
+        qr_token,
+        qr_code,
         events (
           id,
           title,
-          event_date
+          event_date,
+          poster_url,
+          venues (name)
         )
       `)
       .eq("id", ticket_id)
@@ -87,26 +92,94 @@ serve(async (req) => {
       return jsonResponse({ ok: false, error: "No tienes permiso para gestionar esta entrada" }, 403);
     }
 
-    // 5. Generar URLs según plataforma (Modo simplificado para asegurar que no falla)
-    if (platform === 'ios') {
-      // Para iOS devolvemos el enlace directo de descarga
-      // USAMOS UNA URL DE PRUEBA EXTREMADAMENTE ESTABLE PARA EVITAR 404
-      return jsonResponse({ 
-        ok: true, 
-        platform: 'ios', 
-        url: `https://raw.githubusercontent.com/v-at/apple-wallet-pass-samples/master/generic.pkpass`,
-        message: "Enlace de Apple Wallet (Modo Prueba Estable) generado."
-      });
-    } else {
-      const baseUrl = `https://pay.google.com/gp/v/save/${ticket_id}`;
-      console.log(`[WALLET] Success! Generated ${platform} link for ticket ${ticket_id}`);
-      return jsonResponse({ 
-        ok: true, 
-        platform,
-        url: baseUrl,
-        message: "Enlace de Wallet generado correctamente."
-      });
+    if (platform === "ios") {
+      return jsonResponse(
+        {
+          ok: false,
+          platform: "ios",
+          error: 'Usa la función "apple-wallet-generator" para generar el .pkpass en iOS.',
+        },
+        400,
+      );
     }
+
+    const GOOGLE_WALLET_ISSUER_ID = Deno.env.get("GOOGLE_WALLET_ISSUER_ID");
+    const GOOGLE_WALLET_CLASS_ID = Deno.env.get("GOOGLE_WALLET_CLASS_ID");
+    const GOOGLE_WALLET_SERVICE_ACCOUNT_EMAIL = Deno.env.get("GOOGLE_WALLET_SERVICE_ACCOUNT_EMAIL");
+    const GOOGLE_WALLET_PRIVATE_KEY = Deno.env.get("GOOGLE_WALLET_PRIVATE_KEY");
+
+    if (!GOOGLE_WALLET_ISSUER_ID || !GOOGLE_WALLET_CLASS_ID || !GOOGLE_WALLET_SERVICE_ACCOUNT_EMAIL || !GOOGLE_WALLET_PRIVATE_KEY) {
+      return jsonResponse(
+        {
+          ok: false,
+          platform: "android",
+          error:
+            "Google Wallet no está configurado (faltan GOOGLE_WALLET_ISSUER_ID / GOOGLE_WALLET_CLASS_ID / GOOGLE_WALLET_SERVICE_ACCOUNT_EMAIL / GOOGLE_WALLET_PRIVATE_KEY).",
+        },
+        500,
+      );
+    }
+
+    const objectId = `${GOOGLE_WALLET_ISSUER_ID}.${ticket.id}`;
+    const eventTitle = String(ticket.events?.title || "Entrada");
+    const eventDateIso = String(ticket.events?.event_date || "");
+    const venueName = String(ticket.events?.venues?.name || "Ubicación por confirmar");
+    const heroImage = String(ticket.events?.poster_url || "");
+    const qrValue = String(ticket.qr_token || ticket.qr_code || ticket.id);
+    const eventDateText = (() => {
+      try {
+        const d = eventDateIso ? new Date(eventDateIso) : null;
+        if (!d || !Number.isFinite(d.getTime())) return "";
+        return d.toLocaleString("es-ES", { year: "numeric", month: "long", day: "2-digit", hour: "2-digit", minute: "2-digit" });
+      } catch {
+        return "";
+      }
+    })();
+
+    const genericObject: any = {
+      id: objectId,
+      classId: GOOGLE_WALLET_CLASS_ID,
+      state: "ACTIVE",
+      hexBackgroundColor: "#0F0F1A",
+      barcode: {
+        type: "QR_CODE",
+        value: qrValue,
+        alternateText: String(ticket.id).slice(0, 8).toUpperCase(),
+      },
+      cardTitle: { defaultValue: { language: "es-ES", value: eventTitle } },
+      header: { defaultValue: { language: "es-ES", value: "Entrada" } },
+      subheader: { defaultValue: { language: "es-ES", value: venueName } },
+      textModulesData: [
+        { id: "event", header: "Evento", body: eventTitle },
+        ...(eventDateText ? [{ id: "date", header: "Fecha", body: eventDateText }] : []),
+        { id: "venue", header: "Lugar", body: venueName },
+      ],
+    };
+
+    if (heroImage) {
+      genericObject.heroImage = {
+        sourceUri: { uri: heroImage },
+        contentDescription: { defaultValue: { language: "es-ES", value: "Cartel del evento" } },
+      };
+    }
+
+    const privateKeyPem = GOOGLE_WALLET_PRIVATE_KEY.replace(/\\n/g, "\n");
+    const key = await importPKCS8(privateKeyPem, "RS256");
+    const nowSeconds = Math.floor(Date.now() / 1000);
+    const jwt = await new SignJWT({
+      payload: { genericObjects: [genericObject] },
+    })
+      .setProtectedHeader({ alg: "RS256", typ: "JWT" })
+      .setIssuedAt(nowSeconds)
+      .setIssuer(GOOGLE_WALLET_SERVICE_ACCOUNT_EMAIL)
+      .setAudience("google")
+      .setExpirationTime(nowSeconds + 60 * 5)
+      .setSubject("savetowallet")
+      .sign(key);
+
+    const url = `https://pay.google.com/gp/v/save/${jwt}`;
+    console.log(`[WALLET] Success! Generated Google Wallet link for ticket ${ticket_id}`);
+    return jsonResponse({ ok: true, platform: "android", url, objectId });
 
   } catch (err) {
     console.error("[WALLET] Fatal Error:", err.message);

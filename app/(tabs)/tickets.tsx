@@ -1,4 +1,4 @@
-import { View, Text, StyleSheet, FlatList, Image, TouchableOpacity, RefreshControl, Platform, Modal, KeyboardAvoidingView, Animated, Easing } from 'react-native';
+﻿import { View, Text, StyleSheet, FlatList, Image, TouchableOpacity, RefreshControl, Platform, Modal, KeyboardAvoidingView, Animated, Easing } from 'react-native';
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { router } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
@@ -20,15 +20,18 @@ import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
 import * as Haptics from 'expo-haptics';
 import * as Linking from 'expo-linking';
+import { addPassToWallet, canAddPasses, isPassLibraryAvailable, reportWalletDebug } from '@/lib/passkite';
 import { useResponsive } from '@/lib/responsive';
 import { invokeEdgeFunction } from '@/lib/edgeFunctions';
 import { useTranslation } from 'react-i18next';
 import { useI18n } from '@/lib/I18nContext';
 import { useAppDialog } from '@/components/ui/AppDialog';
+import Constants from 'expo-constants';
 
 type ExtendedTicket = Ticket & { 
   status?: string;
   wallet_added?: boolean;
+  wallet_pass_id?: string | null;
   resale_listings?: { id: string; status: string; price: number }[];
 };
 
@@ -65,8 +68,8 @@ export default function TicketsScreen() {
     const normalized = String(resalePrice || '').trim().replace(',', '.');
     if (!normalized) return 'Obligatorio.';
     const price = Number(normalized);
-    if (!Number.isFinite(price)) return 'Introduce un número válido.';
-    if (price < 1) return 'Precio mínimo 1,00 €.';
+    if (!Number.isFinite(price)) return 'Introduce un numero valido.';
+    if (price < 1) return 'Precio minimo 1,00 EUR.';
 
     const rawOriginal = selectedTicket ? (typeof selectedTicket.total_price === 'string' ? Number(selectedTicket.total_price) : (selectedTicket as any).total_price) : 0;
     const originalPrice = typeof rawOriginal === 'number' && Number.isFinite(rawOriginal) ? rawOriginal : 0;
@@ -74,10 +77,10 @@ export default function TicketsScreen() {
     const maxResalePrice = originalPrice * 1.2;
 
     if (Number.isFinite(minResalePrice) && price < minResalePrice) {
-      return `Precio mínimo: ${(minResalePrice || 0).toFixed(2)} €`;
+      return `Precio minimo: ${(minResalePrice || 0).toFixed(2)} EUR`;
     }
     if (Number.isFinite(maxResalePrice) && price > maxResalePrice) {
-      return `Precio máximo: ${(maxResalePrice || 0).toFixed(2)} €`;
+      return `Precio maximo: ${(maxResalePrice || 0).toFixed(2)} EUR`;
     }
     return null;
   }, [resalePrice, selectedTicket]);
@@ -363,41 +366,81 @@ export default function TicketsScreen() {
 
     try {
       if (Platform.OS === 'ios') {
-        console.log('[WALLET] Generating Apple Wallet pass via Edge Function:', ticket.id);
+        // #region debug-point A:wallet-flow-start
+        reportWalletDebug('A', 'Starting iOS wallet flow', {
+          ticketId: ticket.id,
+          walletAdded: !!ticket.wallet_added,
+          walletPassId: ticket.wallet_pass_id || null,
+          executionEnvironment: Constants.executionEnvironment ?? null,
+          nativeAppVersion: Constants.nativeAppVersion ?? null,
+          nativeBuildVersion: Constants.nativeBuildVersion ?? null,
+        });
+        // #endregion
         
-        // 1. Invoke the Edge Function (Official Client - Auto Injects JWT)
         const { data, error } = await invokeEdgeFunction<{ base64: string }>('apple-wallet-generator', { ticket_id: ticket.id });
+        // #region debug-point A:wallet-edge-response
+        reportWalletDebug('A', 'Received apple-wallet-generator response', {
+          ticketId: ticket.id,
+          hasError: !!error,
+          status: error ? 'error' : 'ok',
+          hasBase64: !!data?.base64,
+          base64Prefix: data?.base64 ? String(data.base64).slice(0, 8) : null,
+          base64Length: data?.base64 ? String(data.base64).length : 0,
+        });
+        // #endregion
         if (error) throw new Error(String(error?.message || error));
         if (!data?.base64) throw new Error('No pass data received from server');
+        if (!String(data.base64).startsWith('UEsD')) throw new Error('El pase generado no parece un .pkpass valido.');
 
-        const fileUri = FileSystem.documentDirectory + `ticket-${ticket.id}.pkpass`;
-        
-        // 2. Save the Base64 as a physical file
-        await FileSystem.writeAsStringAsync(fileUri, data.base64, {
-          encoding: FileSystem.EncodingType.Base64,
+        const libraryAvailable = await isPassLibraryAvailable();
+        const walletAvailable = await canAddPasses();
+        // #region debug-point C:wallet-availability-results
+        reportWalletDebug('C', 'Resolved wallet availability checks', {
+          ticketId: ticket.id,
+          libraryAvailable,
+          walletAvailable,
         });
-        
-        // 3. Open native Apple Wallet dialog
-        await Sharing.shareAsync(fileUri, {
-          mimeType: 'application/vnd.apple.pkpass',
-          UTI: 'com.apple.pkpass',
-          dialogTitle: t('tickets.add_to_wallet'),
+        // #endregion
+        if (!libraryAvailable || !walletAvailable) {
+          throw new Error('Apple Wallet no esta disponible en este build. Instala un development build o TestFlight con PassKit.');
+        }
+
+        const result = await addPassToWallet(data.base64);
+        // #region debug-point D:wallet-native-result
+        reportWalletDebug('D', 'Native addPassToWallet completed', {
+          ticketId: ticket.id,
+          success: !!result?.success,
+          error: result?.error || null,
         });
+        // #endregion
+        if (!result?.success) {
+          throw new Error(result?.error || 'No se pudo abrir Apple Wallet.');
+        }
+
+        await supabase.from('tickets').update({ wallet_added: true, wallet_pass_id: ticket.id }).eq('id', ticket.id);
+        setTickets((prev) => prev.map((t) => (t.id === ticket.id ? { ...t, wallet_added: true, wallet_pass_id: ticket.id } : t)));
       } else {
         // Android Google Wallet handling
-        const { data, error } = await invokeEdgeFunction<{ url?: string }>('generate-wallet-pass', { ticket_id: ticket.id, platform: 'android' });
+        const { data, error } = await invokeEdgeFunction<{ url?: string; objectId?: string }>('generate-wallet-pass', { ticket_id: ticket.id, platform: 'android' });
         if (error) throw new Error(String(error?.message || error));
-        if (data?.url) await Linking.openURL(data.url);
+        if (!data?.url) throw new Error('No se recibio el enlace de Google Wallet.');
+        if (!String(data.url).startsWith('https://pay.google.com/gp/v/save/')) throw new Error('Enlace de Google Wallet invalido.');
+        await Linking.openURL(data.url);
+
+        // Igual que en iOS, abrir Google Wallet no garantiza que el usuario complete el guardado.
+        showDialog({
+          title: t('tickets.add_to_wallet'),
+          message: 'Se ha abierto Google Wallet. Si no se ha guardado la entrada, puedes volver a intentarlo.',
+        });
       }
-          
-      // Mark as added in DB
-      await supabase
-        .from('tickets')
-        .update({ wallet_added: true })
-        .eq('id', ticket.id);
-            
-      setTickets(prev => prev.map(t => t.id === ticket.id ? { ...t, wallet_added: true } : t));
     } catch (err: any) {
+      // #region debug-point E:wallet-flow-error
+      reportWalletDebug('E', 'Wallet flow failed', {
+        ticketId: ticket.id,
+        platform: Platform.OS,
+        message: String(err?.message || err),
+      });
+      // #endregion
       console.error('Wallet error:', err);
       const msg = err.message || t('errors.generic');
       showDialog({ title: t('common.error'), message: `${msg}\n${t('tickets.wallet_install_hint')}` });
@@ -421,7 +464,7 @@ export default function TicketsScreen() {
     const price = Number(normalized);
     const err = resalePriceError();
     if (err) {
-      showDialog({ title: 'Precio inválido', message: err });
+      showDialog({ title: 'Precio invalido', message: err });
       return;
     }
 
@@ -764,7 +807,7 @@ export default function TicketsScreen() {
                               style={styles.vipHeaderBadge}
                             >
                               <Sparkles size={14} color="#0b0b10" />
-                              <Text style={styles.vipHeaderBadgeText}>VIP · LUXURY ACCESS</Text>
+                              <Text style={styles.vipHeaderBadgeText}>VIP LUXURY ACCESS</Text>
                             </LinearGradient>
                           </View>
                         )}
@@ -807,7 +850,7 @@ export default function TicketsScreen() {
                             <View style={styles.infoColRight}>
                                 <Text style={styles.infoLabel}>{isVip ? t('tickets.card.access') : t('tickets.card.seat')}</Text>
                                 <Text style={[styles.infoValue, isVip && styles.infoValueVip]}>
-                                  {isVip ? `VIP • ${(item as any).quantity}P` : t('tickets.card.general')}
+                                  {isVip ? `VIP - ${(item as any).quantity}P` : t('tickets.card.general')}
                                 </Text>
                             </View>
                         </View>
@@ -891,7 +934,7 @@ export default function TicketsScreen() {
                         </TouchableOpacity>
                         )}
 
-                        {!isResale && ((item as any)?.events?.allow_resale ?? true) ? (
+                        {!isResale ? (
                         <TouchableOpacity 
                             style={[styles.actionButton, styles.actionButtonPrimary, isUsed && styles.actionButtonDisabled, { flex: 1 }]} 
                             onPress={() => !isUsed && void handleSellPress(item)}
@@ -902,12 +945,12 @@ export default function TicketsScreen() {
                                 {isUsed ? t('tickets.used') : t('tickets.sell')}
                             </Text>
                         </TouchableOpacity>
-                        ) : isResale ? (
+                        ) : (
                         <TouchableOpacity style={[styles.actionButton, styles.actionButtonDanger, { flex: 1 }]} onPress={() => handleCancelResale(item)}>
                             <X size={14} color="#ef4444" />
                             <Text style={[styles.actionButtonText, styles.actionButtonTextDanger]}>{t('common.cancel')}</Text>
                         </TouchableOpacity>
-                        ) : null}
+                        )}
                     </View>
 
                     {/* Barcode Strip Simulation */}
@@ -931,7 +974,7 @@ export default function TicketsScreen() {
         secondaryCtaLabel={t('auth.register')}
         Icon={LogIn}
         variant="resaleCard"
-        eyebrow={`ECLIPSE · ${String(t('tickets.my_tickets')).toUpperCase()}`}
+        eyebrow={`ECLIPSE | ${String(t('tickets.my_tickets')).toUpperCase()}`}
       />
     );
   }
@@ -1038,7 +1081,7 @@ export default function TicketsScreen() {
                   <View pointerEvents="none" style={styles.emptyHairlineTop} />
 
                   <View style={styles.emptyHeader}>
-                    <Text style={styles.emptyEyebrow}>ECLIPSE · ENTRADAS</Text>
+                    <Text style={styles.emptyEyebrow}>ECLIPSE | ENTRADAS</Text>
                   </View>
 
                   <Animated.View style={[styles.emptyIconFloat, { transform: [{ translateY: emptyFloat.interpolate({ inputRange: [0, 1], outputRange: [0, -7] }) }] }]}>
@@ -1826,3 +1869,4 @@ const styles = StyleSheet.create({
     width: '100%',
   },
 });
+

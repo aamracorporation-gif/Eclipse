@@ -42,7 +42,7 @@ export const theme = {
       borderRadius: 16,
     },
     input: {
-      minHeight: 52,
+      minHeight: 60,
       borderWidth: 1,
     },
   },

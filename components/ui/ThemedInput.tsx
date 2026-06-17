@@ -19,8 +19,8 @@ export const ThemedInput = forwardRef<TextInput, ThemedInputProps>(({ icon: Icon
   const resolvedRightIcon =
     rightIcon ??
     (error
-      ? <AlertCircle size={18} color={Colors.dark.error} />
-      : (success ? <CheckCircle2 size={18} color={Colors.dark.success} /> : null));
+      ? <AlertCircle size={20} color={Colors.dark.error} />
+      : (success ? <CheckCircle2 size={20} color={Colors.dark.success} /> : null));
   return (
     <View style={[styles.wrapper, containerStyle]}>
       {label && <Text style={styles.label}>{label}</Text>}
@@ -65,16 +65,22 @@ const styles = StyleSheet.create({
     color: Colors.dark.text,
     fontSize: theme.typography.size.md,
     fontWeight: theme.typography.weight.semibold,
-    marginBottom: theme.space[2],
+    marginBottom: theme.space[3],
+    letterSpacing: 0.2,
   },
   container: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.06)',
-    borderRadius: theme.radius.md,
+    backgroundColor: 'rgba(255, 255, 255, 0.075)',
+    borderRadius: 18,
     borderWidth: theme.components.input.borderWidth,
-    borderColor: Colors.dark.border,
+    borderColor: 'rgba(255,255,255,0.12)',
     minHeight: theme.components.input.minHeight,
+    shadowColor: Colors.dark.primary,
+    shadowOpacity: 0.14,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 4,
   },
   errorBorder: {
     borderColor: Colors.dark.error,
@@ -83,13 +89,13 @@ const styles = StyleSheet.create({
     borderColor: Colors.dark.success,
   },
   iconContainer: {
-    paddingLeft: theme.space[4],
+    paddingLeft: theme.space[5],
     paddingRight: theme.space[3],
     height: theme.components.input.minHeight,
     justifyContent: 'center',
   },
   rightIconContainer: {
-    paddingRight: theme.space[4],
+    paddingRight: theme.space[5],
     paddingLeft: theme.space[3],
     height: theme.components.input.minHeight,
     justifyContent: 'center',
@@ -97,21 +103,23 @@ const styles = StyleSheet.create({
   input: {
     flex: 1,
     color: Colors.dark.text,
-    fontSize: theme.typography.size.md,
+    fontSize: theme.typography.size.lg,
     minHeight: theme.components.input.minHeight,
-    paddingRight: theme.space[4],
-    paddingVertical: theme.space[3],
+    paddingRight: theme.space[5],
+    paddingVertical: theme.space[4],
+    fontWeight: '700',
   },
   noIconInput: {
-    paddingLeft: theme.space[4],
+    paddingLeft: theme.space[5],
   },
   inputWithRightIcon: {
     paddingRight: 0,
   },
   errorText: {
     color: Colors.dark.error,
-    fontSize: theme.typography.size.xs,
-    marginTop: theme.space[1],
+    fontSize: theme.typography.size.sm,
+    marginTop: theme.space[2],
     marginLeft: theme.space[1],
+    fontWeight: '700',
   }
 });

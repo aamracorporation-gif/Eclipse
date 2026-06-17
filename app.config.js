@@ -1,5 +1,16 @@
 const appJson = require('./app.json');
 
+const PASSKITE_PLUGIN_PATH = './plugins/withPasskite';
+
+const normalizePlugins = (plugins = []) =>
+  plugins.map((plugin) => {
+    if (plugin === 'expo-passkite') return PASSKITE_PLUGIN_PATH;
+    if (Array.isArray(plugin) && plugin[0] === 'expo-passkite') {
+      return [PASSKITE_PLUGIN_PATH, plugin[1] || {}];
+    }
+    return plugin;
+  });
+
 const getHttpsHost = () => {
   const enableAssociatedDomains = process.env.EXPO_PUBLIC_ENABLE_ASSOCIATED_DOMAINS === '1';
   if (!enableAssociatedDomains) return null;
@@ -16,8 +27,14 @@ const getHttpsHost = () => {
 module.exports = () => {
   const host = getHttpsHost();
   const expoConfig = appJson.expo;
+  const plugins = normalizePlugins(expoConfig.plugins);
 
-  if (!host) return expoConfig;
+  if (!host) {
+    return {
+      ...expoConfig,
+      plugins,
+    };
+  }
 
   const intentFilters = [
     {
@@ -41,6 +58,7 @@ module.exports = () => {
 
   return {
     ...expoConfig,
+    plugins,
     android: {
       ...expoConfig.android,
       intentFilters,

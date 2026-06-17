@@ -18,3 +18,9 @@ verify_jwt = false
 
 [functions.send-push]
 verify_jwt = false
+
+[functions.apple-wallet-generator]
+verify_jwt = false
+
+[functions.generate-wallet-pass]
+verify_jwt = false
