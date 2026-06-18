@@ -363,41 +363,17 @@ Deno.serve(async (req) => {
               ? "EXHIBITION"
               : "EVENT";
 
+    // Backgrounds tuned to match the near-black used in the strip images
     const palette =
       eventStyle === "music"
-        ? {
-            name: "eclipse-music",
-            backgroundColor: "rgb(10, 8, 18)",
-            foregroundColor: "rgb(255, 255, 255)",
-            labelColor: "rgb(255, 179, 107)",
-          }
+        ? { name:"eclipse-music",     backgroundColor:"rgb(8,4,12)",   foregroundColor:"rgb(255,255,255)", labelColor:"rgb(255,179,107)" }
         : eventStyle === "sports"
-          ? {
-              name: "eclipse-sports",
-              backgroundColor: "rgb(4, 11, 20)",
-              foregroundColor: "rgb(255, 255, 255)",
-              labelColor: "rgb(125, 211, 255)",
-            }
+          ? { name:"eclipse-sports",  backgroundColor:"rgb(2,6,14)",   foregroundColor:"rgb(255,255,255)", labelColor:"rgb(125,211,255)" }
           : eventStyle === "corporate"
-            ? {
-                name: "eclipse-corporate",
-                backgroundColor: "rgb(12, 12, 18)",
-                foregroundColor: "rgb(255, 255, 255)",
-                labelColor: "rgb(182, 187, 198)",
-              }
+            ? { name:"eclipse-corp",  backgroundColor:"rgb(6,6,10)",   foregroundColor:"rgb(255,255,255)", labelColor:"rgb(212,216,226)" }
             : eventStyle === "art"
-              ? {
-                  name: "eclipse-art",
-                  backgroundColor: "rgb(12, 8, 22)",
-                  foregroundColor: "rgb(255, 255, 255)",
-                  labelColor: "rgb(199, 178, 255)",
-                }
-              : {
-                  name: "eclipse-default",
-                  backgroundColor: "rgb(10, 8, 18)",
-                  foregroundColor: "rgb(255, 255, 255)",
-                  labelColor: "rgb(255, 179, 107)",
-                };
+              ? { name:"eclipse-art", backgroundColor:"rgb(6,2,12)",   foregroundColor:"rgb(255,255,255)", labelColor:"rgb(207,159,255)" }
+              : { name:"eclipse-def", backgroundColor:"rgb(8,4,12)",   foregroundColor:"rgb(255,255,255)", labelColor:"rgb(255,179,107)" };
 
     const bundledStripBase64 =
       eventStyle === "music"
@@ -546,18 +522,19 @@ Deno.serve(async (req) => {
         : null;
     const relevantDate =
       entryDate && Number.isFinite(entryDate.getTime()) ? entryDate.toISOString() : undefined;
-    const passIdDisplay = `ECL·${eventYear}·${ticket.id.slice(0, 6).toUpperCase()}`;
-    const holderName = nonEmpty(ticket.buyer_name) || nonEmpty(user.email) || "ECLIPSE MEMBER";
-    const benefits = nonEmpty(ticketTypeMetadata.benefits);
-    const vipGroupSize = parsePositiveNumber(ticketTypeMetadata.vipGroupSize);
-    const backstageHost = nonEmpty(ticketTypeMetadata.backstageHost);
-    const gateDisplay = nonEmpty(ticketTypeMetadata.gate) || (dedicatedLane ? "VIP" : "MAIN");
-    const sectionDisplay = nonEmpty(ticketTypeMetadata.section) || (tier === "vip" ? "VIP FLOOR" : tier === "gold" ? "BACKSTAGE" : "FLOOR");
-    const seatDisplay = nonEmpty(ticketTypeMetadata.seat) || (!ticket.ticket_type_id ? "OPEN" : "GENERAL");
+    // ── Display values ───────────────────────────────────────────────────────
+    const passIdDisplay   = `ECL·${eventYear}·${ticket.id.slice(0,6).toUpperCase()}`;
+    const holderName      = nonEmpty(ticket.buyer_name) || nonEmpty(user.email) || "ECLIPSE MEMBER";
+    const benefits        = nonEmpty(ticketTypeMetadata.benefits);
+    const vipGroupSize    = parsePositiveNumber(ticketTypeMetadata.vipGroupSize);
+    const backstageHost   = nonEmpty(ticketTypeMetadata.backstageHost);
+    const gateDisplay     = nonEmpty(ticketTypeMetadata.gate) || (dedicatedLane ? "VIP" : "MAIN");
+    const sectionDisplay  = nonEmpty(ticketTypeMetadata.section) || (tier === "vip" ? "VIP FLOOR" : tier === "gold" ? "BACKSTAGE" : "FLOOR");
+    const seatDisplay     = nonEmpty(ticketTypeMetadata.seat) || (!ticket.ticket_type_id ? "OPEN" : "GENERAL");
     const ticketCodeDisplay = passIdDisplay;
-    const dateTimeDisplay = `${dateDisplay} • ${timeDisplay}`;
+    const dateTimeDisplay = `${dateDisplay} · ${timeDisplay}`;
 
-    // ── Date formatting ──
+    // ── Date formatted as "FRI 20 JUN" ──
     const shortDateDisplay = eventDate && Number.isFinite(eventDate.getTime())
       ? (() => {
           const day = eventDate.toLocaleDateString("en-GB", { weekday: "short" }).toUpperCase();
@@ -571,19 +548,18 @@ Deno.serve(async (req) => {
       ? new Date(eventDate.getTime() + 8 * 60 * 60 * 1000).toISOString()
       : undefined;
 
-    // ── Category badge (header right) ──
-    // Unicode bullet + category: "● CONCERT"
-    const categoryBadge = `● ${eventTypeLabel}`;
+    // ── Category badge: "○ CONCERT" in the header (right-aligned) ──
+    // Unicode thin circle reads as a premium accent dot in the accent (label) color
+    const categoryBadge = `◉ ${eventTypeLabel}`;
 
-    // ── Venue display: truncate to 28 chars max for secondary field ──
-    const venueShort = venueName.length > 28 ? venueName.slice(0, 26) + "…" : venueName;
+    // ── Venue: cap at 26 chars ──
+    const venueShort = venueName.length > 26 ? venueName.slice(0,24) + "…" : venueName;
 
-    // ── Access display for auxiliary ──
-    const accessDisplay = tier === "gold"
-      ? "FOUNDERS ✦"
-      : tier === "vip"
-        ? "VIP ACCESS"
-        : "GENERAL";
+    // ── Access tier label ──
+    const accessLabel =
+      tier === "gold"   ? "FOUNDERS"   :
+      tier === "vip"    ? "VIP"        :
+                          "GENERAL";
 
     const backFields: any[] = [];
     const pushBackField = (key: string, label: string, value: unknown) => {
@@ -592,119 +568,107 @@ Deno.serve(async (req) => {
       backFields.push({ key, label, value: v });
     };
 
+    // ── pass.json — Apple-minimal layout ─────────────────────────────────────
+    //
+    //  ┌─────────────────────────────────────────┐
+    //  │  [LOGO]  ECLIPSE        ◉ CONCERT  [hdr]│  ← header
+    //  │══════════ STRIP IMAGE ═══════════════════│  ← solar eclipse artwork
+    //  │  EVENT                                  │  ← primary (large)
+    //  │  AMAPIANO NIGHTS VOL. 4                 │
+    //  │  ──────────────────────────────────────  │
+    //  │  VENUE                    DATE          │  ← secondary
+    //  │  WiZink Center            FRI 20 JUN    │
+    //  │  ──────────────────────────────────────  │
+    //  │  DOORS     ACCESS         GATE          │  ← auxiliary
+    //  │  21:00     VIP            MAIN          │
+    //  │  ══════════ QR CODE ══════════════════  │
+    //  └─────────────────────────────────────────┘
+    //
     const passJson = {
-      formatVersion: 1,
+      formatVersion:      1,
       passTypeIdentifier: APPLE_PASS_TYPE_ID,
-      teamIdentifier: APPLE_TEAM_ID,
-      serialNumber: ticket.id,
-      organizationName: "ECLIPSE",
-      description: `ECLIPSE — ${title}`,
-      backgroundColor: palette.backgroundColor,
-      foregroundColor: palette.foregroundColor,
-      labelColor: palette.labelColor,
+      teamIdentifier:     APPLE_TEAM_ID,
+      serialNumber:       ticket.id,
+      organizationName:   "ECLIPSE",
+      description:        `${title} — ECLIPSE`,
+      backgroundColor:    palette.backgroundColor,
+      foregroundColor:    palette.foregroundColor,
+      labelColor:         palette.labelColor,
       suppressStripShine: true,
-      sharingProhibited: true,
+      sharingProhibited:  true,
       groupingIdentifier: `eclipse.events.${eventYear}`,
-      ...(relevantDate ? { relevantDate } : {}),
+      ...(relevantDate   ? { relevantDate }   : {}),
       ...(expirationDate ? { expirationDate } : {}),
-      ...(hasVenueCoords
-        ? {
-            locations: [
-              {
-                latitude: venueLat,
-                longitude: venueLng,
-                relevantText: `${title} · Scan at the entrance`,
-              },
-            ],
-          }
-        : {}),
-      barcode: { ...barcode, altText: ticketCodeDisplay },
+      ...(hasVenueCoords ? {
+        locations: [{ latitude: venueLat, longitude: venueLng,
+          relevantText: `${title} — your ECLIPSE pass is ready` }],
+      } : {}),
+      barcode:  { ...barcode, altText: ticketCodeDisplay },
       barcodes: [{ ...barcode, altText: ticketCodeDisplay }],
+
       eventTicket: {
-        // ── HEADER (top strip: logo left, these fields right) ──
+        // HEADER — tiny field, right of logo strip
+        // Shows the event category badge in the accent color
         headerFields: [
-          {
-            key: "category",
-            label: "",
-            value: categoryBadge,
-            textAlignment: "PKTextAlignmentRight",
-          },
+          { key: "cat", label: "", value: categoryBadge,
+            textAlignment: "PKTextAlignmentRight" },
         ],
 
-        // ── PRIMARY (large bold text below strip) ──
+        // PRIMARY — the star: large white title
         primaryFields: [
-          {
-            key: "eventName",
-            label: "EVENT",
+          { key: "eventName", label: "EVENT",
             value: title.toUpperCase(),
-            textAlignment: "PKTextAlignmentLeft",
-          },
+            textAlignment: "PKTextAlignmentLeft" },
         ],
 
-        // ── SECONDARY (two columns below primary) ──
+        // SECONDARY — venue left, formatted date right
         secondaryFields: [
-          {
-            key: "venue",
-            label: "VENUE",
+          { key: "venue", label: "VENUE",
             value: venueShort,
-            textAlignment: "PKTextAlignmentLeft",
-          },
-          {
-            key: "date",
-            label: "DATE",
+            textAlignment: "PKTextAlignmentLeft" },
+          { key: "date",  label: "DATE",
             value: shortDateDisplay,
-            textAlignment: "PKTextAlignmentRight",
-          },
+            textAlignment: "PKTextAlignmentRight" },
         ],
 
-        // ── AUXILIARY (small 3-col row) ──
+        // AUXILIARY — 3 tight columns: DOORS · ACCESS · GATE
         auxiliaryFields: [
-          {
-            key: "doors",
-            label: "DOORS",
+          { key: "doors",  label: "DOORS",
             value: entryDisplay,
-            textAlignment: "PKTextAlignmentLeft",
-          },
-          {
-            key: "access",
-            label: "ACCESS",
-            value: accessDisplay,
-            textAlignment: "PKTextAlignmentCenter",
-          },
-          {
-            key: "gate",
-            label: "GATE",
+            textAlignment: "PKTextAlignmentLeft" },
+          { key: "access", label: "ACCESS",
+            value: accessLabel,
+            textAlignment: "PKTextAlignmentCenter" },
+          { key: "gate",   label: "GATE",
             value: gateDisplay,
-            textAlignment: "PKTextAlignmentRight",
-          },
+            textAlignment: "PKTextAlignmentRight" },
         ],
 
         backFields,
       },
     };
 
-    // ── BACK FIELDS (flip side — rich detail) ──
-    pushBackField("holder",    "TICKET HOLDER",  holderName.toUpperCase());
-    pushBackField("passId",    "PASS ID",        ticketCodeDisplay);
-    pushBackField("access",    "ACCESS TYPE",    (ticketTypeName || accessDisplay).toUpperCase());
-    pushBackField("zone",      "ZONE / SECTION", sectionDisplay);
-    pushBackField("seat",      "SEAT",           seatDisplay);
-    pushBackField("gate",      "ENTRY GATE",     gateDisplay);
-    pushBackField("entryTime", "ENTRY FROM",     entryDisplay);
-    pushBackField("showtime",  "SHOW STARTS",    timeDisplay);
-    pushBackField("date",      "DATE",           dateTimeDisplay);
-    pushBackField("venue",     "VENUE",          venueName);
-    pushBackField("address",   "ADDRESS",        venueAddress);
-    pushBackField("lane",      "LANE",           dedicatedLane);
-    pushBackField("benefits",  "BENEFITS",       benefits);
-    pushBackField("group",     "GROUP SIZE",     vipGroupSize ? `${vipGroupSize} GUESTS` : null);
-    pushBackField("bottles",   "TABLE SERVICE",  bottleSummary);
-    pushBackField("host",      "HOST",           backstageHost);
-    pushBackField("terms",     "TERMS & CONDITIONS",
-      "This ticket is strictly non-transferable and non-refundable. " +
-      "Valid only for the date and venue shown. Must be presented at entry. " +
-      "ECLIPSE reserves the right to refuse admission.");
-    pushBackField("support",   "SUPPORT",        "help@eclipse.app · eclipse.app");
+    // ── BACK FIELDS — flip side, full detail ─────────────────────────────────
+    pushBackField("holder",    "TICKET HOLDER",       holderName.toUpperCase());
+    pushBackField("passId",    "PASS ID",             ticketCodeDisplay);
+    pushBackField("accessType","ACCESS TYPE",          (ticketTypeName || accessLabel).toUpperCase());
+    pushBackField("zone",      "ZONE",                sectionDisplay);
+    pushBackField("seat",      "SEAT",                seatDisplay);
+    pushBackField("gate",      "GATE",                gateDisplay);
+    pushBackField("entryOpen", "DOORS OPEN",          entryDisplay);
+    pushBackField("showtime",  "SHOW STARTS",         timeDisplay);
+    pushBackField("datetime",  "DATE & TIME",         dateTimeDisplay);
+    pushBackField("venue",     "VENUE",               venueName);
+    pushBackField("address",   "ADDRESS",             venueAddress);
+    pushBackField("lane",      "ENTRY LANE",          dedicatedLane);
+    pushBackField("benefits",  "INCLUDED BENEFITS",   benefits);
+    pushBackField("group",     "GROUP SIZE",          vipGroupSize ? `${vipGroupSize} guests` : null);
+    pushBackField("bottles",   "TABLE SERVICE",       bottleSummary);
+    pushBackField("host",      "YOUR HOST",           backstageHost);
+    pushBackField("terms",     "TERMS",
+      "Non-transferable · Non-refundable · Valid only on the date shown. " +
+      "ECLIPSE reserves the right to refuse admission at any time.");
+    pushBackField("support",   "SUPPORT",             "help@eclipse.app");
     console.log("[INFO] pass.json preview:", JSON.stringify({
       formatVersion: passJson.formatVersion,
       passTypeIdentifier: passJson.passTypeIdentifier,
