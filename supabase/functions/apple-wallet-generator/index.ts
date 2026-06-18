@@ -588,13 +588,11 @@ Deno.serve(async (req) => {
       backgroundColor: palette.backgroundColor,
       foregroundColor: palette.foregroundColor,
       labelColor: palette.labelColor,
-      logoText: "",
       suppressStripShine: true,
       sharingProhibited: true,
       groupingIdentifier: `eclipse.events.${eventYear}`,
       ...(relevantDate ? { relevantDate } : {}),
       ...(expirationDate ? { expirationDate } : {}),
-      voided: false,
       ...(hasVenueCoords
         ? {
             locations: [
@@ -616,18 +614,6 @@ Deno.serve(async (req) => {
           altText: ticketCodeDisplay,
         },
       ],
-      semantics: {
-        eventType: "PKEventTypeGeneric",
-        eventName: title,
-        venueName: venueName,
-        ...(hasVenueCoords
-          ? { venueLocation: { latitude: venueLat, longitude: venueLng } }
-          : {}),
-        ...(eventDate && Number.isFinite(eventDate.getTime())
-          ? { eventStartDate: eventDate.toISOString() }
-          : {}),
-        ...(expirationDate ? { eventEndDate: expirationDate } : {}),
-      },
       eventTicket: {
         headerFields: [
           {

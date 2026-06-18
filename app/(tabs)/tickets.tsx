@@ -1,4 +1,4 @@
-﻿import { View, Text, StyleSheet, FlatList, Image, TouchableOpacity, RefreshControl, Platform, Modal, KeyboardAvoidingView, Animated, Easing } from 'react-native';
+﻿﻿import { View, Text, StyleSheet, FlatList, Image, TouchableOpacity, RefreshControl, Platform, Modal, KeyboardAvoidingView, Animated, Easing } from 'react-native';
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { router } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
@@ -686,281 +686,256 @@ export default function TicketsScreen() {
     }
   };
 
+  const getCategoryTheme = (ticket: ExtendedTicket) => {
+    const src = `${ticket.events?.title || ''} ${(ticket as any).ticket_type || ''}`.toLowerCase();
+    if (/(concert|music|festival|dj|tour|live|party|show|amapiano)/.test(src))
+      return { label: 'CONCERT', accent: '#FFB36B', grad: ['#2A1A3E', '#120A20', '#0A0A10'] as const };
+    if (/(sport|match|game|league|cup|stadium|football|soccer|basket|tennis|padel)/.test(src))
+      return { label: 'SPORT', accent: '#7DD3FF', grad: ['#0D1F35', '#091525', '#0A0A10'] as const };
+    if (/(conference|summit|corporate|business|forum|expo|networking)/.test(src))
+      return { label: 'CONFERENCE', accent: '#B6BBC6', grad: ['#111118', '#0D0D14', '#0A0A10'] as const };
+    if (/(museum|gallery|exhibition|art|installation|editorial)/.test(src))
+      return { label: 'EXHIBITION', accent: '#C7B2FF', grad: ['#1A0E2A', '#100820', '#0A0A10'] as const };
+    return { label: 'EVENT', accent: '#FFB36B', grad: ['#2A1A3E', '#120A20', '#0A0A10'] as const };
+  };
+
   const renderTicket = ({ item }: { item: ExtendedTicket }) => {
     const isResale = item.status === 'resale';
-    const isUsed = item.scanned_at || item.validation_status === 'used';
+    const isUsed = !!(item.scanned_at || item.validation_status === 'used');
     const eventDate = item.events?.event_date ? new Date(item.events.event_date) : null;
     const isVip = (item as any)?.ticket_type_id == null;
     const eventId = item.events?.id;
-    
-    // Ticket Data
-    const day = eventDate ? eventDate.getDate() : '??';
-    const month = eventDate ? eventDate.toLocaleString(localeTag, { month: 'short' }).toUpperCase() : '???';
-    const time = eventDate ? eventDate.toLocaleTimeString(localeTag, { hour: '2-digit', minute: '2-digit' }) : '??:??';
-    const year = eventDate ? eventDate.getFullYear() : '2024';
-    
-    const ticketRef = `#${item.id.substring(0, 8).toUpperCase()}`;
-    const passengerName = item.buyer_name || user?.user_metadata?.full_name || 'Invitado';
+    const theme = getCategoryTheme(item);
+
+    const shortDate = eventDate
+      ? `${eventDate.toLocaleDateString(localeTag, { weekday: 'short' })} · ${eventDate.getDate()} ${eventDate.toLocaleDateString(localeTag, { month: 'short' })}`
+      : '—';
+    const time = eventDate ? eventDate.toLocaleTimeString(localeTag, { hour: '2-digit', minute: '2-digit' }) : '—';
+    const eventYear = eventDate ? eventDate.getFullYear() : new Date().getFullYear();
+    const ticketShort = item.id.slice(0, 4).toUpperCase();
+    const sectionLabel = isVip ? 'VIP' : t('tickets.card.general');
+    const rowLabel = '—';
+    const seatLabel = isVip ? `${(item as any).quantity}P` : t('tickets.card.general');
+    const ticketCode = `ECL-${eventYear}-${ticketShort}-${sectionLabel.replace(/\s/g, '-').toUpperCase()}`;
 
     return (
       <View style={[styles.ticketContainer, { maxWidth: maxContentWidth }]}>
-        {/* Physical Ticket Wrapper with Shadow */}
-        <TouchableOpacity
-          activeOpacity={0.92}
-          disabled={!eventId}
-          onPress={() => {
-            if (!eventId) return;
-            router.push(`/(tabs)/event/${eventId}`);
-          }}
-          style={[styles.ticketShadow, isVip && styles.ticketShadowVip]}
-        >
-            <View style={[styles.ticketWrapper, isVip && styles.ticketWrapperVip]}>
-                
-                {/* 1. Main Ticket Body (Top) */}
-                <View style={[styles.ticketMain, isVip && styles.ticketMainVip]}>
-                    {isVip && (
-                      <LinearGradient
-                        colors={['rgba(212,175,55,0.10)', 'rgba(124,58,237,0.10)', 'rgba(0,0,0,0.0)']}
-                        start={{ x: 0, y: 0 }}
-                        end={{ x: 1, y: 1 }}
-                        style={StyleSheet.absoluteFill}
-                      />
-                    )}
-                    {isVip && (
-                      <Animated.View
-                        pointerEvents="none"
-                        style={[
-                          styles.vipTicketGlow,
-                          {
-                            opacity: vipGlow.interpolate({ inputRange: [0, 1], outputRange: [0.18, 0.55] }),
-                            transform: [{ scale: vipGlow.interpolate({ inputRange: [0, 1], outputRange: [1, 1.05] }) }],
-                          },
-                        ]}
-                      >
-                        <LinearGradient
-                          colors={['rgba(212,175,55,0.20)', 'rgba(255,255,255,0.08)', 'rgba(6,182,212,0.10)']}
-                          start={{ x: 0, y: 0 }}
-                          end={{ x: 1, y: 1 }}
-                          style={StyleSheet.absoluteFill}
-                        />
-                      </Animated.View>
-                    )}
-                    {isVip && (
-                      <Animated.View
-                        pointerEvents="none"
-                        style={[
-                          styles.vipTicketShimmer,
-                          {
-                            opacity: vipShimmer.interpolate({ inputRange: [0, 1], outputRange: [0.10, 0.38] }),
-                            transform: [
-                              { translateX: vipShimmer.interpolate({ inputRange: [0, 1], outputRange: [-160, 280] }) },
-                              { rotate: '-12deg' },
-                            ],
-                          },
-                        ]}
-                      >
-                        <LinearGradient
-                          colors={['transparent', 'rgba(255,255,255,0.16)', 'transparent']}
-                          start={{ x: 0, y: 0 }}
-                          end={{ x: 1, y: 0 }}
-                          style={StyleSheet.absoluteFill}
-                        />
-                      </Animated.View>
-                    )}
-                    {/* Header Image */}
-                    <View style={styles.ticketHeaderImage}>
-                        {item.events?.poster_url ? (
-                            <Image 
-                                source={{ uri: item.events.poster_url }} 
-                                style={StyleSheet.absoluteFill} 
-                                resizeMode="cover"
-                            />
-                        ) : (
-                            <View style={[StyleSheet.absoluteFill, { backgroundColor: '#333' }]} />
-                        )}
-                        {isVip && (
-                          <LinearGradient
-                            colors={['rgba(212,175,55,0.35)', 'rgba(0,0,0,0)', 'rgba(255,255,255,0.08)']}
-                            style={StyleSheet.absoluteFill}
-                          />
-                        )}
-                        <LinearGradient
-                            colors={['transparent', 'rgba(0,0,0,0.8)']}
-                            style={StyleSheet.absoluteFill}
-                        />
-                        
-                        {/* Status Stamp */}
-                        {(isResale || isUsed) && (
-                            <View style={[styles.resaleStamp, isUsed && styles.usedStamp]}>
-                                <Text style={[styles.resaleStampText, isUsed && styles.usedStampText]}>
-                                    {isUsed ? 'USADO' : 'EN VENTA'}
-                                </Text>
-                            </View>
-                        )}
+        {/* ECLIPSE Card */}
+        <View style={styles.eclipseCard}>
 
-                        {isVip && (
-                          <View style={styles.vipHeaderBadgeWrap}>
-                            <LinearGradient
-                              colors={['rgba(212,175,55,0.95)', 'rgba(245,158,11,0.85)']}
-                              start={{ x: 0, y: 0 }}
-                              end={{ x: 1, y: 1 }}
-                              style={styles.vipHeaderBadge}
-                            >
-                              <Sparkles size={14} color="#0b0b10" />
-                              <Text style={styles.vipHeaderBadgeText}>VIP LUXURY ACCESS</Text>
-                            </LinearGradient>
-                          </View>
-                        )}
+          {/* ── BANNER ── */}
+          <TouchableOpacity
+            activeOpacity={0.92}
+            disabled={!eventId}
+            onPress={() => { if (eventId) router.push(`/(tabs)/event/${eventId}`); }}
+            style={styles.eclipseBanner}
+          >
+            {/* Base gradient (category color → dark) */}
+            <LinearGradient
+              colors={[...theme.grad]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={StyleSheet.absoluteFill}
+            />
 
-                        <View style={styles.headerContent}>
-                            <Text style={[styles.ticketBrand, isVip && styles.ticketBrandVip]}>{isVip ? 'VIP PASS' : 'OFFICIAL TICKET'}</Text>
-                            <Text style={styles.ticketTitle} numberOfLines={2}>
-                                {item.events?.title?.toUpperCase()}
-                            </Text>
-                        </View>
-                    </View>
+            {/* Poster image with heavy dark overlay */}
+            {item.events?.poster_url && (
+              <>
+                <Image
+                  source={{ uri: item.events.poster_url }}
+                  style={[StyleSheet.absoluteFill, { opacity: 0.22 }]}
+                  resizeMode="cover"
+                />
+              </>
+            )}
 
-                    {/* Info Grid */}
-                    <View style={styles.ticketInfoBody}>
-                        <View style={styles.infoRow}>
-                            <View style={styles.infoCol}>
-                                <Text style={styles.infoLabel}>{t('tickets.card.date')}</Text>
-                                <Text style={styles.infoValue}>{day} {month} {year}</Text>
-                            </View>
-                            <View style={styles.infoColRight}>
-                                <Text style={styles.infoLabel}>{t('tickets.card.time')}</Text>
-                                <Text style={styles.infoValue}>{time}</Text>
-                            </View>
-                        </View>
+            {/* Spotlight glow in category color */}
+            <LinearGradient
+              colors={[`${theme.accent}40`, `${theme.accent}00`]}
+              start={{ x: 0.55, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={StyleSheet.absoluteFill}
+            />
 
-                        <View style={styles.infoRow}>
-                            <View style={styles.infoCol}>
-                                <Text style={styles.infoLabel}>{t('tickets.card.location')}</Text>
-                                <Text style={styles.infoValue} numberOfLines={1}>
-                                    {item.events?.venues?.name || t('tickets_pdf.location_tbd')}
-                                </Text>
-                            </View>
-                        </View>
+            {/* Top darkness overlay for readability */}
+            <LinearGradient
+              colors={['rgba(10,10,15,0.88)', 'rgba(10,10,15,0.12)']}
+              style={StyleSheet.absoluteFill}
+            />
 
-                        <View style={styles.infoRow}>
-                            <View style={styles.infoCol}>
-                                <Text style={styles.infoLabel}>{t('tickets.card.holder')}</Text>
-                                <Text style={styles.infoValue} numberOfLines={1}>{passengerName}</Text>
-                            </View>
-                            <View style={styles.infoColRight}>
-                                <Text style={styles.infoLabel}>{isVip ? t('tickets.card.access') : t('tickets.card.seat')}</Text>
-                                <Text style={[styles.infoValue, isVip && styles.infoValueVip]}>
-                                  {isVip ? `VIP - ${(item as any).quantity}P` : t('tickets.card.general')}
-                                </Text>
-                            </View>
-                        </View>
-                    </View>
-                </View>
+            {/* Bottom vignette */}
+            <LinearGradient
+              colors={['transparent', 'rgba(0,0,0,0.30)']}
+              start={{ x: 0, y: 0.6 }}
+              end={{ x: 0, y: 1 }}
+              style={StyleSheet.absoluteFill}
+            />
 
-                {/* 2. Tear Line / Perforation */}
-                <View style={[styles.perforationContainer, isVip && styles.perforationContainerVip]}>
-                    <View style={styles.notchLeft} />
-                    <View style={[styles.dottedLine, isVip && styles.dottedLineVip]} />
-                    <View style={styles.notchRight} />
-                </View>
+            {/* VIP shimmer */}
+            {isVip && (
+              <Animated.View
+                pointerEvents="none"
+                style={[
+                  StyleSheet.absoluteFill,
+                  {
+                    opacity: vipShimmer.interpolate({ inputRange: [0, 1], outputRange: [0.06, 0.22] }),
+                    transform: [
+                      { translateX: vipShimmer.interpolate({ inputRange: [0, 1], outputRange: [-200, 340] }) },
+                      { rotate: '-15deg' },
+                    ],
+                  },
+                ]}
+              >
+                <LinearGradient
+                  colors={['transparent', 'rgba(255,255,255,0.18)', 'transparent']}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 0 }}
+                  style={{ flex: 1, width: 120 }}
+                />
+              </Animated.View>
+            )}
 
-                {/* 3. Stub (Bottom) */}
-                <View style={[styles.ticketStub, isVip && styles.ticketStubVip]}>
-                    {isVip && (
-                      <LinearGradient
-                        colors={['rgba(212,175,55,0.08)', 'rgba(124,58,237,0.08)', 'rgba(6,182,212,0.05)']}
-                        start={{ x: 0, y: 0 }}
-                        end={{ x: 1, y: 1 }}
-                        style={StyleSheet.absoluteFill}
-                      />
-                    )}
-                    <View style={styles.stubContent}>
-                        <View style={[styles.qrBox, isVip && styles.qrBoxVip]}>
-                             {!isResale ? (
-                               <QRCode 
-                                  value={item.qr_token || item.qr_code || item.id} 
-                                  size={120} 
-                                  color="black" 
-                                  backgroundColor="white" 
-                              />
-                             ) : (
-                               <View style={styles.qrPlaceholder}>
-                                 <Text style={styles.qrPlaceholderText}>{t('tickets.qr_disabled_resale')}</Text>
-                               </View>
-                             )}
-                            {isUsed && (
-                                <View style={styles.qrOverlay}>
-                                    <Text style={styles.qrOverlayText}>{t('tickets.card.used_overlay')}</Text>
-                                </View>
-                            )}
-                        </View>
-                        
-                        <View style={styles.stubInfo}>
-                            <Text style={styles.stubLabel}>{t('tickets.card.scan_at_entry')}</Text>
-                            <Text style={styles.stubId}>REF: {ticketRef}</Text>
-                            <Text style={styles.stubSmallText}>{t('tickets.card.unique_code_hint')}</Text>
-                        </View>
-                    </View>
-                    
-                    {/* New Dedicated Action Row */}
-                    <View style={styles.actionRow}>
-                        <TouchableOpacity 
-                            style={[styles.actionButton, { flex: 1 }, isResale && styles.actionButtonDisabled]} 
-                            onPress={() => handleDownloadPDF(item)}
-                            disabled={isResale}
-                        >
-                            <Download size={14} color="#9ca3af" />
-                            <Text style={styles.actionButtonText}>{t('tickets.download')}</Text>
-                        </TouchableOpacity>
-
-                        {!isUsed && !isResale && (
-                        <TouchableOpacity 
-                            style={[styles.actionButton, item.wallet_added && styles.actionButtonSuccess, { flex: 1 }]} 
-                            onPress={() => !item.wallet_added && handleAddToWallet(item)}
-                            disabled={!!item.wallet_added || addingToWallet === item.id}
-                        >
-                            <CreditCard size={14} color={item.wallet_added ? Colors.dark.success : "#9ca3af"} />
-                            <Text
-                              style={[
-                                styles.actionButtonText,
-                                { textTransform: 'none', letterSpacing: 0 },
-                                item.wallet_added && { color: Colors.dark.success },
-                              ]}
-                              numberOfLines={1}
-                              ellipsizeMode="tail"
-                            >
-                                {item.wallet_added ? t('common.ok') : (addingToWallet === item.id ? '...' : t('tickets.add_to_wallet'))}
-                            </Text>
-                        </TouchableOpacity>
-                        )}
-
-                        {!isResale ? (
-                        <TouchableOpacity 
-                            style={[styles.actionButton, styles.actionButtonPrimary, isUsed && styles.actionButtonDisabled, { flex: 1 }]} 
-                            onPress={() => !isUsed && void handleSellPress(item)}
-                            disabled={!!isUsed}
-                        >
-                            <DollarSign size={14} color={isUsed ? '#9ca3af' : "#fbbf24"} />
-                            <Text style={[styles.actionButtonText, styles.actionButtonTextPrimary, isUsed && styles.actionButtonTextDisabled]}>
-                                {isUsed ? t('tickets.used') : t('tickets.sell')}
-                            </Text>
-                        </TouchableOpacity>
-                        ) : (
-                        <TouchableOpacity style={[styles.actionButton, styles.actionButtonDanger, { flex: 1 }]} onPress={() => handleCancelResale(item)}>
-                            <X size={14} color="#ef4444" />
-                            <Text style={[styles.actionButtonText, styles.actionButtonTextDanger]}>{t('common.cancel')}</Text>
-                        </TouchableOpacity>
-                        )}
-                    </View>
-
-                    {/* Barcode Strip Simulation */}
-                    <View style={styles.barcodeStrip}>
-                        <Text style={styles.barcodeText}>||| || ||| | |||| ||| || |||||</Text>
-                    </View>
-                </View>
-
+            {/* Category pill — top left */}
+            <View style={styles.eclipsePill}>
+              <View style={[styles.eclipsePillBar, { backgroundColor: theme.accent }]} />
+              <Text style={styles.eclipsePillText}>{isVip ? 'VIP' : theme.label}</Text>
             </View>
-        </TouchableOpacity>
+
+            {/* Status stamp — top right */}
+            {(isResale || isUsed) && (
+              <View style={[styles.eclipseStamp, isUsed && styles.eclipseStampUsed]}>
+                <Text style={[styles.eclipseStampText, isUsed && styles.eclipseStampTextUsed]}>
+                  {isUsed ? 'USADO' : 'EN VENTA'}
+                </Text>
+              </View>
+            )}
+          </TouchableOpacity>
+
+          {/* ── CONTENT ── */}
+          <View style={styles.eclipseContent}>
+            <TouchableOpacity
+              activeOpacity={0.88}
+              disabled={!eventId}
+              onPress={() => { if (eventId) router.push(`/(tabs)/event/${eventId}`); }}
+            >
+              <Text style={styles.eclipseEventName} numberOfLines={2}>
+                {item.events?.title || '—'}
+              </Text>
+              <Text style={styles.eclipseVenueLine} numberOfLines={1}>
+                {item.events?.venues?.name || t('tickets_pdf.location_tbd')}
+              </Text>
+              <Text style={styles.eclipseDateLine}>
+                {shortDate} · {time}
+              </Text>
+            </TouchableOpacity>
+
+            <View style={styles.eclipseDivider} />
+
+            {/* Access grid */}
+            <View style={styles.eclipseGrid}>
+              <View style={styles.eclipseGridItem}>
+                <Text style={styles.eclipseGridLabel}>SECTION</Text>
+                <Text style={styles.eclipseGridValue}>{sectionLabel}</Text>
+              </View>
+              <View style={styles.eclipseGridItem}>
+                <Text style={styles.eclipseGridLabel}>ROW</Text>
+                <Text style={styles.eclipseGridValue}>{rowLabel}</Text>
+              </View>
+              <View style={styles.eclipseGridItem}>
+                <Text style={styles.eclipseGridLabel}>SEAT</Text>
+                <Text style={styles.eclipseGridValue}>{seatLabel}</Text>
+              </View>
+              <View style={styles.eclipseGridItem}>
+                <Text style={styles.eclipseGridLabel}>TICKET ID</Text>
+                <View style={styles.eclipseMonoChip}>
+                  <Text style={styles.eclipseMonoChipText}>{`ECL-${item.id.slice(0, 4).toUpperCase()}`}</Text>
+                </View>
+              </View>
+            </View>
+          </View>
+
+          {/* ── QR ZONE ── */}
+          <View style={styles.eclipseQrZone}>
+            {!isResale ? (
+              <View style={{ position: 'relative' }}>
+                <QRCode
+                  value={item.qr_token || item.qr_code || item.id}
+                  size={120}
+                  color="#111118"
+                  backgroundColor="white"
+                />
+                {isUsed && (
+                  <View style={styles.eclipseQrOverlay}>
+                    <Text style={styles.eclipseQrOverlayText}>{t('tickets.card.used_overlay')}</Text>
+                  </View>
+                )}
+              </View>
+            ) : (
+              <View style={styles.eclipseQrDisabled}>
+                <Text style={styles.eclipseQrDisabledText}>{t('tickets.qr_disabled_resale')}</Text>
+              </View>
+            )}
+            <Text style={styles.eclipseQrLabel}>{t('tickets.card.scan_at_entry')}</Text>
+            <Text style={styles.eclipseQrSub}>{ticketCode}</Text>
+          </View>
+
+          {/* ── ACTION ROW ── */}
+          <View style={styles.eclipseActions}>
+            <TouchableOpacity
+              style={[styles.eclipseActionBtn, isResale && styles.eclipseActionBtnDisabled]}
+              onPress={() => handleDownloadPDF(item)}
+              disabled={isResale}
+            >
+              <Download size={13} color={isResale ? '#4b5563' : '#9ca3af'} />
+              <Text style={[styles.eclipseActionBtnText, isResale && { color: '#4b5563' }]}>{t('tickets.download')}</Text>
+            </TouchableOpacity>
+
+            {!isUsed && !isResale && (
+              <TouchableOpacity
+                style={[
+                  styles.eclipseActionBtn,
+                  item.wallet_added && { borderColor: Colors.dark.success, backgroundColor: 'rgba(16,185,129,0.06)' },
+                ]}
+                onPress={() => !item.wallet_added && handleAddToWallet(item)}
+                disabled={!!item.wallet_added || addingToWallet === item.id}
+              >
+                <CreditCard size={13} color={item.wallet_added ? Colors.dark.success : '#9ca3af'} />
+                <Text
+                  style={[styles.eclipseActionBtnText, item.wallet_added && { color: Colors.dark.success }]}
+                  numberOfLines={1}
+                >
+                  {item.wallet_added ? t('common.ok') : addingToWallet === item.id ? '...' : t('tickets.add_to_wallet')}
+                </Text>
+              </TouchableOpacity>
+            )}
+
+            {!isResale ? (
+              <TouchableOpacity
+                style={[
+                  styles.eclipseActionBtn,
+                  { borderColor: isUsed ? '#374151' : `${theme.accent}50`, backgroundColor: isUsed ? 'transparent' : `${theme.accent}0D` },
+                  isUsed && styles.eclipseActionBtnDisabled,
+                ]}
+                onPress={() => !isUsed && void handleSellPress(item)}
+                disabled={!!isUsed}
+              >
+                <DollarSign size={13} color={isUsed ? '#4b5563' : theme.accent} />
+                <Text style={[styles.eclipseActionBtnText, { color: isUsed ? '#4b5563' : theme.accent }]}>
+                  {isUsed ? t('tickets.used') : t('tickets.sell')}
+                </Text>
+              </TouchableOpacity>
+            ) : (
+              <TouchableOpacity
+                style={[styles.eclipseActionBtn, { borderColor: 'rgba(239,68,68,0.4)', backgroundColor: 'rgba(239,68,68,0.06)' }]}
+                onPress={() => handleCancelResale(item)}
+              >
+                <X size={13} color="#ef4444" />
+                <Text style={[styles.eclipseActionBtnText, { color: '#ef4444' }]}>{t('common.cancel')}</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+
+        </View>
       </View>
     );
   };
@@ -1257,386 +1232,240 @@ const styles = StyleSheet.create({
     marginTop: 12,
     fontSize: 16,
   },
-  
-  // Physical Ticket Styles
+
+  // ── ECLIPSE Card ──────────────────────────────────────────
   ticketContainer: {
-    marginBottom: 32,
-    paddingHorizontal: 4,
+    marginBottom: 28,
     width: '100%',
     alignSelf: 'center',
   },
-  ticketShadow: {
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.5,
-    shadowRadius: 16,
-    elevation: 10,
-  },
-  ticketShadowVip: {
-    shadowColor: '#d4af37',
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.45,
-    shadowRadius: 18,
+  eclipseCard: {
+    backgroundColor: '#0E0E14',
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.08)',
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.55,
+    shadowRadius: 24,
     elevation: 12,
   },
-  ticketWrapper: {
-    backgroundColor: '#1c1c1e', // Dark Cardstock
-    borderRadius: 16,
+
+  // Banner
+  eclipseBanner: {
+    height: 220,
     overflow: 'hidden',
   },
-  ticketWrapperVip: {
-    backgroundColor: '#0b0b10',
-    borderWidth: 1,
-    borderColor: 'rgba(212,175,55,0.42)',
-  },
-  ticketMain: {
-    backgroundColor: '#1c1c1e',
-  },
-  ticketMainVip: {
-    backgroundColor: '#0b0b10',
-  },
-  vipTicketGlow: {
-    ...StyleSheet.absoluteFillObject,
-    zIndex: 1,
-  },
-  vipTicketShimmer: {
+  eclipsePill: {
     position: 'absolute',
-    top: -40,
-    left: -220,
-    width: 220,
-    height: 340,
-    zIndex: 2,
-  },
-  ticketHeaderImage: {
-    height: 180,
-    width: '100%',
-    position: 'relative',
-    justifyContent: 'space-between',
-    padding: 20,
-  },
-  headerContent: {
-    justifyContent: 'flex-end',
-    flex: 1,
-    zIndex: 2,
-  },
-  resaleStamp: {
-    position: 'absolute',
-    top: 20,
-    right: 20,
-    borderWidth: 2,
-    borderColor: '#fbbf24', // Amber
-    paddingHorizontal: 12,
-    paddingVertical: 4,
-    borderRadius: 4,
-    transform: [{ rotate: '-10deg' }],
-    backgroundColor: 'rgba(0,0,0,0.6)',
-    zIndex: 10,
-  },
-  resaleStampText: {
-    color: '#fbbf24',
-    fontWeight: '900',
-    fontSize: 12,
-    textTransform: 'uppercase',
-    letterSpacing: 2,
-  },
-  vipHeaderBadgeWrap: {
-    position: 'absolute',
-    top: 18,
-    left: 18,
-    zIndex: 10,
-  },
-  vipHeaderBadge: {
+    top: 14,
+    left: 14,
+    height: 28,
+    paddingHorizontal: 10,
     borderRadius: 999,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
+    backgroundColor: 'rgba(255,255,255,0.06)',
     borderWidth: 1,
-    borderColor: 'rgba(0,0,0,0.35)',
-  },
-  vipHeaderBadgeText: {
-    color: '#0b0b10',
-    fontSize: 10,
-    fontWeight: '900',
-    letterSpacing: 1.6,
-  },
-  ticketBrand: {
-    color: '#fbbf24', // Gold/Amber tint for "Official" feel
-    fontSize: 10,
-    fontWeight: '800',
-    letterSpacing: 3,
-    marginBottom: 8,
-    textTransform: 'uppercase',
-    textShadowColor: 'rgba(0,0,0,0.8)',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 2,
-  },
-  ticketBrandVip: {
-    color: '#d4af37',
-    letterSpacing: 4,
-  },
-  ticketTitle: {
-    color: 'white',
-    fontSize: 28,
-    fontWeight: '800',
-    lineHeight: 30,
-    textTransform: 'uppercase',
-    letterSpacing: -0.5,
-    textShadowColor: 'rgba(0,0,0,0.8)',
-    textShadowOffset: { width: 0, height: 2 },
-    textShadowRadius: 4,
-  },
-  ticketInfoBody: {
-    padding: 24,
-    paddingTop: 20,
-  },
-  infoRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 20,
-  },
-  infoCol: {
-    flex: 2,
-    alignItems: 'flex-start',
-  },
-  infoColRight: {
-    flex: 1,
-    alignItems: 'flex-end',
-  },
-  infoLabel: {
-    color: '#6b7280', // Gray-500
-    fontSize: 10,
-    fontWeight: '700',
-    letterSpacing: 1.5,
-    marginBottom: 4,
-    textTransform: 'uppercase',
-  },
-  infoValue: {
-    color: '#e5e7eb', // Gray-200
-    fontSize: 15,
-    fontWeight: '600',
-    letterSpacing: 0.5,
-  },
-  infoValueVip: {
-    color: '#fef3c7',
-    fontWeight: '800',
-  },
-  
-  // Tear Line
-  perforationContainer: {
+    borderColor: 'rgba(255,255,255,0.10)',
     flexDirection: 'row',
     alignItems: 'center',
-    height: 30,
-    backgroundColor: '#1c1c1e',
+    gap: 6,
     zIndex: 10,
-    marginHorizontal: -10, // Pull out to cut edges
   },
-  perforationContainerVip: {
-    backgroundColor: '#0b0b10',
+  eclipsePillBar: {
+    width: 2,
+    height: 14,
+    borderRadius: 2,
   },
-  notchLeft: {
-    width: 20,
-    height: 30,
-    backgroundColor: '#000', // Screen background color
-    borderTopRightRadius: 15,
-    borderBottomRightRadius: 15,
+  eclipsePillText: {
+    fontSize: 11,
+    fontWeight: '600',
+    letterSpacing: 0.08 * 11,
+    textTransform: 'uppercase',
+    color: 'rgba(255,255,255,0.92)',
   },
-  dottedLine: {
-    flex: 1,
-    height: 1,
-    borderWidth: 1,
-    borderColor: '#4b5563', // Gray-600
-    borderStyle: 'dashed',
-    borderRadius: 1,
-    marginHorizontal: 10,
+  eclipseStamp: {
+    position: 'absolute',
+    top: 14,
+    right: 14,
+    borderWidth: 1.5,
+    borderColor: '#fbbf24',
+    paddingHorizontal: 10,
+    paddingVertical: 3,
+    borderRadius: 4,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    transform: [{ rotate: '-8deg' }],
+    zIndex: 10,
   },
-  dottedLineVip: {
-    borderColor: 'rgba(212,175,55,0.50)',
+  eclipseStampUsed: {
+    borderColor: '#ef4444',
   },
-  notchRight: {
-    width: 20,
-    height: 30,
-    backgroundColor: '#000', // Screen background color
-    borderTopLeftRadius: 15,
-    borderBottomLeftRadius: 15,
+  eclipseStampText: {
+    color: '#fbbf24',
+    fontWeight: '800',
+    fontSize: 10,
+    textTransform: 'uppercase',
+    letterSpacing: 1.5,
+  },
+  eclipseStampTextUsed: {
+    color: '#ef4444',
   },
 
-  // Stub
-  ticketStub: {
-    backgroundColor: '#1c1c1e', // Keep unified look
-    paddingBottom: 24,
-    paddingHorizontal: 24,
-    paddingTop: 10,
-    alignItems: 'center',
+  // Content
+  eclipseContent: {
+    paddingHorizontal: 16,
+    paddingTop: 14,
+    paddingBottom: 10,
+    gap: 12,
   },
-  ticketStubVip: {
-    backgroundColor: '#0b0b10',
+  eclipseEventName: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: '#FFFFFF',
+    lineHeight: 28,
+    letterSpacing: -0.02 * 24,
   },
-  stubContent: {
+  eclipseVenueLine: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: 'rgba(255,255,255,0.78)',
+    marginTop: 4,
+  },
+  eclipseDateLine: {
+    fontSize: 13,
+    fontWeight: '500',
+    color: 'rgba(255,255,255,0.62)',
+    marginTop: 2,
+  },
+  eclipseDivider: {
+    height: 1,
+    backgroundColor: 'rgba(255,255,255,0.06)',
+  },
+  eclipseGrid: {
     flexDirection: 'row',
-    width: '100%',
-    justifyContent: 'space-between',
+    flexWrap: 'wrap',
+    gap: 12,
+  },
+  eclipseGridItem: {
+    width: '46%',
+  },
+  eclipseGridLabel: {
+    fontSize: 10,
+    fontWeight: '500',
+    color: 'rgba(255,255,255,0.42)',
+    textTransform: 'uppercase',
+    letterSpacing: 0.06 * 10,
+    marginBottom: 3,
+  },
+  eclipseGridValue: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: 'rgba(255,255,255,0.90)',
+  },
+  eclipseMonoChip: {
+    alignSelf: 'flex-start',
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    backgroundColor: 'rgba(255,255,255,0.06)',
+  },
+  eclipseMonoChipText: {
+    fontFamily: Platform.OS === 'ios' ? 'Courier New' : 'monospace',
+    fontSize: 12,
+    fontWeight: '500',
+    color: 'rgba(255,255,255,0.85)',
+    letterSpacing: 0.05 * 12,
+  },
+
+  // QR Zone
+  eclipseQrZone: {
+    marginHorizontal: 16,
+    marginBottom: 16,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 14,
     alignItems: 'center',
-    marginBottom: 20,
+    gap: 8,
   },
-  qrBox: {
-    padding: 8,
-    backgroundColor: 'white',
-    borderRadius: 8,
-  },
-  qrBoxVip: {
-    borderWidth: 2,
-    borderColor: 'rgba(212,175,55,0.70)',
-    shadowColor: '#d4af37',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.28,
-    shadowRadius: 10,
-    elevation: 8,
-  },
-  qrPlaceholder: {
+  eclipseQrDisabled: {
     width: 120,
     height: 120,
-    borderRadius: 6,
-    backgroundColor: '#111827',
+    borderRadius: 8,
+    backgroundColor: '#F3F4F6',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 10,
+    padding: 8,
   },
-  qrPlaceholderText: {
-    color: 'rgba(255,255,255,0.85)',
+  eclipseQrDisabledText: {
+    color: '#374151',
     fontSize: 10,
     fontWeight: '700',
     textAlign: 'center',
-    letterSpacing: 0.6,
-    textTransform: 'uppercase',
-  },
-  stubInfo: {
-    flex: 1,
-    marginLeft: 20,
-    alignItems: 'flex-start', // Left align text for better readability next to QR
-    justifyContent: 'center',
-    height: 120, // Match QR height approx
-  },
-  stubLabel: {
-    color: '#9ca3af',
-    fontSize: 10,
-    fontWeight: '700',
-    letterSpacing: 1.5,
-    textTransform: 'uppercase',
-    marginBottom: 8,
-  },
-  stubId: {
-    color: 'white',
-    fontSize: 18,
-    fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
-    fontWeight: '700',
-    letterSpacing: 2,
-    marginBottom: 8,
-  },
-  stubSmallText: {
-    color: '#4b5563', // Darker gray
-    fontSize: 9,
-    fontWeight: '500',
-    lineHeight: 12,
-    maxWidth: 160,
-  },
-  actionRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    width: '100%',
-    marginTop: 20,
-    marginBottom: 8,
-    gap: 10,
-  },
-  actionButton: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    height: 48,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.1)',
-    borderRadius: 14,
-    backgroundColor: 'rgba(255,255,255,0.05)',
-  },
-  actionButtonText: {
-    color: '#9ca3af',
-    fontSize: 11,
-    fontWeight: '800',
-    marginLeft: 6,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
-    lineHeight: 14,
-    includeFontPadding: false,
-    textAlignVertical: 'center',
-    flexShrink: 1,
-    textAlign: 'center',
   },
-  actionButtonPrimary: {
-    borderColor: '#fbbf24', // Amber border
-    backgroundColor: 'rgba(251, 191, 36, 0.1)',
-  },
-  actionButtonTextPrimary: {
-    color: '#fbbf24',
-  },
-  actionButtonDanger: {
-    borderColor: '#ef4444', // Red border
-    backgroundColor: 'rgba(239, 68, 68, 0.1)',
-  },
-  actionButtonTextDanger: {
-    color: '#ef4444',
-  },
-  actionButtonSuccess: {
-    borderColor: Colors.dark.success,
-    backgroundColor: 'rgba(16, 185, 129, 0.05)',
-  },
-  barcodeStrip: {
-    width: '100%',
-    alignItems: 'center',
-    opacity: 0.3,
-    marginTop: 8,
-  },
-  barcodeText: {
-    color: '#9ca3af',
-    fontSize: 20,
-    letterSpacing: 4,
-    transform: [{ scaleY: 2 }], // Stretch vertically to look like barcode
-  },
-  // Used Ticket Styles
-  usedStamp: {
-    backgroundColor: '#ef4444',
-    transform: [{ rotate: '-15deg' }],
-  },
-  usedStampText: {
-    color: 'white',
-    fontWeight: '900',
-    letterSpacing: 2,
-  },
-  qrOverlay: {
+  eclipseQrOverlay: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(255, 255, 255, 0.9)',
-    justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.88)',
     alignItems: 'center',
-    borderRadius: 8,
+    justifyContent: 'center',
+    borderRadius: 4,
   },
-  qrOverlayText: {
+  eclipseQrOverlayText: {
     color: '#ef4444',
     fontWeight: '900',
-    fontSize: 20,
+    fontSize: 16,
     transform: [{ rotate: '-45deg' }],
     borderWidth: 2,
     borderColor: '#ef4444',
-    padding: 4,
-    borderRadius: 4,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 3,
   },
-  actionButtonDisabled: {
-    borderColor: '#374151',
-    backgroundColor: 'rgba(55, 65, 81, 0.1)',
-    opacity: 0.5,
+  eclipseQrLabel: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#111118',
+    letterSpacing: 0.08 * 11,
+    textTransform: 'uppercase',
+    textAlign: 'center',
   },
-  actionButtonTextDisabled: {
-    color: '#6b7280',
+  eclipseQrSub: {
+    fontSize: 10,
+    color: 'rgba(17,17,24,0.55)',
+    fontFamily: Platform.OS === 'ios' ? 'Courier New' : 'monospace',
+    textAlign: 'center',
+  },
+
+  // Actions
+  eclipseActions: {
+    flexDirection: 'row',
+    paddingHorizontal: 16,
+    paddingBottom: 14,
+    gap: 8,
+  },
+  eclipseActionBtn: {
+    flex: 1,
+    height: 44,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 5,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.09)',
+    backgroundColor: 'rgba(255,255,255,0.04)',
+  },
+  eclipseActionBtnDisabled: {
+    opacity: 0.4,
+  },
+  eclipseActionBtnText: {
+    color: '#9ca3af',
+    fontSize: 11,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 0.4,
+    flexShrink: 1,
   },
 
   // Modal and Auth Styles
