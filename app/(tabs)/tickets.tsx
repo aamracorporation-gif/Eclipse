@@ -200,7 +200,7 @@ export default function TicketsScreen() {
             *,
             venues (*),
             profiles:creator_id (full_name, club_name),
-            event_ticket_types (id, name, tier, metadata)
+            event_ticket_types (id, name, category, metadata)
           )
         `)
         .eq('user_id', user.id)
@@ -727,11 +727,11 @@ export default function TicketsScreen() {
       ? ((item.events as any)?.event_ticket_types ?? []).find((t: any) => t.id === item.ticket_type_id)
       : null;
     const ticketTypeName: string = ticketTypeRecord?.name ?? '';
-    const ticketTier: string = ticketTypeRecord?.tier ?? '';
+    const ticketCategory: string = (ticketTypeRecord?.category ?? '').toLowerCase();
     const nameLower = ticketTypeName.toLowerCase();
-    const isFastlane  = nameLower.includes('fast') || nameLower.includes('lane') || nameLower.includes('express');
-    const isBackstage = ticketTier === 'gold' || nameLower.includes('backstage') || nameLower.includes('back stage');
-    const isVipTier   = ticketTier === 'vip' || nameLower.includes('vip');
+    const isFastlane  = nameLower.includes('fast') || nameLower.includes('lane') || nameLower.includes('express') || ticketCategory.includes('fast');
+    const isBackstage = ticketCategory.includes('gold') || ticketCategory.includes('backstage') || nameLower.includes('backstage') || nameLower.includes('back stage');
+    const isVipTier   = ticketCategory.includes('vip') || nameLower.includes('vip');
     const visualTier  = isFastlane ? 'fastlane' : isBackstage ? 'backstage' : isVipTier ? 'vip' : 'general';
 
     // ── Per-tier visual config ────────────────────────────────────────────────
