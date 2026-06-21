@@ -1,11 +1,13 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// generate_eclipse_wallet_assets.mjs  ── CINEMATIC v5
-// Eclipse Apple Wallet — strip images @3x (1125×432 px)
+// generate_eclipse_wallet_assets.mjs  ──  PHENOMENA EDITION
+// Eclipse Apple Wallet — 4 completely original visual concepts
 //
-// STANDARD   → SOLAR TOTALITY      — corona, chromosphere, eclipse sky
-// PREMIUM    → AURORA MAXIMUS      — 7-curtain borealis + lake reflection
-// VIP        → STELLAR FORGE       — Pillars of Creation nebula + OB stars
-// LEGENDARY  → EVENT HORIZON       — photorealistic black hole + disk + jet
+// GENERAL   → "DEEP OCEAN"     — bioluminescent organisms in total darkness
+// VIP       → "LIQUID GOLD"    — molten gold droplets, caustics, luxury surface
+// BACKSTAGE → "LAVA FIELD"     — matte black volcanic crust + incandescent cracks
+// FASTLANE  → "LIGHT BREAK"    — white light shattering into full spectrum
+//
+// Strip dimensions: 1125 × 432 px  (@3x)
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import { createCanvas } from '@napi-rs/canvas';
@@ -23,653 +25,706 @@ const TAU = Math.PI * 2;
 const PHI = (1 + Math.sqrt(5)) / 2;
 
 // ─────────────────────────────────────────────────────────────────────────────
-// SHARED UTILITIES
+// UTILITIES
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** Seeded LCG — no Math.random() anywhere */
 function makeLcg(seed) {
   let s = (seed >>> 0) || 1;
   return () => { s = (Math.imul(s, 1664525) + 1013904223) >>> 0; return s / 0xFFFFFFFF; };
 }
 
-/** Blackbody color (Mitchell Charity approximation) — K → [r,g,b] 0-255 */
-function kelvin(K) {
-  K = Math.max(1000, Math.min(40000, K)) / 100;
-  const clamp = v => Math.round(Math.max(0, Math.min(255, v)));
-  let r, g, b;
-  if (K <= 66) {
-    r = 255;
-    g = K <= 19 ? 0 : 99.4708025861 * Math.log(K - 10) - 161.1195681661;
-    b = K >= 66 ? 255 : K <= 19 ? 0 : 138.5177312231 * Math.log(K - 10) - 305.0447927307;
-  } else {
-    r = 329.698727446 * Math.pow(K - 60, -0.1332047592);
-    g = 288.1221695283 * Math.pow(K - 60, -0.0755148492);
-    b = 255;
-  }
-  return [clamp(r), clamp(g), clamp(b)];
-}
-
-/** Fibonacci star field — deterministic, uniform distribution */
-function drawStars(ctx, n, rng, opts) {
-  const alpha  = (opts && opts.alpha  != null) ? opts.alpha  : 0.8;
-  const minSz  = (opts && opts.minSz  != null) ? opts.minSz  : 0.2;
-  const maxSz  = (opts && opts.maxSz  != null) ? opts.maxSz  : 1.5;
-  const sx     = (opts && opts.sx     != null) ? opts.sx     : CX * 1.05;
-  const sy     = (opts && opts.sy     != null) ? opts.sy     : CY * 1.05;
-  for (let i = 0; i < n; i++) {
-    const theta = TAU * i * PHI;
-    const r     = Math.sqrt(i / n);
-    const x     = CX + r * sx * Math.cos(theta);
-    const y     = CY + r * sy * Math.sin(theta);
-    if (x < -10 || x > W + 10 || y < -10 || y > H + 10) continue;
-    const sz    = minSz + rng() * maxSz;
-    const a     = (0.25 + rng() * 0.75) * alpha;
-    const temp  = 3500 + rng() * 22000;
-    const col   = kelvin(temp);
-    const sr = col[0], sg = col[1], sb = col[2];
-    ctx.beginPath();
-    ctx.arc(x, y, sz, 0, TAU);
-    ctx.fillStyle = 'rgba(' + sr + ',' + sg + ',' + sb + ',' + a.toFixed(3) + ')';
-    ctx.fill();
-    if (sz > 1.0 && a > 0.55) {
-      ctx.strokeStyle = 'rgba(' + sr + ',' + sg + ',' + sb + ',' + (a * 0.22).toFixed(3) + ')';
-      ctx.lineWidth = 0.35;
-      ctx.beginPath();
-      ctx.moveTo(x - sz * 6, y); ctx.lineTo(x + sz * 6, y);
-      ctx.moveTo(x, y - sz * 6); ctx.lineTo(x, y + sz * 6);
-      ctx.stroke();
-    }
-  }
-}
-
-/** Film grain — cinematic texture */
-function drawGrain(ctx, seed, intensity) {
-  if (intensity == null) intensity = 0.02;
+function drawGrain(ctx, seed, strength) {
+  strength = strength || 0.018;
   const rng = makeLcg(seed || 1);
   for (let y = 0; y < H; y++) {
     for (let x = 0; x < W; x += 2) {
       const v = rng();
-      if (v < intensity * 3.5) {
-        ctx.fillStyle = 'rgba(255,255,255,' + (v * 0.075).toFixed(4) + ')';
+      if (v < strength * 4) {
+        ctx.fillStyle = 'rgba(255,255,255,' + (v * 0.065).toFixed(4) + ')';
         ctx.fillRect(x, y, 1, 1);
       }
     }
   }
 }
 
-/** Radial vignette */
+function drawBleed(ctx, r, g, b, from) {
+  from = from || 0.40;
+  const gr = ctx.createLinearGradient(0, H * from, 0, H);
+  gr.addColorStop(0,   'rgba(' + r + ',' + g + ',' + b + ',0)');
+  gr.addColorStop(0.55,'rgba(' + r + ',' + g + ',' + b + ',0.65)');
+  gr.addColorStop(1,   'rgba(' + r + ',' + g + ',' + b + ',1)');
+  ctx.fillStyle = gr;
+  ctx.fillRect(0, 0, W, H);
+}
+
 function drawVignette(ctx, s) {
-  if (s == null) s = 0.75;
-  const g = ctx.createRadialGradient(CX, CY * 0.75, H * 0.12, CX, CY * 0.75, H * 0.88);
+  s = s || 0.7;
+  const g = ctx.createRadialGradient(CX, CY * 0.7, H * 0.08, CX, CY * 0.7, H * 0.92);
   g.addColorStop(0, 'rgba(0,0,0,0)');
   g.addColorStop(1, 'rgba(0,0,0,' + s + ')');
   ctx.fillStyle = g;
   ctx.fillRect(0, 0, W, H);
 }
 
-/** Bottom bleed — seamless transition to pass body */
-function drawBleed(ctx, r, g, b, from) {
-  if (from == null) from = 0.42;
-  const gr = ctx.createLinearGradient(0, H * from, 0, H);
-  gr.addColorStop(0,   'rgba(' + r + ',' + g + ',' + b + ',0)');
-  gr.addColorStop(0.5, 'rgba(' + r + ',' + g + ',' + b + ',0.55)');
-  gr.addColorStop(1,   'rgba(' + r + ',' + g + ',' + b + ',1)');
-  ctx.fillStyle = gr;
-  ctx.fillRect(0, 0, W, H);
-}
-
 function savePng(canvas, name) {
   const buf = canvas.toBuffer('image/png');
   writeFileSync(join(OUT, name), buf);
-  console.log('  ' + name.padEnd(30) + (buf.length / 1024).toFixed(0) + ' KB');
-  return buf;
+  console.log('  ' + name.padEnd(32) + (buf.length / 1024).toFixed(0) + ' KB');
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
-// STRIP 1: STANDARD — "SOLAR TOTALITY"
+//  GENERAL  ──  "DEEP OCEAN"
+//
+//  Total darkness of the deep ocean floor. Hundreds of bioluminescent organisms
+//  glow in electric cyan and blue — some tiny (bacteria), some large (medusae).
+//  Faint vertical "marine snow" particles drift downward.
+//  The abyss: mysterious, alive, beautiful.
 // ═════════════════════════════════════════════════════════════════════════════
-function makeStripStandard() {
+function makeStripGeneral() {
   const canvas = createCanvas(W, H);
   const ctx    = canvas.getContext('2d');
-  const rng    = makeLcg(3001);
+  const rng    = makeLcg(5001);
 
-  const EX = CX - 15, EY = CY - 18;
-  const MOON_R  = 115;
-  const CHROM_R = MOON_R + 5;
-  const INNER_R = MOON_R + 70;
+  // 1. Absolute deep ocean darkness — not pure black, has the faintest deep teal
+  const bg = ctx.createLinearGradient(0, 0, W * 0.6, H);
+  bg.addColorStop(0,   'rgb(0,3,14)');
+  bg.addColorStop(0.5, 'rgb(0,5,18)');
+  bg.addColorStop(1,   'rgb(0,2,10)');
+  ctx.fillStyle = bg;
+  ctx.fillRect(0, 0, W, H);
 
-  // 1. Eclipse sky — deep indigo-blue
-  const sky = ctx.createRadialGradient(EX, EY, MOON_R, EX, EY, H * 1.4);
-  sky.addColorStop(0,    'rgb(2,4,20)');
-  sky.addColorStop(0.25, 'rgb(5,8,28)');
-  sky.addColorStop(0.6,  'rgb(4,7,24)');
-  sky.addColorStop(1,    'rgb(2,3,14)');
-  ctx.fillStyle = sky; ctx.fillRect(0, 0, W, H);
-
-  // 2. Stars visible in totality
-  drawStars(ctx, 260, rng, { alpha: 0.65, maxSz: 1.2 });
-
-  // Venus (bright planet)
-  const VX = EX - 290, VY = EY - 85;
-  ctx.filter = 'blur(3px)';
-  const venus = ctx.createRadialGradient(VX, VY, 0, VX, VY, 14);
-  venus.addColorStop(0, 'rgba(255,245,210,1)');
-  venus.addColorStop(1, 'rgba(255,240,180,0)');
-  ctx.fillStyle = venus; ctx.beginPath(); ctx.arc(VX, VY, 14, 0, TAU); ctx.fill();
+  // 2. Faint bioluminescent "fog" zones — diffuse glowing patches deep in water
+  ctx.filter = 'blur(60px)';
+  const fogZones = [
+    [220, 180, 200, '0,200,220', 0.07],
+    [680, 100, 240, '0,180,210', 0.05],
+    [950, 280, 180, '0,160,200', 0.06],
+    [420, 340, 160, '20,180,200', 0.05],
+  ];
+  for (const [fx, fy, fr, fc, fa] of fogZones) {
+    const g = ctx.createRadialGradient(fx, fy, 0, fx, fy, fr);
+    g.addColorStop(0, 'rgba(' + fc + ',' + fa + ')');
+    g.addColorStop(1, 'rgba(' + fc + ',0)');
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, W, H);
+  }
   ctx.filter = 'none';
-  ctx.beginPath(); ctx.arc(VX, VY, 2.5, 0, TAU); ctx.fillStyle = 'rgba(255,248,220,1)'; ctx.fill();
 
-  // Mars (red)
-  ctx.beginPath(); ctx.arc(EX + 320, EY + 70, 1.8, 0, TAU); ctx.fillStyle = 'rgba(255,100,60,0.8)'; ctx.fill();
-
-  // 3. Long helmet streamers
-  const helmetAngles = [0.08, 0.22, -0.12, -0.06, Math.PI-0.08, Math.PI+0.15, Math.PI+0.28, Math.PI*0.48, Math.PI*1.5-0.05];
-  ctx.save(); ctx.translate(EX, EY);
-  for (const angle of helmetAngles) {
-    const sLen = 260 + rng() * 160, sW = 5 + rng() * 14;
-    const grad = ctx.createLinearGradient(
-      Math.cos(angle)*CHROM_R, Math.sin(angle)*CHROM_R,
-      Math.cos(angle)*(CHROM_R+sLen), Math.sin(angle)*(CHROM_R+sLen)
-    );
-    grad.addColorStop(0,    'rgba(235,246,255,0.50)');
-    grad.addColorStop(0.1,  'rgba(220,238,255,0.28)');
-    grad.addColorStop(0.4,  'rgba(210,230,255,0.12)');
-    grad.addColorStop(0.75, 'rgba(200,220,255,0.04)');
-    grad.addColorStop(1,    'rgba(190,215,255,0)');
-    ctx.save(); ctx.rotate(angle);
-    ctx.beginPath();
-    ctx.moveTo(CHROM_R, -sW/2);
-    ctx.quadraticCurveTo(sLen*0.5, sW*0.15, sLen+CHROM_R, sW*0.04);
-    ctx.quadraticCurveTo(sLen*0.5, -sW*0.15, CHROM_R, sW/2);
-    ctx.closePath(); ctx.fillStyle = grad; ctx.fill();
-    ctx.restore();
+  // 3. LARGE MEDUSAE (jellyfish-like organisms) — 6 of them
+  const medusae = [];
+  for (let i = 0; i < 6; i++) {
+    medusae.push({
+      x: rng() * W,
+      y: rng() * H,
+      r: 28 + rng() * 55,
+      hue: 175 + rng() * 40, // cyan to teal range
+      alpha: 0.25 + rng() * 0.40,
+    });
   }
-  ctx.restore();
+  for (const m of medusae) {
+    // Soft outer glow
+    ctx.filter = 'blur(20px)';
+    const mg = ctx.createRadialGradient(m.x, m.y, 0, m.x, m.y, m.r * 2.2);
+    mg.addColorStop(0,   'hsla(' + m.hue + ',100%,65%,' + m.alpha + ')');
+    mg.addColorStop(0.4, 'hsla(' + m.hue + ',100%,55%,' + (m.alpha * 0.5) + ')');
+    mg.addColorStop(1,   'hsla(' + m.hue + ',100%,45%,0)');
+    ctx.fillStyle = mg;
+    ctx.beginPath(); ctx.arc(m.x, m.y, m.r * 2.2, 0, TAU); ctx.fill();
 
-  // Polar plumes
-  ctx.save(); ctx.translate(EX, EY);
-  for (const pa of [Math.PI/2-0.04, Math.PI/2+0.04, -Math.PI/2-0.05, -Math.PI/2+0.05]) {
-    const pLen = 200 + rng() * 80;
-    ctx.filter = 'blur(5px)';
-    const pg = ctx.createLinearGradient(
-      Math.cos(pa)*CHROM_R, Math.sin(pa)*CHROM_R,
-      Math.cos(pa)*(CHROM_R+pLen), Math.sin(pa)*(CHROM_R+pLen)
-    );
-    pg.addColorStop(0, 'rgba(200,222,255,0.35)'); pg.addColorStop(1, 'rgba(190,215,255,0)');
-    ctx.save(); ctx.rotate(pa);
-    ctx.beginPath(); ctx.moveTo(CHROM_R,-28); ctx.lineTo(CHROM_R+pLen,-4); ctx.lineTo(CHROM_R+pLen,4); ctx.lineTo(CHROM_R,28); ctx.closePath();
-    ctx.fillStyle = pg; ctx.fill(); ctx.restore();
-  }
-  ctx.filter = 'none'; ctx.restore();
-
-  // 4. Fine corona ray texture (summed sines for realism)
-  ctx.save(); ctx.translate(EX, EY);
-  for (let i = 0; i < 500; i++) {
-    const a = (i/500)*TAU;
-    const rLen = INNER_R + 55*Math.sin(a*3+0.5) + 28*Math.sin(a*7+1.2) + 14*Math.sin(a*11+0.8) + 18*Math.sin(a*2+2.1) + 8*Math.sin(a*19+0.3);
-    const al   = 0.035 + 0.075 * Math.pow(Math.abs(Math.sin(a*3)), 1.5);
-    ctx.beginPath();
-    ctx.moveTo(Math.cos(a)*CHROM_R, Math.sin(a)*CHROM_R);
-    ctx.lineTo(Math.cos(a)*rLen,   Math.sin(a)*rLen);
-    ctx.strokeStyle = 'rgba(225,238,255,' + al.toFixed(4) + ')'; ctx.lineWidth = 0.55; ctx.stroke();
-  }
-  ctx.restore();
-
-  // 5. Inner corona bloom — multiple passes
-  ctx.save(); ctx.translate(EX, EY);
-  const coronaLayers = [
-    [INNER_R*2.8, 0.65, '215,232,255', 28],
-    [INNER_R*2.0, 0.55, '228,242,255', 18],
-    [INNER_R*1.4, 0.50, '242,250,255', 10],
-    [INNER_R*1.0, 0.60, '255,255,255', 5 ],
-  ];
-  for (const [cr, ca, col, bl] of coronaLayers) {
-    ctx.filter = 'blur(' + bl + 'px)';
-    const g = ctx.createRadialGradient(0, 0, MOON_R*0.85, 0, 0, cr);
-    g.addColorStop(0,   'rgba(' + col + ',' + ca + ')');
-    g.addColorStop(0.5, 'rgba(' + col + ',' + (ca*0.35).toFixed(2) + ')');
-    g.addColorStop(1,   'rgba(' + col + ',0)');
-    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(0,0,cr,0,TAU); ctx.fill();
-  }
-  ctx.filter = 'none'; ctx.restore();
-
-  // 6. Chromosphere ring + Bailey's beads
-  ctx.save(); ctx.translate(EX, EY);
-  ctx.filter = 'blur(2px)';
-  ctx.beginPath(); ctx.arc(0,0,CHROM_R,0,TAU); ctx.lineWidth = 5.5; ctx.strokeStyle = 'rgba(255,35,15,0.90)'; ctx.stroke();
-  const bA = 2.62, bx = Math.cos(bA)*CHROM_R, by = Math.sin(bA)*CHROM_R;
-  ctx.filter = 'blur(3.5px)';
-  const bead = ctx.createRadialGradient(bx,by,0,bx,by,9);
-  bead.addColorStop(0,'rgba(255,210,120,1)'); bead.addColorStop(1,'rgba(255,210,120,0)');
-  ctx.fillStyle = bead; ctx.beginPath(); ctx.arc(bx,by,9,0,TAU); ctx.fill();
-  ctx.filter = 'none'; ctx.restore();
-
-  // 7. Moon — perfect black disc
-  ctx.save(); ctx.translate(EX, EY);
-  ctx.beginPath(); ctx.arc(0,0,MOON_R,0,TAU); ctx.fillStyle = 'rgb(0,0,0)'; ctx.fill();
-  const es = ctx.createRadialGradient(-MOON_R*0.25,-MOON_R*0.25,0,0,0,MOON_R);
-  es.addColorStop(0.82,'rgba(0,0,0,0)'); es.addColorStop(1,'rgba(15,22,40,0.12)');
-  ctx.fillStyle = es; ctx.beginPath(); ctx.arc(0,0,MOON_R,0,TAU); ctx.fill();
-  ctx.restore();
-
-  drawVignette(ctx, 0.62);
-  drawGrain(ctx, 101, 0.018);
-  drawBleed(ctx, 3, 4, 12, 0.44);
-  return canvas;
-}
-
-// ═════════════════════════════════════════════════════════════════════════════
-// STRIP 2: PREMIUM — "AURORA MAXIMUS"
-// ═════════════════════════════════════════════════════════════════════════════
-function makeStripPremium() {
-  const canvas = createCanvas(W, H);
-  const ctx    = canvas.getContext('2d');
-  const rng    = makeLcg(3002);
-
-  const HORIZON = H * 0.64;
-
-  // 1. Arctic sky + ground
-  const sky = ctx.createLinearGradient(0, 0, 0, HORIZON);
-  sky.addColorStop(0, 'rgb(0,1,10)'); sky.addColorStop(0.4,'rgb(0,4,14)'); sky.addColorStop(1,'rgb(0,9,12)');
-  ctx.fillStyle = sky; ctx.fillRect(0, 0, W, H);
-  const gnd = ctx.createLinearGradient(0, HORIZON, 0, H);
-  gnd.addColorStop(0,'rgb(0,9,12)'); gnd.addColorStop(1,'rgb(0,4,7)');
-  ctx.fillStyle = gnd; ctx.fillRect(0, HORIZON, W, H - HORIZON);
-
-  // 2. Stars
-  drawStars(ctx, 200, rng, { alpha: 0.40, maxSz: 1.0, sy: CY * 0.95 });
-
-  // 3. Aurora curtains
-  const curtains = [
-    { cx: 80,   w: 320, h: 240, hue: 130, sat: 80, lit: 24, a: 0.62, lean: -5 },
-    { cx: 310,  w: 260, h: 300, hue: 163, sat: 95, lit: 30, a: 0.72, lean:  4 },
-    { cx: 490,  w: 300, h: 270, hue: 142, sat: 88, lit: 26, a: 0.65, lean: -3 },
-    { cx: 660,  w: 220, h: 330, hue: 172, sat: 98, lit: 35, a: 0.78, lean:  6 },
-    { cx: 810,  w: 280, h: 255, hue: 126, sat: 75, lit: 22, a: 0.58, lean: -4 },
-    { cx: 980,  w: 250, h: 285, hue: 155, sat: 90, lit: 28, a: 0.68, lean:  3 },
-    { cx: 1110, w: 180, h: 220, hue: 138, sat: 82, lit: 20, a: 0.55, lean: -2 },
-  ];
-
-  for (const c of curtains) {
-    const topY  = HORIZON - c.h;
-    const leftX = c.cx - c.w / 2;
-
-    // Main glow band
-    ctx.filter = 'blur(22px)';
-    const mg = ctx.createLinearGradient(0, topY, 0, HORIZON);
-    mg.addColorStop(0,    'hsla(300,60%,30%,0)');
-    mg.addColorStop(0.04, 'hsla(300,55%,32%,' + (c.a*0.28) + ')');
-    mg.addColorStop(0.14, 'hsla(' + (c.hue+8) + ',' + c.sat + '%,' + (c.lit+12) + '%,' + (c.a*0.72) + ')');
-    mg.addColorStop(0.42, 'hsla(' + c.hue + ',' + c.sat + '%,' + c.lit + '%,' + c.a + ')');
-    mg.addColorStop(0.72, 'hsla(' + (c.hue-6) + ',' + (c.sat-8) + '%,' + (c.lit-4) + '%,' + (c.a*0.45) + ')');
-    mg.addColorStop(1,    'hsla(' + c.hue + ',' + c.sat + '%,' + c.lit + '%,0)');
-    ctx.fillStyle = mg; ctx.fillRect(leftX, topY, c.w, c.h);
-
-    // Crisp ray shafts
+    // Crisp bell (semi-transparent dome)
+    ctx.filter = 'blur(2px)';
+    const bell = ctx.createRadialGradient(m.x - m.r * 0.2, m.y - m.r * 0.25, 0, m.x, m.y, m.r);
+    bell.addColorStop(0,   'hsla(' + m.hue + ',100%,88%,' + (m.alpha * 0.9) + ')');
+    bell.addColorStop(0.5, 'hsla(' + m.hue + ',100%,65%,' + (m.alpha * 0.55) + ')');
+    bell.addColorStop(0.85,'hsla(' + m.hue + ',100%,50%,' + (m.alpha * 0.2) + ')');
+    bell.addColorStop(1,   'hsla(' + m.hue + ',100%,45%,0)');
+    ctx.fillStyle = bell;
+    ctx.beginPath(); ctx.arc(m.x, m.y, m.r, 0, TAU); ctx.fill();
     ctx.filter = 'none';
-    const nRays = Math.floor(c.w / 6);
-    for (let ri = 0; ri < nRays; ri++) {
-      const rx    = leftX + c.lean * (ri/nRays) + (ri/nRays) * c.w;
-      const rayH  = c.h * (0.38 + 0.5 * Math.abs(Math.sin(ri * PHI)));
-      const rayA  = c.a * (0.12 + 0.32 * Math.abs(Math.sin(ri * PHI * 1.618)));
-      const rayW  = 1.0 + rng() * 2.5;
-      const rayG  = ctx.createLinearGradient(0, HORIZON - rayH, 0, HORIZON);
-      rayG.addColorStop(0,    'hsla(' + (c.hue+5) + ',' + c.sat + '%,' + (c.lit+18) + '%,0)');
-      rayG.addColorStop(0.18, 'hsla(' + (c.hue+5) + ',' + c.sat + '%,' + (c.lit+14) + '%,' + rayA + ')');
-      rayG.addColorStop(0.65, 'hsla(' + c.hue + ',' + c.sat + '%,' + (c.lit+5) + '%,' + (rayA*0.85).toFixed(3) + ')');
-      rayG.addColorStop(1,    'hsla(' + c.hue + ',' + c.sat + '%,' + c.lit + '%,0)');
-      ctx.strokeStyle = rayG; ctx.lineWidth = rayW;
-      ctx.beginPath(); ctx.moveTo(rx, HORIZON-rayH); ctx.lineTo(rx + c.lean*0.3, HORIZON); ctx.stroke();
+
+    // Tentacles — thin glowing threads hanging down
+    const nTent = 5 + Math.floor(rng() * 6);
+    for (let t = 0; t < nTent; t++) {
+      const tx  = m.x + (t / nTent - 0.5) * m.r * 1.6;
+      const len = m.r * (1.5 + rng() * 2.5);
+      const tg  = ctx.createLinearGradient(tx, m.y + m.r * 0.4, tx + (rng() - 0.5) * 20, m.y + m.r * 0.4 + len);
+      tg.addColorStop(0, 'hsla(' + m.hue + ',100%,75%,' + (m.alpha * 0.7) + ')');
+      tg.addColorStop(1, 'hsla(' + m.hue + ',100%,60%,0)');
+      ctx.strokeStyle = tg;
+      ctx.lineWidth = 0.8 + rng() * 0.8;
+      ctx.filter = 'blur(1px)';
+      ctx.beginPath();
+      ctx.moveTo(tx, m.y + m.r * 0.4);
+      ctx.quadraticCurveTo(tx + (rng() - 0.5) * m.r * 0.5, m.y + m.r + len * 0.4, tx + (rng() - 0.5) * 12, m.y + m.r * 0.4 + len);
+      ctx.stroke();
+      ctx.filter = 'none';
     }
   }
-  ctx.filter = 'none';
 
-  // 4. Horizon glow
-  ctx.filter = 'blur(10px)';
-  const hg = ctx.createLinearGradient(0, HORIZON-18, 0, HORIZON+18);
-  hg.addColorStop(0, 'rgba(15,70,35,0)'); hg.addColorStop(0.5,'rgba(15,70,35,0.22)'); hg.addColorStop(1,'rgba(10,50,25,0)');
-  ctx.fillStyle = hg; ctx.fillRect(0, HORIZON-18, W, 36);
-  ctx.filter = 'none';
+  // 4. SMALL ORGANISMS — hundreds of tiny glowing points
+  // Three size classes: micro, small, medium
+  const organisms = [
+    { n: 180, rMin: 0.6, rMax: 1.8, aMin: 0.35, aMax: 0.85, hMin: 175, hVar: 50, bloom: 6  },
+    { n: 80,  rMin: 1.8, rMax: 3.5, aMin: 0.50, aMax: 0.95, hMin: 170, hVar: 55, bloom: 12 },
+    { n: 30,  rMin: 3.5, rMax: 6.0, aMin: 0.60, aMax: 1.00, hMin: 165, hVar: 60, bloom: 22 },
+  ];
 
-  // 5. Reflection
-  ctx.save(); ctx.globalAlpha = 0.28;
-  for (const c of curtains) {
-    const reflH = (c.h) * 0.32;
-    ctx.filter = 'blur(28px)';
-    const rg = ctx.createLinearGradient(0, HORIZON, 0, HORIZON+reflH);
-    rg.addColorStop(0, 'hsla(' + c.hue + ',' + c.sat + '%,' + (c.lit+4) + '%,' + (c.a*0.7) + ')');
-    rg.addColorStop(1, 'hsla(' + c.hue + ',' + c.sat + '%,' + c.lit + '%,0)');
-    ctx.fillStyle = rg; ctx.fillRect(c.cx-c.w/2, HORIZON, c.w, reflH);
+  for (const tier of organisms) {
+    for (let i = 0; i < tier.n; i++) {
+      const x    = rng() * W;
+      const y    = rng() * H;
+      const r    = tier.rMin + rng() * (tier.rMax - tier.rMin);
+      const a    = tier.aMin + rng() * (tier.aMax - tier.aMin);
+      const hue  = tier.hMin + rng() * tier.hVar;
+
+      // Bloom
+      ctx.filter = 'blur(' + (tier.bloom * 0.6) + 'px)';
+      const bloom = ctx.createRadialGradient(x, y, 0, x, y, tier.bloom);
+      bloom.addColorStop(0, 'hsla(' + hue + ',100%,70%,' + (a * 0.5) + ')');
+      bloom.addColorStop(1, 'hsla(' + hue + ',100%,55%,0)');
+      ctx.fillStyle = bloom;
+      ctx.beginPath(); ctx.arc(x, y, tier.bloom, 0, TAU); ctx.fill();
+
+      // Core
+      ctx.filter = 'none';
+      ctx.beginPath(); ctx.arc(x, y, r, 0, TAU);
+      ctx.fillStyle = 'hsla(' + hue + ',100%,90%,' + a + ')';
+      ctx.fill();
+    }
   }
-  ctx.filter = 'none'; ctx.restore();
 
-  ctx.strokeStyle = 'rgba(60,160,90,0.10)'; ctx.lineWidth = 1;
-  ctx.beginPath(); ctx.moveTo(0, HORIZON); ctx.lineTo(W, HORIZON); ctx.stroke();
+  // 5. Marine snow — tiny white particles drifting
+  ctx.filter = 'blur(0.5px)';
+  for (let i = 0; i < 120; i++) {
+    const sx = rng() * W, sy = rng() * H;
+    const sa = 0.08 + rng() * 0.18;
+    const ss = 0.4 + rng() * 0.6;
+    ctx.beginPath(); ctx.arc(sx, sy, ss, 0, TAU);
+    ctx.fillStyle = 'rgba(180,220,230,' + sa.toFixed(3) + ')';
+    ctx.fill();
+  }
+  ctx.filter = 'none';
 
-  drawVignette(ctx, 0.68);
-  drawGrain(ctx, 102, 0.016);
-  drawBleed(ctx, 0, 5, 10, 0.46);
+  // 6. Top-to-bottom pressure gradient (very subtle — deeper = darker)
+  const pressure = ctx.createLinearGradient(0, 0, 0, H);
+  pressure.addColorStop(0, 'rgba(0,0,0,0.18)');
+  pressure.addColorStop(0.5, 'rgba(0,0,0,0)');
+  pressure.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = pressure; ctx.fillRect(0, 0, W, H);
+
+  drawVignette(ctx, 0.72);
+  drawGrain(ctx, 201, 0.015);
+  drawBleed(ctx, 0, 5, 16, 0.45);
   return canvas;
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
-// STRIP 3: VIP — "STELLAR FORGE"
+//  VIP  ──  "LIQUID GOLD"
+//
+//  A mass of molten gold suspended in zero gravity — spherical droplets with
+//  perfect specular highlights, caustic light patterns reflected on dark
+//  surfaces, liquid surface with ripple rings. The definition of VIP luxury.
 // ═════════════════════════════════════════════════════════════════════════════
 function makeStripVip() {
   const canvas = createCanvas(W, H);
   const ctx    = canvas.getContext('2d');
-  const rng    = makeLcg(3003);
+  const rng    = makeLcg(5002);
 
-  // 1. Deep space bg
-  const bg = ctx.createRadialGradient(CX,CY,60,CX,CY,H);
-  bg.addColorStop(0,'rgb(12,3,20)'); bg.addColorStop(0.4,'rgb(8,2,15)'); bg.addColorStop(1,'rgb(4,1,8)');
-  ctx.fillStyle = bg; ctx.fillRect(0,0,W,H);
+  // 1. Warm void background — almost black with warmth
+  const bg = ctx.createLinearGradient(0, 0, W, H);
+  bg.addColorStop(0,   'rgb(10,6,0)');
+  bg.addColorStop(0.5, 'rgb(14,8,0)');
+  bg.addColorStop(1,   'rgb(8,4,0)');
+  ctx.fillStyle = bg; ctx.fillRect(0, 0, W, H);
 
-  // 2. Background nebula glows
-  ctx.filter = 'blur(45px)';
-  const nebs = [
-    [180,100,220,'160,25,45',0.38],[580,80,280,'20,150,130',0.28],
-    [950,120,200,'100,15,35',0.30],[380,280,260,'60,10,100',0.25],[780,200,190,'15,120,110',0.22],
+  // 2. Ambient golden atmosphere — warm glow filling the space
+  ctx.filter = 'blur(80px)';
+  const ambientZones = [
+    [CX - 150, CY - 40, 380, '200,120,0', 0.18],
+    [CX + 200, CY + 60, 300, '180,100,0', 0.14],
+    [CX - 300, CY + 80, 250, '220,140,0', 0.12],
   ];
-  for (const [nx,ny,nr,nc,na] of nebs) {
-    const g = ctx.createRadialGradient(nx,ny,0,nx,ny,nr);
-    g.addColorStop(0,'rgba('+nc+','+na+')'); g.addColorStop(1,'rgba('+nc+',0)');
-    ctx.fillStyle = g; ctx.fillRect(0,0,W,H);
+  for (const [ax, ay, ar, ac, aa] of ambientZones) {
+    const g = ctx.createRadialGradient(ax, ay, 0, ax, ay, ar);
+    g.addColorStop(0, 'rgba(' + ac + ',' + aa + ')');
+    g.addColorStop(1, 'rgba(' + ac + ',0)');
+    ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
   }
   ctx.filter = 'none';
 
-  // 3. Stars
-  drawStars(ctx, 340, rng, { alpha: 0.58, maxSz: 1.4 });
+  // 3. CAUSTIC LIGHT PATTERNS — light refracted through gold surface
+  // These are bright, curvy lines of concentrated light
+  ctx.filter = 'blur(3px)';
+  const nCaustics = 35;
+  for (let i = 0; i < nCaustics; i++) {
+    const cx2  = rng() * W;
+    const cy2  = rng() * H;
+    const len  = 40 + rng() * 120;
+    const curv = (rng() - 0.5) * 80;
+    const ang  = rng() * TAU;
+    const alpha = 0.08 + rng() * 0.22;
+    const width = 0.8 + rng() * 2.5;
+    const hue   = 38 + rng() * 20; // amber-gold range
 
-  // 4. H-alpha emission
-  ctx.filter = 'blur(30px)';
-  const ha = ctx.createLinearGradient(0,0,0,H*0.65);
-  ha.addColorStop(0,'rgba(190,18,40,0.42)'); ha.addColorStop(0.45,'rgba(160,12,30,0.20)'); ha.addColorStop(1,'rgba(140,8,25,0)');
-  ctx.fillStyle = ha; ctx.fillRect(0,0,W,H*0.65);
-  ctx.filter = 'none';
+    const cg = ctx.createLinearGradient(
+      cx2, cy2,
+      cx2 + Math.cos(ang) * len, cy2 + Math.sin(ang) * len
+    );
+    cg.addColorStop(0,   'hsla(' + hue + ',100%,70%,0)');
+    cg.addColorStop(0.3, 'hsla(' + hue + ',100%,78%,' + alpha + ')');
+    cg.addColorStop(0.7, 'hsla(' + hue + ',100%,72%,' + alpha + ')');
+    cg.addColorStop(1,   'hsla(' + hue + ',100%,60%,0)');
 
-  // 5. Gas pillars
-  const pillars = [
-    { cx:215, w:148, tipY:H*0.06,  leanPx:-8, col1:'85,14,18',  col2:'145,28,38' },
-    { cx:560, w:190, tipY:H*-0.04, leanPx: 6, col1:'72,10,14',  col2:'132,22,32' },
-    { cx:870, w:128, tipY:H*0.13,  leanPx:-5, col1:'65,11,16',  col2:'118,24,34' },
-  ];
-
-  for (const p of pillars) {
-    const bY   = H + 30;
-    const tX   = p.cx + p.leanPx;
-    const tY   = p.tipY;
-    const hw   = p.w / 2;
-
-    ctx.filter = 'blur(2.5px)';
-    const pilG = ctx.createLinearGradient(p.cx, tY, p.cx, bY);
-    pilG.addColorStop(0,'rgba('+p.col1+',0.96)'); pilG.addColorStop(0.45,'rgba('+p.col2+',0.92)'); pilG.addColorStop(1,'rgba(18,4,4,1)');
+    ctx.strokeStyle = cg; ctx.lineWidth = width;
     ctx.beginPath();
-    ctx.moveTo(tX - hw*0.45, tY);
-    ctx.bezierCurveTo(tX - hw*0.55, (tY+bY)*0.4, p.cx - hw, (tY+bY)*0.7, p.cx - hw, bY);
-    ctx.lineTo(p.cx + hw, bY);
-    ctx.bezierCurveTo(p.cx + hw, (tY+bY)*0.7, tX + hw*0.55, (tY+bY)*0.4, tX + hw*0.45, tY);
-    ctx.closePath(); ctx.fillStyle = pilG; ctx.fill();
-
-    ctx.filter = 'blur(7px)'; ctx.lineWidth = 5.5; ctx.strokeStyle = 'rgba(255,110,55,0.52)';
-    ctx.beginPath(); ctx.moveTo(tX-hw*0.45,tY); ctx.bezierCurveTo(tX-hw*0.55,(tY+bY)*0.4,p.cx-hw,(tY+bY)*0.7,p.cx-hw,bY); ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(tX+hw*0.45,tY); ctx.bezierCurveTo(tX+hw*0.55,(tY+bY)*0.4,p.cx+hw,(tY+bY)*0.7,p.cx+hw,bY); ctx.stroke();
-
-    const eR = 16 + rng()*10;
-    ctx.filter = 'blur(5px)';
-    const egg = ctx.createRadialGradient(tX,tY,0,tX,tY,eR*1.8);
-    egg.addColorStop(0,'rgba('+p.col2+',0.92)'); egg.addColorStop(0.55,'rgba(210,80,40,0.4)'); egg.addColorStop(1,'rgba(210,80,40,0)');
-    ctx.fillStyle = egg; ctx.beginPath(); ctx.arc(tX,tY,eR*1.8,0,TAU); ctx.fill();
-
-    ctx.filter = 'blur(2px)';
-    const ps = ctx.createRadialGradient(tX,tY-eR*0.4,0,tX,tY-eR*0.4,eR*0.6);
-    ps.addColorStop(0,'rgba(255,220,140,0.95)'); ps.addColorStop(1,'rgba(255,180,80,0)');
-    ctx.fillStyle = ps; ctx.beginPath(); ctx.arc(tX,tY-eR*0.4,eR*0.6,0,TAU); ctx.fill();
-    ctx.filter = 'none';
-  }
-
-  // 6. Protostellar jet
-  const jX = 566, jY = pillars[1].tipY;
-  ctx.filter = 'blur(5px)';
-  const jetDirs = [[-1, 210, 0.80], [1, 130, 0.42]];
-  for (const [dir, len, al] of jetDirs) {
-    const jg = ctx.createLinearGradient(jX, jY, jX, jY + dir*len);
-    jg.addColorStop(0,'rgba(120,210,255,'+al+')'); jg.addColorStop(0.45,'rgba(80,165,255,'+(al*0.4)+')'); jg.addColorStop(1,'rgba(60,120,255,0)');
-    ctx.strokeStyle = jg; ctx.lineWidth = 4.5;
-    ctx.beginPath(); ctx.moveTo(jX,jY); ctx.lineTo(jX, jY+dir*len); ctx.stroke();
-    ctx.filter = 'blur(14px)';
-    const knot = ctx.createRadialGradient(jX,jY+dir*len,0,jX,jY+dir*len,28);
-    knot.addColorStop(0,'rgba(100,195,255,'+(al*0.45)+')'); knot.addColorStop(1,'rgba(80,160,255,0)');
-    ctx.fillStyle = knot; ctx.beginPath(); ctx.arc(jX,jY+dir*len,28,0,TAU); ctx.fill();
-    ctx.filter = 'blur(5px)';
+    ctx.moveTo(cx2, cy2);
+    ctx.quadraticCurveTo(
+      cx2 + Math.cos(ang + Math.PI / 2) * curv,
+      cy2 + Math.sin(ang + Math.PI / 2) * curv,
+      cx2 + Math.cos(ang) * len, cy2 + Math.sin(ang) * len
+    );
+    ctx.stroke();
   }
   ctx.filter = 'none';
 
-  // 7. Young OB stars
-  const obStars = [
-    [110,52,28000,3.8],[400,35,32000,4.2],[695,62,24000,3.2],
-    [995,48,30000,3.6],[1070,82,22000,2.8],[258,78,19000,2.4],[822,88,26000,3.0],
-  ];
-  for (const [sx,sy,T,sr] of obStars) {
-    const col = kelvin(T);
-    const scr=col[0],scg=col[1],scb=col[2];
-    ctx.filter = 'blur(' + (sr*4) + 'px)';
-    const halo = ctx.createRadialGradient(sx,sy,0,sx,sy,sr*14);
-    halo.addColorStop(0,'rgba('+scr+','+scg+','+scb+',0.85)'); halo.addColorStop(0.5,'rgba('+scr+','+scg+','+scb+',0.25)'); halo.addColorStop(1,'rgba('+scr+','+scg+','+scb+',0)');
-    ctx.fillStyle = halo; ctx.beginPath(); ctx.arc(sx,sy,sr*14,0,TAU); ctx.fill();
+  // 4. LIQUID GOLD DROPLETS — the hero element
+  // Droplets of different sizes, each with realistic sphere shading:
+  //   - Dark rim at edge (Fresnel)
+  //   - Deep gold mid-tones
+  //   - Bright specular highlight (off-center, simulating top light)
+  //   - White hot specular peak (tiny)
+  const droplets = [];
+  // Large hero droplets
+  for (let i = 0; i < 5; i++) {
+    droplets.push({ x: 100 + rng() * (W - 200), y: 50 + rng() * (H - 100), r: 40 + rng() * 70, primary: true });
+  }
+  // Medium droplets
+  for (let i = 0; i < 12; i++) {
+    droplets.push({ x: rng() * W, y: rng() * H, r: 15 + rng() * 35, primary: false });
+  }
+  // Small splash droplets
+  for (let i = 0; i < 25; i++) {
+    droplets.push({ x: rng() * W, y: rng() * H, r: 4 + rng() * 12, primary: false });
+  }
+  // Sort by size (paint large first)
+  droplets.sort((a, b) => b.r - a.r);
+
+  for (const d of droplets) {
+    const { x, y, r } = d;
+
+    // Outer glow (ambient reflection from gold surface)
+    ctx.filter = 'blur(' + (r * 0.5) + 'px)';
+    const outerGlow = ctx.createRadialGradient(x, y, r * 0.5, x, y, r * 2.0);
+    outerGlow.addColorStop(0, 'rgba(220,160,0,0.30)');
+    outerGlow.addColorStop(0.5, 'rgba(200,130,0,0.12)');
+    outerGlow.addColorStop(1, 'rgba(180,100,0,0)');
+    ctx.fillStyle = outerGlow;
+    ctx.beginPath(); ctx.arc(x, y, r * 2, 0, TAU); ctx.fill();
+
+    // Sphere body — dark edge (Fresnel), gold mid, highlight
     ctx.filter = 'none';
-    ctx.beginPath(); ctx.arc(sx,sy,sr,0,TAU); ctx.fillStyle = 'rgb('+scr+','+scg+','+scb+')'; ctx.fill();
-    ctx.strokeStyle = 'rgba('+scr+','+scg+','+scb+',0.35)'; ctx.lineWidth = 0.5;
-    for (let k = 0; k < 4; k++) {
-      const a = k * Math.PI / 4;
-      ctx.beginPath(); ctx.moveTo(sx+Math.cos(a)*sr, sy+Math.sin(a)*sr); ctx.lineTo(sx+Math.cos(a)*sr*22, sy+Math.sin(a)*sr*22); ctx.stroke();
+    const body = ctx.createRadialGradient(
+      x - r * 0.30, y - r * 0.28, r * 0.02,  // light source offset (upper-left)
+      x, y, r
+    );
+    body.addColorStop(0,   'rgba(255,245,180,0.98)'); // specular highlight center
+    body.addColorStop(0.12,'rgba(255,220,80,0.96)');  // bright gold
+    body.addColorStop(0.35,'rgba(225,165,0,0.94)');   // deep gold
+    body.addColorStop(0.62,'rgba(180,115,0,0.92)');   // shadowed gold
+    body.addColorStop(0.82,'rgba(120,65,0,0.90)');    // dark edge
+    body.addColorStop(1,   'rgba(60,25,0,0.88)');     // Fresnel rim
+    ctx.fillStyle = body;
+    ctx.beginPath(); ctx.arc(x, y, r, 0, TAU); ctx.fill();
+
+    // Specular highlight — white hot peak
+    const specX = x - r * 0.28, specY = y - r * 0.26;
+    const specR  = r * 0.18;
+    ctx.filter = 'blur(' + (specR * 0.4) + 'px)';
+    const spec = ctx.createRadialGradient(specX, specY, 0, specX, specY, specR);
+    spec.addColorStop(0, 'rgba(255,255,240,0.95)');
+    spec.addColorStop(0.5,'rgba(255,250,200,0.45)');
+    spec.addColorStop(1, 'rgba(255,240,160,0)');
+    ctx.fillStyle = spec;
+    ctx.beginPath(); ctx.arc(specX, specY, specR * 1.5, 0, TAU); ctx.fill();
+    ctx.filter = 'none';
+
+    // Contact shadow (below larger droplets)
+    if (r > 25) {
+      ctx.filter = 'blur(' + (r * 0.35) + 'px)';
+      const shadow = ctx.createRadialGradient(x, y + r * 0.85, 0, x, y + r * 0.85, r * 1.1);
+      shadow.addColorStop(0, 'rgba(0,0,0,0.40)');
+      shadow.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.fillStyle = shadow;
+      ctx.beginPath(); ctx.ellipse(x, y + r * 0.85, r * 1.1, r * 0.3, 0, 0, TAU); ctx.fill();
+      ctx.filter = 'none';
     }
   }
 
-  // 8. O-III teal overlay
-  ctx.filter = 'blur(40px)';
-  const oiii = ctx.createLinearGradient(W,0,0,H*0.55);
-  oiii.addColorStop(0,'rgba(15,175,148,0.18)'); oiii.addColorStop(0.5,'rgba(8,155,130,0.10)'); oiii.addColorStop(1,'rgba(5,130,110,0)');
-  ctx.fillStyle = oiii; ctx.fillRect(0,0,W,H*0.55);
+  // 5. Ripple rings on liquid surface — top portion
+  // These suggest the droplets just landed on a liquid gold surface
+  const rippleSources = [
+    { x: CX - 180, y: H * 0.25, maxR: 180, n: 4 },
+    { x: CX + 220, y: H * 0.35, maxR: 140, n: 3 },
+    { x: CX - 50,  y: H * 0.18, maxR: 100, n: 3 },
+  ];
+  for (const rs of rippleSources) {
+    for (let ri = 0; ri < rs.n; ri++) {
+      const frac   = (ri + 0.5) / rs.n;
+      const ripR   = rs.maxR * frac;
+      const ripA   = 0.25 * (1 - frac);
+      ctx.filter   = 'blur(1.5px)';
+      ctx.beginPath();
+      ctx.ellipse(rs.x, rs.y, ripR, ripR * 0.28, 0, 0, TAU);
+      ctx.strokeStyle = 'rgba(220,165,0,' + ripA.toFixed(3) + ')';
+      ctx.lineWidth   = 1.2 - frac * 0.8;
+      ctx.stroke();
+    }
+  }
   ctx.filter = 'none';
 
-  drawVignette(ctx, 0.78);
-  drawGrain(ctx, 103, 0.022);
-  drawBleed(ctx, 5, 0, 8, 0.45);
+  drawVignette(ctx, 0.68);
+  drawGrain(ctx, 202, 0.016);
+  drawBleed(ctx, 8, 5, 0, 0.42);
   return canvas;
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
-// STRIP 4: LEGENDARY — "EVENT HORIZON"
+//  BACKSTAGE  ──  "LAVA FIELD"
+//
+//  Aerial view of a solidified lava field at night. The matte black volcanic
+//  crust is fractured into an irregular network of cracks revealing the
+//  incandescent molten rock below. Three layers of glow per crack: wide orange
+//  ambient heat, medium amber light, white-yellow burning core.
 // ═════════════════════════════════════════════════════════════════════════════
-function makeStripLegendary() {
+function makeStripBackstage() {
   const canvas = createCanvas(W, H);
   const ctx    = canvas.getContext('2d');
-  const rng    = makeLcg(3004);
+  const rng    = makeLcg(5003);
 
-  const BHX   = CX + 10, BHY = CY + 8;
-  const BH_R  = 70;
-  const PHOT  = 82;
-  const D_IN  = 78;
-  const D_OUT = 292;
-  const TILT  = 0.26;
+  // 1. Matte black volcanic rock
+  ctx.fillStyle = 'rgb(4,2,1)'; ctx.fillRect(0, 0, W, H);
 
-  // 1. Void
-  ctx.fillStyle = '#000000'; ctx.fillRect(0,0,W,H);
+  // 2. Very faint ambient heat haze — a barely visible warm glow
+  ctx.filter = 'blur(80px)';
+  const haze = ctx.createRadialGradient(CX, CY, 0, CX, CY, W * 0.7);
+  haze.addColorStop(0,   'rgba(80,20,0,0.12)');
+  haze.addColorStop(0.6, 'rgba(50,10,0,0.06)');
+  haze.addColorStop(1,   'rgba(20,5,0,0)');
+  ctx.fillStyle = haze; ctx.fillRect(0, 0, W, H);
+  ctx.filter = 'none';
 
-  // 2. ISM nebulosity
-  ctx.filter = 'blur(55px)';
-  const ism = [[BHX-240,BHY-80,320,'18,6,45',0.38],[BHX+230,BHY+90,280,'5,12,55',0.30],[BHX-50,BHY-140,200,'28,6,58',0.32]];
-  for (const [ix,iy,ir,ic,ia] of ism) {
-    const g = ctx.createRadialGradient(ix,iy,60,ix,iy,ir);
-    g.addColorStop(0,'rgba('+ic+','+ia+')'); g.addColorStop(1,'rgba('+ic+',0)');
-    ctx.fillStyle = g; ctx.fillRect(0,0,W,H);
+  // 3. CRACK NETWORK — Voronoi-like fracture pattern
+  // Generate seed points, then connect nearby seeds with cracks
+  const N_SEEDS = 42;
+  const seeds   = [];
+  for (let i = 0; i < N_SEEDS; i++) {
+    seeds.push({ x: rng() * W, y: rng() * H });
+  }
+
+  // Collect all crack segments (pair of nearby seeds)
+  const MAX_DIST  = 200;
+  const crackSegs = [];
+  for (let i = 0; i < seeds.length; i++) {
+    for (let j = i + 1; j < seeds.length; j++) {
+      const dx = seeds[j].x - seeds[i].x;
+      const dy = seeds[j].y - seeds[i].y;
+      const d  = Math.sqrt(dx * dx + dy * dy);
+      if (d < MAX_DIST && rng() < 0.65) {
+        // Midpoint with slight offset — makes cracks look natural
+        const mx = (seeds[i].x + seeds[j].x) / 2 + (rng() - 0.5) * 30;
+        const my = (seeds[i].y + seeds[j].y) / 2 + (rng() - 0.5) * 30;
+        const heat = 0.4 + rng() * 0.6; // crack heat intensity
+        crackSegs.push({ x1: seeds[i].x, y1: seeds[i].y, mx, my, x2: seeds[j].x, y2: seeds[j].y, heat });
+      }
+    }
+  }
+
+  // Add a few forced horizontal / diagonal cracks for composition
+  const forcedCracks = [
+    { x1: 0,    y1: CY - 40, mx: CX * 0.5,  my: CY - 20, x2: CX,   y2: CY + 10,  heat: 0.9 },
+    { x1: CX,   y1: CY + 10, mx: CX * 1.5,  my: CY - 30, x2: W,    y2: CY - 50,  heat: 0.85 },
+    { x1: 150,  y1: 0,       mx: 180,        my: CY * 0.6, x2: 220,  y2: H,        heat: 0.75 },
+    { x1: 600,  y1: 0,       mx: 580,        my: CY,       x2: 560,  y2: H,        heat: 0.80 },
+    { x1: 900,  y1: 60,      mx: 880,        my: CY * 0.8, x2: 860,  y2: H - 40,  heat: 0.70 },
+  ];
+  crackSegs.push(...forcedCracks);
+
+  // Draw each crack in 3 passes (wide glow → medium → bright core)
+  const crackPasses = [
+    { blur: 18, width: 18, colFn: h => 'rgba(200,' + Math.round(50+h*60) + ',0,' + (h*0.35).toFixed(3) + ')' },
+    { blur: 6,  width: 7,  colFn: h => 'rgba(240,' + Math.round(100+h*80) + ',0,' + (h*0.55).toFixed(3) + ')' },
+    { blur: 1,  width: 2,  colFn: h => 'rgba(255,' + Math.round(200+h*55) + ',30,' + (h*0.90).toFixed(3) + ')' },
+  ];
+
+  for (const pass of crackPasses) {
+    ctx.filter = 'blur(' + pass.blur + 'px)';
+    for (const c of crackSegs) {
+      ctx.beginPath();
+      ctx.moveTo(c.x1, c.y1);
+      ctx.quadraticCurveTo(c.mx, c.my, c.x2, c.y2);
+      ctx.strokeStyle = pass.colFn(c.heat);
+      ctx.lineWidth   = pass.width;
+      ctx.lineCap     = 'round';
+      ctx.stroke();
+    }
   }
   ctx.filter = 'none';
 
-  // 3. Stars
-  drawStars(ctx, 580, rng, { alpha: 0.82, maxSz: 1.5 });
+  // 4. LAVA POOLS — open areas of fully molten rock (at crack junctions)
+  const poolCenters = [];
+  // Find highly connected seeds
+  for (let i = 0; i < seeds.length; i++) {
+    let connections = 0;
+    for (const c of crackSegs) {
+      const isEndpoint =
+        (Math.abs(c.x1 - seeds[i].x) < 5 && Math.abs(c.y1 - seeds[i].y) < 5) ||
+        (Math.abs(c.x2 - seeds[i].x) < 5 && Math.abs(c.y2 - seeds[i].y) < 5);
+      if (isEndpoint) connections++;
+    }
+    if (connections >= 2 && rng() < 0.30) {
+      poolCenters.push({ x: seeds[i].x, y: seeds[i].y, r: 8 + rng() * 22 });
+    }
+  }
 
-  // 4. Outer disk bloom
-  ctx.save(); ctx.translate(BHX,BHY); ctx.scale(1,TILT);
-  ctx.filter = 'blur(38px)';
-  const ob = ctx.createRadialGradient(0,0,D_IN,0,0,D_OUT*1.5);
-  ob.addColorStop(0,'rgba(255,110,22,0.55)'); ob.addColorStop(0.35,'rgba(255,65,10,0.30)'); ob.addColorStop(0.65,'rgba(220,28,5,0.14)'); ob.addColorStop(1,'rgba(140,8,0,0)');
-  ctx.fillStyle = ob; ctx.beginPath(); ctx.arc(0,0,D_OUT*1.5,0,TAU); ctx.fill();
-  ctx.restore(); ctx.filter = 'none';
+  for (const p of poolCenters) {
+    // Wide heat glow
+    ctx.filter = 'blur(20px)';
+    const pg = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, p.r * 3);
+    pg.addColorStop(0,   'rgba(255,180,0,0.60)');
+    pg.addColorStop(0.4, 'rgba(255,100,0,0.30)');
+    pg.addColorStop(1,   'rgba(200,50,0,0)');
+    ctx.fillStyle = pg; ctx.beginPath(); ctx.arc(p.x, p.y, p.r * 3, 0, TAU); ctx.fill();
+    // Bright pool surface
+    ctx.filter = 'blur(3px)';
+    const ps = ctx.createRadialGradient(p.x - p.r * 0.2, p.y - p.r * 0.15, 0, p.x, p.y, p.r);
+    ps.addColorStop(0,   'rgba(255,240,100,0.95)');
+    ps.addColorStop(0.4, 'rgba(255,180,20,0.88)');
+    ps.addColorStop(0.8, 'rgba(230,80,0,0.70)');
+    ps.addColorStop(1,   'rgba(180,30,0,0)');
+    ctx.fillStyle = ps; ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, TAU); ctx.fill();
+  }
+  ctx.filter = 'none';
 
-  // 5. Accretion disk — 65 concentric ellipses
-  ctx.save(); ctx.translate(BHX,BHY);
-  for (let i = 65; i >= 0; i--) {
-    const t    = i / 65;
-    const dR   = D_IN + t * (D_OUT - D_IN);
-    const tempK = 18000 * Math.pow(1-t, 1.5) + 1800;
-    const col  = kelvin(tempK);
-    const cr=col[0],cg=col[1],cb=col[2];
-    const bright = Math.pow(1-t, 1.65) * 0.92 + 0.04;
-    ctx.beginPath();
-    ctx.ellipse(0, 0, dR, dR*TILT, 0, 0, TAU);
-    ctx.strokeStyle = 'rgba('+cr+','+cg+','+cb+','+bright.toFixed(3)+')';
-    ctx.lineWidth = (D_OUT-D_IN)/65 * 1.9;
+  // 5. Cool dark rock texture overlay (slight noise pattern to avoid flat black)
+  drawGrain(ctx, 203, 0.025);
+
+  drawVignette(ctx, 0.80);
+  drawBleed(ctx, 5, 2, 0, 0.48);
+  return canvas;
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+//  FASTLANE  ──  "LIGHT BREAK"
+//
+//  A beam of pure white light smashes into a prism point at center-left and
+//  EXPLODES into the full visible spectrum — 7 spectral bands fan out to the
+//  right edge. The left side of the image is pure white-hot; the right is a
+//  perfect rainbow. Speed, energy, clarity.
+// ═════════════════════════════════════════════════════════════════════════════
+function makeStripFastlane() {
+  const canvas = createCanvas(W, H);
+  const ctx    = canvas.getContext('2d');
+  const rng    = makeLcg(5004);
+
+  // 1. Pure void
+  ctx.fillStyle = 'rgb(0,0,4)'; ctx.fillRect(0, 0, W, H);
+
+  // The prism/burst point — left of center
+  const BX = W * 0.28, BY = CY;
+
+  // 2. INPUT BEAM (white light entering from left)
+  ctx.filter = 'blur(12px)';
+  const beamG = ctx.createLinearGradient(0, BY, BX, BY);
+  beamG.addColorStop(0, 'rgba(255,255,255,0)');
+  beamG.addColorStop(0.6,'rgba(255,255,255,0.50)');
+  beamG.addColorStop(1,  'rgba(255,255,255,0.90)');
+  ctx.fillStyle = beamG;
+  ctx.fillRect(0, BY - 14, BX, 28);
+  ctx.filter = 'blur(3px)';
+  ctx.fillStyle = 'rgba(255,255,255,0.95)';
+  ctx.fillRect(0, BY - 5, BX, 10);
+  ctx.filter = 'none';
+
+  // 3. CENTRAL PRISM BURST — intense white flash
+  ctx.filter = 'blur(28px)';
+  const burst = ctx.createRadialGradient(BX, BY, 0, BX, BY, 200);
+  burst.addColorStop(0,   'rgba(255,255,255,0.95)');
+  burst.addColorStop(0.15,'rgba(255,255,255,0.60)');
+  burst.addColorStop(0.35,'rgba(240,240,255,0.25)');
+  burst.addColorStop(1,   'rgba(200,200,255,0)');
+  ctx.fillStyle = burst; ctx.beginPath(); ctx.arc(BX, BY, 200, 0, TAU); ctx.fill();
+  ctx.filter = 'blur(8px)';
+  const burst2 = ctx.createRadialGradient(BX, BY, 0, BX, BY, 50);
+  burst2.addColorStop(0, 'rgba(255,255,255,1)');
+  burst2.addColorStop(1, 'rgba(255,255,255,0)');
+  ctx.fillStyle = burst2; ctx.beginPath(); ctx.arc(BX, BY, 50, 0, TAU); ctx.fill();
+  ctx.filter = 'none';
+
+  // 4. SPECTRAL RAYS — the key element
+  // The spectrum fans out from BX,BY toward the right edge
+  // 7 colors, each a band of 3–4 closely-spaced rays
+  // Angle range: from -35° (top, violet) to +35° (bottom, red)
+  const spectrumBands = [
+    { color: '148,0,211',   name: 'violet',  angleCenter: -0.61, spread: 0.055, brightness: 0.75 },
+    { color: '75,0,130',    name: 'indigo',  angleCenter: -0.42, spread: 0.055, brightness: 0.70 },
+    { color: '0,0,255',     name: 'blue',    angleCenter: -0.26, spread: 0.060, brightness: 0.80 },
+    { color: '0,200,0',     name: 'green',   angleCenter: -0.06, spread: 0.065, brightness: 0.85 },
+    { color: '255,255,0',   name: 'yellow',  angleCenter:  0.08, spread: 0.055, brightness: 0.88 },
+    { color: '255,127,0',   name: 'orange',  angleCenter:  0.22, spread: 0.060, brightness: 0.82 },
+    { color: '255,0,0',     name: 'red',     angleCenter:  0.40, spread: 0.065, brightness: 0.78 },
+  ];
+
+  // Draw each spectral band as a solid fan of rays
+  for (const band of spectrumBands) {
+    const RAYS_PER_BAND = 5;
+    for (let ri = 0; ri < RAYS_PER_BAND; ri++) {
+      const frac  = ri / (RAYS_PER_BAND - 1);
+      const angle = band.angleCenter + (frac - 0.5) * band.spread;
+      const rayLen = (W - BX) * 1.25;
+
+      const ex = BX + Math.cos(angle) * rayLen;
+      const ey = BY + Math.sin(angle) * rayLen;
+
+      // Wide, soft ray (bloom)
+      const spread = band.spread * rayLen * 0.55;
+      ctx.filter = 'blur(16px)';
+      const rg1 = ctx.createLinearGradient(BX, BY, ex, ey);
+      rg1.addColorStop(0,   'rgba(' + band.color + ',' + (band.brightness * 0.3) + ')');
+      rg1.addColorStop(0.25,'rgba(' + band.color + ',' + (band.brightness * 0.55) + ')');
+      rg1.addColorStop(0.65,'rgba(' + band.color + ',' + (band.brightness * 0.45) + ')');
+      rg1.addColorStop(1,   'rgba(' + band.color + ',0)');
+      ctx.strokeStyle = rg1;
+      ctx.lineWidth = spread;
+      ctx.beginPath(); ctx.moveTo(BX, BY); ctx.lineTo(ex, ey); ctx.stroke();
+
+      // Crisp bright core ray
+      ctx.filter = 'blur(2px)';
+      const rg2 = ctx.createLinearGradient(BX, BY, ex, ey);
+      rg2.addColorStop(0,   'rgba(255,255,255,' + band.brightness + ')');
+      rg2.addColorStop(0.15,'rgba(' + band.color + ',' + band.brightness + ')');
+      rg2.addColorStop(0.7, 'rgba(' + band.color + ',' + (band.brightness * 0.5) + ')');
+      rg2.addColorStop(1,   'rgba(' + band.color + ',0)');
+      ctx.strokeStyle = rg2;
+      ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.moveTo(BX, BY); ctx.lineTo(ex, ey); ctx.stroke();
+      ctx.filter = 'none';
+    }
+  }
+
+  // 5. White "prism diamond" at the burst point
+  ctx.filter = 'blur(1px)';
+  ctx.beginPath(); ctx.arc(BX, BY, 6, 0, TAU);
+  ctx.fillStyle = 'rgba(255,255,255,1)'; ctx.fill();
+  ctx.filter = 'none';
+
+  // 6. Refraction halos — concentric circles around the prism point
+  for (let h = 1; h <= 3; h++) {
+    const hr = h * 35;
+    ctx.filter = 'blur(4px)';
+    ctx.beginPath(); ctx.arc(BX, BY, hr, 0, TAU);
+    ctx.strokeStyle = 'rgba(255,255,255,' + (0.15 / h).toFixed(3) + ')';
+    ctx.lineWidth = 1.5;
     ctx.stroke();
   }
-  ctx.restore();
+  ctx.filter = 'none';
 
-  // 6. Doppler boosting overlay
-  ctx.save();
-  ctx.beginPath(); ctx.ellipse(BHX,BHY,D_OUT*1.12,D_OUT*1.12*TILT,0,0,TAU); ctx.clip();
-  const dop = ctx.createLinearGradient(BHX-D_OUT,BHY,BHX+D_OUT,BHY);
-  dop.addColorStop(0,    'rgba(255,230,155,0.48)');
-  dop.addColorStop(0.22, 'rgba(255,165,65,0.22)');
-  dop.addColorStop(0.40, 'rgba(0,0,0,0)');
-  dop.addColorStop(0.60, 'rgba(0,0,0,0)');
-  dop.addColorStop(0.78, 'rgba(0,0,0,0.18)');
-  dop.addColorStop(1,    'rgba(0,0,0,0.46)');
-  ctx.fillStyle = dop; ctx.fillRect(BHX-D_OUT, BHY-D_OUT, D_OUT*2, D_OUT*2);
-  ctx.restore();
+  // 7. Speed lines — thin white lines coming from the left at high speed
+  ctx.filter = 'blur(1px)';
+  for (let i = 0; i < 12; i++) {
+    const ly = BY + (rng() - 0.5) * H * 0.6;
+    const llen = 80 + rng() * 200;
+    const la = 0.04 + rng() * 0.12;
+    const slg = ctx.createLinearGradient(BX - llen, ly, BX, ly);
+    slg.addColorStop(0, 'rgba(255,255,255,0)');
+    slg.addColorStop(1, 'rgba(255,255,255,' + la + ')');
+    ctx.strokeStyle = slg; ctx.lineWidth = 0.5 + rng() * 1;
+    ctx.beginPath(); ctx.moveTo(BX - llen, ly); ctx.lineTo(BX, ly); ctx.stroke();
+  }
+  ctx.filter = 'none';
 
-  // 7. Inner disk ISCO blaze
-  ctx.save(); ctx.translate(BHX,BHY); ctx.scale(1,TILT);
-  ctx.filter = 'blur(7px)';
-  const ih = ctx.createRadialGradient(0,0,D_IN*0.7,0,0,D_IN*2.6);
-  ih.addColorStop(0,'rgba(215,240,255,0.88)'); ih.addColorStop(0.45,'rgba(195,215,255,0.42)'); ih.addColorStop(1,'rgba(175,200,255,0)');
-  ctx.fillStyle = ih; ctx.beginPath(); ctx.arc(0,0,D_IN*2.6,0,TAU); ctx.fill();
-  ctx.restore(); ctx.filter = 'none';
+  // Vignette (slightly asymmetric — darker on right where spectrum lives)
+  const vg = ctx.createRadialGradient(BX * 0.5, BY, H * 0.1, CX * 1.2, BY, H * 0.95);
+  vg.addColorStop(0, 'rgba(0,0,0,0)');
+  vg.addColorStop(1, 'rgba(0,0,0,0.72)');
+  ctx.fillStyle = vg; ctx.fillRect(0, 0, W, H);
 
-  // 8. Relativistic jets
-  ctx.save(); ctx.translate(BHX,BHY);
-  ctx.filter = 'blur(5px)';
-  const jUp = ctx.createLinearGradient(0,-BH_R,0,-(BH_R+215));
-  jUp.addColorStop(0,'rgba(165,225,255,0.92)'); jUp.addColorStop(0.35,'rgba(105,185,255,0.52)'); jUp.addColorStop(0.72,'rgba(80,148,255,0.18)'); jUp.addColorStop(1,'rgba(65,115,255,0)');
-  ctx.fillStyle = jUp; ctx.fillRect(-5,-(BH_R+215),10,215);
-  ctx.filter = 'blur(18px)';
-  const jHalo = ctx.createLinearGradient(0,-BH_R,0,-(BH_R+200));
-  jHalo.addColorStop(0,'rgba(130,210,255,0.38)'); jHalo.addColorStop(1,'rgba(90,170,255,0)');
-  ctx.fillStyle = jHalo; ctx.fillRect(-22,-(BH_R+200),44,200);
-  ctx.filter = 'blur(8px)';
-  const jDn = ctx.createLinearGradient(0,BH_R,0,BH_R+110);
-  jDn.addColorStop(0,'rgba(90,148,210,0.48)'); jDn.addColorStop(1,'rgba(70,115,185,0)');
-  ctx.fillStyle = jDn; ctx.fillRect(-3.5,BH_R,7,110);
-  ctx.filter = 'none'; ctx.restore();
-
-  // 9. Einstein ring
-  ctx.save(); ctx.translate(BHX,BHY);
-  ctx.filter = 'blur(3.5px)';
-  ctx.beginPath(); ctx.ellipse(0,0,PHOT*1.38,PHOT*1.38*(TILT+0.06),0,0,TAU);
-  ctx.lineWidth = 2.8; ctx.strokeStyle = 'rgba(255,185,80,0.28)'; ctx.stroke();
-  ctx.filter = 'none'; ctx.restore();
-
-  // 10. Photon sphere
-  ctx.save(); ctx.translate(BHX,BHY);
-  ctx.filter = 'blur(4px)';
-  ctx.beginPath(); ctx.arc(0,0,PHOT,0,TAU);
-  ctx.lineWidth = 3.8; ctx.strokeStyle = 'rgba(255,158,58,0.58)'; ctx.stroke();
-  ctx.filter = 'none'; ctx.restore();
-
-  // 11. Event horizon
-  ctx.save(); ctx.translate(BHX,BHY);
-  ctx.beginPath(); ctx.arc(0,0,BH_R,0,TAU); ctx.fillStyle = 'rgb(0,0,0)'; ctx.fill();
-  ctx.restore();
-
-  drawVignette(ctx, 0.82);
-  drawGrain(ctx, 104, 0.013);
-  drawBleed(ctx, 0, 0, 0, 0.50);
+  drawGrain(ctx, 204, 0.014);
+  drawBleed(ctx, 0, 0, 4, 0.50);
   return canvas;
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
-// ICON — Solar eclipse mark
+// ICON — Eclipse mark (unchanged, brand anchor)
 // ═════════════════════════════════════════════════════════════════════════════
 function makeIcon(size) {
+  size = size || 300;
   const canvas = createCanvas(size, size);
-  const ctx    = canvas.getContext('2d');
-  const cx = size/2, cy = size/2, R = size*0.38;
-  ctx.fillStyle = 'rgb(4,4,12)'; ctx.fillRect(0,0,size,size);
-  ctx.filter = 'blur(18px)';
-  const glow = ctx.createRadialGradient(cx,cy,R*0.6,cx,cy,R*1.5);
-  glow.addColorStop(0,'rgba(215,228,255,0.80)'); glow.addColorStop(0.5,'rgba(200,218,255,0.35)'); glow.addColorStop(1,'rgba(180,210,255,0)');
-  ctx.fillStyle = glow; ctx.beginPath(); ctx.arc(cx,cy,R*1.5,0,TAU); ctx.fill(); ctx.filter = 'none';
+  const ctx = canvas.getContext('2d');
+  const cx = size / 2, cy = size / 2, R = size * 0.36;
+  ctx.fillStyle = 'rgb(4,4,12)'; ctx.fillRect(0, 0, size, size);
+  ctx.filter = 'blur(16px)';
+  const glow = ctx.createRadialGradient(cx, cy, R * 0.55, cx, cy, R * 1.5);
+  glow.addColorStop(0, 'rgba(215,228,255,0.75)');
+  glow.addColorStop(1, 'rgba(180,210,255,0)');
+  ctx.fillStyle = glow; ctx.beginPath(); ctx.arc(cx, cy, R * 1.5, 0, TAU); ctx.fill();
+  ctx.filter = 'none';
   const rng = makeLcg(42);
-  for (let i = 0; i < 12; i++) {
-    const a = (i/12)*TAU, len = R*(1.35+rng()*0.4);
-    ctx.beginPath(); ctx.moveTo(cx+Math.cos(a)*R,cy+Math.sin(a)*R); ctx.lineTo(cx+Math.cos(a)*len,cy+Math.sin(a)*len);
-    ctx.strokeStyle = 'rgba(220,235,255,'+(0.35+rng()*0.25)+')'; ctx.lineWidth = R*0.04; ctx.stroke();
+  for (let i = 0; i < 10; i++) {
+    const a = (i / 10) * TAU, len = R * (1.3 + rng() * 0.45);
+    ctx.beginPath(); ctx.moveTo(cx + Math.cos(a) * R, cy + Math.sin(a) * R);
+    ctx.lineTo(cx + Math.cos(a) * len, cy + Math.sin(a) * len);
+    ctx.strokeStyle = 'rgba(220,235,255,' + (0.3 + rng() * 0.28) + ')';
+    ctx.lineWidth = R * 0.04; ctx.stroke();
   }
   ctx.filter = 'blur(2px)';
-  ctx.beginPath(); ctx.arc(cx,cy,R+2,0,TAU); ctx.lineWidth = size*0.018; ctx.strokeStyle = 'rgba(255,50,20,0.85)'; ctx.stroke();
+  ctx.beginPath(); ctx.arc(cx, cy, R + 2, 0, TAU);
+  ctx.lineWidth = size * 0.02; ctx.strokeStyle = 'rgba(255,50,20,0.85)'; ctx.stroke();
   ctx.filter = 'none';
-  ctx.beginPath(); ctx.arc(cx,cy,R,0,TAU); ctx.fillStyle = 'rgb(0,0,0)'; ctx.fill();
-  const dotR = size*0.072, dotX = cx+R*0.68, dotY = cy-R*0.68;
+  ctx.beginPath(); ctx.arc(cx, cy, R, 0, TAU); ctx.fillStyle = 'rgb(0,0,0)'; ctx.fill();
+  const dotR = size * 0.07, dotX = cx + R * 0.65, dotY = cy - R * 0.65;
   ctx.filter = 'blur(4px)';
-  const dot = ctx.createRadialGradient(dotX,dotY,0,dotX,dotY,dotR*1.8);
-  dot.addColorStop(0,'rgba(255,185,60,1)'); dot.addColorStop(1,'rgba(255,140,20,0)');
-  ctx.fillStyle = dot; ctx.beginPath(); ctx.arc(dotX,dotY,dotR*1.8,0,TAU); ctx.fill();
+  const dot = ctx.createRadialGradient(dotX, dotY, 0, dotX, dotY, dotR * 1.8);
+  dot.addColorStop(0, 'rgba(255,185,60,1)'); dot.addColorStop(1, 'rgba(255,140,20,0)');
+  ctx.fillStyle = dot; ctx.beginPath(); ctx.arc(dotX, dotY, dotR * 1.8, 0, TAU); ctx.fill();
   ctx.filter = 'none';
-  ctx.beginPath(); ctx.arc(dotX,dotY,dotR,0,TAU); ctx.fillStyle = 'rgb(255,195,70)'; ctx.fill();
+  ctx.beginPath(); ctx.arc(dotX, dotY, dotR, 0, TAU); ctx.fillStyle = 'rgb(255,195,70)'; ctx.fill();
   return canvas;
 }
 
-// ═════════════════════════════════════════════════════════════════════════════
-// LOGO — ECLIPSE wordmark
-// ═════════════════════════════════════════════════════════════════════════════
 function makeLogo() {
   const LW = 600, LH = 120;
   const canvas = createCanvas(LW, LH);
   const ctx = canvas.getContext('2d');
-  ctx.clearRect(0,0,LW,LH);
+  ctx.clearRect(0, 0, LW, LH);
   ctx.fillStyle = 'rgb(255,255,255)';
   ctx.font = '900 62px "Arial Black", Arial, sans-serif';
   ctx.textBaseline = 'middle';
-  ctx.fillText('ECLIPSE', 14, LH/2 - 4);
-  ctx.fillStyle = 'rgba(255,180,60,0.88)';
-  ctx.fillRect(14, LH-14, 540, 2);
+  ctx.fillText('ECLIPSE', 14, LH / 2 - 4);
+  ctx.fillStyle = 'rgba(255,180,60,0.88)'; ctx.fillRect(14, LH - 14, 540, 2);
   return canvas;
 }
 
-// ═════════════════════════════════════════════════════════════════════════════
-// FOOTER
-// ═════════════════════════════════════════════════════════════════════════════
 function makeFooter() {
   const FW = 640, FH = 30;
   const canvas = createCanvas(FW, FH);
   const ctx = canvas.getContext('2d');
-  ctx.clearRect(0,0,FW,FH);
-  const g = ctx.createLinearGradient(0, FH/2, FW, FH/2);
-  g.addColorStop(0,'rgba(255,175,50,0)'); g.addColorStop(0.15,'rgba(255,175,50,0.6)');
-  g.addColorStop(0.85,'rgba(255,175,50,0.6)'); g.addColorStop(1,'rgba(255,175,50,0)');
-  ctx.fillStyle = g; ctx.fillRect(0, FH/2-1, FW, 2);
+  ctx.clearRect(0, 0, FW, FH);
+  const g = ctx.createLinearGradient(0, FH / 2, FW, FH / 2);
+  g.addColorStop(0, 'rgba(255,175,50,0)'); g.addColorStop(0.15, 'rgba(255,175,50,0.6)');
+  g.addColorStop(0.85, 'rgba(255,175,50,0.6)'); g.addColorStop(1, 'rgba(255,175,50,0)');
+  ctx.fillStyle = g; ctx.fillRect(0, FH / 2 - 1, FW, 2);
   return canvas;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
 // RUN
 // ─────────────────────────────────────────────────────────────────────────────
-console.log('\n  Eclipse Wallet Assets — Cinematic v5\n');
+console.log('\n  Eclipse Wallet — PHENOMENA edition\n');
 
-savePng(makeStripStandard(), 'strip_standard.png');
-savePng(makeStripPremium(),  'strip_premium.png');
-savePng(makeStripVip(),      'strip_vip.png');
-savePng(makeStripLegendary(),'strip_legendary.png');
+savePng(makeStripGeneral(),   'strip_general.png');
+savePng(makeStripVip(),       'strip_vip.png');
+savePng(makeStripBackstage(), 'strip_backstage.png');
+savePng(makeStripFastlane(),  'strip_fastlane.png');
 
 savePng(makeIcon(300), 'icon.png');
 savePng(makeIcon(600), 'icon@2x.png');

@@ -7,10 +7,10 @@ import {
   BUNDLED_FOOTER_PNG_BASE64,
   BUNDLED_ICON_PNG_BASE64,
   BUNDLED_LOGO_PNG_BASE64,
-  BUNDLED_STRIP_PNG_BASE64_STANDARD,
-  BUNDLED_STRIP_PNG_BASE64_PREMIUM,
+  BUNDLED_STRIP_PNG_BASE64_GENERAL,
   BUNDLED_STRIP_PNG_BASE64_VIP,
-  BUNDLED_STRIP_PNG_BASE64_LEGENDARY,
+  BUNDLED_STRIP_PNG_BASE64_BACKSTAGE,
+  BUNDLED_STRIP_PNG_BASE64_FASTLANE,
 } from "./bundledAssets.ts";
 
 // Headers CORS requeridos para Expo/React Native
@@ -362,32 +362,42 @@ Deno.serve(async (req) => {
               ? "EXHIBITION"
               : "EVENT";
 
-    // ── Tier-based palette ────────────────────────────────────────────────────
-    // Each background is tuned to match the near-black edge of its strip image
-    // so the transition from strip → card body is completely seamless.
-    const palette =
-      tier === "gold"
-        ? { name:"legendary", backgroundColor:"rgb(0,0,0)",     foregroundColor:"rgb(255,255,255)", labelColor:"rgb(207,148,255)" }
-        : tier === "vip"
-          ? { name:"vip",     backgroundColor:"rgb(5,1,0)",     foregroundColor:"rgb(255,255,255)", labelColor:"rgb(255,185,90)"  }
-          : eventStyle === "music" || eventStyle === "art" || eventStyle === "default"
-            ? { name:"premium", backgroundColor:"rgb(0,6,16)",  foregroundColor:"rgb(255,255,255)", labelColor:"rgb(80,200,255)"  }
-            : { name:"standard",backgroundColor:"rgb(4,4,10)",  foregroundColor:"rgb(255,255,255)", labelColor:"rgb(205,213,230)" };
+    // ── Ticket-type detection ─────────────────────────────────────────────────
+    // Priority order: FASTLANE > BACKSTAGE (gold) > VIP > GENERAL
+    const ticketNameLower = ticketTypeName.toLowerCase();
+    const isFastlane  = ticketNameLower.includes("fast") || ticketNameLower.includes("lane") || ticketNameLower.includes("express");
+    const isBackstage = tier === "gold" || ticketNameLower.includes("backstage") || ticketNameLower.includes("back stage");
+    const isVipTier   = tier === "vip"  || ticketNameLower.includes("vip");
 
-    // ── Tier-based strip selection ────────────────────────────────────────────
-    // Tier takes visual priority over event category.
+    const passVisualTier =
+      isFastlane  ? "fastlane"  :
+      isBackstage ? "backstage" :
+      isVipTier   ? "vip"       :
+                    "general";
+
+    // ── Palette per ticket type ───────────────────────────────────────────────
+    // Background exactly matches the bottom bleed color of each strip image.
+    const palette =
+      passVisualTier === "fastlane"
+        ? { name: "fastlane",  backgroundColor: "rgb(0,0,4)",   foregroundColor: "rgb(255,255,255)", labelColor: "rgb(255,255,255)"  }
+        : passVisualTier === "backstage"
+          ? { name: "backstage", backgroundColor: "rgb(5,2,0)",  foregroundColor: "rgb(255,255,255)", labelColor: "rgb(255,115,25)"   }
+          : passVisualTier === "vip"
+            ? { name: "vip",     backgroundColor: "rgb(8,5,0)",  foregroundColor: "rgb(255,255,255)", labelColor: "rgb(255,205,0)"    }
+            : { name: "general", backgroundColor: "rgb(0,5,16)", foregroundColor: "rgb(255,255,255)", labelColor: "rgb(0,220,255)"    };
+
+    // ── Strip selection ───────────────────────────────────────────────────────
+    // One visual concept per ticket type: entirely different art, not just color.
     // gold (founders/backstage) → LEGENDARY (black hole)
-    // vip                       → VIP       (supernova)
-    // music / art / default     → PREMIUM   (aurora borealis)
-    // sports / corporate        → STANDARD  (corona eclipse)
+    // general   → bioluminescent deep ocean   (cyan, mysterious)
+    // vip       → liquid gold droplets        (amber, luxury)
+    // backstage → lava field cracks           (orange-red, exclusive)
+    // fastlane  → chromatic light break       (full spectrum, speed)
     const bundledStripBase64 =
-      tier === "gold"
-        ? BUNDLED_STRIP_PNG_BASE64_LEGENDARY
-        : tier === "vip"
-          ? BUNDLED_STRIP_PNG_BASE64_VIP
-          : eventStyle === "music" || eventStyle === "art" || eventStyle === "default"
-            ? BUNDLED_STRIP_PNG_BASE64_PREMIUM
-            : BUNDLED_STRIP_PNG_BASE64_STANDARD;
+      passVisualTier === "fastlane"  ? BUNDLED_STRIP_PNG_BASE64_FASTLANE  :
+      passVisualTier === "backstage" ? BUNDLED_STRIP_PNG_BASE64_BACKSTAGE :
+      passVisualTier === "vip"       ? BUNDLED_STRIP_PNG_BASE64_VIP       :
+                                       BUNDLED_STRIP_PNG_BASE64_GENERAL;
     const stripPng = decodeBase64ToUint8Array(
       bundledStripBase64 || BUNDLED_LOGO_PNG_BASE64 || BUNDLED_ICON_PNG_BASE64,
     );
@@ -556,19 +566,19 @@ Deno.serve(async (req) => {
       : undefined;
 
     // ── Tier badge for header field ─────────────────────────────────────────
-    // Shown right of the ECLIPSE logo — tiny but first thing security sees.
-    // Different symbol per tier reinforces exclusivity at a glance.
+    // Shown right of the ECLIPSE logo — first thing security sees at the gate.
     const tierBadge =
-      tier === "gold"    ? "✦ LEGENDARY" :
-      tier === "vip"     ? "★ VIP"       :
-      ticketTypeName.toLowerCase().includes("premium") ? "◆ PREMIUM" :
-                           "◇ STANDARD";
+      passVisualTier === "fastlane"  ? "⚡ FASTLANE"  :
+      passVisualTier === "backstage" ? "✦ BACKSTAGE" :
+      passVisualTier === "vip"       ? "★ VIP"       :
+                                       "◇ GENERAL";
 
-    // ── Access label (short, fits in auxiliary) ──────────────────────────────
+    // ── Access label (short, for auxiliary field) ────────────────────────────
     const accessLabel =
-      tier === "gold"  ? "FOUNDERS" :
-      tier === "vip"   ? "VIP"      :
-                         "GENERAL";
+      passVisualTier === "fastlane"  ? "FASTLANE"  :
+      passVisualTier === "backstage" ? "BACKSTAGE" :
+      passVisualTier === "vip"       ? "VIP"       :
+                                       "GENERAL";
 
     // ── Primary label = event category (small, in accent/labelColor) ────────
     // This is the key Apple design trick: the label doubles as a category badge
