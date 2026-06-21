@@ -1211,7 +1211,7 @@ const styles = StyleSheet.create({
     color: Colors.dark.textSecondary,
   },
   listContent: {
-    paddingHorizontal: 6,
+    paddingHorizontal: 14,
     paddingTop: 0,
     paddingBottom: 120,
     flexGrow: 1,
