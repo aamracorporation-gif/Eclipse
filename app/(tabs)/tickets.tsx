@@ -53,6 +53,9 @@ export default function TicketsScreen() {
   const emptyDrift = useRef(new Animated.Value(0)).current;
   const vipGlow = useRef(new Animated.Value(0)).current;
   const vipShimmer = useRef(new Animated.Value(0)).current;
+  const backstageGlow = useRef(new Animated.Value(0)).current;
+  const fastlaneSpeed = useRef(new Animated.Value(0)).current;
+  const generalFlow = useRef(new Animated.Value(0)).current;
   const localeTag = language === 'en' ? 'en-US' : language === 'fr' ? 'fr-FR' : 'es-ES';
   
   // Resale Modal State
@@ -152,6 +155,32 @@ export default function TicketsScreen() {
     };
   }, [vipGlow, vipShimmer]);
 
+  useEffect(() => {
+    const backstageAnim = Animated.loop(
+      Animated.sequence([
+        Animated.timing(backstageGlow, { toValue: 1, duration: 1800, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
+        Animated.timing(backstageGlow, { toValue: 0, duration: 1800, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
+      ])
+    );
+    const fastlaneAnim = Animated.loop(
+      Animated.timing(fastlaneSpeed, { toValue: 1, duration: 900, easing: Easing.linear, useNativeDriver: true })
+    );
+    const generalAnim = Animated.loop(
+      Animated.sequence([
+        Animated.timing(generalFlow, { toValue: 1, duration: 3500, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
+        Animated.timing(generalFlow, { toValue: 0, duration: 3500, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
+      ])
+    );
+    backstageAnim.start();
+    fastlaneAnim.start();
+    generalAnim.start();
+    return () => {
+      backstageAnim.stop();
+      fastlaneAnim.stop();
+      generalAnim.stop();
+    };
+  }, [backstageGlow, fastlaneSpeed, generalFlow]);
+
   const refreshTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const fetchTickets = useCallback(async () => {
@@ -171,7 +200,8 @@ export default function TicketsScreen() {
             *,
             venues (*),
             profiles:creator_id (full_name, club_name)
-          )
+          ),
+          ticket_types (id, name, tier, metadata)
         `)
         .eq('user_id', user.id)
         .order('purchase_date', { ascending: false, nullsFirst: true })
@@ -686,26 +716,55 @@ export default function TicketsScreen() {
     }
   };
 
-  const getCategoryTheme = (ticket: ExtendedTicket) => {
-    const src = `${ticket.events?.title || ''} ${(ticket as any).ticket_type || ''}`.toLowerCase();
-    if (/(concert|music|festival|dj|tour|live|party|show|amapiano)/.test(src))
-      return { label: 'CONCERT', accent: '#FFB36B', grad: ['#2A1A3E', '#120A20', '#0A0A10'] as const };
-    if (/(sport|match|game|league|cup|stadium|football|soccer|basket|tennis|padel)/.test(src))
-      return { label: 'SPORT', accent: '#7DD3FF', grad: ['#0D1F35', '#091525', '#0A0A10'] as const };
-    if (/(conference|summit|corporate|business|forum|expo|networking)/.test(src))
-      return { label: 'CONFERENCE', accent: '#B6BBC6', grad: ['#111118', '#0D0D14', '#0A0A10'] as const };
-    if (/(museum|gallery|exhibition|art|installation|editorial)/.test(src))
-      return { label: 'EXHIBITION', accent: '#C7B2FF', grad: ['#1A0E2A', '#100820', '#0A0A10'] as const };
-    return { label: 'EVENT', accent: '#FFB36B', grad: ['#2A1A3E', '#120A20', '#0A0A10'] as const };
-  };
-
   const renderTicket = ({ item }: { item: ExtendedTicket }) => {
     const isResale = item.status === 'resale';
     const isUsed = !!(item.scanned_at || item.validation_status === 'used');
     const eventDate = item.events?.event_date ? new Date(item.events.event_date) : null;
-    const isVip = (item as any)?.ticket_type_id == null;
     const eventId = item.events?.id;
-    const theme = getCategoryTheme(item);
+    // ── Proper ticket-type detection ──────────────────────────────────────────
+    const ticketTypeName: string = (item as any).ticket_types?.name ?? '';
+    const ticketTier: string = (item as any).ticket_types?.tier ?? '';
+    const nameLower = ticketTypeName.toLowerCase();
+    const isFastlane  = nameLower.includes('fast') || nameLower.includes('lane') || nameLower.includes('express');
+    const isBackstage = ticketTier === 'gold' || nameLower.includes('backstage') || nameLower.includes('back stage');
+    const isVipTier   = ticketTier === 'vip' || nameLower.includes('vip');
+    const visualTier  = isFastlane ? 'fastlane' : isBackstage ? 'backstage' : isVipTier ? 'vip' : 'general';
+
+    // ── Per-tier visual config ────────────────────────────────────────────────
+    const tierConfig = {
+      general: {
+        label: '◇ GENERAL',
+        accent: '#00DCFF',
+        labelColor: '#00DCFF',
+        grad: ['#001830', '#000C18', '#000508'] as const,
+        spotGrad: ['#00DCFF25', '#00DCFF00'] as const,
+        borderColor: 'rgba(0,220,255,0.18)',
+      },
+      vip: {
+        label: '★ VIP',
+        accent: '#FFCD00',
+        labelColor: '#FFCD00',
+        grad: ['#1A1100', '#0D0900', '#050300'] as const,
+        spotGrad: ['#FFCD0040', '#FFCD0000'] as const,
+        borderColor: 'rgba(255,205,0,0.28)',
+      },
+      backstage: {
+        label: '✦ BACKSTAGE',
+        accent: '#FF7319',
+        labelColor: '#FF7319',
+        grad: ['#1C0800', '#0D0400', '#050200'] as const,
+        spotGrad: ['#FF731940', '#FF731900'] as const,
+        borderColor: 'rgba(255,115,25,0.28)',
+      },
+      fastlane: {
+        label: '⚡ FASTLANE',
+        accent: '#A855F7',
+        labelColor: '#D8B4FE',
+        grad: ['#0D0020', '#060010', '#020005'] as const,
+        spotGrad: ['#A855F740', '#A855F700'] as const,
+        borderColor: 'rgba(168,85,247,0.28)',
+      },
+    }[visualTier];
 
     const shortDate = eventDate
       ? `${eventDate.toLocaleDateString(localeTag, { weekday: 'short' })} · ${eventDate.getDate()} ${eventDate.toLocaleDateString(localeTag, { month: 'short' })}`
@@ -713,15 +772,15 @@ export default function TicketsScreen() {
     const time = eventDate ? eventDate.toLocaleTimeString(localeTag, { hour: '2-digit', minute: '2-digit' }) : '—';
     const eventYear = eventDate ? eventDate.getFullYear() : new Date().getFullYear();
     const ticketShort = item.id.slice(0, 4).toUpperCase();
-    const sectionLabel = isVip ? 'VIP' : t('tickets.card.general');
+    const sectionLabel = ticketTypeName || tierConfig.label.replace(/^[^\s]+\s/, '');
     const rowLabel = '—';
-    const seatLabel = isVip ? `${(item as any).quantity}P` : t('tickets.card.general');
-    const ticketCode = `ECL-${eventYear}-${ticketShort}-${sectionLabel.replace(/\s/g, '-').toUpperCase()}`;
+    const seatLabel = `${(item as any).quantity ?? 1}P`;
+    const ticketCode = `ECL-${eventYear}-${ticketShort}-${visualTier.toUpperCase()}`;
 
     return (
       <View style={[styles.ticketContainer, { maxWidth: maxContentWidth }]}>
         {/* ECLIPSE Card */}
-        <View style={styles.eclipseCard}>
+        <View style={[styles.eclipseCard, { borderColor: tierConfig.borderColor, borderWidth: 1 }]}>
 
           {/* ── BANNER ── */}
           <TouchableOpacity
@@ -730,64 +789,83 @@ export default function TicketsScreen() {
             onPress={() => { if (eventId) router.push(`/(tabs)/event/${eventId}`); }}
             style={styles.eclipseBanner}
           >
-            {/* Base gradient (category color → dark) */}
+            {/* Base gradient per ticket tier */}
             <LinearGradient
-              colors={[...theme.grad]}
+              colors={[...tierConfig.grad]}
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 1 }}
               style={StyleSheet.absoluteFill}
             />
 
-            {/* Poster image with heavy dark overlay */}
+            {/* Poster image with dark overlay */}
             {item.events?.poster_url && (
-              <>
-                <Image
-                  source={{ uri: item.events.poster_url }}
-                  style={[StyleSheet.absoluteFill, { opacity: 0.22 }]}
-                  resizeMode="cover"
-                />
-              </>
+              <Image
+                source={{ uri: item.events.poster_url }}
+                style={[StyleSheet.absoluteFill, { opacity: 0.18 }]}
+                resizeMode="cover"
+              />
             )}
 
-            {/* Spotlight glow in category color */}
+            {/* Tier spotlight glow */}
             <LinearGradient
-              colors={[`${theme.accent}40`, `${theme.accent}00`]}
+              colors={[...tierConfig.spotGrad]}
               start={{ x: 0.55, y: 0 }}
               end={{ x: 1, y: 1 }}
               style={StyleSheet.absoluteFill}
             />
 
-            {/* Top darkness overlay for readability */}
+            {/* Top darkness overlay */}
             <LinearGradient
-              colors={['rgba(10,10,15,0.88)', 'rgba(10,10,15,0.12)']}
+              colors={['rgba(6,6,12,0.90)', 'rgba(6,6,12,0.10)']}
               style={StyleSheet.absoluteFill}
             />
 
             {/* Bottom vignette */}
             <LinearGradient
-              colors={['transparent', 'rgba(0,0,0,0.30)']}
-              start={{ x: 0, y: 0.6 }}
+              colors={['transparent', 'rgba(0,0,0,0.40)']}
+              start={{ x: 0, y: 0.5 }}
               end={{ x: 0, y: 1 }}
               style={StyleSheet.absoluteFill}
             />
 
-            {/* VIP shimmer */}
-            {isVip && (
+            {/* ── GENERAL: slow drifting cyan glow ── */}
+            {visualTier === 'general' && (
               <Animated.View
                 pointerEvents="none"
                 style={[
                   StyleSheet.absoluteFill,
                   {
-                    opacity: vipShimmer.interpolate({ inputRange: [0, 1], outputRange: [0.06, 0.22] }),
+                    opacity: generalFlow.interpolate({ inputRange: [0, 1], outputRange: [0.0, 0.18] }),
+                    transform: [{ translateY: generalFlow.interpolate({ inputRange: [0, 1], outputRange: [0, -20] }) }],
+                  },
+                ]}
+              >
+                <LinearGradient
+                  colors={['transparent', 'rgba(0,220,255,0.22)', 'transparent']}
+                  start={{ x: 0, y: 1 }}
+                  end={{ x: 0, y: 0 }}
+                  style={StyleSheet.absoluteFill}
+                />
+              </Animated.View>
+            )}
+
+            {/* ── VIP: diagonal gold shimmer ── */}
+            {visualTier === 'vip' && (
+              <Animated.View
+                pointerEvents="none"
+                style={[
+                  StyleSheet.absoluteFill,
+                  {
+                    opacity: vipShimmer.interpolate({ inputRange: [0, 1], outputRange: [0.05, 0.28] }),
                     transform: [
-                      { translateX: vipShimmer.interpolate({ inputRange: [0, 1], outputRange: [-200, 340] }) },
+                      { translateX: vipShimmer.interpolate({ inputRange: [0, 1], outputRange: [-200, 360] }) },
                       { rotate: '-15deg' },
                     ],
                   },
                 ]}
               >
                 <LinearGradient
-                  colors={['transparent', 'rgba(255,255,255,0.18)', 'transparent']}
+                  colors={['transparent', 'rgba(255,205,0,0.28)', 'transparent']}
                   start={{ x: 0, y: 0 }}
                   end={{ x: 1, y: 0 }}
                   style={{ flex: 1, width: 120 }}
@@ -795,10 +873,67 @@ export default function TicketsScreen() {
               </Animated.View>
             )}
 
-            {/* Category pill — top left */}
-            <View style={styles.eclipsePill}>
-              <View style={[styles.eclipsePillBar, { backgroundColor: theme.accent }]} />
-              <Text style={styles.eclipsePillText}>{isVip ? 'VIP' : theme.label}</Text>
+            {/* ── VIP: gold glow pulse ── */}
+            {visualTier === 'vip' && (
+              <Animated.View
+                pointerEvents="none"
+                style={[
+                  StyleSheet.absoluteFill,
+                  { opacity: vipGlow.interpolate({ inputRange: [0, 1], outputRange: [0.0, 0.16] }) },
+                ]}
+              >
+                <LinearGradient
+                  colors={['rgba(255,205,0,0.30)', 'transparent']}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={StyleSheet.absoluteFill}
+                />
+              </Animated.View>
+            )}
+
+            {/* ── BACKSTAGE: pulsing lava glow ── */}
+            {visualTier === 'backstage' && (
+              <Animated.View
+                pointerEvents="none"
+                style={[
+                  StyleSheet.absoluteFill,
+                  { opacity: backstageGlow.interpolate({ inputRange: [0, 1], outputRange: [0.08, 0.32] }) },
+                ]}
+              >
+                <LinearGradient
+                  colors={['rgba(255,115,25,0.45)', 'rgba(255,40,0,0.10)', 'transparent']}
+                  start={{ x: 0, y: 1 }}
+                  end={{ x: 1, y: 0 }}
+                  style={StyleSheet.absoluteFill}
+                />
+              </Animated.View>
+            )}
+
+            {/* ── FASTLANE: speed lines ── */}
+            {visualTier === 'fastlane' && (
+              <Animated.View
+                pointerEvents="none"
+                style={[
+                  StyleSheet.absoluteFill,
+                  {
+                    opacity: 0.28,
+                    transform: [{ translateX: fastlaneSpeed.interpolate({ inputRange: [0, 1], outputRange: [-300, 0] }) }],
+                  },
+                ]}
+              >
+                <LinearGradient
+                  colors={['transparent', 'rgba(168,85,247,0.18)', 'rgba(236,72,153,0.14)', 'rgba(59,130,246,0.18)', 'transparent']}
+                  start={{ x: 0, y: 0.5 }}
+                  end={{ x: 1, y: 0.5 }}
+                  style={StyleSheet.absoluteFill}
+                />
+              </Animated.View>
+            )}
+
+            {/* Tier badge pill — top left */}
+            <View style={[styles.eclipsePill, { backgroundColor: `${tierConfig.accent}1A`, borderColor: `${tierConfig.accent}40`, borderWidth: 1 }]}>
+              <View style={[styles.eclipsePillBar, { backgroundColor: tierConfig.accent }]} />
+              <Text style={[styles.eclipsePillText, { color: tierConfig.labelColor }]}>{tierConfig.label}</Text>
             </View>
 
             {/* Status stamp — top right */}
@@ -913,14 +1048,14 @@ export default function TicketsScreen() {
               <TouchableOpacity
                 style={[
                   styles.eclipseActionBtn,
-                  { borderColor: isUsed ? '#374151' : `${theme.accent}50`, backgroundColor: isUsed ? 'transparent' : `${theme.accent}0D` },
+                  { borderColor: isUsed ? '#374151' : `${tierConfig.accent}50`, backgroundColor: isUsed ? 'transparent' : `${tierConfig.accent}0D` },
                   isUsed && styles.eclipseActionBtnDisabled,
                 ]}
                 onPress={() => !isUsed && void handleSellPress(item)}
                 disabled={!!isUsed}
               >
-                <DollarSign size={13} color={isUsed ? '#4b5563' : theme.accent} />
-                <Text style={[styles.eclipseActionBtnText, { color: isUsed ? '#4b5563' : theme.accent }]}>
+                <DollarSign size={13} color={isUsed ? '#4b5563' : tierConfig.accent} />
+                <Text style={[styles.eclipseActionBtnText, { color: isUsed ? '#4b5563' : tierConfig.accent }]}>
                   {isUsed ? t('tickets.used') : t('tickets.sell')}
                 </Text>
               </TouchableOpacity>

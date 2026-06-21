@@ -1,4 +1,4 @@
-import { TextInput, View, StyleSheet, TextInputProps, Text, StyleProp, ViewStyle, TextStyle } from 'react-native';
+﻿import { TextInput, View, StyleSheet, TextInputProps, Text, StyleProp, ViewStyle, TextStyle } from 'react-native';
 import { Colors } from '@/constants/Colors';
 import { AlertCircle, CheckCircle2, AppIconComponent } from '@/lib/icons';
 import React, { forwardRef, isValidElement } from 'react';
@@ -103,11 +103,11 @@ const styles = StyleSheet.create({
   input: {
     flex: 1,
     color: Colors.dark.text,
-    fontSize: theme.typography.size.lg,
+    fontSize: 15,
     minHeight: theme.components.input.minHeight,
     paddingRight: theme.space[5],
     paddingVertical: theme.space[4],
-    fontWeight: '700',
+    fontWeight: '400',
   },
   noIconInput: {
     paddingLeft: theme.space[5],
@@ -120,6 +120,6 @@ const styles = StyleSheet.create({
     fontSize: theme.typography.size.sm,
     marginTop: theme.space[2],
     marginLeft: theme.space[1],
-    fontWeight: '700',
+    fontWeight: '400',
   }
 });
