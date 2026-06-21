@@ -362,80 +362,8 @@ Deno.serve(async (req) => {
               ? "EXHIBITION"
               : "EVENT";
 
-    // ── Ticket-type detection ─────────────────────────────────────────────────
-    // Priority order: FASTLANE > BACKSTAGE (gold) > VIP > GENERAL
-    const ticketNameLower = ticketTypeName.toLowerCase();
-    const isFastlane  = ticketNameLower.includes("fast") || ticketNameLower.includes("lane") || ticketNameLower.includes("express");
-    const isBackstage = tier === "gold" || ticketNameLower.includes("backstage") || ticketNameLower.includes("back stage");
-    const isVipTier   = tier === "vip"  || ticketNameLower.includes("vip");
 
-    const passVisualTier =
-      isFastlane  ? "fastlane"  :
-      isBackstage ? "backstage" :
-      isVipTier   ? "vip"       :
-                    "general";
-
-    // ── Palette per ticket type ───────────────────────────────────────────────
-    // Background exactly matches the bottom bleed color of each strip image.
-    const palette =
-      passVisualTier === "fastlane"
-        ? { name: "fastlane",  backgroundColor: "rgb(0,0,4)",   foregroundColor: "rgb(255,255,255)", labelColor: "rgb(255,255,255)"  }
-        : passVisualTier === "backstage"
-          ? { name: "backstage", backgroundColor: "rgb(5,2,0)",  foregroundColor: "rgb(255,255,255)", labelColor: "rgb(255,115,25)"   }
-          : passVisualTier === "vip"
-            ? { name: "vip",     backgroundColor: "rgb(8,5,0)",  foregroundColor: "rgb(255,255,255)", labelColor: "rgb(255,205,0)"    }
-            : { name: "general", backgroundColor: "rgb(0,5,16)", foregroundColor: "rgb(255,255,255)", labelColor: "rgb(0,220,255)"    };
-
-    // ── Strip selection ───────────────────────────────────────────────────────
-    // One visual concept per ticket type: entirely different art, not just color.
-    // gold (founders/backstage) → LEGENDARY (black hole)
-    // general   → bioluminescent deep ocean   (cyan, mysterious)
-    // vip       → liquid gold droplets        (amber, luxury)
-    // backstage → lava field cracks           (orange-red, exclusive)
-    // fastlane  → chromatic light break       (full spectrum, speed)
-    const bundledStripBase64 =
-      passVisualTier === "fastlane"  ? BUNDLED_STRIP_PNG_BASE64_FASTLANE  :
-      passVisualTier === "backstage" ? BUNDLED_STRIP_PNG_BASE64_BACKSTAGE :
-      passVisualTier === "vip"       ? BUNDLED_STRIP_PNG_BASE64_VIP       :
-                                       BUNDLED_STRIP_PNG_BASE64_GENERAL;
-    const stripPng = decodeBase64ToUint8Array(
-      bundledStripBase64 || BUNDLED_LOGO_PNG_BASE64 || BUNDLED_ICON_PNG_BASE64,
-    );
-    console.log("[INFO] Asset signatures:", JSON.stringify({
-      iconLength: iconPng.length,
-      iconHexPrefix: hexPrefix(iconPng),
-      logoLength: logoPng?.length || 0,
-      logoHexPrefix: logoPng ? hexPrefix(logoPng) : null,
-      stripLength: stripPng?.length || 0,
-      stripHexPrefix: stripPng ? hexPrefix(stripPng) : null,
-      iconInfo: pngInfo(iconPng),
-      logoInfo: pngInfo(logoPng),
-      effectiveLogoInfo: pngInfo(effectiveLogoPng),
-      footerInfo: pngInfo(footerPng),
-      stripInfo: pngInfo(stripPng),
-      tier,
-      palette: palette.name,
-    }));
-    const iconBuffer = Buffer.from(iconPng);
-    const logoBuffer = Buffer.from(effectiveLogoPng);
-    const footerBuffer = Buffer.from(footerPng);
-    const files: Record<string, Buffer> = {
-      "icon.png": iconBuffer,
-      "icon@2x.png": iconBuffer,
-      "icon@3x.png": iconBuffer,
-      "logo.png": logoBuffer,
-      "logo@2x.png": logoBuffer,
-      "logo@3x.png": logoBuffer,
-      "footer.png": footerBuffer,
-      "footer@2x.png": footerBuffer,
-      "footer@3x.png": footerBuffer,
-    };
-    if (stripPng && stripPng.length > 0) {
-      const stripBuffer = Buffer.from(stripPng);
-      files["strip.png"] = stripBuffer;
-      files["strip@2x.png"] = stripBuffer;
-      files["strip@3x.png"] = stripBuffer;
-    }
+    // (files + log built below, after stripPng and palette are declared)
 
     const certificates: Record<string, string> = {
       wwdr: WWDR_CERT,
@@ -507,6 +435,83 @@ Deno.serve(async (req) => {
       tier === "vip" ? "VIP" : tier === "gold" ? "FOUNDERS" : "PREMIUM";
     const editionLabel = Boolean(ticketTypeMetadata.featured) ? "SIGNATURE" : tierLabel;
     const ticketTypeName = nonEmpty(ticketTypeObj?.name) || `${tierLabel} ACCESS`;
+
+    // ── Ticket-type detection ─────────────────────────────────────────────────
+    // Priority: FASTLANE > BACKSTAGE (gold) > VIP > GENERAL
+    // ticketTypeName is now available for name-based detection.
+    const ticketNameLower = ticketTypeName.toLowerCase();
+    const isFastlane  = ticketNameLower.includes("fast") || ticketNameLower.includes("lane") || ticketNameLower.includes("express");
+    const isBackstage = tier === "gold" || ticketNameLower.includes("backstage") || ticketNameLower.includes("back stage");
+    const isVipTier   = tier === "vip"  || ticketNameLower.includes("vip");
+
+    const passVisualTier =
+      isFastlane  ? "fastlane"  :
+      isBackstage ? "backstage" :
+      isVipTier   ? "vip"       :
+                    "general";
+
+    // ── Palette — background matches strip bleed color exactly ───────────────
+    const palette =
+      passVisualTier === "fastlane"
+        ? { name: "fastlane",  backgroundColor: "rgb(0,0,4)",   foregroundColor: "rgb(255,255,255)", labelColor: "rgb(255,255,255)"  }
+        : passVisualTier === "backstage"
+          ? { name: "backstage", backgroundColor: "rgb(5,2,0)",  foregroundColor: "rgb(255,255,255)", labelColor: "rgb(255,115,25)"   }
+          : passVisualTier === "vip"
+            ? { name: "vip",     backgroundColor: "rgb(8,5,0)",  foregroundColor: "rgb(255,255,255)", labelColor: "rgb(255,205,0)"    }
+            : { name: "general", backgroundColor: "rgb(0,5,16)", foregroundColor: "rgb(255,255,255)", labelColor: "rgb(0,220,255)"    };
+
+    // ── Strip art selection ───────────────────────────────────────────────────
+    // Each ticket type gets a completely different visual concept.
+    // general   → bioluminescent deep ocean  (cyan, mysterious)
+    // vip       → liquid gold droplets       (amber, luxury)
+    // backstage → lava field cracks          (orange-red, exclusive)
+    // fastlane  → chromatic light break      (full spectrum, speed)
+    const bundledStripBase64 =
+      passVisualTier === "fastlane"  ? BUNDLED_STRIP_PNG_BASE64_FASTLANE  :
+      passVisualTier === "backstage" ? BUNDLED_STRIP_PNG_BASE64_BACKSTAGE :
+      passVisualTier === "vip"       ? BUNDLED_STRIP_PNG_BASE64_VIP       :
+                                       BUNDLED_STRIP_PNG_BASE64_GENERAL;
+    const stripPng = decodeBase64ToUint8Array(
+      bundledStripBase64 || BUNDLED_LOGO_PNG_BASE64 || BUNDLED_ICON_PNG_BASE64,
+    );
+
+    // ── Asset log + file bundle (all assets now resolved) ────────────────────
+    console.log("[INFO] Asset signatures:", JSON.stringify({
+      iconLength: iconPng.length,
+      iconHexPrefix: hexPrefix(iconPng),
+      logoLength: logoPng?.length || 0,
+      logoHexPrefix: logoPng ? hexPrefix(logoPng) : null,
+      stripLength: stripPng?.length || 0,
+      stripHexPrefix: stripPng ? hexPrefix(stripPng) : null,
+      iconInfo: pngInfo(iconPng),
+      logoInfo: pngInfo(logoPng),
+      effectiveLogoInfo: pngInfo(effectiveLogoPng),
+      footerInfo: pngInfo(footerPng),
+      stripInfo: pngInfo(stripPng),
+      tier,
+      passVisualTier,
+      palette: palette.name,
+    }));
+    const iconBuffer = Buffer.from(iconPng);
+    const logoBuffer = Buffer.from(effectiveLogoPng);
+    const footerBuffer = Buffer.from(footerPng);
+    const files: Record<string, Buffer> = {
+      "icon.png": iconBuffer,
+      "icon@2x.png": iconBuffer,
+      "icon@3x.png": iconBuffer,
+      "logo.png": logoBuffer,
+      "logo@2x.png": logoBuffer,
+      "logo@3x.png": logoBuffer,
+      "footer.png": footerBuffer,
+      "footer@2x.png": footerBuffer,
+      "footer@3x.png": footerBuffer,
+    };
+    if (stripPng && stripPng.length > 0) {
+      const stripBuffer = Buffer.from(stripPng);
+      files["strip.png"] = stripBuffer;
+      files["strip@2x.png"] = stripBuffer;
+      files["strip@3x.png"] = stripBuffer;
+    }
     const accessZone =
       nonEmpty(ticketTypeMetadata.accessZone) ||
       (tier === "vip"
