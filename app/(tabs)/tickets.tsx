@@ -199,9 +199,9 @@ export default function TicketsScreen() {
           events (
             *,
             venues (*),
-            profiles:creator_id (full_name, club_name)
-          ),
-          event_ticket_types (id, name, tier, metadata)
+            profiles:creator_id (full_name, club_name),
+            event_ticket_types (id, name, tier, metadata)
+          )
         `)
         .eq('user_id', user.id)
         .order('purchase_date', { ascending: false, nullsFirst: true })
@@ -722,8 +722,12 @@ export default function TicketsScreen() {
     const eventDate = item.events?.event_date ? new Date(item.events.event_date) : null;
     const eventId = item.events?.id;
     // ── Proper ticket-type detection ──────────────────────────────────────────
-    const ticketTypeName: string = (item as any).event_ticket_types?.name ?? '';
-    const ticketTier: string = (item as any).event_ticket_types?.tier ?? '';
+    // event_ticket_types lives under events (not directly on tickets)
+    const ticketTypeRecord = item.ticket_type_id
+      ? ((item.events as any)?.event_ticket_types ?? []).find((t: any) => t.id === item.ticket_type_id)
+      : null;
+    const ticketTypeName: string = ticketTypeRecord?.name ?? '';
+    const ticketTier: string = ticketTypeRecord?.tier ?? '';
     const nameLower = ticketTypeName.toLowerCase();
     const isFastlane  = nameLower.includes('fast') || nameLower.includes('lane') || nameLower.includes('express');
     const isBackstage = ticketTier === 'gold' || nameLower.includes('backstage') || nameLower.includes('back stage');
