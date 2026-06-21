@@ -56,6 +56,8 @@ export default function TicketsScreen() {
   const backstageGlow = useRef(new Animated.Value(0)).current;
   const fastlaneSpeed = useRef(new Animated.Value(0)).current;
   const generalFlow = useRef(new Animated.Value(0)).current;
+  const spinAnim = useRef(new Animated.Value(0)).current;
+  const pulseAnim = useRef(new Animated.Value(0)).current;
   const localeTag = language === 'en' ? 'en-US' : language === 'fr' ? 'fr-FR' : 'es-ES';
   
   // Resale Modal State
@@ -154,6 +156,18 @@ export default function TicketsScreen() {
       shimmerAnim.stop();
     };
   }, [vipGlow, vipShimmer]);
+
+  useEffect(() => {
+    Animated.loop(
+      Animated.timing(spinAnim, { toValue: 1, duration: 9000, easing: Easing.linear, useNativeDriver: true })
+    ).start();
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulseAnim, { toValue: 1, duration: 1400, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
+        Animated.timing(pulseAnim, { toValue: 0, duration: 1400, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
+      ])
+    ).start();
+  }, [spinAnim, pulseAnim]);
 
   useEffect(() => {
     const backstageAnim = Animated.loop(
@@ -781,95 +795,156 @@ export default function TicketsScreen() {
     const seatLabel = `${(item as any).quantity ?? 1}P`;
     const ticketCode = `ECL-${eventYear}-${ticketShort}-${visualTier.toUpperCase()}`;
 
+    const spinDeg = spinAnim.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '360deg'] });
+    const spinDegRev = spinAnim.interpolate({ inputRange: [0, 1], outputRange: ['360deg', '0deg'] });
+    const pulseSc = pulseAnim.interpolate({ inputRange: [0, 1], outputRange: [0.88, 1.12] });
+    const pulseOp = pulseAnim.interpolate({ inputRange: [0, 1], outputRange: [0.25, 0.75] });
+
     return (
       <View style={styles.ticketContainer}>
-        {/* ── Outer glow ring (tier color) ── */}
-        <View style={[styles.tcGlowRing, { shadowColor: tierConfig.accent, borderColor: `${tierConfig.accent}35` }]}>
+        <View style={[styles.tcGlowRing, { shadowColor: tierConfig.accent, borderColor: `${tierConfig.accent}40` }]}>
 
-          {/* ══ POSTER SECTION ══════════════════════════════════════════ */}
-          <TouchableOpacity
-            activeOpacity={0.95}
-            disabled={!eventId}
+          {/* ══ PORTAL SECTION ══════════════════════════════════════════ */}
+          <TouchableOpacity activeOpacity={0.95} disabled={!eventId}
             onPress={() => { if (eventId) router.push(`/(tabs)/event/${eventId}`); }}
-            style={styles.tcPoster}
-          >
-            {/* Tier base gradient — always visible even without poster */}
+            style={styles.tcPoster}>
+
+            {/* 1 · Tier base colour */}
             <LinearGradient colors={[...tierConfig.grad]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />
 
-            {/* Event poster — hero at 65% */}
+            {/* 2 · Event poster at 72% */}
             {item.events?.poster_url && (
-              <Image source={{ uri: item.events.poster_url }} style={[StyleSheet.absoluteFill, { opacity: 0.65 }]} resizeMode="cover" />
+              <Image source={{ uri: item.events.poster_url }} style={[StyleSheet.absoluteFill, { opacity: 0.72 }]} resizeMode="cover" />
             )}
 
-            {/* Subtle top vignette so badges are readable */}
-            <LinearGradient colors={['rgba(0,0,0,0.55)', 'transparent']} end={{ x: 0, y: 0.38 }} start={{ x: 0, y: 0 }} style={StyleSheet.absoluteFill} />
-
-            {/* Heavy bottom gradient — event name lives here */}
+            {/* 3 · Color-mix overlay so tier bleeds through the photo */}
             <LinearGradient
-              colors={['transparent', 'rgba(0,0,0,0.30)', 'rgba(0,0,0,0.82)', 'rgba(0,0,0,0.97)']}
-              locations={[0, 0.42, 0.72, 1]}
-              start={{ x: 0, y: 0 }} end={{ x: 0, y: 1 }}
-              style={StyleSheet.absoluteFill}
-            />
+              colors={[`${tierConfig.accent}55`, 'transparent', `${tierConfig.grad[2]}CC`]}
+              locations={[0, 0.5, 1]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
+              style={[StyleSheet.absoluteFill, { opacity: 0.45 }]} />
 
-            {/* ── GENERAL: rising bioluminescent glow ── */}
-            {visualTier === 'general' && (
+            {/* ── GENERAL · Rotating bioluminescent ring ── */}
+            {visualTier === 'general' && (<>
+              <Animated.View pointerEvents="none" style={[styles.tcAuraRing, {
+                width: 340, height: 340, borderRadius: 170, top: -40, left: -60,
+                borderColor: '#00DCFF',
+                opacity: pulseOp,
+                transform: [{ rotate: spinDeg }, { scale: pulseSc }],
+              }]} />
+              <Animated.View pointerEvents="none" style={[styles.tcAuraRing, {
+                width: 220, height: 220, borderRadius: 110, top: 10, left: 20,
+                borderColor: '#00AADD',
+                opacity: pulseAnim.interpolate({ inputRange: [0, 1], outputRange: [0.15, 0.50] }),
+                transform: [{ rotate: spinDegRev }],
+              }]} />
               <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, {
-                opacity: generalFlow.interpolate({ inputRange: [0, 1], outputRange: [0.12, 0.45] }),
-                transform: [{ translateY: generalFlow.interpolate({ inputRange: [0, 1], outputRange: [30, -10] }) }],
+                opacity: generalFlow.interpolate({ inputRange: [0, 1], outputRange: [0.20, 0.55] }),
               }]}>
-                <LinearGradient colors={['transparent', 'rgba(0,220,255,0.35)', 'rgba(0,180,255,0.12)', 'transparent']}
-                  locations={[0, 0.4, 0.75, 1]} start={{ x: 0.5, y: 1 }} end={{ x: 0.5, y: 0 }} style={StyleSheet.absoluteFill} />
+                <LinearGradient colors={['transparent', 'rgba(0,220,255,0.40)', 'transparent']}
+                  start={{ x: 0.5, y: 1 }} end={{ x: 0.5, y: 0.2 }} style={StyleSheet.absoluteFill} />
               </Animated.View>
-            )}
+            </>)}
 
-            {/* ── VIP: sweeping gold shimmer ── */}
+            {/* ── VIP · Solar corona rings + diagonal gold ── */}
             {visualTier === 'vip' && (<>
-              <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, {
-                opacity: vipShimmer.interpolate({ inputRange: [0, 1], outputRange: [0, 1] }),
-                transform: [{ translateX: vipShimmer.interpolate({ inputRange: [0, 1], outputRange: [-320, 420] }) }, { rotate: '-20deg' }],
+              <Animated.View pointerEvents="none" style={[styles.tcAuraRing, {
+                width: 360, height: 360, borderRadius: 180, top: -80, right: -80,
+                borderColor: '#FFCD00', borderWidth: 2,
+                opacity: vipGlow.interpolate({ inputRange: [0, 1], outputRange: [0.20, 0.55] }),
+                transform: [{ rotate: spinDeg }],
+              }]} />
+              <Animated.View pointerEvents="none" style={[styles.tcAuraRing, {
+                width: 220, height: 220, borderRadius: 110, top: -20, right: -20,
+                borderColor: '#FFE55C', borderWidth: 1.5,
+                opacity: vipGlow.interpolate({ inputRange: [0, 1], outputRange: [0.30, 0.70] }),
+                transform: [{ rotate: spinDegRev }, { scale: pulseSc }],
+              }]} />
+              {/* Sweeping diagonal shimmer */}
+              <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, { overflow: 'hidden',
+                transform: [{ translateX: vipShimmer.interpolate({ inputRange: [0, 1], outputRange: [-400, 500] }) }, { rotate: '-25deg' }],
               }]}>
-                <LinearGradient colors={['transparent', 'rgba(255,215,0,0.38)', 'rgba(255,235,120,0.22)', 'transparent']}
-                  start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={{ flex: 1, width: 160 }} />
+                <LinearGradient colors={['transparent','rgba(255,230,80,0.55)','rgba(255,255,180,0.30)','transparent']}
+                  start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={{ flex: 1, width: 180 }} />
               </Animated.View>
               <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, {
-                opacity: vipGlow.interpolate({ inputRange: [0, 1], outputRange: [0.10, 0.38] }),
+                opacity: vipGlow.interpolate({ inputRange: [0, 1], outputRange: [0.08, 0.30] }),
               }]}>
-                <LinearGradient colors={['rgba(255,205,0,0.50)', 'rgba(200,150,0,0.15)', 'transparent']}
+                <LinearGradient colors={['rgba(255,210,0,0.60)', 'transparent']}
                   start={{ x: 0.5, y: 0 }} end={{ x: 0.5, y: 1 }} style={StyleSheet.absoluteFill} />
               </Animated.View>
             </>)}
 
-            {/* ── BACKSTAGE: lava pulse from bottom corners ── */}
-            {visualTier === 'backstage' && (
+            {/* ── BACKSTAGE · Lava fault lines ── */}
+            {visualTier === 'backstage' && (<>
+              <Animated.View pointerEvents="none" style={[styles.tcAuraRing, {
+                width: 400, height: 400, borderRadius: 200, bottom: -200, left: -100,
+                borderColor: '#FF7319', borderWidth: 3,
+                opacity: backstageGlow.interpolate({ inputRange: [0, 1], outputRange: [0.25, 0.65] }),
+                transform: [{ rotate: spinDeg }, { scale: pulseSc }],
+              }]} />
+              <Animated.View pointerEvents="none" style={[styles.tcAuraRing, {
+                width: 240, height: 240, borderRadius: 120, bottom: -90, right: -60,
+                borderColor: '#FF4000', borderWidth: 2,
+                opacity: backstageGlow.interpolate({ inputRange: [0, 1], outputRange: [0.35, 0.80] }),
+                transform: [{ rotate: spinDegRev }],
+              }]} />
               <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, {
-                opacity: backstageGlow.interpolate({ inputRange: [0, 1], outputRange: [0.22, 0.65] }),
+                opacity: backstageGlow.interpolate({ inputRange: [0, 1], outputRange: [0.15, 0.55] }),
               }]}>
-                <LinearGradient colors={['transparent', 'transparent', 'rgba(255,80,0,0.55)', 'rgba(255,30,0,0.30)']}
-                  locations={[0, 0.45, 0.80, 1]} start={{ x: 0, y: 0 }} end={{ x: 0, y: 1 }} style={StyleSheet.absoluteFill} />
+                <LinearGradient colors={['transparent', 'rgba(255,60,0,0.50)', 'rgba(255,120,0,0.35)']}
+                  locations={[0.3, 0.75, 1]} start={{ x: 0, y: 0 }} end={{ x: 0, y: 1 }} style={StyleSheet.absoluteFill} />
               </Animated.View>
-            )}
+            </>)}
 
-            {/* ── FASTLANE: spectral speed sweep ── */}
-            {visualTier === 'fastlane' && (
-              <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, {
-                opacity: 0.55,
-                transform: [{ translateX: fastlaneSpeed.interpolate({ inputRange: [0, 1], outputRange: [-400, 400] }) }],
+            {/* ── FASTLANE · Warp speed vortex ── */}
+            {visualTier === 'fastlane' && (<>
+              {/* Rotating spectral disc */}
+              <Animated.View pointerEvents="none" style={[styles.tcAuraDisc, {
+                opacity: 0.50,
+                transform: [{ rotate: spinDeg }, { scale: pulseSc }],
               }]}>
                 <LinearGradient
-                  colors={['transparent','rgba(139,92,246,0.50)','rgba(236,72,153,0.40)','rgba(59,130,246,0.45)','transparent']}
-                  locations={[0, 0.25, 0.5, 0.75, 1]} start={{ x: 0, y: 0.5 }} end={{ x: 1, y: 0.5 }}
-                  style={{ flex: 1, width: 300 }} />
+                  colors={['rgba(139,92,246,0.80)','rgba(236,72,153,0.60)','rgba(59,130,246,0.70)','rgba(16,185,129,0.50)','rgba(139,92,246,0.80)']}
+                  start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />
               </Animated.View>
-            )}
+              {/* Speed lines sweeping */}
+              {[0, 1, 2, 3].map(i => (
+                <Animated.View key={i} pointerEvents="none" style={[StyleSheet.absoluteFill, {
+                  opacity: 0.60,
+                  transform: [{
+                    translateX: fastlaneSpeed.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [-500 - i * 80, 500 + i * 40],
+                    }),
+                  }],
+                }]}>
+                  <LinearGradient
+                    colors={['transparent', i % 2 === 0 ? 'rgba(168,85,247,0.45)' : 'rgba(236,72,153,0.40)', 'transparent']}
+                    start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
+                    style={{ position: 'absolute', top: 30 + i * 55, left: 0, right: 0, height: 18 + i * 4 }} />
+                </Animated.View>
+              ))}
+            </>)}
 
-            {/* Tier badge — top left */}
-            <View style={[styles.tcBadge, { backgroundColor: `${tierConfig.accent}28`, borderColor: `${tierConfig.accent}70` }]}>
-              <View style={[styles.tcBadgeDot, { backgroundColor: tierConfig.accent }]} />
+            {/* 4 · Top vignette for badge readability */}
+            <LinearGradient colors={['rgba(0,0,0,0.65)', 'transparent']}
+              start={{ x: 0, y: 0 }} end={{ x: 0, y: 1 }}
+              style={[StyleSheet.absoluteFill, { height: 90 }]} />
+
+            {/* 5 · Bottom scrim for event info */}
+            <LinearGradient
+              colors={['transparent', 'rgba(0,0,0,0.20)', 'rgba(0,0,0,0.75)', 'rgba(0,0,0,0.96)']}
+              locations={[0, 0.45, 0.72, 1]} start={{ x: 0, y: 0 }} end={{ x: 0, y: 1 }}
+              style={StyleSheet.absoluteFill} />
+
+            {/* Tier badge */}
+            <View style={[styles.tcBadge, { backgroundColor: `${tierConfig.accent}30`, borderColor: `${tierConfig.accent}80` }]}>
+              <Animated.View style={[styles.tcBadgeDot, { backgroundColor: tierConfig.accent,
+                transform: [{ scale: pulseAnim.interpolate({ inputRange: [0, 1], outputRange: [0.7, 1.3] }) }] }]} />
               <Text style={[styles.tcBadgeText, { color: tierConfig.labelColor }]}>{tierConfig.label}</Text>
             </View>
 
-            {/* Status stamp — top right */}
+            {/* Status stamp */}
             {(isResale || isUsed) && (
               <View style={[styles.tcStamp, isUsed ? styles.tcStampUsed : styles.tcStampResale]}>
                 <Text style={[styles.tcStampText, { color: isUsed ? '#ef4444' : '#fbbf24' }]}>
@@ -878,7 +953,7 @@ export default function TicketsScreen() {
               </View>
             )}
 
-            {/* Event info overlaid at bottom of poster */}
+            {/* Event info at bottom */}
             <View style={styles.tcPosterInfo}>
               <Text style={styles.tcEventName} numberOfLines={2}>{item.events?.title || '—'}</Text>
               <View style={styles.tcPosterMeta}>
@@ -1282,27 +1357,42 @@ const styles = StyleSheet.create({
 
   // ── NEW TICKET CARD ───────────────────────────────────────
   ticketContainer: {
-    marginBottom: 32,
-    width: '100%',
-    maxWidth: 360,
+    marginBottom: 36,
+    width: '92%',
+    maxWidth: 400,
     alignSelf: 'center',
-    paddingHorizontal: 2,
   },
   tcGlowRing: {
-    borderRadius: 24,
+    borderRadius: 26,
     borderWidth: 1,
     overflow: 'hidden',
-    shadowOffset: { width: 0, height: 16 },
-    shadowOpacity: 0.70,
-    shadowRadius: 32,
-    elevation: 18,
+    shadowOffset: { width: 0, height: 20 },
+    shadowOpacity: 0.80,
+    shadowRadius: 40,
+    elevation: 20,
   },
 
   // Poster
   tcPoster: {
-    height: 270,
+    height: 300,
     overflow: 'hidden',
     backgroundColor: '#080810',
+  },
+
+  // Aura elements
+  tcAuraRing: {
+    position: 'absolute',
+    borderWidth: 1.5,
+    backgroundColor: 'transparent',
+  },
+  tcAuraDisc: {
+    position: 'absolute',
+    top: -60,
+    left: -60,
+    right: -60,
+    bottom: -60,
+    borderRadius: 999,
+    overflow: 'hidden',
   },
   tcBadge: {
     position: 'absolute',
