@@ -51,13 +51,7 @@ export default function TicketsScreen() {
   const emptyPulse = useRef(new Animated.Value(0)).current;
   const emptyEnter = useRef(new Animated.Value(0)).current;
   const emptyDrift = useRef(new Animated.Value(0)).current;
-  const vipGlow = useRef(new Animated.Value(0)).current;
-  const vipShimmer = useRef(new Animated.Value(0)).current;
-  const backstageGlow = useRef(new Animated.Value(0)).current;
-  const fastlaneSpeed = useRef(new Animated.Value(0)).current;
-  const generalFlow = useRef(new Animated.Value(0)).current;
-  const spinAnim = useRef(new Animated.Value(0)).current;
-  const pulseAnim = useRef(new Animated.Value(0)).current;
+  const shimmer = useRef(new Animated.Value(0)).current;
   const localeTag = language === 'en' ? 'en-US' : language === 'fr' ? 'fr-FR' : 'es-ES';
   
   // Resale Modal State
@@ -134,66 +128,13 @@ export default function TicketsScreen() {
   }, [emptyDrift, emptyEnter, emptyFloat, emptyPulse, loading, tickets.length]);
 
   useEffect(() => {
-    const glowAnim = Animated.loop(
-      Animated.sequence([
-        Animated.timing(vipGlow, { toValue: 1, duration: 2200, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
-        Animated.timing(vipGlow, { toValue: 0, duration: 2200, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
-      ])
-    );
-
-    const shimmerAnim = Animated.loop(
-      Animated.sequence([
-        Animated.timing(vipShimmer, { toValue: 1, duration: 1600, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
-        Animated.timing(vipShimmer, { toValue: 0, duration: 1600, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
-      ])
-    );
-
-    glowAnim.start();
-    shimmerAnim.start();
-
-    return () => {
-      glowAnim.stop();
-      shimmerAnim.stop();
-    };
-  }, [vipGlow, vipShimmer]);
-
-  useEffect(() => {
-    Animated.loop(
-      Animated.timing(spinAnim, { toValue: 1, duration: 9000, easing: Easing.linear, useNativeDriver: true })
-    ).start();
     Animated.loop(
       Animated.sequence([
-        Animated.timing(pulseAnim, { toValue: 1, duration: 1400, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
-        Animated.timing(pulseAnim, { toValue: 0, duration: 1400, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
+        Animated.timing(shimmer, { toValue: 1, duration: 2800, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
+        Animated.timing(shimmer, { toValue: 0, duration: 2800, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
       ])
     ).start();
-  }, [spinAnim, pulseAnim]);
-
-  useEffect(() => {
-    const backstageAnim = Animated.loop(
-      Animated.sequence([
-        Animated.timing(backstageGlow, { toValue: 1, duration: 1800, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
-        Animated.timing(backstageGlow, { toValue: 0, duration: 1800, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
-      ])
-    );
-    const fastlaneAnim = Animated.loop(
-      Animated.timing(fastlaneSpeed, { toValue: 1, duration: 900, easing: Easing.linear, useNativeDriver: true })
-    );
-    const generalAnim = Animated.loop(
-      Animated.sequence([
-        Animated.timing(generalFlow, { toValue: 1, duration: 3500, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
-        Animated.timing(generalFlow, { toValue: 0, duration: 3500, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
-      ])
-    );
-    backstageAnim.start();
-    fastlaneAnim.start();
-    generalAnim.start();
-    return () => {
-      backstageAnim.stop();
-      fastlaneAnim.stop();
-      generalAnim.stop();
-    };
-  }, [backstageGlow, fastlaneSpeed, generalFlow]);
+  }, [shimmer]);
 
   const refreshTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -795,156 +736,75 @@ export default function TicketsScreen() {
     const seatLabel = `${(item as any).quantity ?? 1}P`;
     const ticketCode = `ECL-${eventYear}-${ticketShort}-${visualTier.toUpperCase()}`;
 
-    const spinDeg = spinAnim.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '360deg'] });
-    const spinDegRev = spinAnim.interpolate({ inputRange: [0, 1], outputRange: ['360deg', '0deg'] });
-    const pulseSc = pulseAnim.interpolate({ inputRange: [0, 1], outputRange: [0.88, 1.12] });
-    const pulseOp = pulseAnim.interpolate({ inputRange: [0, 1], outputRange: [0.25, 0.75] });
+    // Single shared shimmer translateX — runs on native thread, zero JS cost
+    const shimmerX = shimmer.interpolate({ inputRange: [0, 1], outputRange: [-420, 420] });
 
     return (
       <View style={styles.ticketContainer}>
-        <View style={[styles.tcGlowRing, { shadowColor: tierConfig.accent, borderColor: `${tierConfig.accent}40` }]}>
+        {/* Tier-coloured outer shadow wrapper */}
+        <View style={[styles.tcCard, { shadowColor: tierConfig.accent }]}>
 
-          {/* ══ PORTAL SECTION ══════════════════════════════════════════ */}
-          <TouchableOpacity activeOpacity={0.95} disabled={!eventId}
+          {/* ══ POSTER ═══════════════════════════════════════════════════ */}
+          <TouchableOpacity activeOpacity={0.96} disabled={!eventId}
             onPress={() => { if (eventId) router.push(`/(tabs)/event/${eventId}`); }}
             style={styles.tcPoster}>
 
-            {/* 1 · Tier base colour */}
+            {/* Base tier gradient */}
             <LinearGradient colors={[...tierConfig.grad]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />
 
-            {/* 2 · Event poster at 72% */}
-            {item.events?.poster_url && (
-              <Image source={{ uri: item.events.poster_url }} style={[StyleSheet.absoluteFill, { opacity: 0.72 }]} resizeMode="cover" />
-            )}
+            {/* Poster at 75% — visible, the hero */}
+            {item.events?.poster_url
+              ? <Image source={{ uri: item.events.poster_url }} style={[StyleSheet.absoluteFill, { opacity: 0.75 }]} resizeMode="cover" />
+              : <LinearGradient colors={[tierConfig.grad[0], tierConfig.grad[1], tierConfig.grad[2]]} style={StyleSheet.absoluteFill} />
+            }
 
-            {/* 3 · Color-mix overlay so tier bleeds through the photo */}
+            {/* Tier colour tint — makes photo feel "owned" by the tier */}
             <LinearGradient
-              colors={[`${tierConfig.accent}55`, 'transparent', `${tierConfig.grad[2]}CC`]}
-              locations={[0, 0.5, 1]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
-              style={[StyleSheet.absoluteFill, { opacity: 0.45 }]} />
+              colors={[`${tierConfig.accent}3A`, 'transparent', `${tierConfig.grad[2]}BB`]}
+              locations={[0, 0.55, 1]} start={{ x: 0.1, y: 0 }} end={{ x: 0.9, y: 1 }}
+              style={[StyleSheet.absoluteFill, { opacity: 0.55 }]} />
 
-            {/* ── GENERAL · Rotating bioluminescent ring ── */}
-            {visualTier === 'general' && (<>
-              <Animated.View pointerEvents="none" style={[styles.tcAuraRing, {
-                width: 340, height: 340, borderRadius: 170, top: -40, left: -60,
-                borderColor: '#00DCFF',
-                opacity: pulseOp,
-                transform: [{ rotate: spinDeg }, { scale: pulseSc }],
-              }]} />
-              <Animated.View pointerEvents="none" style={[styles.tcAuraRing, {
-                width: 220, height: 220, borderRadius: 110, top: 10, left: 20,
-                borderColor: '#00AADD',
-                opacity: pulseAnim.interpolate({ inputRange: [0, 1], outputRange: [0.15, 0.50] }),
-                transform: [{ rotate: spinDegRev }],
-              }]} />
-              <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, {
-                opacity: generalFlow.interpolate({ inputRange: [0, 1], outputRange: [0.20, 0.55] }),
-              }]}>
-                <LinearGradient colors={['transparent', 'rgba(0,220,255,0.40)', 'transparent']}
-                  start={{ x: 0.5, y: 1 }} end={{ x: 0.5, y: 0.2 }} style={StyleSheet.absoluteFill} />
-              </Animated.View>
-            </>)}
-
-            {/* ── VIP · Solar corona rings + diagonal gold ── */}
-            {visualTier === 'vip' && (<>
-              <Animated.View pointerEvents="none" style={[styles.tcAuraRing, {
-                width: 360, height: 360, borderRadius: 180, top: -80, right: -80,
-                borderColor: '#FFCD00', borderWidth: 2,
-                opacity: vipGlow.interpolate({ inputRange: [0, 1], outputRange: [0.20, 0.55] }),
-                transform: [{ rotate: spinDeg }],
-              }]} />
-              <Animated.View pointerEvents="none" style={[styles.tcAuraRing, {
-                width: 220, height: 220, borderRadius: 110, top: -20, right: -20,
-                borderColor: '#FFE55C', borderWidth: 1.5,
-                opacity: vipGlow.interpolate({ inputRange: [0, 1], outputRange: [0.30, 0.70] }),
-                transform: [{ rotate: spinDegRev }, { scale: pulseSc }],
-              }]} />
-              {/* Sweeping diagonal shimmer */}
-              <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, { overflow: 'hidden',
-                transform: [{ translateX: vipShimmer.interpolate({ inputRange: [0, 1], outputRange: [-400, 500] }) }, { rotate: '-25deg' }],
-              }]}>
-                <LinearGradient colors={['transparent','rgba(255,230,80,0.55)','rgba(255,255,180,0.30)','transparent']}
-                  start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={{ flex: 1, width: 180 }} />
-              </Animated.View>
-              <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, {
-                opacity: vipGlow.interpolate({ inputRange: [0, 1], outputRange: [0.08, 0.30] }),
-              }]}>
-                <LinearGradient colors={['rgba(255,210,0,0.60)', 'transparent']}
-                  start={{ x: 0.5, y: 0 }} end={{ x: 0.5, y: 1 }} style={StyleSheet.absoluteFill} />
-              </Animated.View>
-            </>)}
-
-            {/* ── BACKSTAGE · Lava fault lines ── */}
-            {visualTier === 'backstage' && (<>
-              <Animated.View pointerEvents="none" style={[styles.tcAuraRing, {
-                width: 400, height: 400, borderRadius: 200, bottom: -200, left: -100,
-                borderColor: '#FF7319', borderWidth: 3,
-                opacity: backstageGlow.interpolate({ inputRange: [0, 1], outputRange: [0.25, 0.65] }),
-                transform: [{ rotate: spinDeg }, { scale: pulseSc }],
-              }]} />
-              <Animated.View pointerEvents="none" style={[styles.tcAuraRing, {
-                width: 240, height: 240, borderRadius: 120, bottom: -90, right: -60,
-                borderColor: '#FF4000', borderWidth: 2,
-                opacity: backstageGlow.interpolate({ inputRange: [0, 1], outputRange: [0.35, 0.80] }),
-                transform: [{ rotate: spinDegRev }],
-              }]} />
-              <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, {
-                opacity: backstageGlow.interpolate({ inputRange: [0, 1], outputRange: [0.15, 0.55] }),
-              }]}>
-                <LinearGradient colors={['transparent', 'rgba(255,60,0,0.50)', 'rgba(255,120,0,0.35)']}
-                  locations={[0.3, 0.75, 1]} start={{ x: 0, y: 0 }} end={{ x: 0, y: 1 }} style={StyleSheet.absoluteFill} />
-              </Animated.View>
-            </>)}
-
-            {/* ── FASTLANE · Warp speed vortex ── */}
-            {visualTier === 'fastlane' && (<>
-              {/* Rotating spectral disc */}
-              <Animated.View pointerEvents="none" style={[styles.tcAuraDisc, {
-                opacity: 0.50,
-                transform: [{ rotate: spinDeg }, { scale: pulseSc }],
-              }]}>
-                <LinearGradient
-                  colors={['rgba(139,92,246,0.80)','rgba(236,72,153,0.60)','rgba(59,130,246,0.70)','rgba(16,185,129,0.50)','rgba(139,92,246,0.80)']}
-                  start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />
-              </Animated.View>
-              {/* Speed lines sweeping */}
-              {[0, 1, 2, 3].map(i => (
-                <Animated.View key={i} pointerEvents="none" style={[StyleSheet.absoluteFill, {
-                  opacity: 0.60,
-                  transform: [{
-                    translateX: fastlaneSpeed.interpolate({
-                      inputRange: [0, 1],
-                      outputRange: [-500 - i * 80, 500 + i * 40],
-                    }),
-                  }],
-                }]}>
-                  <LinearGradient
-                    colors={['transparent', i % 2 === 0 ? 'rgba(168,85,247,0.45)' : 'rgba(236,72,153,0.40)', 'transparent']}
-                    start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
-                    style={{ position: 'absolute', top: 30 + i * 55, left: 0, right: 0, height: 18 + i * 4 }} />
-                </Animated.View>
-              ))}
-            </>)}
-
-            {/* 4 · Top vignette for badge readability */}
-            <LinearGradient colors={['rgba(0,0,0,0.65)', 'transparent']}
-              start={{ x: 0, y: 0 }} end={{ x: 0, y: 1 }}
-              style={[StyleSheet.absoluteFill, { height: 90 }]} />
-
-            {/* 5 · Bottom scrim for event info */}
+            {/* Tier glow from a corner — unique per tier */}
             <LinearGradient
-              colors={['transparent', 'rgba(0,0,0,0.20)', 'rgba(0,0,0,0.75)', 'rgba(0,0,0,0.96)']}
-              locations={[0, 0.45, 0.72, 1]} start={{ x: 0, y: 0 }} end={{ x: 0, y: 1 }}
+              colors={[`${tierConfig.accent}60`, `${tierConfig.accent}15`, 'transparent']}
+              start={
+                visualTier === 'vip'       ? { x: 1, y: 0 } :
+                visualTier === 'backstage' ? { x: 0, y: 1 } :
+                visualTier === 'fastlane'  ? { x: 1, y: 0.5 } :
+                                             { x: 0, y: 0.5 }}
+              end={{ x: 0.4, y: 0.4 }}
               style={StyleSheet.absoluteFill} />
 
-            {/* Tier badge */}
-            <View style={[styles.tcBadge, { backgroundColor: `${tierConfig.accent}30`, borderColor: `${tierConfig.accent}80` }]}>
-              <Animated.View style={[styles.tcBadgeDot, { backgroundColor: tierConfig.accent,
-                transform: [{ scale: pulseAnim.interpolate({ inputRange: [0, 1], outputRange: [0.7, 1.3] }) }] }]} />
+            {/* Single smooth shimmer sweep — all tiers, native thread only */}
+            <Animated.View pointerEvents="none"
+              style={[StyleSheet.absoluteFill, { transform: [{ translateX: shimmerX }, { rotate: '-18deg' }] }]}>
+              <LinearGradient
+                colors={['transparent', `${tierConfig.accent}28`, `${tierConfig.accent}12`, 'transparent']}
+                start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
+                style={{ flex: 1, width: 200 }} />
+            </Animated.View>
+
+            {/* Top scrim — badge legibility */}
+            <LinearGradient colors={['rgba(0,0,0,0.60)', 'rgba(0,0,0,0.10)', 'transparent']}
+              start={{ x: 0, y: 0 }} end={{ x: 0, y: 1 }}
+              style={[StyleSheet.absoluteFill, { height: 80 }]} />
+
+            {/* Bottom scrim — text legibility */}
+            <LinearGradient
+              colors={['transparent', 'rgba(0,0,0,0.15)', 'rgba(0,0,0,0.70)', 'rgba(0,0,0,0.97)']}
+              locations={[0, 0.40, 0.70, 1]} start={{ x: 0, y: 0 }} end={{ x: 0, y: 1 }}
+              style={StyleSheet.absoluteFill} />
+
+            {/* Tier accent bar — left edge, full height */}
+            <View style={[styles.tcAccentBar, { backgroundColor: tierConfig.accent }]} />
+
+            {/* ── Badge top-left ── */}
+            <View style={[styles.tcBadge, { backgroundColor: `${tierConfig.accent}22`, borderColor: `${tierConfig.accent}88` }]}>
+              <View style={[styles.tcBadgeDot, { backgroundColor: tierConfig.accent }]} />
               <Text style={[styles.tcBadgeText, { color: tierConfig.labelColor }]}>{tierConfig.label}</Text>
             </View>
 
-            {/* Status stamp */}
+            {/* ── Status stamp top-right ── */}
             {(isResale || isUsed) && (
               <View style={[styles.tcStamp, isUsed ? styles.tcStampUsed : styles.tcStampResale]}>
                 <Text style={[styles.tcStampText, { color: isUsed ? '#ef4444' : '#fbbf24' }]}>
@@ -953,15 +813,31 @@ export default function TicketsScreen() {
               </View>
             )}
 
-            {/* Event info at bottom */}
+            {/* ── Event info bottom ── */}
             <View style={styles.tcPosterInfo}>
               <Text style={styles.tcEventName} numberOfLines={2}>{item.events?.title || '—'}</Text>
-              <View style={styles.tcPosterMeta}>
-                <Text style={styles.tcPosterVenue} numberOfLines={1}>📍 {item.events?.venues?.name || t('tickets_pdf.location_tbd')}</Text>
-                <Text style={styles.tcPosterDate}>🗓 {shortDate}  ·  {time}</Text>
+              <View style={styles.tcMetaRow}>
+                <Text style={styles.tcMetaText} numberOfLines={1}>
+                  {item.events?.venues?.name || t('tickets_pdf.location_tbd')}
+                </Text>
+                <View style={[styles.tcMetaDot, { backgroundColor: tierConfig.accent }]} />
+                <Text style={styles.tcMetaText}>{shortDate}</Text>
+                <View style={[styles.tcMetaDot, { backgroundColor: tierConfig.accent }]} />
+                <Text style={styles.tcMetaText}>{time}</Text>
               </View>
             </View>
           </TouchableOpacity>
+
+          {/* ══ TEAR LINE ════════════════════════════════════════════════ */}
+          <View style={[styles.tcTearRow, { backgroundColor: '#07070F' }]}>
+            <View style={[styles.tcNotch, styles.tcNotchL, { borderColor: tierConfig.accent + '30', backgroundColor: Colors.dark.background }]} />
+            <View style={styles.tcTearDashes}>
+              {Array.from({ length: 26 }).map((_, i) => (
+                <View key={i} style={[styles.tcTearDash, { backgroundColor: tierConfig.accent + '50' }]} />
+              ))}
+            </View>
+            <View style={[styles.tcNotch, styles.tcNotchR, { borderColor: tierConfig.accent + '30', backgroundColor: Colors.dark.background }]} />
+          </View>
 
           {/* ══ PERFORATED TEAR LINE ══════════════════════════════════ */}
           <View style={[styles.tcTearRow, { backgroundColor: '#0A0A10' }]}>
@@ -975,32 +851,34 @@ export default function TicketsScreen() {
           </View>
 
           {/* ══ LOWER BODY ════════════════════════════════════════════ */}
-          <View style={[styles.tcBody, { backgroundColor: '#080810' }]}>
+          <View style={[styles.tcBody, { backgroundColor: '#07070F' }]}>
+            {/* Left accent bar continued */}
+            <View style={[styles.tcAccentBar, { backgroundColor: tierConfig.accent, opacity: 0.35 }]} />
 
-            {/* Left: access fields + ticket code */}
+            {/* Fields */}
             <View style={styles.tcFields}>
               <View style={styles.tcField}>
-                <Text style={[styles.tcFieldLabel, { color: `${tierConfig.accent}99` }]}>TIPO</Text>
+                <Text style={[styles.tcFieldLabel, { color: tierConfig.accent }]}>TIPO DE ENTRADA</Text>
                 <Text style={styles.tcFieldValue} numberOfLines={1}>{sectionLabel || 'GENERAL'}</Text>
               </View>
               <View style={styles.tcField}>
-                <Text style={[styles.tcFieldLabel, { color: `${tierConfig.accent}99` }]}>ENTRADAS</Text>
+                <Text style={[styles.tcFieldLabel, { color: tierConfig.accent }]}>CANTIDAD</Text>
                 <Text style={styles.tcFieldValue}>{seatLabel}</Text>
               </View>
-              <View style={[styles.tcField, { marginTop: 6 }]}>
-                <Text style={[styles.tcFieldLabel, { color: `${tierConfig.accent}99` }]}>CÓDIGO</Text>
-                <Text style={[styles.tcFieldMono, { color: tierConfig.accent }]}>{ticketCode}</Text>
+              <View style={styles.tcField}>
+                <Text style={[styles.tcFieldLabel, { color: tierConfig.accent }]}>CÓDIGO</Text>
+                <Text style={[styles.tcFieldMono, { color: 'rgba(255,255,255,0.70)' }]}>{ticketCode}</Text>
               </View>
             </View>
 
-            {/* Vertical divider */}
-            <View style={[styles.tcVertDivider, { backgroundColor: `${tierConfig.accent}25` }]} />
+            {/* Divider */}
+            <View style={[styles.tcVertDivider, { backgroundColor: `${tierConfig.accent}30` }]} />
 
-            {/* Right: QR code */}
+            {/* QR */}
             <View style={styles.tcQrWrap}>
               {!isResale ? (
-                <View style={[styles.tcQrBox, { borderColor: `${tierConfig.accent}40` }]}>
-                  <QRCode value={item.qr_token || item.qr_code || item.id} size={100} color="#060610" backgroundColor="white" />
+                <View style={[styles.tcQrBox, { borderColor: `${tierConfig.accent}55` }]}>
+                  <QRCode value={item.qr_token || item.qr_code || item.id} size={106} color="#07070F" backgroundColor="white" />
                   {isUsed && (
                     <View style={styles.tcQrOverlay}>
                       <Text style={styles.tcQrOverlayText}>USADO</Text>
@@ -1008,18 +886,18 @@ export default function TicketsScreen() {
                   )}
                 </View>
               ) : (
-                <View style={[styles.tcQrBox, { alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,255,255,0.04)' }]}>
-                  <Text style={{ fontSize: 9, color: 'rgba(255,255,255,0.40)', textAlign: 'center', fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                <View style={[styles.tcQrBox, { alignItems: 'center', justifyContent: 'center' }]}>
+                  <Text style={{ fontSize: 9, color: 'rgba(255,255,255,0.35)', textAlign: 'center', fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.5 }}>
                     {t('tickets.qr_disabled_resale')}
                   </Text>
                 </View>
               )}
-              <Text style={[styles.tcScanHint, { color: `${tierConfig.accent}80` }]}>{t('tickets.card.scan_at_entry')}</Text>
+              <Text style={[styles.tcScanHint, { color: `${tierConfig.accent}90` }]}>{t('tickets.card.scan_at_entry')}</Text>
             </View>
           </View>
 
           {/* ══ ACTION ROW ════════════════════════════════════════════ */}
-          <View style={[styles.tcActions, { borderTopColor: `${tierConfig.accent}18`, backgroundColor: '#060610' }]}>
+          <View style={[styles.tcActions, { borderTopColor: `${tierConfig.accent}20`, backgroundColor: '#050510' }]}>
             <TouchableOpacity style={[styles.tcActionBtn, isResale && styles.tcActionBtnDim]} onPress={() => handleDownloadPDF(item)} disabled={isResale}>
               <Download size={14} color={isResale ? '#374151' : '#6b7280'} />
               <Text style={[styles.tcActionBtnTxt, isResale && { color: '#374151' }]}>{t('tickets.download')}</Text>
@@ -1355,44 +1233,35 @@ const styles = StyleSheet.create({
     fontSize: 16,
   },
 
-  // ── NEW TICKET CARD ───────────────────────────────────────
+  // ── TICKET CARD ───────────────────────────────────────────
   ticketContainer: {
-    marginBottom: 36,
-    width: '92%',
-    maxWidth: 400,
+    marginBottom: 28,
+    width: '100%',
     alignSelf: 'center',
   },
-  tcGlowRing: {
-    borderRadius: 26,
-    borderWidth: 1,
+  tcCard: {
+    borderRadius: 22,
     overflow: 'hidden',
-    shadowOffset: { width: 0, height: 20 },
-    shadowOpacity: 0.80,
-    shadowRadius: 40,
-    elevation: 20,
+    shadowOffset: { width: 0, height: 14 },
+    shadowOpacity: 0.75,
+    shadowRadius: 28,
+    elevation: 16,
+    backgroundColor: '#07070F',
   },
 
   // Poster
   tcPoster: {
-    height: 300,
+    height: 310,
     overflow: 'hidden',
-    backgroundColor: '#080810',
+    backgroundColor: '#07070F',
   },
-
-  // Aura elements
-  tcAuraRing: {
+  tcAccentBar: {
     position: 'absolute',
-    borderWidth: 1.5,
-    backgroundColor: 'transparent',
-  },
-  tcAuraDisc: {
-    position: 'absolute',
-    top: -60,
-    left: -60,
-    right: -60,
-    bottom: -60,
-    borderRadius: 999,
-    overflow: 'hidden',
+    left: 0,
+    top: 0,
+    bottom: 0,
+    width: 3,
+    zIndex: 10,
   },
   tcBadge: {
     position: 'absolute',
@@ -1458,25 +1327,26 @@ const styles = StyleSheet.create({
     textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 6,
   },
-  tcPosterMeta: {
-    marginTop: 5,
-    gap: 2,
+  tcMetaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 6,
+    marginTop: 6,
   },
-  tcPosterVenue: {
+  tcMetaText: {
     fontSize: 12,
     fontWeight: '500',
-    color: 'rgba(255,255,255,0.82)',
-    textShadowColor: 'rgba(0,0,0,0.6)',
+    color: 'rgba(255,255,255,0.78)',
+    textShadowColor: 'rgba(0,0,0,0.7)',
     textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 4,
   },
-  tcPosterDate: {
-    fontSize: 12,
-    fontWeight: '500',
-    color: 'rgba(255,255,255,0.65)',
-    textShadowColor: 'rgba(0,0,0,0.6)',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 4,
+  tcMetaDot: {
+    width: 4,
+    height: 4,
+    borderRadius: 2,
+    opacity: 0.80,
   },
 
   // Perforated tear line
@@ -1486,18 +1356,21 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     overflow: 'visible',
   },
-  tcTearCircle: {
-    width: 26,
-    height: 26,
-    borderRadius: 13,
+  tcNotch: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
     borderWidth: 1,
-    backgroundColor: Colors.dark.background,
     position: 'absolute',
-    top: 0,
+    top: -1,
     zIndex: 2,
   },
-  tcTearCircleLeft:  { left: -13 },
-  tcTearCircleRight: { right: -13 },
+  tcNotchL: { left: -14 },
+  tcNotchR: { right: -14 },
+  // keep old names as aliases to not break anything
+  tcTearCircle:      { width: 28, height: 28, borderRadius: 14, borderWidth: 1, position: 'absolute', top: -1, zIndex: 2 },
+  tcTearCircleLeft:  { left: -14 },
+  tcTearCircleRight: { right: -14 },
   tcTearDashes: {
     flex: 1,
     flexDirection: 'row',
