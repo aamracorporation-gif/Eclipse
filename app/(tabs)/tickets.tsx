@@ -991,7 +991,7 @@ export default function TicketsScreen() {
           contentContainerStyle={
             isEmptyState
               ? styles.listContentEmpty
-              : [styles.listContent, { paddingHorizontal: horizontalPadding, alignItems: 'center' }]
+              : [styles.listContent, { paddingHorizontal: 10, alignItems: 'center' }]
           }
           showsVerticalScrollIndicator={false}
           ListHeaderComponent={
@@ -1211,7 +1211,7 @@ const styles = StyleSheet.create({
     color: Colors.dark.textSecondary,
   },
   listContent: {
-    padding: 20,
+    paddingHorizontal: 10,
     paddingTop: 0,
     paddingBottom: 120,
     flexGrow: 1,
