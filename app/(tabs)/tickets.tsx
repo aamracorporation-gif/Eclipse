@@ -782,294 +782,202 @@ export default function TicketsScreen() {
     const ticketCode = `ECL-${eventYear}-${ticketShort}-${visualTier.toUpperCase()}`;
 
     return (
-      <View style={[styles.ticketContainer, { maxWidth: maxContentWidth }]}>
-        {/* ECLIPSE Card */}
-        <View style={[styles.eclipseCard, { borderColor: tierConfig.borderColor, borderWidth: 1 }]}>
+      <View style={styles.ticketContainer}>
+        {/* ── Outer glow ring (tier color) ── */}
+        <View style={[styles.tcGlowRing, { shadowColor: tierConfig.accent, borderColor: `${tierConfig.accent}35` }]}>
 
-          {/* ── BANNER ── */}
+          {/* ══ POSTER SECTION ══════════════════════════════════════════ */}
           <TouchableOpacity
-            activeOpacity={0.92}
+            activeOpacity={0.95}
             disabled={!eventId}
             onPress={() => { if (eventId) router.push(`/(tabs)/event/${eventId}`); }}
-            style={styles.eclipseBanner}
+            style={styles.tcPoster}
           >
-            {/* Base gradient per ticket tier */}
-            <LinearGradient
-              colors={[...tierConfig.grad]}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-              style={StyleSheet.absoluteFill}
-            />
+            {/* Tier base gradient — always visible even without poster */}
+            <LinearGradient colors={[...tierConfig.grad]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />
 
-            {/* Poster image with dark overlay */}
+            {/* Event poster — hero at 65% */}
             {item.events?.poster_url && (
-              <Image
-                source={{ uri: item.events.poster_url }}
-                style={[StyleSheet.absoluteFill, { opacity: 0.18 }]}
-                resizeMode="cover"
-              />
+              <Image source={{ uri: item.events.poster_url }} style={[StyleSheet.absoluteFill, { opacity: 0.65 }]} resizeMode="cover" />
             )}
 
-            {/* Tier spotlight glow */}
+            {/* Subtle top vignette so badges are readable */}
+            <LinearGradient colors={['rgba(0,0,0,0.55)', 'transparent']} end={{ x: 0, y: 0.38 }} start={{ x: 0, y: 0 }} style={StyleSheet.absoluteFill} />
+
+            {/* Heavy bottom gradient — event name lives here */}
             <LinearGradient
-              colors={[...tierConfig.spotGrad]}
-              start={{ x: 0.55, y: 0 }}
-              end={{ x: 1, y: 1 }}
+              colors={['transparent', 'rgba(0,0,0,0.30)', 'rgba(0,0,0,0.82)', 'rgba(0,0,0,0.97)']}
+              locations={[0, 0.42, 0.72, 1]}
+              start={{ x: 0, y: 0 }} end={{ x: 0, y: 1 }}
               style={StyleSheet.absoluteFill}
             />
 
-            {/* Top darkness overlay */}
-            <LinearGradient
-              colors={['rgba(6,6,12,0.90)', 'rgba(6,6,12,0.10)']}
-              style={StyleSheet.absoluteFill}
-            />
-
-            {/* Bottom vignette */}
-            <LinearGradient
-              colors={['transparent', 'rgba(0,0,0,0.40)']}
-              start={{ x: 0, y: 0.5 }}
-              end={{ x: 0, y: 1 }}
-              style={StyleSheet.absoluteFill}
-            />
-
-            {/* ── GENERAL: slow drifting cyan glow ── */}
+            {/* ── GENERAL: rising bioluminescent glow ── */}
             {visualTier === 'general' && (
-              <Animated.View
-                pointerEvents="none"
-                style={[
-                  StyleSheet.absoluteFill,
-                  {
-                    opacity: generalFlow.interpolate({ inputRange: [0, 1], outputRange: [0.0, 0.18] }),
-                    transform: [{ translateY: generalFlow.interpolate({ inputRange: [0, 1], outputRange: [0, -20] }) }],
-                  },
-                ]}
-              >
-                <LinearGradient
-                  colors={['transparent', 'rgba(0,220,255,0.22)', 'transparent']}
-                  start={{ x: 0, y: 1 }}
-                  end={{ x: 0, y: 0 }}
-                  style={StyleSheet.absoluteFill}
-                />
+              <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, {
+                opacity: generalFlow.interpolate({ inputRange: [0, 1], outputRange: [0.12, 0.45] }),
+                transform: [{ translateY: generalFlow.interpolate({ inputRange: [0, 1], outputRange: [30, -10] }) }],
+              }]}>
+                <LinearGradient colors={['transparent', 'rgba(0,220,255,0.35)', 'rgba(0,180,255,0.12)', 'transparent']}
+                  locations={[0, 0.4, 0.75, 1]} start={{ x: 0.5, y: 1 }} end={{ x: 0.5, y: 0 }} style={StyleSheet.absoluteFill} />
               </Animated.View>
             )}
 
-            {/* ── VIP: diagonal gold shimmer ── */}
-            {visualTier === 'vip' && (
-              <Animated.View
-                pointerEvents="none"
-                style={[
-                  StyleSheet.absoluteFill,
-                  {
-                    opacity: vipShimmer.interpolate({ inputRange: [0, 1], outputRange: [0.05, 0.28] }),
-                    transform: [
-                      { translateX: vipShimmer.interpolate({ inputRange: [0, 1], outputRange: [-200, 360] }) },
-                      { rotate: '-15deg' },
-                    ],
-                  },
-                ]}
-              >
-                <LinearGradient
-                  colors={['transparent', 'rgba(255,205,0,0.28)', 'transparent']}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 0 }}
-                  style={{ flex: 1, width: 120 }}
-                />
+            {/* ── VIP: sweeping gold shimmer ── */}
+            {visualTier === 'vip' && (<>
+              <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, {
+                opacity: vipShimmer.interpolate({ inputRange: [0, 1], outputRange: [0, 1] }),
+                transform: [{ translateX: vipShimmer.interpolate({ inputRange: [0, 1], outputRange: [-320, 420] }) }, { rotate: '-20deg' }],
+              }]}>
+                <LinearGradient colors={['transparent', 'rgba(255,215,0,0.38)', 'rgba(255,235,120,0.22)', 'transparent']}
+                  start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={{ flex: 1, width: 160 }} />
               </Animated.View>
-            )}
-
-            {/* ── VIP: gold glow pulse ── */}
-            {visualTier === 'vip' && (
-              <Animated.View
-                pointerEvents="none"
-                style={[
-                  StyleSheet.absoluteFill,
-                  { opacity: vipGlow.interpolate({ inputRange: [0, 1], outputRange: [0.0, 0.16] }) },
-                ]}
-              >
-                <LinearGradient
-                  colors={['rgba(255,205,0,0.30)', 'transparent']}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 1 }}
-                  style={StyleSheet.absoluteFill}
-                />
+              <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, {
+                opacity: vipGlow.interpolate({ inputRange: [0, 1], outputRange: [0.10, 0.38] }),
+              }]}>
+                <LinearGradient colors={['rgba(255,205,0,0.50)', 'rgba(200,150,0,0.15)', 'transparent']}
+                  start={{ x: 0.5, y: 0 }} end={{ x: 0.5, y: 1 }} style={StyleSheet.absoluteFill} />
               </Animated.View>
-            )}
+            </>)}
 
-            {/* ── BACKSTAGE: pulsing lava glow ── */}
+            {/* ── BACKSTAGE: lava pulse from bottom corners ── */}
             {visualTier === 'backstage' && (
-              <Animated.View
-                pointerEvents="none"
-                style={[
-                  StyleSheet.absoluteFill,
-                  { opacity: backstageGlow.interpolate({ inputRange: [0, 1], outputRange: [0.08, 0.32] }) },
-                ]}
-              >
-                <LinearGradient
-                  colors={['rgba(255,115,25,0.45)', 'rgba(255,40,0,0.10)', 'transparent']}
-                  start={{ x: 0, y: 1 }}
-                  end={{ x: 1, y: 0 }}
-                  style={StyleSheet.absoluteFill}
-                />
+              <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, {
+                opacity: backstageGlow.interpolate({ inputRange: [0, 1], outputRange: [0.22, 0.65] }),
+              }]}>
+                <LinearGradient colors={['transparent', 'transparent', 'rgba(255,80,0,0.55)', 'rgba(255,30,0,0.30)']}
+                  locations={[0, 0.45, 0.80, 1]} start={{ x: 0, y: 0 }} end={{ x: 0, y: 1 }} style={StyleSheet.absoluteFill} />
               </Animated.View>
             )}
 
-            {/* ── FASTLANE: speed lines ── */}
+            {/* ── FASTLANE: spectral speed sweep ── */}
             {visualTier === 'fastlane' && (
-              <Animated.View
-                pointerEvents="none"
-                style={[
-                  StyleSheet.absoluteFill,
-                  {
-                    opacity: 0.28,
-                    transform: [{ translateX: fastlaneSpeed.interpolate({ inputRange: [0, 1], outputRange: [-300, 0] }) }],
-                  },
-                ]}
-              >
+              <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, {
+                opacity: 0.55,
+                transform: [{ translateX: fastlaneSpeed.interpolate({ inputRange: [0, 1], outputRange: [-400, 400] }) }],
+              }]}>
                 <LinearGradient
-                  colors={['transparent', 'rgba(168,85,247,0.18)', 'rgba(236,72,153,0.14)', 'rgba(59,130,246,0.18)', 'transparent']}
-                  start={{ x: 0, y: 0.5 }}
-                  end={{ x: 1, y: 0.5 }}
-                  style={StyleSheet.absoluteFill}
-                />
+                  colors={['transparent','rgba(139,92,246,0.50)','rgba(236,72,153,0.40)','rgba(59,130,246,0.45)','transparent']}
+                  locations={[0, 0.25, 0.5, 0.75, 1]} start={{ x: 0, y: 0.5 }} end={{ x: 1, y: 0.5 }}
+                  style={{ flex: 1, width: 300 }} />
               </Animated.View>
             )}
 
-            {/* Tier badge pill — top left */}
-            <View style={[styles.eclipsePill, { backgroundColor: `${tierConfig.accent}1A`, borderColor: `${tierConfig.accent}40`, borderWidth: 1 }]}>
-              <View style={[styles.eclipsePillBar, { backgroundColor: tierConfig.accent }]} />
-              <Text style={[styles.eclipsePillText, { color: tierConfig.labelColor }]}>{tierConfig.label}</Text>
+            {/* Tier badge — top left */}
+            <View style={[styles.tcBadge, { backgroundColor: `${tierConfig.accent}28`, borderColor: `${tierConfig.accent}70` }]}>
+              <View style={[styles.tcBadgeDot, { backgroundColor: tierConfig.accent }]} />
+              <Text style={[styles.tcBadgeText, { color: tierConfig.labelColor }]}>{tierConfig.label}</Text>
             </View>
 
             {/* Status stamp — top right */}
             {(isResale || isUsed) && (
-              <View style={[styles.eclipseStamp, isUsed && styles.eclipseStampUsed]}>
-                <Text style={[styles.eclipseStampText, isUsed && styles.eclipseStampTextUsed]}>
+              <View style={[styles.tcStamp, isUsed ? styles.tcStampUsed : styles.tcStampResale]}>
+                <Text style={[styles.tcStampText, { color: isUsed ? '#ef4444' : '#fbbf24' }]}>
                   {isUsed ? 'USADO' : 'EN VENTA'}
                 </Text>
               </View>
             )}
+
+            {/* Event info overlaid at bottom of poster */}
+            <View style={styles.tcPosterInfo}>
+              <Text style={styles.tcEventName} numberOfLines={2}>{item.events?.title || '—'}</Text>
+              <View style={styles.tcPosterMeta}>
+                <Text style={styles.tcPosterVenue} numberOfLines={1}>📍 {item.events?.venues?.name || t('tickets_pdf.location_tbd')}</Text>
+                <Text style={styles.tcPosterDate}>🗓 {shortDate}  ·  {time}</Text>
+              </View>
+            </View>
           </TouchableOpacity>
 
-          {/* ── CONTENT ── */}
-          <View style={styles.eclipseContent}>
-            <TouchableOpacity
-              activeOpacity={0.88}
-              disabled={!eventId}
-              onPress={() => { if (eventId) router.push(`/(tabs)/event/${eventId}`); }}
-            >
-              <Text style={styles.eclipseEventName} numberOfLines={2}>
-                {item.events?.title || '—'}
-              </Text>
-              <Text style={styles.eclipseVenueLine} numberOfLines={1}>
-                {item.events?.venues?.name || t('tickets_pdf.location_tbd')}
-              </Text>
-              <Text style={styles.eclipseDateLine}>
-                {shortDate} · {time}
-              </Text>
-            </TouchableOpacity>
+          {/* ══ PERFORATED TEAR LINE ══════════════════════════════════ */}
+          <View style={[styles.tcTearRow, { backgroundColor: '#0A0A10' }]}>
+            <View style={[styles.tcTearCircle, styles.tcTearCircleLeft, { borderColor: `${tierConfig.accent}30` }]} />
+            <View style={styles.tcTearDashes}>
+              {Array.from({ length: 22 }).map((_, i) => (
+                <View key={i} style={[styles.tcTearDash, { backgroundColor: `${tierConfig.accent}45` }]} />
+              ))}
+            </View>
+            <View style={[styles.tcTearCircle, styles.tcTearCircleRight, { borderColor: `${tierConfig.accent}30` }]} />
+          </View>
 
-            <View style={styles.eclipseDivider} />
+          {/* ══ LOWER BODY ════════════════════════════════════════════ */}
+          <View style={[styles.tcBody, { backgroundColor: '#080810' }]}>
 
-            {/* Access grid */}
-            <View style={styles.eclipseGrid}>
-              <View style={styles.eclipseGridItem}>
-                <Text style={styles.eclipseGridLabel}>SECTION</Text>
-                <Text style={styles.eclipseGridValue}>{sectionLabel}</Text>
+            {/* Left: access fields + ticket code */}
+            <View style={styles.tcFields}>
+              <View style={styles.tcField}>
+                <Text style={[styles.tcFieldLabel, { color: `${tierConfig.accent}99` }]}>TIPO</Text>
+                <Text style={styles.tcFieldValue} numberOfLines={1}>{sectionLabel || 'GENERAL'}</Text>
               </View>
-              <View style={styles.eclipseGridItem}>
-                <Text style={styles.eclipseGridLabel}>ROW</Text>
-                <Text style={styles.eclipseGridValue}>{rowLabel}</Text>
+              <View style={styles.tcField}>
+                <Text style={[styles.tcFieldLabel, { color: `${tierConfig.accent}99` }]}>ENTRADAS</Text>
+                <Text style={styles.tcFieldValue}>{seatLabel}</Text>
               </View>
-              <View style={styles.eclipseGridItem}>
-                <Text style={styles.eclipseGridLabel}>SEAT</Text>
-                <Text style={styles.eclipseGridValue}>{seatLabel}</Text>
+              <View style={[styles.tcField, { marginTop: 6 }]}>
+                <Text style={[styles.tcFieldLabel, { color: `${tierConfig.accent}99` }]}>CÓDIGO</Text>
+                <Text style={[styles.tcFieldMono, { color: tierConfig.accent }]}>{ticketCode}</Text>
               </View>
-              <View style={styles.eclipseGridItem}>
-                <Text style={styles.eclipseGridLabel}>TICKET ID</Text>
-                <View style={styles.eclipseMonoChip}>
-                  <Text style={styles.eclipseMonoChipText}>{`ECL-${item.id.slice(0, 4).toUpperCase()}`}</Text>
+            </View>
+
+            {/* Vertical divider */}
+            <View style={[styles.tcVertDivider, { backgroundColor: `${tierConfig.accent}25` }]} />
+
+            {/* Right: QR code */}
+            <View style={styles.tcQrWrap}>
+              {!isResale ? (
+                <View style={[styles.tcQrBox, { borderColor: `${tierConfig.accent}40` }]}>
+                  <QRCode value={item.qr_token || item.qr_code || item.id} size={100} color="#060610" backgroundColor="white" />
+                  {isUsed && (
+                    <View style={styles.tcQrOverlay}>
+                      <Text style={styles.tcQrOverlayText}>USADO</Text>
+                    </View>
+                  )}
                 </View>
-              </View>
+              ) : (
+                <View style={[styles.tcQrBox, { alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,255,255,0.04)' }]}>
+                  <Text style={{ fontSize: 9, color: 'rgba(255,255,255,0.40)', textAlign: 'center', fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                    {t('tickets.qr_disabled_resale')}
+                  </Text>
+                </View>
+              )}
+              <Text style={[styles.tcScanHint, { color: `${tierConfig.accent}80` }]}>{t('tickets.card.scan_at_entry')}</Text>
             </View>
           </View>
 
-          {/* ── QR ZONE ── */}
-          <View style={styles.eclipseQrZone}>
-            {!isResale ? (
-              <View style={{ position: 'relative' }}>
-                <QRCode
-                  value={item.qr_token || item.qr_code || item.id}
-                  size={120}
-                  color="#111118"
-                  backgroundColor="white"
-                />
-                {isUsed && (
-                  <View style={styles.eclipseQrOverlay}>
-                    <Text style={styles.eclipseQrOverlayText}>{t('tickets.card.used_overlay')}</Text>
-                  </View>
-                )}
-              </View>
-            ) : (
-              <View style={styles.eclipseQrDisabled}>
-                <Text style={styles.eclipseQrDisabledText}>{t('tickets.qr_disabled_resale')}</Text>
-              </View>
-            )}
-            <Text style={styles.eclipseQrLabel}>{t('tickets.card.scan_at_entry')}</Text>
-            <Text style={styles.eclipseQrSub}>{ticketCode}</Text>
-          </View>
-
-          {/* ── ACTION ROW ── */}
-          <View style={styles.eclipseActions}>
-            <TouchableOpacity
-              style={[styles.eclipseActionBtn, isResale && styles.eclipseActionBtnDisabled]}
-              onPress={() => handleDownloadPDF(item)}
-              disabled={isResale}
-            >
-              <Download size={13} color={isResale ? '#4b5563' : '#9ca3af'} />
-              <Text style={[styles.eclipseActionBtnText, isResale && { color: '#4b5563' }]}>{t('tickets.download')}</Text>
+          {/* ══ ACTION ROW ════════════════════════════════════════════ */}
+          <View style={[styles.tcActions, { borderTopColor: `${tierConfig.accent}18`, backgroundColor: '#060610' }]}>
+            <TouchableOpacity style={[styles.tcActionBtn, isResale && styles.tcActionBtnDim]} onPress={() => handleDownloadPDF(item)} disabled={isResale}>
+              <Download size={14} color={isResale ? '#374151' : '#6b7280'} />
+              <Text style={[styles.tcActionBtnTxt, isResale && { color: '#374151' }]}>{t('tickets.download')}</Text>
             </TouchableOpacity>
 
             {!isUsed && !isResale && (
               <TouchableOpacity
-                style={[
-                  styles.eclipseActionBtn,
-                  item.wallet_added && { borderColor: Colors.dark.success, backgroundColor: 'rgba(16,185,129,0.06)' },
-                ]}
+                style={[styles.tcActionBtn, item.wallet_added && { borderColor: `${Colors.dark.success}60`, backgroundColor: `${Colors.dark.success}0D` }]}
                 onPress={() => !item.wallet_added && handleAddToWallet(item)}
                 disabled={!!item.wallet_added || addingToWallet === item.id}
               >
-                <CreditCard size={13} color={item.wallet_added ? Colors.dark.success : '#9ca3af'} />
-                <Text
-                  style={[styles.eclipseActionBtnText, item.wallet_added && { color: Colors.dark.success }]}
-                  numberOfLines={1}
-                >
-                  {item.wallet_added ? t('common.ok') : addingToWallet === item.id ? '...' : t('tickets.add_to_wallet')}
+                <CreditCard size={14} color={item.wallet_added ? Colors.dark.success : '#6b7280'} />
+                <Text style={[styles.tcActionBtnTxt, item.wallet_added && { color: Colors.dark.success }]} numberOfLines={1}>
+                  {item.wallet_added ? '✓ OK' : addingToWallet === item.id ? '...' : t('tickets.add_to_wallet')}
                 </Text>
               </TouchableOpacity>
             )}
 
             {!isResale ? (
               <TouchableOpacity
-                style={[
-                  styles.eclipseActionBtn,
-                  { borderColor: isUsed ? '#374151' : `${tierConfig.accent}50`, backgroundColor: isUsed ? 'transparent' : `${tierConfig.accent}0D` },
-                  isUsed && styles.eclipseActionBtnDisabled,
-                ]}
+                style={[styles.tcActionBtn, { borderColor: isUsed ? '#1f2937' : `${tierConfig.accent}45`, backgroundColor: isUsed ? 'transparent' : `${tierConfig.accent}0F` }, isUsed && styles.tcActionBtnDim]}
                 onPress={() => !isUsed && void handleSellPress(item)}
                 disabled={!!isUsed}
               >
-                <DollarSign size={13} color={isUsed ? '#4b5563' : tierConfig.accent} />
-                <Text style={[styles.eclipseActionBtnText, { color: isUsed ? '#4b5563' : tierConfig.accent }]}>
+                <DollarSign size={14} color={isUsed ? '#374151' : tierConfig.accent} />
+                <Text style={[styles.tcActionBtnTxt, { color: isUsed ? '#374151' : tierConfig.accent }]}>
                   {isUsed ? t('tickets.used') : t('tickets.sell')}
                 </Text>
               </TouchableOpacity>
             ) : (
-              <TouchableOpacity
-                style={[styles.eclipseActionBtn, { borderColor: 'rgba(239,68,68,0.4)', backgroundColor: 'rgba(239,68,68,0.06)' }]}
-                onPress={() => handleCancelResale(item)}
-              >
-                <X size={13} color="#ef4444" />
-                <Text style={[styles.eclipseActionBtnText, { color: '#ef4444' }]}>{t('common.cancel')}</Text>
+              <TouchableOpacity style={[styles.tcActionBtn, { borderColor: 'rgba(239,68,68,0.35)', backgroundColor: 'rgba(239,68,68,0.07)' }]} onPress={() => handleCancelResale(item)}>
+                <X size={14} color="#ef4444" />
+                <Text style={[styles.tcActionBtnTxt, { color: '#ef4444' }]}>{t('common.cancel')}</Text>
               </TouchableOpacity>
             )}
           </View>
@@ -1372,229 +1280,255 @@ const styles = StyleSheet.create({
     fontSize: 16,
   },
 
-  // ── ECLIPSE Card ──────────────────────────────────────────
+  // ── NEW TICKET CARD ───────────────────────────────────────
   ticketContainer: {
-    marginBottom: 28,
+    marginBottom: 32,
     width: '100%',
+    maxWidth: 360,
     alignSelf: 'center',
+    paddingHorizontal: 2,
   },
-  eclipseCard: {
-    backgroundColor: '#0E0E14',
-    borderRadius: 20,
+  tcGlowRing: {
+    borderRadius: 24,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.08)',
     overflow: 'hidden',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 12 },
-    shadowOpacity: 0.55,
-    shadowRadius: 24,
-    elevation: 12,
+    shadowOffset: { width: 0, height: 16 },
+    shadowOpacity: 0.70,
+    shadowRadius: 32,
+    elevation: 18,
   },
 
-  // Banner
-  eclipseBanner: {
-    height: 220,
+  // Poster
+  tcPoster: {
+    height: 270,
     overflow: 'hidden',
+    backgroundColor: '#080810',
   },
-  eclipsePill: {
+  tcBadge: {
     position: 'absolute',
     top: 14,
     left: 14,
-    height: 28,
-    paddingHorizontal: 10,
-    borderRadius: 999,
-    backgroundColor: 'rgba(255,255,255,0.06)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.10)',
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
+    paddingHorizontal: 11,
+    paddingVertical: 5,
+    borderRadius: 999,
+    borderWidth: 1,
     zIndex: 10,
+    backdropFilter: 'blur(8px)',
   },
-  eclipsePillBar: {
-    width: 2,
-    height: 14,
-    borderRadius: 2,
+  tcBadgeDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
   },
-  eclipsePillText: {
-    fontSize: 11,
-    fontWeight: '600',
-    letterSpacing: 0.08 * 11,
+  tcBadgeText: {
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 1.2,
     textTransform: 'uppercase',
-    color: 'rgba(255,255,255,0.92)',
   },
-  eclipseStamp: {
+  tcStamp: {
     position: 'absolute',
     top: 14,
     right: 14,
     borderWidth: 1.5,
-    borderColor: '#fbbf24',
-    paddingHorizontal: 10,
-    paddingVertical: 3,
-    borderRadius: 4,
-    backgroundColor: 'rgba(0,0,0,0.55)',
-    transform: [{ rotate: '-8deg' }],
+    paddingHorizontal: 9,
+    paddingVertical: 4,
+    borderRadius: 5,
+    backgroundColor: 'rgba(0,0,0,0.60)',
+    transform: [{ rotate: '-6deg' }],
     zIndex: 10,
   },
-  eclipseStampUsed: {
-    borderColor: '#ef4444',
-  },
-  eclipseStampText: {
-    color: '#fbbf24',
+  tcStampResale: { borderColor: '#fbbf24' },
+  tcStampUsed:   { borderColor: '#ef4444' },
+  tcStampText: {
     fontWeight: '800',
-    fontSize: 10,
+    fontSize: 9,
     textTransform: 'uppercase',
-    letterSpacing: 1.5,
+    letterSpacing: 1.8,
   },
-  eclipseStampTextUsed: {
-    color: '#ef4444',
-  },
-
-  // Content
-  eclipseContent: {
+  tcPosterInfo: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
     paddingHorizontal: 16,
-    paddingTop: 14,
-    paddingBottom: 10,
-    gap: 12,
+    paddingBottom: 16,
+    zIndex: 5,
   },
-  eclipseEventName: {
-    fontSize: 24,
-    fontWeight: '700',
+  tcEventName: {
+    fontSize: 22,
+    fontWeight: '800',
     color: '#FFFFFF',
-    lineHeight: 28,
-    letterSpacing: -0.02 * 24,
+    letterSpacing: -0.4,
+    lineHeight: 27,
+    textShadowColor: 'rgba(0,0,0,0.8)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 6,
   },
-  eclipseVenueLine: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: 'rgba(255,255,255,0.78)',
-    marginTop: 4,
+  tcPosterMeta: {
+    marginTop: 5,
+    gap: 2,
   },
-  eclipseDateLine: {
-    fontSize: 13,
-    fontWeight: '500',
-    color: 'rgba(255,255,255,0.62)',
-    marginTop: 2,
-  },
-  eclipseDivider: {
-    height: 1,
-    backgroundColor: 'rgba(255,255,255,0.06)',
-  },
-  eclipseGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 12,
-  },
-  eclipseGridItem: {
-    width: '46%',
-  },
-  eclipseGridLabel: {
-    fontSize: 10,
-    fontWeight: '500',
-    color: 'rgba(255,255,255,0.42)',
-    textTransform: 'uppercase',
-    letterSpacing: 0.06 * 10,
-    marginBottom: 3,
-  },
-  eclipseGridValue: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: 'rgba(255,255,255,0.90)',
-  },
-  eclipseMonoChip: {
-    alignSelf: 'flex-start',
-    borderRadius: 10,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    backgroundColor: 'rgba(255,255,255,0.06)',
-  },
-  eclipseMonoChipText: {
-    fontFamily: Platform.OS === 'ios' ? 'Courier New' : 'monospace',
+  tcPosterVenue: {
     fontSize: 12,
     fontWeight: '500',
-    color: 'rgba(255,255,255,0.85)',
-    letterSpacing: 0.05 * 12,
+    color: 'rgba(255,255,255,0.82)',
+    textShadowColor: 'rgba(0,0,0,0.6)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 4,
+  },
+  tcPosterDate: {
+    fontSize: 12,
+    fontWeight: '500',
+    color: 'rgba(255,255,255,0.65)',
+    textShadowColor: 'rgba(0,0,0,0.6)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 4,
   },
 
-  // QR Zone
-  eclipseQrZone: {
-    marginHorizontal: 16,
-    marginBottom: 16,
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    padding: 14,
+  // Perforated tear line
+  tcTearRow: {
+    height: 26,
+    flexDirection: 'row',
+    alignItems: 'center',
+    overflow: 'visible',
+  },
+  tcTearCircle: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    borderWidth: 1,
+    backgroundColor: Colors.dark.background,
+    position: 'absolute',
+    top: 0,
+    zIndex: 2,
+  },
+  tcTearCircleLeft:  { left: -13 },
+  tcTearCircleRight: { right: -13 },
+  tcTearDashes: {
+    flex: 1,
+    flexDirection: 'row',
+    justifyContent: 'space-evenly',
+    alignItems: 'center',
+    paddingHorizontal: 18,
+  },
+  tcTearDash: {
+    width: 5,
+    height: 1.5,
+    borderRadius: 1,
+  },
+
+  // Lower body
+  tcBody: {
+    flexDirection: 'row',
+    paddingHorizontal: 16,
+    paddingVertical: 18,
+    gap: 14,
+    alignItems: 'center',
+  },
+  tcFields: {
+    flex: 1,
+    gap: 12,
+  },
+  tcField: {},
+  tcFieldLabel: {
+    fontSize: 9,
+    fontWeight: '700',
+    letterSpacing: 1.4,
+    textTransform: 'uppercase',
+    marginBottom: 3,
+  },
+  tcFieldValue: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#FFFFFF',
+    letterSpacing: -0.2,
+  },
+  tcFieldMono: {
+    fontSize: 11,
+    fontWeight: '600',
+    fontFamily: Platform.OS === 'ios' ? 'Courier New' : 'monospace',
+    letterSpacing: 0.5,
+  },
+  tcVertDivider: {
+    width: 1,
+    height: 120,
+    borderRadius: 1,
+  },
+  tcQrWrap: {
     alignItems: 'center',
     gap: 8,
   },
-  eclipseQrDisabled: {
-    width: 120,
-    height: 120,
-    borderRadius: 8,
-    backgroundColor: '#F3F4F6',
+  tcQrBox: {
+    width: 116,
+    height: 116,
+    borderRadius: 12,
+    borderWidth: 1,
+    overflow: 'hidden',
     alignItems: 'center',
     justifyContent: 'center',
+    backgroundColor: '#FFFFFF',
     padding: 8,
   },
-  eclipseQrDisabledText: {
-    color: '#374151',
-    fontSize: 10,
-    fontWeight: '700',
-    textAlign: 'center',
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
-  eclipseQrOverlay: {
+  tcQrOverlay: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(255,255,255,0.88)',
+    backgroundColor: 'rgba(255,255,255,0.90)',
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: 4,
   },
-  eclipseQrOverlayText: {
+  tcQrOverlayText: {
     color: '#ef4444',
     fontWeight: '900',
-    fontSize: 16,
+    fontSize: 14,
+    letterSpacing: 2,
     transform: [{ rotate: '-45deg' }],
     borderWidth: 2,
     borderColor: '#ef4444',
-    paddingHorizontal: 6,
+    paddingHorizontal: 5,
     paddingVertical: 2,
     borderRadius: 3,
   },
-  eclipseQrLabel: {
-    fontSize: 11,
+  tcScanHint: {
+    fontSize: 9,
     fontWeight: '600',
-    color: '#111118',
-    letterSpacing: 0.08 * 11,
+    letterSpacing: 0.8,
     textTransform: 'uppercase',
-    textAlign: 'center',
-  },
-  eclipseQrSub: {
-    fontSize: 10,
-    color: 'rgba(17,17,24,0.55)',
-    fontFamily: Platform.OS === 'ios' ? 'Courier New' : 'monospace',
-    textAlign: 'center',
   },
 
   // Actions
-  eclipseActions: {
+  tcActions: {
     flexDirection: 'row',
-    paddingHorizontal: 16,
-    paddingBottom: 14,
+    paddingHorizontal: 12,
+    paddingVertical: 11,
     gap: 8,
+    borderTopWidth: 1,
   },
-  eclipseActionBtn: {
+  tcActionBtn: {
     flex: 1,
-    height: 44,
+    height: 40,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 5,
-    borderRadius: 12,
+    borderRadius: 10,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.09)',
+    borderColor: 'rgba(255,255,255,0.08)',
     backgroundColor: 'rgba(255,255,255,0.04)',
   },
+  tcActionBtnDim: {
+    opacity: 0.38,
+  },
+  tcActionBtnTxt: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#6b7280',
+    letterSpacing: 0.2,
+  },
+
+  // ── Legacy placeholders (kept to avoid ref errors) ────────
   eclipseActionBtnDisabled: {
     opacity: 0.4,
   },
