@@ -1,3 +1,19 @@
+diff --git a/node_modules/expo-passkite/expo-module.config.json b/node_modules/expo-passkite/expo-module.config.json
+index e1803aa..c7997e5 100644
+--- a/node_modules/expo-passkite/expo-module.config.json
++++ b/node_modules/expo-passkite/expo-module.config.json
+@@ -1,10 +1,7 @@
+ {
+-  "platforms": ["apple", "android"],
++  "platforms": ["apple"],
+   "apple": {
+     "modules": ["ExpoPasskiteModule"],
+     "podspecPath": "./expo-passkite.podspec"
+-  },
+-  "android": {
+-    "modules": ["expo.modules.passkite.ExpoPasskiteModule"]
+   }
+ }
 diff --git a/node_modules/expo-passkite/ios/ExpoPasskiteModule.swift b/node_modules/expo-passkite/ios/ExpoPasskiteModule.swift
 index 576a861..e6e23e0 100644
 --- a/node_modules/expo-passkite/ios/ExpoPasskiteModule.swift
