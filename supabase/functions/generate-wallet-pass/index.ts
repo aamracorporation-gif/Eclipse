@@ -163,11 +163,17 @@ serve(async (req) => {
       };
     }
 
+    // Generic class definition inline (fat JWT) — Google Wallet creates the class
+    // automatically if it doesn't exist yet, so no pre-creation step is needed.
+    const genericClass: any = {
+      id: GOOGLE_WALLET_CLASS_ID,
+    };
+
     const privateKeyPem = GOOGLE_WALLET_PRIVATE_KEY.replace(/\\n/g, "\n");
     const key = await importPKCS8(privateKeyPem, "RS256");
     const nowSeconds = Math.floor(Date.now() / 1000);
     const jwt = await new SignJWT({
-      payload: { genericObjects: [genericObject] },
+      payload: { genericClasses: [genericClass], genericObjects: [genericObject] },
     })
       .setProtectedHeader({ alg: "RS256", typ: "JWT" })
       .setIssuedAt(nowSeconds)
