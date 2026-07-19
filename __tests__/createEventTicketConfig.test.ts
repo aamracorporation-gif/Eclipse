@@ -13,11 +13,11 @@ describe('createEventTicketConfig', () => {
     ticket.price = '250';
     ticket.quantity = '5';
     ticket.vipGroupSize = '25';
-    ticket.vipBottleQuantities.vodka = '0';
+    ticket.vipFreeBottles = [{ brand: 'Belvedere', quantity: '0' }];
 
     const errors = getTicketDraftErrors(ticket);
     expect(errors.vipGroupSize).toContain('1 y 20');
-    expect(errors['bottle.vodka']).toBeTruthy();
+    expect(errors['bottle.0.quantity']).toBeTruthy();
   });
 
   it('acepta un ticket VIP válido y serializa botellas', () => {
@@ -29,8 +29,10 @@ describe('createEventTicketConfig', () => {
     ticket.benefits = 'Acceso privado';
     ticket.featured = true;
     ticket.vipGroupSize = '5';
-    ticket.vipBottleQuantities.vodka = '2';
-    ticket.vipBottleQuantities.champagne = '1';
+    ticket.vipFreeBottles = [
+      { brand: 'Belvedere', quantity: '2' },
+      { brand: 'Moët', quantity: '1' },
+    ];
 
     const errors = getTicketDraftErrors(ticket);
     expect(errors).toEqual({});
@@ -78,4 +80,3 @@ describe('createEventTicketConfig', () => {
     expect(buildTicketName(ticket)).toContain('Botella incluida');
   });
 });
-

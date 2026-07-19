@@ -12,7 +12,7 @@ import { GlassView } from '@/components/ui/GlassView';
 import { DiscoLoader } from '@/components/ui/DiscoLoader';
 import type { AppEvent } from '@/lib/EventContext';
 import { router, useLocalSearchParams } from 'expo-router';
-import { Search, X, MapPin, Calendar, Flame, Music, Sparkles, Tag } from '@/lib/icons';
+import { Search, X, MapPin, Calendar, Flame, Music, Sparkles, Tag, DollarSign } from '@/lib/icons';
 import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 import { useTranslation } from 'react-i18next';
 import Animated, {
@@ -94,56 +94,47 @@ const ClusterBubble = memo(({ count, color }: { count: number; color: string }) 
 ));
 ClusterBubble.displayName = 'ClusterBubble';
 
-const EVENT_EMOJI: Record<string, string> = {
-  party: '🎉', fiesta: '🎉',
-  concert: '🎤', concierto: '🎤',
-  festival: '🎪',
-  techno: '🎛️',
-  other: '✨', otro: '✨',
-};
-function getEventEmoji(eventType?: string | null): string {
-  const t = String(eventType || '').toLowerCase();
-  for (const [k, v] of Object.entries(EVENT_EMOJI)) { if (t.includes(k)) return v; }
-  return '🎉';
-}
-
-const EventPin = memo(({ color, selected, eventType }: { color: string; selected: boolean; eventType?: string | null }) => {
+const EventPin = memo(({ color, selected, price }: { color: string; selected: boolean; price?: string }) => {
   const pulse = useRef(new RNAnimated.Value(0)).current;
   useEffect(() => {
-    // Only animate pulse ring when selected — avoids 80 concurrent animation loops
     if (!selected) { pulse.setValue(0); return; }
     const anim = RNAnimated.loop(
       RNAnimated.sequence([
-        RNAnimated.timing(pulse, { toValue: 1, duration: 1000, useNativeDriver: true }),
-        RNAnimated.timing(pulse, { toValue: 0, duration: 1000, useNativeDriver: true }),
+        RNAnimated.timing(pulse, { toValue: 1, duration: 900, useNativeDriver: true }),
+        RNAnimated.timing(pulse, { toValue: 0, duration: 900, useNativeDriver: true }),
       ])
     );
     anim.start();
     return () => anim.stop();
   }, [pulse, selected]);
 
-  const pulseScale = pulse.interpolate({ inputRange: [0, 1], outputRange: [1, selected ? 1.7 : 1.55] });
-  const pulseOpacity = pulse.interpolate({ inputRange: [0, 0.6, 1], outputRange: [0.55, 0.15, 0] });
-  const emoji = getEventEmoji(eventType);
-  const scale = selected ? 1.25 : 1;
+  const pulseScale = pulse.interpolate({ inputRange: [0, 1], outputRange: [1, 1.9] });
+  const pulseOpacity = pulse.interpolate({ inputRange: [0, 0.5, 1], outputRange: [0.6, 0.2, 0] });
+
+  const priceNum = parseFloat(String(price || '0'));
+  const priceLabel = !Number.isFinite(priceNum) || priceNum <= 0
+    ? 'Free'
+    : priceNum < 1000
+      ? `${Math.round(priceNum)}€`
+      : `${(priceNum / 1000).toFixed(1)}k€`;
 
   return (
-    <View style={[styles.pinWrap, { transform: [{ scale }] }]}>
-      {/* Pulse ring */}
-      <RNAnimated.View style={[
-        styles.pinPulse,
-        { borderColor: color, transform: [{ scale: pulseScale }], opacity: pulseOpacity },
-      ]} />
-      {/* Glow halo */}
-      <View style={[styles.pinHalo, { backgroundColor: color + '30', shadowColor: color }]} />
-      {/* Main badge */}
-      <View style={[styles.pinBadge, { backgroundColor: '#111127', borderColor: selected ? color : color + '90', shadowColor: color }]}>
-        <View style={[styles.pinBadgeInner, { backgroundColor: color + '25' }]}>
-          <Text style={styles.pinEmoji}>{emoji}</Text>
-        </View>
+    <View style={[styles.pinWrap, selected && styles.pinWrapSelected]}>
+      {selected && (
+        <RNAnimated.View style={[
+          styles.pinPulse,
+          { borderColor: color, transform: [{ scale: pulseScale }], opacity: pulseOpacity },
+        ]} />
+      )}
+      <View style={[
+        styles.pinBadge,
+        { backgroundColor: selected ? color : '#111127', borderColor: color, shadowColor: color },
+      ]}>
+        <Text style={[styles.pinPrice, { color: selected ? '#fff' : color }]} numberOfLines={1}>
+          {priceLabel}
+        </Text>
       </View>
-      {/* Tail */}
-      <View style={[styles.pinTailOuter, { borderTopColor: selected ? color : color + '90' }]} />
+      <View style={[styles.pinTailOuter, { borderTopColor: color }]} />
     </View>
   );
 });
@@ -327,7 +318,7 @@ export default function PartyMapScreen() {
     const maxLng = safe.longitude + safe.longitudeDelta * (0.5 + pad);
 
     const bboxKey = `${minLat.toFixed(3)}|${maxLat.toFixed(3)}|${minLng.toFixed(3)}|${maxLng.toFixed(3)}`;
-    if (bboxKey === lastBboxKeyRef.current && Date.now() - lastFetchAtRef.current < 12000) return;
+    if (bboxKey === lastBboxKeyRef.current && Date.now() - lastFetchAtRef.current < 8000) return;
 
     if (fetchAbortRef.current) fetchAbortRef.current.abort();
     const ctrl = new AbortController();
@@ -479,8 +470,11 @@ export default function PartyMapScreen() {
     setSearchFocused(false);
     Keyboard.dismiss();
     const next = sanitizeRegion({ latitude: e._lat, longitude: e._lng, latitudeDelta: EVENT_FOCUS_DELTA, longitudeDelta: EVENT_FOCUS_DELTA });
+    viewportRef.current = next;
+    computeClusters(next);
+    void fetchForRegion(next);
     try { mapRef.current?.animateToRegion(next, 650); } catch {}
-  }, [sanitizeRegion]);
+  }, [sanitizeRegion, computeClusters, fetchForRegion]);
 
   // ─── Geocode search ───────────────────────────────────────────────────────────
   const geocodeSearch = useCallback(async (q: string) => {
@@ -617,7 +611,7 @@ export default function PartyMapScreen() {
                     tracksViewChanges={false}
                     onPress={() => focusOnEvent(e)}
                   >
-                    <EventPin color={c.color} selected={isSel} eventType={e.eventType} />
+                    <EventPin color={c.color} selected={isSel} price={e.price} />
                   </Marker>
                 );
               })}
@@ -737,53 +731,73 @@ export default function PartyMapScreen() {
           entering={SlideInDown.springify().damping(20).stiffness(260)}
           exiting={SlideOutDown.duration(180)}
         >
-          <GlassView intensity={22} style={styles.card}>
+          <View style={styles.card}>
+            {/* Dismiss tap area */}
+            <Pressable
+              onPress={() => { setSelectedId(null); setSelectedEvent(null); }}
+              style={styles.cardDismiss}
+            />
+            {/* Banner image */}
             {selectedEvent.imageUrl ? (
-              <Image source={{ uri: selectedEvent.imageUrl }} style={styles.cardImg} />
+              <Image source={{ uri: selectedEvent.imageUrl }} style={styles.cardBanner} resizeMode="cover" />
             ) : (
-              <View style={[styles.cardImg, { backgroundColor: getEventColor(selectedEvent.eventType) + '28' }]} />
+              <LinearGradient
+                colors={[getEventColor(selectedEvent.eventType) + '40', '#08080F']}
+                style={styles.cardBanner}
+              />
             )}
+            {/* Gradient overlay on image */}
+            <LinearGradient
+              colors={['transparent', 'rgba(8,8,15,0.85)', 'rgba(8,8,15,0.98)']}
+              locations={[0, 0.55, 1]}
+              style={styles.cardBannerOverlay}
+            />
+            {/* Close pill */}
+            <Pressable
+              onPress={() => { setSelectedId(null); setSelectedEvent(null); }}
+              style={styles.cardCloseBtn}
+            >
+              <X size={14} color="white" />
+            </Pressable>
+            {/* Price badge */}
+            <View style={[styles.cardPriceBadge, { backgroundColor: getEventColor(selectedEvent.eventType) }]}>
+              <Text style={styles.cardPriceBadgeTxt}>{formatPrice(selectedEvent.price)}</Text>
+            </View>
+            {/* Content */}
             <View style={styles.cardBody}>
-              {/* Type badge */}
-              <View style={[styles.typeBadge, { backgroundColor: getEventColor(selectedEvent.eventType) + '28' }]}>
-                <Text style={[styles.typeBadgeTxt, { color: getEventColor(selectedEvent.eventType) }]}>
-                  {(selectedEvent.eventType || 'Evento').toUpperCase()}
-                </Text>
-              </View>
-              <Text style={styles.cardTitle} numberOfLines={2}>{selectedEvent.title}</Text>
-              <View style={styles.cardMetaRow}>
-                <MapPin size={12} color="rgba(255,255,255,0.5)" />
-                <Text style={styles.cardMeta} numberOfLines={1}>{selectedEvent.location}</Text>
-              </View>
-              <View style={styles.cardMetaRow}>
-                <Calendar size={12} color="rgba(255,255,255,0.5)" />
-                <Text style={styles.cardMeta}>{selectedEvent.date} · {selectedEvent.time}</Text>
+              <View style={styles.cardTopRow}>
+                <View style={[styles.typeBadge, { backgroundColor: getEventColor(selectedEvent.eventType) + '30' }]}>
+                  <Text style={[styles.typeBadgeTxt, { color: getEventColor(selectedEvent.eventType) }]}>
+                    {(selectedEvent.eventType || 'Evento').toUpperCase()}
+                  </Text>
+                </View>
                 <Text style={[styles.cardDist, { color: getEventColor(selectedEvent.eventType) }]}>
                   {selectedEvent._distanceKm.toFixed(1)} km
                 </Text>
               </View>
-              <View style={styles.cardActions}>
-                <Pressable
-                  onPress={() => { setSelectedId(null); setSelectedEvent(null); }}
-                  style={({ pressed }) => [styles.btnClose, { opacity: pressed ? 0.7 : 1 }]}
-                >
-                  <Text style={styles.btnCloseTxt}>Cerrar</Text>
-                </Pressable>
-                <Pressable
-                  onPress={() => router.push(`/(tabs)/event/${selectedEvent.id}`)}
-                  style={({ pressed }) => [{ opacity: pressed ? 0.9 : 1, flex: 1 }]}
-                >
-                  <LinearGradient
-                    colors={[Colors.dark.primary, Colors.dark.secondary]}
-                    start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
-                    style={styles.btnDetail}
-                  >
-                    <Text style={styles.btnDetailTxt}>{formatPrice(selectedEvent.price)} · Ver evento</Text>
-                  </LinearGradient>
-                </Pressable>
+              <Text style={styles.cardTitle} numberOfLines={1}>{selectedEvent.title}</Text>
+              <View style={styles.cardMetaRow}>
+                <MapPin size={11} color="rgba(255,255,255,0.45)" />
+                <Text style={styles.cardMeta} numberOfLines={1}>{selectedEvent.location}</Text>
               </View>
+              <View style={styles.cardMetaRow}>
+                <Calendar size={11} color="rgba(255,255,255,0.45)" />
+                <Text style={styles.cardMeta}>{selectedEvent.date} · {selectedEvent.time}</Text>
+              </View>
+              <Pressable
+                onPress={() => router.push(`/(tabs)/event/${selectedEvent.id}`)}
+                style={({ pressed }) => [{ opacity: pressed ? 0.88 : 1 }]}
+              >
+                <LinearGradient
+                  colors={[Colors.dark.primary, Colors.dark.secondary]}
+                  start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
+                  style={styles.btnDetail}
+                >
+                  <Text style={styles.btnDetailTxt}>Ver evento →</Text>
+                </LinearGradient>
+              </Pressable>
             </View>
-          </GlassView>
+          </View>
         </Animated.View>
       )}
     </View>
@@ -848,35 +862,42 @@ const styles = StyleSheet.create({
   noResultsSearch:{ color: Colors.dark.primary, fontWeight: '900', fontSize: 13 },
 
   // ── Map markers ──
-  pinWrap:      { alignItems: 'center', justifyContent: 'center' },
-  pinPulse:     { position: 'absolute', width: 44, height: 44, borderRadius: 22, borderWidth: 2 },
-  pinHalo:      { position: 'absolute', width: 38, height: 38, borderRadius: 19, shadowOpacity: 0.6, shadowRadius: 8, shadowOffset: { width: 0, height: 0 }, elevation: 4 },
-  pinBadge:     { width: 42, height: 42, borderRadius: 14, borderWidth: 2.5, alignItems: 'center', justifyContent: 'center', shadowOpacity: 0.8, shadowRadius: 10, shadowOffset: { width: 0, height: 2 }, elevation: 8 },
-  pinBadgeInner:{ width: 34, height: 34, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
-  pinEmoji:     { fontSize: 18, lineHeight: 22 },
-  pinTailOuter: { width: 0, height: 0, borderLeftWidth: 6, borderRightWidth: 6, borderTopWidth: 9, borderLeftColor: 'transparent', borderRightColor: 'transparent', marginTop: -1 },
+  pinWrap:        { alignItems: 'center', justifyContent: 'center' },
+  pinWrapSelected:{ transform: [{ scale: 1.18 }] },
+  pinPulse:       { position: 'absolute', width: 52, height: 52, borderRadius: 26, borderWidth: 2 },
+  pinBadge:       {
+    paddingHorizontal: 10, paddingVertical: 5, borderRadius: 12, borderWidth: 2,
+    alignItems: 'center', justifyContent: 'center',
+    shadowOpacity: 0.7, shadowRadius: 8, shadowOffset: { width: 0, height: 2 }, elevation: 6,
+    minWidth: 46,
+  },
+  pinPrice:       { fontSize: 12, fontWeight: '900', letterSpacing: -0.3 },
+  pinTailOuter:   { width: 0, height: 0, borderLeftWidth: 5, borderRightWidth: 5, borderTopWidth: 7, borderLeftColor: 'transparent', borderRightColor: 'transparent', marginTop: -1 },
 
   clusterBubble: { borderWidth: 2, borderRadius: 999, overflow: 'hidden' },
   clusterInner:  { paddingHorizontal: 10, paddingVertical: 7, alignItems: 'center', justifyContent: 'center' },
   clusterText:   { fontSize: 13, fontWeight: '900', letterSpacing: -0.3 },
 
-  // ── Event card ──
-  cardWrap: { position: 'absolute', left: 14, right: 14, bottom: 0, zIndex: 30 },
-  card:     { borderRadius: 26, overflow: 'hidden', borderWidth: 1, borderColor: 'rgba(255,255,255,0.12)', backgroundColor: 'rgba(8,8,15,0.90)', flexDirection: 'row' },
-  cardImg:  { width: 100, height: 140 },
-  cardBody: { flex: 1, padding: 14, gap: 6 },
+  // ── Event card (redesigned) ──
+  cardWrap:          { position: 'absolute', left: 12, right: 12, bottom: 0, zIndex: 30 },
+  card:              { borderRadius: 22, overflow: 'hidden', borderWidth: 1, borderColor: 'rgba(255,255,255,0.14)', backgroundColor: '#0c0c1a' },
+  cardDismiss:       { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 },
+  cardBanner:        { width: '100%', height: 130 },
+  cardBannerOverlay: { position: 'absolute', top: 0, left: 0, right: 0, height: 130 },
+  cardCloseBtn:      { position: 'absolute', top: 10, right: 10, width: 28, height: 28, borderRadius: 14, backgroundColor: 'rgba(0,0,0,0.55)', alignItems: 'center', justifyContent: 'center' },
+  cardPriceBadge:    { position: 'absolute', top: 10, left: 12, paddingHorizontal: 9, paddingVertical: 4, borderRadius: 8 },
+  cardPriceBadgeTxt: { color: 'white', fontWeight: '900', fontSize: 12 },
+  cardBody:          { padding: 12, gap: 5 },
+  cardTopRow:        { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
 
-  typeBadge:   { alignSelf: 'flex-start', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8, marginBottom: 2 },
+  typeBadge:   { alignSelf: 'flex-start', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8 },
   typeBadgeTxt:{ fontSize: 10, fontWeight: '900', letterSpacing: 0.5 },
 
-  cardTitle:    { color: 'white', fontWeight: '900', fontSize: 15, letterSpacing: -0.3, lineHeight: 20 },
+  cardTitle:    { color: 'white', fontWeight: '900', fontSize: 15, letterSpacing: -0.3 },
   cardMetaRow:  { flexDirection: 'row', alignItems: 'center', gap: 5 },
-  cardMeta:     { color: 'rgba(255,255,255,0.5)', fontSize: 12, fontWeight: '700', flex: 1 },
+  cardMeta:     { color: 'rgba(255,255,255,0.5)', fontSize: 12, fontWeight: '600', flex: 1 },
   cardDist:     { fontSize: 12, fontWeight: '900' },
 
-  cardActions: { flexDirection: 'row', gap: 8, marginTop: 4 },
-  btnClose:    { height: 40, paddingHorizontal: 14, borderRadius: 14, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,255,255,0.08)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.10)' },
-  btnCloseTxt: { color: 'rgba(255,255,255,0.75)', fontWeight: '900', fontSize: 12 },
-  btnDetail:   { height: 40, borderRadius: 14, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 14 },
-  btnDetailTxt:{ color: 'white', fontWeight: '900', fontSize: 12, letterSpacing: -0.2 },
+  btnDetail:   { height: 42, borderRadius: 14, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 14, marginTop: 4 },
+  btnDetailTxt:{ color: 'white', fontWeight: '900', fontSize: 13, letterSpacing: -0.2 },
 });

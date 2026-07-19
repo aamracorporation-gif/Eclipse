@@ -1,7 +1,6 @@
 export type TicketCategory = 'general' | 'vip' | 'early' | 'backstage';
 
-export type VipBottleType = 'vodka' | 'whisky' | 'gin' | 'rum' | 'champagne';
-export type VipBottleBrands = Record<VipBottleType, string>;
+export type FreeBottleEntry = { brand: string; quantity: string };
 
 export type TicketDraft = {
   id: string;
@@ -12,8 +11,7 @@ export type TicketDraft = {
   benefits: string;
   featured: boolean;
   vipGroupSize: string;
-  vipBottleQuantities: Record<VipBottleType, string>;
-  vipBottleBrands: Record<VipBottleType, string>;
+  vipFreeBottles: FreeBottleEntry[];
   generalAccessZone: string;
   generalNumberedSeat: boolean;
   earlyEntryMinutes: string;
@@ -47,20 +45,7 @@ export function createEmptyTicketDraft(): TicketDraft {
     benefits: '',
     featured: false,
     vipGroupSize: '',
-    vipBottleQuantities: {
-      vodka: '',
-      whisky: '',
-      gin: '',
-      rum: '',
-      champagne: '',
-    },
-    vipBottleBrands: {
-      vodka: '',
-      whisky: '',
-      gin: '',
-      rum: '',
-      champagne: '',
-    },
+    vipFreeBottles: [],
     generalAccessZone: '',
     generalNumberedSeat: false,
     earlyEntryMinutes: '',
@@ -68,16 +53,6 @@ export function createEmptyTicketDraft(): TicketDraft {
     backstageMeetGreet: false,
     backstageHost: '',
   };
-}
-
-export function getBottleOptions() {
-  return [
-    { key: 'vodka' as const, label: 'Vodka', brandSuggestions: ['Belvedere', 'Grey Goose', 'Absolut', 'Ketel One', 'Ciroc', 'Tito\'s'] },
-    { key: 'whisky' as const, label: 'Whisky', brandSuggestions: ['Jack Daniel\'s', 'Johnnie Walker', 'Jameson', 'Chivas Regal', 'Glenfiddich', 'Bulleit'] },
-    { key: 'gin' as const, label: 'Gin', brandSuggestions: ['Hendrick\'s', 'Tanqueray', 'Bombay Sapphire', 'Monkey 47', 'Beefeater', 'The Botanist'] },
-    { key: 'rum' as const, label: 'Ron', brandSuggestions: ['Bacardi', 'Havana Club', 'Ron Zacapa', 'Captain Morgan', 'Brugal', 'Diplomatico'] },
-    { key: 'champagne' as const, label: 'Champagne', brandSuggestions: ['Moët & Chandon', 'Veuve Clicquot', 'Bollinger', 'Dom Pérignon', 'Laurent-Perrier', 'Krug'] },
-  ];
 }
 
 export function getTicketDraftErrors(ticket: TicketDraft) {
@@ -91,7 +66,7 @@ export function getTicketDraftErrors(ticket: TicketDraft) {
     Boolean(ticket.quantity.trim()) ||
     Boolean(ticket.benefits.trim()) ||
     Boolean(ticket.vipGroupSize.trim()) ||
-    Object.values(ticket.vipBottleQuantities).some((v) => String(v || '').trim()) ||
+    (ticket.vipFreeBottles || []).some(b => b.brand.trim() || b.quantity.trim()) ||
     Boolean(ticket.generalAccessZone.trim()) ||
     Boolean(ticket.earlyEntryMinutes.trim()) ||
     Boolean(ticket.backstageHost.trim()) ||
@@ -110,14 +85,12 @@ export function getTicketDraftErrors(ticket: TicketDraft) {
     if (groupSize === null || groupSize < 1 || groupSize > 20) {
       errors.vipGroupSize = 'El grupo VIP debe ser entre 1 y 20 personas.';
     }
-    for (const option of getBottleOptions()) {
-      const raw = String(ticket.vipBottleQuantities[option.key] || '').trim();
-      if (!raw) continue;
-      const qty = parsePositiveInt(raw);
-      if (qty === null || qty < 1 || qty > 20) {
-        errors[`bottle.${option.key}`] = `Cantidad inválida para ${option.label}.`;
+    (ticket.vipFreeBottles || []).forEach((b, i) => {
+      const qty = parsePositiveInt(b.quantity);
+      if (b.quantity.trim() && (qty === null || qty < 1 || qty > 99)) {
+        errors[`bottle.${i}.quantity`] = 'Cantidad inválida.';
       }
-    }
+    });
   }
 
   if (ticket.category === 'general') {
@@ -166,15 +139,12 @@ export function serializeTicketMetadata(ticket: TicketDraft) {
   };
 
   if (ticket.category === 'vip') {
-    const bottles = getBottleOptions()
-      .map((option) => ({
-        type: option.key,
-        label: option.label,
-        brand: (ticket.vipBottleBrands?.[option.key] || '').trim(),
-        quantity: parsePositiveInt(ticket.vipBottleQuantities[option.key] || ''),
-      }))
-      .filter((item) => item.quantity !== null)
-      .map((item) => ({ ...item, quantity: item.quantity as number }));
+    const bottles = (ticket.vipFreeBottles || [])
+      .filter(b => b.brand.trim() || b.quantity.trim())
+      .map(b => ({
+        brand: b.brand.trim(),
+        quantity: parsePositiveInt(b.quantity) ?? 1,
+      }));
 
     return {
       ...common,
@@ -205,4 +175,3 @@ export function serializeTicketMetadata(ticket: TicketDraft) {
     backstageHost: ticket.backstageHost.trim(),
   };
 }
-

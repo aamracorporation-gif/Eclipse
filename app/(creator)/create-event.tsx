@@ -12,7 +12,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import DateTimePicker, { DateTimePickerAndroid } from '@react-native-community/datetimepicker';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -27,13 +27,13 @@ import MapView, { Marker, Region } from '@/components/ui/Map';
 import {
   buildTicketName,
   createEmptyTicketDraft,
-  getBottleOptions,
   getTicketDraftErrors,
   parsePositiveInt,
   parsePositiveNumber,
   serializeTicketMetadata,
   type TicketCategory,
   type TicketDraft,
+  type FreeBottleEntry,
 } from '@/lib/createEventTicketConfig';
 import { uploadImage } from '@/lib/storage';
 import { useAuth } from '@/lib/AuthContext';
@@ -106,6 +106,7 @@ export default function CreateEventScreen() {
   const router = useRouter();
   const { user } = useAuth();
   const { addEvent, updateEvent } = useEvents();
+  const insets = useSafeAreaInsets();
 
   const params = useLocalSearchParams<{ id?: string; isEditing?: string }>();
   const eventId = String(params.id ?? '').trim();
@@ -184,8 +185,7 @@ export default function CreateEventScreen() {
             benefits: '',
             featured: false,
             vipGroupSize: '',
-            vipBottleQuantities: { vodka: '', whisky: '', gin: '', rum: '', champagne: '' },
-            vipBottleBrands: { vodka: '', whisky: '', gin: '', rum: '', champagne: '' },
+            vipFreeBottles: [],
             generalAccessZone: '',
             generalNumberedSeat: false,
             earlyEntryMinutes: '',
@@ -217,7 +217,6 @@ export default function CreateEventScreen() {
     ],
     []
   );
-  const bottleOptions = useMemo(() => getBottleOptions(), []);
 
   const metrics = useMemo(() => {
     const parsed = ticketTypes
@@ -375,13 +374,19 @@ export default function CreateEventScreen() {
   const reverseGeocodeSelection = useCallback(async (coords: { latitude: number; longitude: number }) => {
     try {
       setIsResolvingAddress(true);
+      // Clear old address immediately so user sees the update
+      updateDraft('location', '');
       const places = await Location.reverseGeocodeAsync(coords);
       const place = places?.[0];
-      const parts = [place?.street, place?.streetNumber, place?.city, place?.region].filter(Boolean);
-      if (parts.length) {
-        updateDraft('location', parts.join(', '));
-      }
+      // Build address: prefer street+number+city, fallback to district+city, fallback to coords
+      const parts = [
+        place?.street && place?.streetNumber ? `${place.street} ${place.streetNumber}` : place?.street,
+        place?.district || place?.subregion,
+        place?.city,
+      ].filter(Boolean) as string[];
+      updateDraft('location', parts.length ? parts.join(', ') : `${coords.latitude.toFixed(5)}, ${coords.longitude.toFixed(5)}`);
     } catch {
+      updateDraft('location', `${coords.latitude.toFixed(5)}, ${coords.longitude.toFixed(5)}`);
     } finally {
       setIsResolvingAddress(false);
     }
@@ -776,73 +781,63 @@ export default function CreateEventScreen() {
                 />
 
                 <Text style={styles.fieldLabel}>Botellas incluidas</Text>
-                <View style={styles.chipsRow}>
-                  {bottleOptions.map((option) => {
-                    const selected = Boolean(String(newTicket.vipBottleQuantities[option.key] || '').trim());
-                    return (
-                      <Pressable
-                        key={option.key}
-                        onPress={() =>
-                          setNewTicket((prev) => ({
-                            ...prev,
-                            vipBottleQuantities: {
-                              ...prev.vipBottleQuantities,
-                              [option.key]: selected ? '' : '1',
-                            },
-                          }))
+                {(newTicket.vipFreeBottles || []).map((bottle, idx) => (
+                  <View key={idx} style={styles.bottleRow}>
+                    <View style={{ flex: 1 }}>
+                      <ThemedInput
+                        label="Marca"
+                        placeholder="Ej: Belvedere, Moët..."
+                        value={bottle.brand}
+                        onChangeText={(v) =>
+                          setNewTicket((prev) => {
+                            const arr = [...(prev.vipFreeBottles || [])];
+                            arr[idx] = { ...arr[idx], brand: v };
+                            return { ...prev, vipFreeBottles: arr };
+                          })
                         }
-                        style={[styles.chip, selected ? styles.chipActive : null]}
-                      >
-                        <Text style={[styles.chipText, selected ? styles.chipTextActive : null]}>{option.label}</Text>
-                      </Pressable>
-                    );
-                  })}
-                </View>
-
-                {bottleOptions.map((option) => {
-                  const selected = Boolean(String(newTicket.vipBottleQuantities[option.key] || '').trim());
-                  if (!selected) return null;
-                  return (
-                    <View key={option.key}>
-                      <View style={styles.row}>
-                        <View style={styles.half}>
-                          <ThemedInput
-                            label={`Marca (${option.label})`}
-                            placeholder={option.brandSuggestions?.[0] ?? 'Ej: Belvedere'}
-                            value={newTicket.vipBottleBrands?.[option.key] ?? ''}
-                            onChangeText={(value) =>
-                              setNewTicket((prev) => ({
-                                ...prev,
-                                vipBottleBrands: {
-                                  ...prev.vipBottleBrands,
-                                  [option.key]: value,
-                                },
-                              }))
-                            }
-                          />
-                        </View>
-                        <View style={styles.half}>
-                          <ThemedInput
-                            label="Cantidad"
-                            placeholder="Ej: 2"
-                            value={newTicket.vipBottleQuantities[option.key]}
-                            onChangeText={(value) =>
-                              setNewTicket((prev) => ({
-                                ...prev,
-                                vipBottleQuantities: {
-                                  ...prev.vipBottleQuantities,
-                                  [option.key]: value,
-                                },
-                              }))
-                            }
-                            error={newTicketErrors[`bottle.${option.key}`]}
-                            keyboardType="numeric"
-                          />
-                        </View>
-                      </View>
+                      />
                     </View>
-                  );
-                })}
+                    <View style={styles.bottleQty}>
+                      <ThemedInput
+                        label="Uds"
+                        placeholder="1"
+                        value={bottle.quantity}
+                        onChangeText={(v) =>
+                          setNewTicket((prev) => {
+                            const arr = [...(prev.vipFreeBottles || [])];
+                            arr[idx] = { ...arr[idx], quantity: v };
+                            return { ...prev, vipFreeBottles: arr };
+                          })
+                        }
+                        error={newTicketErrors[`bottle.${idx}.quantity`]}
+                        keyboardType="numeric"
+                      />
+                    </View>
+                    <TouchableOpacity
+                      onPress={() =>
+                        setNewTicket((prev) => ({
+                          ...prev,
+                          vipFreeBottles: (prev.vipFreeBottles || []).filter((_, i) => i !== idx),
+                        }))
+                      }
+                      style={styles.bottleRemoveBtn}
+                    >
+                      <Trash2 size={18} color={Colors.dark.error} />
+                    </TouchableOpacity>
+                  </View>
+                ))}
+                <TouchableOpacity
+                  onPress={() =>
+                    setNewTicket((prev) => ({
+                      ...prev,
+                      vipFreeBottles: [...(prev.vipFreeBottles || []), { brand: '', quantity: '1' }],
+                    }))
+                  }
+                  style={styles.addBottleBtn}
+                >
+                  <Plus size={15} color={Colors.dark.primary} />
+                  <Text style={styles.addBottleTxt}>Añadir botella</Text>
+                </TouchableOpacity>
               </View>
             ) : null}
 
@@ -1059,7 +1054,7 @@ export default function CreateEventScreen() {
               {mapSelection ? <Marker coordinate={mapSelection} /> : null}
             </MapView>
 
-            <View style={styles.mapBottomCard}>
+            <View style={[styles.mapBottomCard, { bottom: Math.max(16, insets.bottom + 8) }]}>
               <Text style={styles.mapBottomTitle}>Pulsa en el mapa para marcar el recinto</Text>
               <Text style={styles.mapBottomText}>
                 {mapSelection
@@ -1188,6 +1183,12 @@ const styles = StyleSheet.create({
   metricsText: { color: Colors.dark.textSecondary, lineHeight: 18 },
   errorText: { color: Colors.dark.error, fontSize: 12, marginTop: 8 },
   smallButton: { width: 124, minHeight: 42 },
+  bottleRow: { flexDirection: 'row', alignItems: 'flex-end', gap: 8, marginBottom: 4 },
+  bottleQty: { width: 72 },
+  bottleRemoveBtn: { width: 40, height: 48, alignItems: 'center', justifyContent: 'center', marginBottom: 2 },
+  addBottleBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 10, paddingHorizontal: 12, borderRadius: 12, borderWidth: 1, borderColor: Colors.dark.primary + '60', backgroundColor: Colors.dark.primary + '12', alignSelf: 'flex-start', marginTop: 4 },
+  addBottleTxt: { color: Colors.dark.primary, fontWeight: '800', fontSize: 13 },
+
   locationPreview: {
     marginTop: 6,
     paddingHorizontal: 12,
