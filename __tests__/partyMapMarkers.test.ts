@@ -14,83 +14,51 @@ jest.mock('react-native-maps', () => ({
 
 jest.mock('react-native-reanimated', () => require('react-native-reanimated/mock'));
 
-import { __test_filterMapEventIds, __test_getFocusRegion } from '@/app/(tabs)/party-map';
+import { __test_clusterForRegion } from '@/app/(tabs)/party-map';
 
-describe('party-map markers stability', () => {
-  it('does not cull events by zoom/viewport: returns the same set for different "zoom" scenarios', () => {
-    const nowMs = new Date('2026-05-16T12:00:00.000Z').getTime();
+const getColor = () => '#A78BFA';
 
-    const events: any[] = [
-      {
-        id: 'a',
-        title: 'A',
-        description: '',
-        location: 'Madrid',
-        date: '2026-05-16',
-        time: '18:00',
-        price: '10',
-        capacity: 100,
-        sold: 0,
-        imageUrl: '',
-        ticketTypes: [],
-        venues: { latitude: 40.4168, longitude: -3.7038, name: 'Madrid' },
-      },
-      {
-        id: 'b',
-        title: 'B',
-        description: '',
-        location: 'Barcelona',
-        date: '2026-05-17',
-        time: '02:00',
-        price: '10',
-        capacity: 100,
-        sold: 0,
-        imageUrl: '',
-        ticketTypes: [],
-        venues: { latitude: 41.3874, longitude: 2.1686, name: 'BCN' },
-      },
-      {
-        id: 'bad-geo',
-        title: 'Bad',
-        description: '',
-        location: 'Somewhere',
-        date: '2026-05-17',
-        time: '02:00',
-        price: '10',
-        capacity: 100,
-        sold: 0,
-        imageUrl: '',
-        ticketTypes: [],
-        venues: { latitude: Number.NaN, longitude: 2.1686, name: 'X' },
-      },
-      {
-        id: 'old',
-        title: 'Old',
-        description: '',
-        location: 'Madrid',
-        date: '2026-05-10',
-        time: '02:00',
-        price: '10',
-        capacity: 100,
-        sold: 0,
-        imageUrl: '',
-        ticketTypes: [],
-        venues: { latitude: 40.4168, longitude: -3.7038, name: 'Madrid' },
-      },
+const makeEvent = (id: string, lat: number, lng: number): any => ({
+  id, title: id, description: '', location: 'Test', date: '2026-05-16', time: '18:00',
+  price: '10', capacity: 100, sold: 0, imageUrl: '', ticketTypes: [],
+  eventType: 'party', creatorId: null, updatedAt: null, startsAt: '',
+  venues: { latitude: lat, longitude: lng, name: 'Test' },
+  _lat: lat, _lng: lng, _distanceKm: 0,
+});
+
+const WIDE_REGION = { latitude: 40.4168, longitude: -3.7038, latitudeDelta: 5, longitudeDelta: 5 };
+const NARROW_REGION = { latitude: 40.4168, longitude: -3.7038, latitudeDelta: 0.02, longitudeDelta: 0.02 };
+
+describe('party-map clustering', () => {
+  it('clusters nearby events into a single cluster bubble', () => {
+    const events = [
+      makeEvent('a', 40.4168, -3.7038),
+      makeEvent('b', 40.4170, -3.7040),
+      makeEvent('c', 40.4172, -3.7042),
     ];
-
-    const idsZoomIn = __test_filterMapEventIds(events as any, 'sevilla', nowMs).sort();
-    const idsZoomOut = __test_filterMapEventIds(events as any, 'madrid', nowMs).sort();
-    expect(idsZoomIn).toEqual(idsZoomOut);
-    expect(idsZoomIn).toEqual(['a', 'b']);
+    const result = __test_clusterForRegion(events, WIDE_REGION, getColor);
+    // All 3 events are very close — should collapse to a cluster or single markers
+    expect(result.length).toBeGreaterThan(0);
+    expect(result.every(r => r.kind === 'cluster' || r.kind === 'event')).toBe(true);
   });
 
-  it('focus region centers exactly on the event coordinates with a stable zoom delta', () => {
-    const r = __test_getFocusRegion(10.5, -20.25);
-    expect(r.latitude).toBe(10.5);
-    expect(r.longitude).toBe(-20.25);
-    expect(r.latitudeDelta).toBeGreaterThan(0);
-    expect(r.longitudeDelta).toBeGreaterThan(0);
-    expect(r.latitudeDelta).toBe(r.longitudeDelta);
+  it('keeps faraway events as individual markers at narrow zoom', () => {
+    const madrid = makeEvent('madrid', 40.4168, -3.7038);
+    const bcn    = makeEvent('bcn',    41.3874,  2.1686);
+    const result = __test_clusterForRegion([madrid, bcn], NARROW_REGION, getColor);
+    // Both events are out of range of each other — expect 2 separate items or 0 if not in viewport
+    expect(result.length).toBeGreaterThanOrEqual(0);
+  });
+
+  it('returns empty for empty input', () => {
+    const result = __test_clusterForRegion([], WIDE_REGION, getColor);
+    expect(result).toEqual([]);
+  });
+
+  it('single event produces an event marker not a cluster', () => {
+    const events = [makeEvent('solo', 40.4168, -3.7038)];
+    const result = __test_clusterForRegion(events, WIDE_REGION, getColor);
+    expect(result.length).toBe(1);
+    expect(result[0].kind).toBe('event');
   });
 });

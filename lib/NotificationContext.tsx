@@ -2,8 +2,6 @@ import React, { createContext, useContext, useEffect, useState, useCallback } fr
 import { supabase } from './supabase';
 import { useAuth } from './AuthContext';
 import { normalizeNotificationRow, type NotificationModel } from './notificationSchema';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { scheduleLocalNotification } from '@/lib/notifications';
 import { registerForPushNotifications } from '@/lib/notifications';
 import { AppState } from 'react-native';
 
@@ -148,26 +146,6 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
         (payload) => {
           const newNotification = normalize(payload.new as any) as any;
           setNotifications(prev => [newNotification, ...prev]);
-          (async () => {
-            try {
-              if (AppState.currentState !== 'active') return;
-              const remoteEnabled = await AsyncStorage.getItem('remote_push_enabled');
-              const shouldLocal = remoteEnabled !== '1';
-              const title = String((newNotification as any)?.title || 'Notificación');
-              const body =
-                String((newNotification as any)?.message || '').trim() ||
-                String((newNotification as any)?.body || '').trim() ||
-                '';
-              if (!body && !title) return;
-              if (!shouldLocal) return;
-              await scheduleLocalNotification(
-                title || 'Notificación',
-                body || title || '',
-                (newNotification as any)?.data || {},
-                1
-              );
-            } catch {}
-          })();
         }
       )
       .subscribe();

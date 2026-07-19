@@ -1,101 +1,12 @@
 import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
-import { supabase } from '@/lib/supabase';
-import * as Location from 'expo-location';
 import Constants from 'expo-constants';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { supabase } from '@/lib/supabase';
 
-// Helper to calculate distance in km
-function getDistanceFromLatLonInKm(lat1: number, lon1: number, lat2: number, lon2: number) {
-  const R = 6371; // Radius of the earth in km
-  const dLat = deg2rad(lat2-lat1);  // deg2rad below
-  const dLon = deg2rad(lon2-lon1); 
-  const a = 
-    Math.sin(dLat/2) * Math.sin(dLat/2) +
-    Math.cos(deg2rad(lat1)) * Math.cos(deg2rad(lat2)) * 
-    Math.sin(dLon/2) * Math.sin(dLon/2)
-    ; 
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a)); 
-  return R * c; // Distance in km
-}
-
-function deg2rad(deg: number) {
-  return deg * (Math.PI/180)
-}
-
-export async function checkNearbyEvents(userId: string) {
-  try {
-    const { status } = await Location.requestForegroundPermissionsAsync();
-    if (status !== 'granted') return;
-
-    const location = await Location.getCurrentPositionAsync({});
-    const { latitude, longitude } = location.coords;
-
-    const now = Date.now();
-    const notifiedKey = `nearby_events_notified_${userId}`;
-    let notified: Record<string, number> = {};
-    try {
-      const raw = await AsyncStorage.getItem(notifiedKey);
-      notified = raw ? (JSON.parse(raw) as any) : {};
-    } catch {
-      notified = {};
-    }
-
-    // Get upcoming events with venue details
-    const { data: events } = await supabase
-      .from('events')
-      .select('*, venues(*)')
-      .gt('event_date', new Date().toISOString())
-      .lt('event_date', new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()); // Next 7 days
-
-    if (!events) return;
-
-    for (const event of events) {
-      if (event.venues?.latitude && event.venues?.longitude) {
-        const distance = getDistanceFromLatLonInKm(
-          latitude,
-          longitude,
-          event.venues.latitude,
-          event.venues.longitude
-        );
-
-        // If event is within 10km
-        if (distance <= 10) {
-          const eid = String(event.id || '');
-          if (eid) {
-            const last = Number((notified as any)[eid] || 0);
-            if (last && now - last < 1000 * 60 * 60 * 24) {
-              continue;
-            }
-            (notified as any)[eid] = now;
-          }
-
-          await Notifications.scheduleNotificationAsync({
-            content: {
-              title: "¡Fiesta cerca de ti! 🎉",
-              body: `${event.title} está a solo ${distance.toFixed(1)}km. ¡No te lo pierdas!`,
-              data: {
-                eventId: event.id,
-                url: (() => {
-                  const base = String(process.env.EXPO_PUBLIC_WEB_BASE_URL || process.env.EXPO_PUBLIC_API_URL || '').trim().replace(/\/$/, '');
-                  const path = `event/${event.id}`;
-                  return base && /^https?:\/\//i.test(base) ? `${base}/${path}` : path;
-                })(),
-                path: `event/${event.id}`,
-              },
-            },
-            trigger: null, // Show immediately
-          });
-        }
-      }
-    }
-
-    try {
-      await AsyncStorage.setItem(notifiedKey, JSON.stringify(notified));
-    } catch {}
-  } catch (error) {
-    console.log('Error checking nearby events:', error);
-  }
+// Nearby events check — notifications are server-side only, no local Expo notifications
+export async function checkNearbyEvents(_userId: string) {
+  // no-op: nearby event push is handled server-side
 }
 
 export async function registerForPushNotifications(userId: string | null) {
@@ -191,35 +102,8 @@ export async function initNotifications() {
   }
 }
 
-export async function scheduleLocalNotification(title: string, body: string, data: any = {}, delaySeconds: number = 0) {
-    const remoteEnabled = await AsyncStorage.getItem('remote_push_enabled');
-    if (remoteEnabled === '1') {
-      return;
-    }
-    const { status: existingStatus } = await Notifications.getPermissionsAsync();
-    let finalStatus = existingStatus;
-    if (existingStatus !== 'granted') {
-      const { status } = await Notifications.requestPermissionsAsync();
-      finalStatus = status;
-    }
-    if (finalStatus !== 'granted') {
-      return;
-    }
-
-    // Expo Notifications 'seconds' trigger must be at least 1 if provided, otherwise use null for immediate
-    // However, if delaySeconds is 0, passing null as trigger executes immediately.
-    // If delaySeconds > 0, we pass { seconds: delaySeconds }
-    
-    // Safety check: ensure seconds is valid if we use it
-    const trigger = delaySeconds > 0 ? { seconds: delaySeconds, channelId: 'default' } : null;
-
-    await Notifications.scheduleNotificationAsync({
-      content: {
-        title,
-        body,
-        data,
-        sound: true,
-      },
-      trigger,
-    });
+// Local notifications disabled — all push notifications are sent server-side only
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+export async function scheduleLocalNotification(_title: string, _body: string, _data: any = {}, _delaySeconds: number = 0) {
+  // no-op
 }

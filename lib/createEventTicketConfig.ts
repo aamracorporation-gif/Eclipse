@@ -1,6 +1,7 @@
 export type TicketCategory = 'general' | 'vip' | 'early' | 'backstage';
 
 export type VipBottleType = 'vodka' | 'whisky' | 'gin' | 'rum' | 'champagne';
+export type VipBottleBrands = Record<VipBottleType, string>;
 
 export type TicketDraft = {
   id: string;
@@ -12,6 +13,7 @@ export type TicketDraft = {
   featured: boolean;
   vipGroupSize: string;
   vipBottleQuantities: Record<VipBottleType, string>;
+  vipBottleBrands: Record<VipBottleType, string>;
   generalAccessZone: string;
   generalNumberedSeat: boolean;
   earlyEntryMinutes: string;
@@ -52,6 +54,13 @@ export function createEmptyTicketDraft(): TicketDraft {
       rum: '',
       champagne: '',
     },
+    vipBottleBrands: {
+      vodka: '',
+      whisky: '',
+      gin: '',
+      rum: '',
+      champagne: '',
+    },
     generalAccessZone: '',
     generalNumberedSeat: false,
     earlyEntryMinutes: '',
@@ -63,11 +72,11 @@ export function createEmptyTicketDraft(): TicketDraft {
 
 export function getBottleOptions() {
   return [
-    { key: 'vodka' as const, label: 'Vodka' },
-    { key: 'whisky' as const, label: 'Whisky' },
-    { key: 'gin' as const, label: 'Gin' },
-    { key: 'rum' as const, label: 'Ron' },
-    { key: 'champagne' as const, label: 'Champagne' },
+    { key: 'vodka' as const, label: 'Vodka', brandSuggestions: ['Belvedere', 'Grey Goose', 'Absolut', 'Ketel One', 'Ciroc', 'Tito\'s'] },
+    { key: 'whisky' as const, label: 'Whisky', brandSuggestions: ['Jack Daniel\'s', 'Johnnie Walker', 'Jameson', 'Chivas Regal', 'Glenfiddich', 'Bulleit'] },
+    { key: 'gin' as const, label: 'Gin', brandSuggestions: ['Hendrick\'s', 'Tanqueray', 'Bombay Sapphire', 'Monkey 47', 'Beefeater', 'The Botanist'] },
+    { key: 'rum' as const, label: 'Ron', brandSuggestions: ['Bacardi', 'Havana Club', 'Ron Zacapa', 'Captain Morgan', 'Brugal', 'Diplomatico'] },
+    { key: 'champagne' as const, label: 'Champagne', brandSuggestions: ['Moët & Chandon', 'Veuve Clicquot', 'Bollinger', 'Dom Pérignon', 'Laurent-Perrier', 'Krug'] },
   ];
 }
 
@@ -161,6 +170,7 @@ export function serializeTicketMetadata(ticket: TicketDraft) {
       .map((option) => ({
         type: option.key,
         label: option.label,
+        brand: (ticket.vipBottleBrands?.[option.key] || '').trim(),
         quantity: parsePositiveInt(ticket.vipBottleQuantities[option.key] || ''),
       }))
       .filter((item) => item.quantity !== null)

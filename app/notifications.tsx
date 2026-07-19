@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+﻿import React, { useMemo, useState } from 'react';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, StatusBar } from 'react-native';
 import { useRouter } from 'expo-router';
 import { ArrowLeft, CheckCheck, Bell, Clock, Trash2 } from '@/lib/icons';
@@ -47,10 +47,37 @@ export default function NotificationsScreen() {
       (typeof item.title === 'string' && item.title.trim() ? item.title.trim() : '') ||
       '';
 
+    const handlePress = () => {
+      if (!item.read) markAsRead(item.id);
+      const data = item.data as any;
+      const type = String(data?.type || data?.tipo || item.type || '');
+      const organizerTypes = [
+        'organizer_new_sale', 'organizer_realtime_sale', 'organizer_verified', 'organizer_rejected',
+        'stock_alerts', 'realtime_sales', 'daily_summary', 'new_sale',
+        'stock_low', 'organizer_weekly_recap',
+      ];
+      const ticketTypes = [
+        'purchase_confirmed', 'purchase_completed', 'purchase_fulfilled',
+        'ticket_validated', 'ticket_cancelled', 'ticket_upgraded',
+        'event_reminder_24h', 'event_reminder_1h',
+        'compra_entrada', 'compra_vip', 'entrada_validada',
+        'event_almost_full',
+      ];
+      const resaleTypes = ['resale_sold', 'resale_purchased', 'resale_update', 'resale_purchase', 'compra_reventa'];
+      if (organizerTypes.some(t => type.includes(t))) { router.push('/(creator)/' as any); return; }
+      if (ticketTypes.some(t => type.includes(t))) { router.push('/(tabs)/tickets' as any); return; }
+      if (resaleTypes.some(t => type.includes(t))) { router.push('/(tabs)/resale' as any); return; }
+      const eventId = String(data?.eventId || data?.event_id || '');
+      if (eventId) { router.push(`/(tabs)/event/${eventId}` as any); return; }
+      const urlRaw = String(data?.url || data?.event_url || '').trim();
+      const match = urlRaw.replace(/^\/+/, '').match(/(^|\/)event\/([^/?#]+)/i);
+      if (match?.[2]) { router.push(`/(tabs)/event/${match[2]}` as any); }
+    };
+
     return (
       <TouchableOpacity
         activeOpacity={0.8}
-        onPress={() => !item.read && markAsRead(item.id)}
+        onPress={handlePress}
         style={[styles.notificationCard, !item.read && styles.unreadCard]}
       >
         <GlassView intensity={item.read ? 10 : 25} style={styles.glass}>
@@ -81,7 +108,7 @@ export default function NotificationsScreen() {
             onPress={() => {
               showDialog({
                 title: t('common.confirm', { defaultValue: 'Confirmar' }),
-                message: t('notifications.confirm_delete_one', { defaultValue: '¿Eliminar esta notificación?' }),
+                message: t('notifications.confirm_delete_one', { defaultValue: 'Â¿Eliminar esta notificaciÃ³n?' }),
                 actions: [
                   { label: t('common.delete', { defaultValue: 'Eliminar' }), variant: 'primary', onPress: () => void deleteNotification(item.id) },
                   { label: t('common.cancel', { defaultValue: 'Cancelar' }), variant: 'outline' },
@@ -119,7 +146,7 @@ export default function NotificationsScreen() {
               onPress={() => {
                 showDialog({
                   title: t('common.confirm', { defaultValue: 'Confirmar' }),
-                  message: t('notifications.confirm_delete_all', { defaultValue: '¿Eliminar todas las notificaciones?' }),
+                  message: t('notifications.confirm_delete_all', { defaultValue: 'Â¿Eliminar todas las notificaciones?' }),
                   actions: [
                     { label: t('common.delete_all', { defaultValue: 'Eliminar todas' }), variant: 'primary', onPress: () => void deleteAllNotifications() },
                     { label: t('common.cancel', { defaultValue: 'Cancelar' }), variant: 'outline' },
@@ -344,3 +371,4 @@ const styles = StyleSheet.create({
     paddingHorizontal: 40,
   },
 });
+

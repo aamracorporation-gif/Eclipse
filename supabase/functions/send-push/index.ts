@@ -195,6 +195,8 @@ Deno.serve(async (req) => {
         title,
         body,
         data,
+        sound: "default",
+        channelId: "default",
       });
       messageDeliveryId.push(deliveryId);
     }

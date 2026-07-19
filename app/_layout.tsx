@@ -22,19 +22,12 @@ import { GlassView } from '@/components/ui/GlassView';
 import { ThemedButton } from '@/components/ui/ThemedButton';
 import { AppDialogProvider } from '@/components/ui/AppDialog';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { supabase } from '@/lib/supabase';
 
 import * as Notifications from 'expo-notifications';
 import * as ExpoLinking from 'expo-linking';
 
-// Configure notifications handler globally
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldPlaySound: true,
-    shouldSetBadge: false,
-    shouldShowBanner: true,
-    shouldShowList: true,
-  }),
-});
+// Notification handler set via initNotifications() after app is ready
 
 class AppErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean }> {
   state = { hasError: false };
@@ -158,9 +151,43 @@ function RootLayoutNav({ fontsLoaded }: { fontsLoaded: boolean }) {
     if (!isAppReady) return;
 
     const navigateFromNotification = (data: any) => {
+      const type = String(data?.type || data?.tipo || '');
+
+      // Organizer notifications → creator panel
+      const organizerTypes = [
+        'organizer_new_sale', 'organizer_realtime_sale', 'organizer_verified', 'organizer_rejected',
+        'stock_alerts', 'realtime_sales', 'daily_summary', 'new_sale',
+        'stock_low', 'organizer_weekly_recap',
+      ];
+      if (organizerTypes.some(t => type.includes(t))) {
+        router.push('/(creator)/' as any);
+        return;
+      }
+
+      // Purchase / ticket / validation → tickets screen
+      const ticketTypes = [
+        'purchase_confirmed', 'purchase_completed', 'purchase_fulfilled',
+        'ticket_validated', 'ticket_cancelled', 'ticket_upgraded',
+        'event_reminder_24h', 'event_reminder_1h',
+        'compra_entrada', 'compra_vip', 'entrada_validada',
+        'event_almost_full',
+      ];
+      if (ticketTypes.some(t => type.includes(t))) {
+        router.push('/(tabs)/tickets' as any);
+        return;
+      }
+
+      // Resale notifications → resale screen
+      const resaleTypes = ['resale_sold', 'resale_purchased', 'resale_update', 'resale_purchase', 'compra_reventa'];
+      if (resaleTypes.some(t => type.includes(t))) {
+        router.push('/(tabs)/resale' as any);
+        return;
+      }
+
+      // Event-related → event detail
       const eventId = String(data?.eventId || data?.event_id || '');
       if (eventId) {
-        router.push(`/(tabs)/event/${eventId}`);
+        router.push(`/(tabs)/event/${eventId}` as any);
         return;
       }
 
@@ -171,7 +198,7 @@ function RootLayoutNav({ fontsLoaded }: { fontsLoaded: boolean }) {
       const cleaned = url.replace(/^\/+/, '');
       const match = cleaned.match(/(^|\/)event\/([^/?#]+)/i);
       if (match?.[2]) {
-        router.push(`/(tabs)/event/${match[2]}`);
+        router.push(`/(tabs)/event/${match[2]}` as any);
         return;
       }
 
@@ -284,9 +311,16 @@ export default function RootLayout() {
       }
     })();
 
+    const dispatchPending = () => {
+      supabase.functions.invoke('dispatch-notifications', { body: { limit: 100 } }).catch(() => {});
+    };
+
+    dispatchPending();
+
     const sub = AppState.addEventListener('change', (state) => {
       if (state === 'active') {
         void initLanguage();
+        dispatchPending();
       }
     });
     return () => {

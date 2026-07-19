@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useRef, useState } from 'react';
+﻿import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
   Image,
@@ -13,7 +13,7 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import DateTimePicker, { DateTimePickerAndroid } from '@react-native-community/datetimepicker';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as ImagePicker from 'expo-image-picker';
@@ -37,6 +37,7 @@ import {
 } from '@/lib/createEventTicketConfig';
 import { uploadImage } from '@/lib/storage';
 import { useAuth } from '@/lib/AuthContext';
+import { supabase } from '@/lib/supabase';
 import { useEvents } from '@/lib/EventContext';
 import {
   ArrowLeft,
@@ -104,7 +105,11 @@ function nextRoundedDateTime(now: Date) {
 export default function CreateEventScreen() {
   const router = useRouter();
   const { user } = useAuth();
-  const { addEvent } = useEvents();
+  const { addEvent, updateEvent } = useEvents();
+
+  const params = useLocalSearchParams<{ id?: string; isEditing?: string }>();
+  const eventId = String(params.id ?? '').trim();
+  const isEditing = eventId.length > 0;
 
   const minDateTime = useMemo(() => nextRoundedDateTime(new Date()), []);
 
@@ -138,6 +143,60 @@ export default function CreateEventScreen() {
   const [mapSelection, setMapSelection] = useState<{ latitude: number; longitude: number } | null>(null);
   const [isResolvingAddress, setIsResolvingAddress] = useState(false);
 
+
+  // Load event data directly from Supabase when editing
+  useEffect(() => {
+    if (!isEditing || !eventId) return;
+    (async () => {
+      try {
+        const { data, error } = await supabase
+          .from('events')
+          .select('*, venues(*), event_ticket_types(*)')
+          .eq('id', eventId)
+          .single();
+        if (error || !data) { console.log('[edit] error', error); return; }
+        const rawDate = data.event_date ? new Date(data.event_date) : null;
+        setDraft({
+          title: data.title ?? '',
+          description: data.description ?? '',
+          location: data.venues?.name ?? '',
+          imageUri: data.poster_url ?? '',
+          venuePlanUri: data.venue_plan_url ?? '',
+          theme: data.theme ?? '',
+          dressCode: data.dress_code ?? '',
+          ageRestriction: String(data.age_restriction ?? '18'),
+          eventType: data.event_type ?? 'party',
+          allowResale: data.allow_resale ?? true,
+          dateTime: rawDate,
+          coordinates: data.venues
+            ? { latitude: data.venues.latitude, longitude: data.venues.longitude }
+            : null,
+        });
+        if (Array.isArray(data.event_ticket_types) && data.event_ticket_types.length > 0) {
+          const validCats = ['general', 'vip', 'early', 'backstage'];
+          const active = data.event_ticket_types.filter((t) => !t.deleted_at && (t.is_active ?? true));
+          setTicketTypes(active.map((t) => ({
+            id: t.id,
+            name: t.name ?? '',
+            category: (validCats.includes(t.category ?? '') ? t.category : 'general'),
+            price: String(t.price ?? 0),
+            quantity: String(t.quantity ?? 0),
+            benefits: '',
+            featured: false,
+            vipGroupSize: '',
+            vipBottleQuantities: { vodka: '', whisky: '', gin: '', rum: '', champagne: '' },
+            vipBottleBrands: { vodka: '', whisky: '', gin: '', rum: '', champagne: '' },
+            generalAccessZone: '',
+            generalNumberedSeat: false,
+            earlyEntryMinutes: '',
+            earlyDedicatedLane: false,
+            backstageMeetGreet: false,
+            backstageHost: '',
+          })));
+        }
+      } catch (err) { console.log('[edit] catch', err); }
+    })();
+  }, [isEditing, eventId]);;
   const eventTypeOptions = useMemo(
     () => [
       { key: 'party', label: 'Fiesta', Icon: Sparkles },
@@ -186,14 +245,14 @@ export default function CreateEventScreen() {
     if (!draft.title.trim()) e.title = 'Obligatorio.';
     if (!draft.description.trim()) e.description = 'Obligatorio.';
     if (!draft.location.trim()) e.location = 'Selecciona la ubicación en el mapa.';
-    if (!draft.imageUri.trim()) e.imageUri = 'Selecciona un cartel desde la cámara o la galería.';
+    if (!draft.imageUri.trim() && !isEditing) e.imageUri = 'Selecciona un cartel desde la cámara o la galería.';
 
     const age = parsePositiveInt(draft.ageRestriction);
     if (age === null || age < 1 || age > 99) e.ageRestriction = 'Edad inválida (1–99).';
 
     if (!draft.dateTime || !Number.isFinite(draft.dateTime.getTime())) {
       e.dateTime = 'Selecciona fecha y hora.';
-    } else if (draft.dateTime.getTime() < minDateTime.getTime()) {
+    } else if (!isEditing && draft.dateTime.getTime() < minDateTime.getTime()) {
       e.dateTime = 'Debe ser una fecha/hora futura.';
     }
 
@@ -334,11 +393,10 @@ export default function CreateEventScreen() {
       return;
     }
     updateDraft('coordinates', mapSelection);
-    if (!draft.location.trim()) {
-      await reverseGeocodeSelection(mapSelection);
-    }
+    // Always reverse geocode to get street address when user confirms a map point
+    await reverseGeocodeSelection(mapSelection);
     setShowMapModal(false);
-  }, [draft.location, mapSelection, reverseGeocodeSelection, updateDraft]);
+  }, [mapSelection, reverseGeocodeSelection, updateDraft]);
 
   const openDateTimePicker = useCallback(() => {
     Keyboard.dismiss();
@@ -439,12 +497,14 @@ export default function CreateEventScreen() {
 
     setLoading(true);
     try {
-      const uploadedPoster = await uploadImage(draft.imageUri, 'events');
+      const imageIsRemote = draft.imageUri.startsWith('http');
+      const uploadedPoster = imageIsRemote ? draft.imageUri : await uploadImage(draft.imageUri, 'events');
       if (!uploadedPoster) throw new Error('No se pudo subir el cartel del evento.');
 
       let uploadedPlan = '';
       if (draft.venuePlanUri.trim()) {
-        const uploaded = await uploadImage(draft.venuePlanUri, 'events');
+        const planIsRemote = draft.venuePlanUri.startsWith('http');
+        const uploaded = planIsRemote ? draft.venuePlanUri : await uploadImage(draft.venuePlanUri, 'events');
         if (!uploaded) throw new Error('No se pudo subir el plano del recinto.');
         uploadedPlan = uploaded;
       }
@@ -459,7 +519,7 @@ export default function CreateEventScreen() {
         metadata: serializeTicketMetadata(ticket),
       }));
 
-      await addEvent({
+      const eventPayload = {
         title: draft.title.trim(),
         description: draft.description.trim(),
         location: draft.location.trim(),
@@ -475,21 +535,27 @@ export default function CreateEventScreen() {
         price: String(metrics.minPrice ?? 0),
         capacity: metrics.capacity,
         ticketTypes: mappedTicketTypes,
-        creatorId: user.id,
         venues: {
           latitude: draft.coordinates.latitude,
           longitude: draft.coordinates.longitude,
           name: draft.location.trim(),
         },
-      });
+      };
 
-      setLoading(false);
-      Alert.alert('Evento creado', 'El evento se ha creado correctamente.', [{ text: 'OK', onPress: safeBack }]);
+      if (isEditing && eventId) {
+        await updateEvent(eventId, eventPayload);
+        setLoading(false);
+        Alert.alert('Evento actualizado', 'Los cambios se han guardado correctamente.', [{ text: 'OK', onPress: safeBack }]);
+      } else {
+        await addEvent({ ...eventPayload, creatorId: user.id });
+        setLoading(false);
+        Alert.alert('Evento creado', 'El evento se ha creado correctamente.', [{ text: 'OK', onPress: safeBack }]);
+      }
     } catch (e: any) {
       setLoading(false);
       Alert.alert('Error', String(e?.message || 'No se pudo crear el evento.'));
     }
-  }, [addEvent, draft, errors, metrics.capacity, metrics.minPrice, safeBack, ticketTypes, user?.id]);
+  }, [addEvent, updateEvent, isEditing, eventId, draft, errors, metrics.capacity, metrics.minPrice, safeBack, ticketTypes, user?.id]);
 
   return (
     <View style={styles.container}>
@@ -502,8 +568,8 @@ export default function CreateEventScreen() {
             </GlassView>
           </TouchableOpacity>
           <View style={{ flex: 1 }}>
-            <Text style={styles.headerTitle}>Crear evento</Text>
-            <Text style={styles.headerSubtitle}>Completa todo y publícalo con imágenes, mapa y entradas personalizadas.</Text>
+            <Text style={styles.headerTitle}>{isEditing ? 'Editar evento' : 'Crear evento'}</Text>
+            <Text style={styles.headerSubtitle}>{isEditing ? 'Modifica los detalles y guarda los cambios.' : 'Completa todo y publícalo con imágenes, mapa y entradas personalizadas.'}</Text>
           </View>
         </View>
 
@@ -582,11 +648,16 @@ export default function CreateEventScreen() {
                 />
               </View>
             </TouchableOpacity>
-            {draft.coordinates ? (
+            {draft.coordinates && !isResolvingAddress ? (
               <View style={styles.locationPreview}>
-                <Text style={styles.locationPreviewText}>
-                  Lat {draft.coordinates.latitude.toFixed(5)} • Lng {draft.coordinates.longitude.toFixed(5)}
+                <Navigation size={13} color={Colors.dark.primary} />
+                <Text style={styles.locationPreviewText} numberOfLines={2}>
+                  {draft.location.trim() || `${draft.coordinates.latitude.toFixed(5)}, ${draft.coordinates.longitude.toFixed(5)}`}
                 </Text>
+              </View>
+            ) : isResolvingAddress ? (
+              <View style={styles.locationPreview}>
+                <Text style={styles.locationPreviewText}>Resolviendo dirección…</Text>
               </View>
             ) : null}
           </GlassView>
@@ -732,23 +803,44 @@ export default function CreateEventScreen() {
                   const selected = Boolean(String(newTicket.vipBottleQuantities[option.key] || '').trim());
                   if (!selected) return null;
                   return (
-                    <ThemedInput
-                      key={option.key}
-                      label={`Cantidad de ${option.label}`}
-                      placeholder="Ej: 2"
-                      value={newTicket.vipBottleQuantities[option.key]}
-                      onChangeText={(value) =>
-                        setNewTicket((prev) => ({
-                          ...prev,
-                          vipBottleQuantities: {
-                            ...prev.vipBottleQuantities,
-                            [option.key]: value,
-                          },
-                        }))
-                      }
-                      error={newTicketErrors[`bottle.${option.key}`]}
-                      keyboardType="numeric"
-                    />
+                    <View key={option.key}>
+                      <View style={styles.row}>
+                        <View style={styles.half}>
+                          <ThemedInput
+                            label={`Marca (${option.label})`}
+                            placeholder={option.brandSuggestions?.[0] ?? 'Ej: Belvedere'}
+                            value={newTicket.vipBottleBrands?.[option.key] ?? ''}
+                            onChangeText={(value) =>
+                              setNewTicket((prev) => ({
+                                ...prev,
+                                vipBottleBrands: {
+                                  ...prev.vipBottleBrands,
+                                  [option.key]: value,
+                                },
+                              }))
+                            }
+                          />
+                        </View>
+                        <View style={styles.half}>
+                          <ThemedInput
+                            label="Cantidad"
+                            placeholder="Ej: 2"
+                            value={newTicket.vipBottleQuantities[option.key]}
+                            onChangeText={(value) =>
+                              setNewTicket((prev) => ({
+                                ...prev,
+                                vipBottleQuantities: {
+                                  ...prev.vipBottleQuantities,
+                                  [option.key]: value,
+                                },
+                              }))
+                            }
+                            error={newTicketErrors[`bottle.${option.key}`]}
+                            keyboardType="numeric"
+                          />
+                        </View>
+                      </View>
+                    </View>
                   );
                 })}
               </View>
@@ -1104,8 +1196,11 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(34,197,94,0.14)',
     borderWidth: 1,
     borderColor: 'rgba(34,197,94,0.25)',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 7,
   },
-  locationPreviewText: { color: '#86efac', fontWeight: '700' },
+  locationPreviewText: { color: '#86efac', fontWeight: '700', flex: 1, fontSize: 13 },
   modalOverlay: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.55)' },
   modalCard: {
     backgroundColor: '#1e1b4b',
@@ -1150,3 +1245,5 @@ const styles = StyleSheet.create({
   mapBottomText: { color: Colors.dark.textSecondary, marginBottom: 12 },
   mapBottomActions: { marginTop: 2 },
 });
+
+

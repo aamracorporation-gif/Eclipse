@@ -95,7 +95,7 @@ export function DiscoLoader({ label, subLabel, size = 140, fullScreen = false, s
             },
           ]}
         >
-          <View style={StyleSheet.absoluteFill}>
+          <View style={[StyleSheet.absoluteFill, { borderRadius: (size * 1.12) / 2, overflow: 'hidden' }]}>
             <LinearGradient
               colors={['rgba(255,255,255,0)', 'rgba(255,255,255,0.26)', 'rgba(255,255,255,0)']}
               start={{ x: 0, y: 0 }}
@@ -129,87 +129,85 @@ export function DiscoLoader({ label, subLabel, size = 140, fullScreen = false, s
             },
           ]}
         >
-          <LinearGradient
-            colors={['rgba(255,255,255,0.14)', 'rgba(255,255,255,0.05)', 'rgba(0,0,0,0.10)']}
-            locations={[0, 0.5, 1]}
-            start={{ x: 0.1, y: 0.1 }}
-            end={{ x: 0.9, y: 0.9 }}
-            style={StyleSheet.absoluteFill}
-          />
-
-          <View pointerEvents="none" style={styles.facets}>
-            {Array.from({ length: facetCount }).map((_, i) => {
-              const pct = i / (facetCount - 1 || 1);
-              return (
-                <View
-                  key={`v-${i}`}
-                  style={[
-                    styles.facetLine,
-                    {
-                      width: facetThickness,
-                      left: Math.round(pct * size) - Math.round(facetThickness / 2),
-                      top: 0,
-                      bottom: 0,
-                      opacity: 0.06 + (i % 3) * 0.012,
-                    },
-                  ]}
-                />
-              );
-            })}
-            {Array.from({ length: facetCount }).map((_, i) => {
-              const pct = i / (facetCount - 1 || 1);
-              return (
-                <View
-                  key={`h-${i}`}
-                  style={[
-                    styles.facetLine,
-                    {
-                      height: facetThickness,
-                      top: Math.round(pct * size) - Math.round(facetThickness / 2),
-                      left: 0,
-                      right: 0,
-                      opacity: 0.06 + (i % 3) * 0.012,
-                    },
-                  ]}
-                />
-              );
-            })}
-          </View>
-
-          <Animated.View
-            pointerEvents="none"
-            style={[
-              styles.shimmer,
-              {
-                width: Math.max(16, Math.round(size * 0.56)),
-                top: -Math.round(size * 0.12),
-                bottom: -Math.round(size * 0.12),
-                transform: [{ translateX: shimmerX }, { rotateZ: '-24deg' }],
-              },
-            ]}
-          >
+          {/* Clip wrapper for gradients/shimmer/facets — required on Android */}
+          <View style={[StyleSheet.absoluteFill, { borderRadius: size / 2, overflow: 'hidden' }]} pointerEvents="none">
             <LinearGradient
-              colors={['rgba(255,255,255,0)', 'rgba(255,255,255,0.26)', 'rgba(255,255,255,0)']}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 0 }}
+              colors={['rgba(255,255,255,0.14)', 'rgba(255,255,255,0.05)', 'rgba(0,0,0,0.10)']}
+              locations={[0, 0.5, 1]}
+              start={{ x: 0.1, y: 0.1 }}
+              end={{ x: 0.9, y: 0.9 }}
               style={StyleSheet.absoluteFill}
             />
-          </Animated.View>
-
-          <View
-            pointerEvents="none"
-            style={[
-              styles.specular,
-              {
-                top: Math.max(2, Math.round(size * 0.08)),
-                left: Math.max(2, Math.round(size * 0.08)),
-                right: Math.max(2, Math.round(size * 0.08)),
-                height: Math.max(6, Math.round(size * 0.18)),
-                borderRadius: Math.max(4, Math.round(size * 0.14)),
-              },
-            ]}
-          />
-
+            <View style={styles.facets}>
+              {Array.from({ length: facetCount }).map((_, i) => {
+                const pct = i / (facetCount - 1 || 1);
+                return (
+                  <View
+                    key={`v-${i}`}
+                    style={[
+                      styles.facetLine,
+                      {
+                        width: facetThickness,
+                        left: Math.round(pct * size) - Math.round(facetThickness / 2),
+                        top: 0,
+                        bottom: 0,
+                        opacity: 0.06 + (i % 3) * 0.012,
+                      },
+                    ]}
+                  />
+                );
+              })}
+              {Array.from({ length: facetCount }).map((_, i) => {
+                const pct = i / (facetCount - 1 || 1);
+                return (
+                  <View
+                    key={`h-${i}`}
+                    style={[
+                      styles.facetLine,
+                      {
+                        height: facetThickness,
+                        top: Math.round(pct * size) - Math.round(facetThickness / 2),
+                        left: 0,
+                        right: 0,
+                        opacity: 0.06 + (i % 3) * 0.012,
+                      },
+                    ]}
+                  />
+                );
+              })}
+            </View>
+            <Animated.View
+              style={[
+                styles.shimmer,
+                {
+                  width: Math.max(16, Math.round(size * 0.56)),
+                  top: -Math.round(size * 0.12),
+                  bottom: -Math.round(size * 0.12),
+                  transform: [{ translateX: shimmerX }, { rotateZ: '-24deg' }],
+                },
+              ]}
+            >
+              <LinearGradient
+                colors={['rgba(255,255,255,0)', 'rgba(255,255,255,0.26)', 'rgba(255,255,255,0)']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+                style={StyleSheet.absoluteFill}
+              />
+            </Animated.View>
+            <View
+              style={[
+                styles.specular,
+                {
+                  top: Math.max(2, Math.round(size * 0.08)),
+                  left: Math.max(2, Math.round(size * 0.08)),
+                  right: Math.max(2, Math.round(size * 0.08)),
+                  height: Math.max(6, Math.round(size * 0.18)),
+                  borderRadius: Math.max(4, Math.round(size * 0.14)),
+                },
+              ]}
+            />
+          </View>
+          {/* Logo and wordmark rendered above clip wrapper */}
           <Image source={discoLogo} style={{ width: logoSize, height: logoSize, opacity: 0.92 }} resizeMode="contain" fadeDuration={0} />
           {size >= 86 ? (
             <Text
@@ -347,7 +345,7 @@ const styles = StyleSheet.create({
           shadowRadius: 10,
           shadowOffset: { width: 0, height: 0 },
         }
-      : null),
+      : { elevation: 6 }),
   },
   label: {
     marginTop: 18,

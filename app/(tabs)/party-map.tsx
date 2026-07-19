@@ -1,5 +1,8 @@
-import { memo, useCallback, useEffect, useRef, useState } from 'react';
-import { View, Text, StyleSheet, Pressable, StatusBar, Platform, Image, TextInput, Keyboard, useColorScheme } from 'react-native';
+import { Component, memo, useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
+import {
+  View, Text, StyleSheet, Pressable, StatusBar, Platform,
+  Image, TextInput, Keyboard, FlatList, TouchableOpacity, Animated as RNAnimated,
+} from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Location from 'expo-location';
@@ -9,884 +12,871 @@ import { GlassView } from '@/components/ui/GlassView';
 import { DiscoLoader } from '@/components/ui/DiscoLoader';
 import type { AppEvent } from '@/lib/EventContext';
 import { router, useLocalSearchParams } from 'expo-router';
-import { Search, X, MapPin, Calendar } from '@/lib/icons';
+import { Search, X, MapPin, Calendar, Flame, Music, Sparkles, Tag } from '@/lib/icons';
 import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 import { useTranslation } from 'react-i18next';
-import { useAppDialog } from '@/components/ui/AppDialog';
-import Animated, { useAnimatedStyle, useSharedValue, withSpring, withTiming } from 'react-native-reanimated';
+import Animated, {
+  useAnimatedStyle, useSharedValue, withSpring, withTiming,
+  FadeIn, FadeOut, SlideInDown, SlideOutDown,
+} from 'react-native-reanimated';
 import { PROVIDER_GOOGLE } from 'react-native-maps';
 import Constants from 'expo-constants';
 
+// ─── Types ──────────────────────────────────────────────────────────────────
 type EventWithGeo = AppEvent & { _lat: number; _lng: number; _distanceKm: number };
-
-const VIEWPORT_DEBOUNCE_MS = 520;
-const EVENT_FOCUS_DELTA = 0.035;
-const MAX_MARKERS_RENDERED = 180;
-const FETCH_HORIZON_DAYS = 45;
-const MAX_EVENTS_CACHE = 2500;
-const MAX_EVENT_CACHE_AGE_MS = 1000 * 60 * 20;
-
 type ClusterItem =
   | { kind: 'cluster'; key: string; center: { latitude: number; longitude: number }; count: number; color: string }
-  | { kind: 'event'; key: string; center: { latitude: number; longitude: number }; event: EventWithGeo; color: string };
+  | { kind: 'event';   key: string; center: { latitude: number; longitude: number }; event: EventWithGeo; color: string };
 
-const MUTED_MAP_STYLE = [
-  { elementType: 'geometry', stylers: [{ color: '#0B0B14' }] },
-  { elementType: 'labels.text.fill', stylers: [{ color: '#A1A1AA' }] },
+// ─── Constants ───────────────────────────────────────────────────────────────
+const VIEWPORT_DEBOUNCE_MS = 400;
+const EVENT_FOCUS_DELTA = 0.03;
+const MAX_MARKERS_RENDERED = 80;   // lower = stable on low-end devices
+const FETCH_HORIZON_DAYS = 60;
+const MAX_EVENTS_CACHE = 1500;
+const MAX_EVENT_CACHE_AGE_MS = 1000 * 60 * 25;
+
+// ─── Map styles ──────────────────────────────────────────────────────────────
+const DARK_MAP_STYLE = [
+  { elementType: 'geometry',         stylers: [{ color: '#0B0B14' }] },
+  { elementType: 'labels.text.fill', stylers: [{ color: '#9CA3AF' }] },
   { elementType: 'labels.text.stroke', stylers: [{ color: '#0B0B14' }] },
-  { featureType: 'poi', elementType: 'labels', stylers: [{ visibility: 'off' }] },
-  { featureType: 'road', elementType: 'geometry', stylers: [{ color: '#151528' }] },
-  { featureType: 'road', elementType: 'geometry.stroke', stylers: [{ color: '#232344' }] },
-  { featureType: 'road', elementType: 'labels.icon', stylers: [{ visibility: 'off' }] },
+  { featureType: 'poi',    elementType: 'labels', stylers: [{ visibility: 'off' }] },
+  { featureType: 'road',   elementType: 'geometry', stylers: [{ color: '#151528' }] },
+  { featureType: 'road',   elementType: 'geometry.stroke', stylers: [{ color: '#1E1E3A' }] },
+  { featureType: 'road',   elementType: 'labels.icon', stylers: [{ visibility: 'off' }] },
   { featureType: 'transit', elementType: 'labels', stylers: [{ visibility: 'off' }] },
-  { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#0A1A2B' }] },
+  { featureType: 'water',  elementType: 'geometry', stylers: [{ color: '#060D1A' }] },
+  { featureType: 'administrative', elementType: 'geometry.stroke', stylers: [{ color: '#2D2D5E' }] },
 ];
 
-const LIGHT_MAP_STYLE = [
-  { elementType: 'geometry', stylers: [{ color: '#F6F7FB' }] },
-  { elementType: 'labels.text.fill', stylers: [{ color: '#3F3F46' }] },
-  { elementType: 'labels.text.stroke', stylers: [{ color: '#F6F7FB' }] },
-  { featureType: 'poi', elementType: 'labels', stylers: [{ visibility: 'off' }] },
-  { featureType: 'road', elementType: 'geometry', stylers: [{ color: '#FFFFFF' }] },
-  { featureType: 'road', elementType: 'geometry.stroke', stylers: [{ color: '#E4E4E7' }] },
-  { featureType: 'road', elementType: 'labels.icon', stylers: [{ visibility: 'off' }] },
-  { featureType: 'transit', elementType: 'labels', stylers: [{ visibility: 'off' }] },
-  { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#DCEBFA' }] },
+// ─── Event type config ───────────────────────────────────────────────────────
+const EVENT_TYPES = [
+  { key: 'all',      label: 'Todo',      color: '#FFFFFF', Icon: Sparkles },
+  { key: 'party',    label: 'Fiesta',    color: '#A78BFA', Icon: Flame },
+  { key: 'concert',  label: 'Concierto', color: '#38BDF8', Icon: Music },
+  { key: 'festival', label: 'Festival',  color: '#FB923C', Icon: Sparkles },
+  { key: 'other',    label: 'Otro',      color: '#34D399', Icon: Tag },
 ];
 
-const ClusterBubble = memo(({ count, color }: { count: number; color: string }) => {
-  return (
-    <View style={[styles.clusterBubble, { borderColor: color }]}>
-      <Text style={styles.clusterText}>{count}</Text>
+function getEventColor(eventType?: string | null): string {
+  const t = String(eventType || '').toLowerCase();
+  if (t.includes('concert') || t.includes('concierto')) return '#38BDF8';
+  if (t.includes('festival')) return '#FB923C';
+  if (t.includes('party')   || t.includes('fiesta'))   return '#A78BFA';
+  if (t.includes('techno'))  return '#EC4899';
+  return '#34D399';
+}
+
+// ─── Error boundary ───────────────────────────────────────────────────────────
+class MapErrorBoundary extends Component<{ children: ReactNode; onError: () => void }, { hasError: boolean }> {
+  state = { hasError: false };
+  static getDerivedStateFromError() { return { hasError: true }; }
+  componentDidCatch(error: Error, info: { componentStack: string }) {
+    console.error('[PartyMap] 🔴 MapErrorBoundary caught error:', error?.message || error);
+    console.error('[PartyMap] 🔴 Stack trace:', error?.stack || '(no stack)');
+    console.error('[PartyMap] 🔴 Component stack:', info?.componentStack || '(no componentStack)');
+    this.props.onError();
+  }
+  render() {
+    if (this.state.hasError) return null;
+    return this.props.children;
+  }
+}
+
+// ─── Memoized marker components ───────────────────────────────────────────────
+const ClusterBubble = memo(({ count, color }: { count: number; color: string }) => (
+  <View style={[styles.clusterBubble, { borderColor: color + 'CC' }]}>
+    <View style={[styles.clusterInner, { backgroundColor: color + '22' }]}>
+      <Text style={[styles.clusterText, { color }]}>{count}</Text>
     </View>
-  );
-});
-
+  </View>
+));
 ClusterBubble.displayName = 'ClusterBubble';
 
-const EventDot = memo(({ color }: { color: string }) => {
+const EVENT_EMOJI: Record<string, string> = {
+  party: '🎉', fiesta: '🎉',
+  concert: '🎤', concierto: '🎤',
+  festival: '🎪',
+  techno: '🎛️',
+  other: '✨', otro: '✨',
+};
+function getEventEmoji(eventType?: string | null): string {
+  const t = String(eventType || '').toLowerCase();
+  for (const [k, v] of Object.entries(EVENT_EMOJI)) { if (t.includes(k)) return v; }
+  return '🎉';
+}
+
+const EventPin = memo(({ color, selected, eventType }: { color: string; selected: boolean; eventType?: string | null }) => {
+  const pulse = useRef(new RNAnimated.Value(0)).current;
+  useEffect(() => {
+    // Only animate pulse ring when selected — avoids 80 concurrent animation loops
+    if (!selected) { pulse.setValue(0); return; }
+    const anim = RNAnimated.loop(
+      RNAnimated.sequence([
+        RNAnimated.timing(pulse, { toValue: 1, duration: 1000, useNativeDriver: true }),
+        RNAnimated.timing(pulse, { toValue: 0, duration: 1000, useNativeDriver: true }),
+      ])
+    );
+    anim.start();
+    return () => anim.stop();
+  }, [pulse, selected]);
+
+  const pulseScale = pulse.interpolate({ inputRange: [0, 1], outputRange: [1, selected ? 1.7 : 1.55] });
+  const pulseOpacity = pulse.interpolate({ inputRange: [0, 0.6, 1], outputRange: [0.55, 0.15, 0] });
+  const emoji = getEventEmoji(eventType);
+  const scale = selected ? 1.25 : 1;
+
   return (
-    <View style={[styles.eventDot, { borderColor: color }]}>
-      <View style={[styles.eventDotInner, { backgroundColor: color }]} />
+    <View style={[styles.pinWrap, { transform: [{ scale }] }]}>
+      {/* Pulse ring */}
+      <RNAnimated.View style={[
+        styles.pinPulse,
+        { borderColor: color, transform: [{ scale: pulseScale }], opacity: pulseOpacity },
+      ]} />
+      {/* Glow halo */}
+      <View style={[styles.pinHalo, { backgroundColor: color + '30', shadowColor: color }]} />
+      {/* Main badge */}
+      <View style={[styles.pinBadge, { backgroundColor: '#111127', borderColor: selected ? color : color + '90', shadowColor: color }]}>
+        <View style={[styles.pinBadgeInner, { backgroundColor: color + '25' }]}>
+          <Text style={styles.pinEmoji}>{emoji}</Text>
+        </View>
+      </View>
+      {/* Tail */}
+      <View style={[styles.pinTailOuter, { borderTopColor: selected ? color : color + '90' }]} />
     </View>
   );
 });
+EventPin.displayName = 'EventPin';
 
-EventDot.displayName = 'EventDot';
-
-export function __test_filterMapEventIds(events: AppEvent[], _searchText: string, nowMs: number) {
-  const todayStart = new Date(nowMs);
-  todayStart.setHours(0, 0, 0, 0);
-  const todayStartMs = todayStart.getTime();
-  const maxHorizonMs = todayStartMs + 1000 * 60 * 60 * 24 * 180;
-  const q = '';
-
-  return (events || [])
-    .filter((e) => {
-      const raw = e.startsAt ? new Date(e.startsAt).getTime() : Number.NaN;
-      const fallback = new Date(`${e.date}T${e.time}`).getTime();
-      const startAt = Number.isFinite(raw) ? raw : fallback;
-      return Number.isFinite(startAt) && startAt >= todayStartMs && startAt <= maxHorizonMs;
-    })
-    .filter((e) => {
-      if (!e.venues) return false;
-      const lat = Number(e.venues.latitude);
-      const lng = Number(e.venues.longitude);
-      return Number.isFinite(lat) && Number.isFinite(lng);
-    })
-    .filter((e) => {
-      if (!q) return true;
-      return (
-        (e.title?.toLowerCase() || '').includes(q) ||
-        (e.location?.toLowerCase() || '').includes(q) ||
-        (e.description?.toLowerCase() || '').includes(q) ||
-        (e.eventType?.toLowerCase() || '').includes(q)
-      );
-    })
-    .map((e) => String(e.id));
-}
-
-export function __test_getFocusRegion(lat: number, lng: number) {
-  return { latitude: lat, longitude: lng, latitudeDelta: EVENT_FOCUS_DELTA, longitudeDelta: EVENT_FOCUS_DELTA };
-}
-
-export function __test_clusterForRegion(list: EventWithGeo[], r: Region, getColor: (eventType?: string | null) => string) {
-  const tryCluster = (stepMultiplier: number) => {
-    const latStep = Math.max(0.002, (r.latitudeDelta / 14) * stepMultiplier);
-    const lngStep = Math.max(0.002, (r.longitudeDelta / 14) * stepMultiplier);
-
+// ─── Clustering logic ─────────────────────────────────────────────────────────
+export function __test_clusterForRegion(
+  list: EventWithGeo[], r: Region,
+  getColor: (t?: string | null) => string,
+): ClusterItem[] {
+  const tryCluster = (mult: number) => {
+    const latStep = Math.max(0.003, (r.latitudeDelta / 12) * mult);
+    const lngStep = Math.max(0.003, (r.longitudeDelta / 12) * mult);
     const buckets = new Map<string, EventWithGeo[]>();
     for (const e of list) {
       const key = `${Math.floor(e._lat / latStep)}:${Math.floor(e._lng / lngStep)}`;
       const arr = buckets.get(key);
-      if (arr) arr.push(e);
-      else buckets.set(key, [e]);
+      if (arr) arr.push(e); else buckets.set(key, [e]);
     }
     return buckets;
   };
 
-  let stepMultiplier = 1;
-  let buckets = tryCluster(stepMultiplier);
-  while (buckets.size > MAX_MARKERS_RENDERED && stepMultiplier < 12) {
-    stepMultiplier *= 1.35;
-    buckets = tryCluster(stepMultiplier);
+  let mult = 1;
+  let buckets = tryCluster(mult);
+  while (buckets.size > MAX_MARKERS_RENDERED && mult < 16) {
+    mult *= 1.4;
+    buckets = tryCluster(mult);
   }
 
   const out: ClusterItem[] = [];
-  for (const [bucketKey, items] of buckets.entries()) {
+  for (const [bk, items] of buckets.entries()) {
     if (items.length === 1) {
       const e = items[0];
-      out.push({
-        kind: 'event',
-        key: `e:${e.id}`,
-        center: { latitude: e._lat, longitude: e._lng },
-        event: e,
-        color: getColor(e.eventType),
-      });
-      continue;
+      out.push({ kind: 'event', key: `e:${e.id}`, center: { latitude: e._lat, longitude: e._lng }, event: e, color: getColor(e.eventType) });
+    } else {
+      const avgLat = items.reduce((s, i) => s + i._lat, 0) / items.length;
+      const avgLng = items.reduce((s, i) => s + i._lng, 0) / items.length;
+      out.push({ kind: 'cluster', key: `c:${bk}`, center: { latitude: avgLat, longitude: avgLng }, count: items.length, color: getColor(items[0]?.eventType) });
     }
-    const avgLat = items.reduce((s, it) => s + it._lat, 0) / items.length;
-    const avgLng = items.reduce((s, it) => s + it._lng, 0) / items.length;
-    const first = items[0];
-    out.push({
-      kind: 'cluster',
-      key: `c:${bucketKey}`,
-      center: { latitude: avgLat, longitude: avgLng },
-      count: items.length,
-      color: getColor(first?.eventType),
-    });
   }
   return out.sort((a, b) => (b.kind === 'cluster' ? b.count : 1) - (a.kind === 'cluster' ? a.count : 1));
 }
 
+// ─── Main component ───────────────────────────────────────────────────────────
 export default function PartyMapScreen() {
   const { t } = useTranslation();
-  const insets = useSafeAreaInsets();
-  const tabBarHeight = useBottomTabBarHeight();
-  const scheme = useColorScheme();
-  const isDark = scheme !== 'light';
-  const { show: showDialog } = useAppDialog();
-  const params = useLocalSearchParams<{ q?: string }>();
+  const insets   = useSafeAreaInsets();
+  const tabBarH  = useBottomTabBarHeight();
+  const params   = useLocalSearchParams<{ q?: string }>();
 
-  const debugLog = useCallback((...args: any[]) => {
-    if (!__DEV__) return;
-    try {
-      console.log('[MAP]', ...args);
-    } catch {}
-  }, []);
-
-  const mapsApiKey = process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY;
-  const hasMapsKey =
-    Platform.OS !== 'android' || (Constants as any)?.appOwnership === 'expo' || (!!mapsApiKey && !mapsApiKey.includes('TU_CLAVE_API'));
-
-  const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL || '';
+  const supabaseUrl     = process.env.EXPO_PUBLIC_SUPABASE_URL     || '';
   const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '';
+  const mapsApiKey      = process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY;
+  const hasMapsKey      =
+    Platform.OS !== 'android' ||
+    (Constants as any)?.appOwnership === 'expo' ||
+    (!!mapsApiKey && !mapsApiKey.includes('TU_CLAVE_API'));
 
-  const mapRef = useRef<MapView>(null);
-  const [locationPermission, setLocationPermission] = useState<'loading' | 'granted' | 'denied'>('loading');
-  const [initialRegion, setInitialRegion] = useState<Region>({
-    latitude: 40.4168,
-    longitude: -3.7038,
-    latitudeDelta: 0.14,
-    longitudeDelta: 0.14,
-  });
-  const viewportRegionRef = useRef<Region>(initialRegion);
-  const viewportDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const geocodeSeqRef = useRef(0);
-  const [mapReady, setMapReady] = useState(false);
-  const [mapMountKey, setMapMountKey] = useState(0);
-  const [mapInitTimedOut, setMapInitTimedOut] = useState(false);
-  const mapRetryRef = useRef(false);
-  const mapEverReadyRef = useRef(false);
-  const mapInitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const [trackMarkers, setTrackMarkers] = useState(Platform.OS === 'android');
-  const trackMarkersTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const [visibleClusters, setVisibleClusters] = useState<ClusterItem[]>([]);
-  const lastClustersSignatureRef = useRef<string>('');
-  const allEventsRef = useRef<Map<string, (EventWithGeo & { _seenAt: number })>>(new Map());
-  const fetchAbortRef = useRef<AbortController | null>(null);
-  const fetchSeqRef = useRef(0);
-  const inFlightBboxKeyRef = useRef<string>('');
-  const lastSuccessBboxKeyRef = useRef<string>('');
-  const lastSuccessAtRef = useRef<number>(0);
-  const [selectedEvent, setSelectedEvent] = useState<EventWithGeo | null>(null);
+  // ── Map refs & state ────────────────────────────────────────────────────────
+  const mapRef             = useRef<MapView>(null);
+  const mapMountKeyRef     = useRef(0);
+  const [mapMountKey,   setMapMountKey]   = useState(0);
+  const [mapReady,      setMapReady]      = useState(false);
+  const [mapCrashed,    setMapCrashed]    = useState(false);
+  const mapEverReadyRef    = useRef(false);
+  const mapInitTimerRef    = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [mapTimedOut,   setMapTimedOut]   = useState(false);
 
-  const [searchText, setSearchText] = useState('');
-  const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
+  // ── Location ─────────────────────────────────────────────────────────────────
+  const [locPerm, setLocPerm] = useState<'loading' | 'granted' | 'denied'>('loading');
+  const DEFAULT_REGION: Region = { latitude: 40.4168, longitude: -3.7038, latitudeDelta: 0.12, longitudeDelta: 0.12 };
+  const [initialRegion, setInitialRegion] = useState<Region>(DEFAULT_REGION);
+  const viewportRef = useRef<Region>(DEFAULT_REGION);
 
+  // ── Events cache ─────────────────────────────────────────────────────────────
+  const allEventsRef    = useRef<Map<string, EventWithGeo & { _seenAt: number }>>(new Map());
+  const fetchAbortRef   = useRef<AbortController | null>(null);
+  const fetchSeqRef     = useRef(0);
+  const lastBboxKeyRef  = useRef('');
+  const lastFetchAtRef  = useRef(0);
+  const debounceRef     = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // ── Clusters & selection ──────────────────────────────────────────────────────
+  const [visibleClusters, setVisibleClusters]   = useState<ClusterItem[]>([]);
+  const lastSigRef = useRef('');
+  const [selectedEvent, setSelectedEvent]       = useState<EventWithGeo | null>(null);
+  const [selectedId,    setSelectedId]          = useState<string | null>(null);
+
+  // ── Search ───────────────────────────────────────────────────────────────────
+  const [searchText,       setSearchText]       = useState('');
+  const [searchFocused,    setSearchFocused]    = useState(false);
+  const [searchResults,    setSearchResults]    = useState<EventWithGeo[]>([]);
+  const [activeFilter,     setActiveFilter]     = useState('all');
+
+  // ── Animations ────────────────────────────────────────────────────────────────
   const cardOpacity = useSharedValue(0);
-  const cardY = useSharedValue(18);
+  const cardY       = useSharedValue(24);
+  const cardStyle   = useAnimatedStyle(() => ({
+    opacity:   cardOpacity.value,
+    transform: [{ translateY: cardY.value }],
+  }));
 
-  const cardStyle = useAnimatedStyle(() => ({ opacity: cardOpacity.value, transform: [{ translateY: cardY.value }] }), []);
+  // ─── Helpers ─────────────────────────────────────────────────────────────────
+  const clamp = (n: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, n));
 
-  const clamp = useCallback((n: number, min: number, max: number) => Math.min(max, Math.max(min, n)), []);
-
-  const sanitizeRegion = useCallback(
-    (r: Region): Region => {
-      const lat = Number(r?.latitude);
-      const lng = Number(r?.longitude);
-      const latDelta = Number(r?.latitudeDelta);
-      const lngDelta = Number(r?.longitudeDelta);
-
-      const safeLat = Number.isFinite(lat) ? clamp(lat, -85, 85) : 40.4168;
-      const safeLng = Number.isFinite(lng) ? clamp(lng, -180, 180) : -3.7038;
-      const safeLatDelta = Number.isFinite(latDelta) ? clamp(latDelta, 0.002, 2.0) : 0.14;
-      const safeLngDelta = Number.isFinite(lngDelta) ? clamp(lngDelta, 0.002, 2.0) : 0.14;
-
-      return { latitude: safeLat, longitude: safeLng, latitudeDelta: safeLatDelta, longitudeDelta: safeLngDelta };
-    },
-    [clamp]
-  );
+  const sanitizeRegion = useCallback((r: Region): Region => ({
+    latitude:      clamp(Number.isFinite(Number(r?.latitude))      ? Number(r.latitude)      : 40.4168, -85, 85),
+    longitude:     clamp(Number.isFinite(Number(r?.longitude))     ? Number(r.longitude)     : -3.7038, -180, 180),
+    latitudeDelta: clamp(Number.isFinite(Number(r?.latitudeDelta)) ? Number(r.latitudeDelta) : 0.12, 0.002, 2.5),
+    longitudeDelta:clamp(Number.isFinite(Number(r?.longitudeDelta))? Number(r.longitudeDelta): 0.12, 0.002, 2.5),
+  }), []);
 
   const haversineKm = useCallback((lat1: number, lon1: number, lat2: number, lon2: number) => {
-    const R = 6371;
-    const dLat = ((lat2 - lat1) * Math.PI) / 180;
-    const dLon = ((lon2 - lon1) * Math.PI) / 180;
-    const a =
-      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-      Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
-    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-    return R * c;
+    const R = 6371, dL = ((lat2 - lat1) * Math.PI) / 180, dO = ((lon2 - lon1) * Math.PI) / 180;
+    const a = Math.sin(dL/2)**2 + Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dO/2)**2;
+    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
   }, []);
 
-  const eventColor = useCallback((eventType?: string | null) => {
-    const tt = String(eventType || '').toLowerCase();
-    if (tt.includes('concert') || tt.includes('concierto')) return '#38BDF8';
-    if (tt.includes('festival')) return '#FB923C';
-    if (tt.includes('party') || tt.includes('fiesta')) return Colors.dark.primary;
-    if (tt.includes('techno')) return '#A78BFA';
-    return '#34D399';
-  }, []);
-
-  const formatPriceEUR = useCallback((raw: string) => {
+  const formatPrice = useCallback((raw: string) => {
     const n = Number(raw);
     if (!Number.isFinite(n)) return `${raw}€`;
-    return new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' }).format(n);
+    return n === 0 ? 'Gratis' : new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' }).format(n);
   }, []);
 
-  const withTimeout = useCallback(async <T,>(promise: Promise<T>, ms: number) => {
-    let timeoutId: ReturnType<typeof setTimeout> | null = null;
-    const timeoutPromise = new Promise<T>((_, reject) => {
-      timeoutId = setTimeout(() => reject(new Error('timeout')), ms);
-    });
+  const withTimeout = useCallback(<T,>(p: Promise<T>, ms: number): Promise<T> => {
+    let id: ReturnType<typeof setTimeout>;
+    return Promise.race([p, new Promise<T>((_, rej) => { id = setTimeout(() => rej(new Error('timeout')), ms); })]).finally(() => clearTimeout(id));
+  }, []);
+
+  // ─── Search matching ─────────────────────────────────────────────────────────
+  const updateSearchResults = useCallback((text: string, filter: string) => {
+    const q = text.trim().toLowerCase();
+    const all = Array.from(allEventsRef.current.values());
+    if (!q && filter === 'all') { setSearchResults([]); return; }
+
+    const filtered = all.filter(e => {
+      const typeMatch = filter === 'all' || (e.eventType || 'party').toLowerCase().includes(filter);
+      const textMatch = !q || [e.title, e.location, e.description, e.eventType]
+        .some(f => (f || '').toLowerCase().includes(q));
+      return typeMatch && textMatch;
+    }).sort((a, b) => a._distanceKm - b._distanceKm).slice(0, 12);
+
+    setSearchResults(filtered);
+  }, []);
+
+  useEffect(() => {
+    updateSearchResults(searchText, activeFilter);
+  }, [searchText, activeFilter, updateSearchResults]);
+
+  // ─── Clusters ────────────────────────────────────────────────────────────────
+  const computeClusters = useCallback((region: Region) => {
+    const all = Array.from(allEventsRef.current.values());
+    const pad = 0.6;
+    const minLat = region.latitude - region.latitudeDelta * (0.5 + pad);
+    const maxLat = region.latitude + region.latitudeDelta * (0.5 + pad);
+    const minLng = region.longitude - region.longitudeDelta * (0.5 + pad);
+    const maxLng = region.longitude + region.longitudeDelta * (0.5 + pad);
+
+    // Apply active filter
+    const visible = all.filter(e =>
+      e._lat >= minLat && e._lat <= maxLat &&
+      e._lng >= minLng && e._lng <= maxLng &&
+      (activeFilter === 'all' || (e.eventType || 'party').toLowerCase().includes(activeFilter))
+    );
+
+    const clustered = __test_clusterForRegion(visible, region, getEventColor);
+    const sig = clustered.slice(0, 60).map(c => c.kind === 'cluster' ? `${c.key}:${c.count}` : c.key).join('|');
+    if (sig === lastSigRef.current) return;
+    lastSigRef.current = sig;
+    setVisibleClusters(clustered);
+  }, [activeFilter]);
+
+  // ─── Fetch ───────────────────────────────────────────────────────────────────
+  const fetchForRegion = useCallback(async (region: Region) => {
+    if (!supabaseUrl || !supabaseAnonKey) return;
+    const safe = sanitizeRegion(region);
+    const pad = 0.85;
+    const minLat = safe.latitude - safe.latitudeDelta * (0.5 + pad);
+    const maxLat = safe.latitude + safe.latitudeDelta * (0.5 + pad);
+    const minLng = safe.longitude - safe.longitudeDelta * (0.5 + pad);
+    const maxLng = safe.longitude + safe.longitudeDelta * (0.5 + pad);
+
+    const bboxKey = `${minLat.toFixed(3)}|${maxLat.toFixed(3)}|${minLng.toFixed(3)}|${maxLng.toFixed(3)}`;
+    if (bboxKey === lastBboxKeyRef.current && Date.now() - lastFetchAtRef.current < 12000) return;
+
+    if (fetchAbortRef.current) fetchAbortRef.current.abort();
+    const ctrl = new AbortController();
+    fetchAbortRef.current = ctrl;
+    const seq = ++fetchSeqRef.current;
+    lastBboxKeyRef.current = bboxKey;
+
     try {
-      return await Promise.race([promise, timeoutPromise]);
-    } finally {
-      if (timeoutId) clearTimeout(timeoutId);
-    }
-  }, []);
-
-  const bumpMarkerTracking = useCallback(() => {
-    if (Platform.OS !== 'android') return;
-    setTrackMarkers(true);
-    if (trackMarkersTimeoutRef.current) clearTimeout(trackMarkersTimeoutRef.current);
-    trackMarkersTimeoutRef.current = setTimeout(() => setTrackMarkers(false), 650);
-  }, []);
-
-  useEffect(() => {
-    return () => {
-      if (trackMarkersTimeoutRef.current) clearTimeout(trackMarkersTimeoutRef.current);
-    };
-  }, []);
-
-  const clusterForRegion = useCallback(
-    (list: EventWithGeo[], r: Region): ClusterItem[] => {
-      return __test_clusterForRegion(list, r, eventColor);
-    },
-    [eventColor]
-  );
-
-  const computeVisibleClusters = useCallback(
-    (regionForViewport: Region) => {
-      const list = Array.from(allEventsRef.current.values());
-
-      const latPad = regionForViewport.latitudeDelta * 0.65;
-      const lngPad = regionForViewport.longitudeDelta * 0.65;
-      const minLat = regionForViewport.latitude - regionForViewport.latitudeDelta / 2 - latPad;
-      const maxLat = regionForViewport.latitude + regionForViewport.latitudeDelta / 2 + latPad;
-      const minLng = regionForViewport.longitude - regionForViewport.longitudeDelta / 2 - lngPad;
-      const maxLng = regionForViewport.longitude + regionForViewport.longitudeDelta / 2 + lngPad;
-      const visible = list.filter((e) => e._lat >= minLat && e._lat <= maxLat && e._lng >= minLng && e._lng <= maxLng);
-
-      const clustered = clusterForRegion(visible, regionForViewport);
-      const signature = clustered
-        .slice(0, 100)
-        .map((c) => (c.kind === 'cluster' ? `${c.key}:${c.count}` : c.key))
-        .join('|');
-
-      if (signature === lastClustersSignatureRef.current) return;
-      lastClustersSignatureRef.current = signature;
-      setVisibleClusters(clustered);
-      debugLog('clusters', { visible: visible.length, clustered: clustered.length, cacheSize: allEventsRef.current.size });
-      bumpMarkerTracking();
-    },
-    [bumpMarkerTracking, clusterForRegion, debugLog]
-  );
-
-  const bboxForRegion = useCallback((r: Region) => {
-    const latPad = r.latitudeDelta * 0.85;
-    const lngPad = r.longitudeDelta * 0.85;
-    const minLat = r.latitude - r.latitudeDelta / 2 - latPad;
-    const maxLat = r.latitude + r.latitudeDelta / 2 + latPad;
-    const minLng = r.longitude - r.longitudeDelta / 2 - lngPad;
-    const maxLng = r.longitude + r.longitudeDelta / 2 + lngPad;
-    return { minLat, maxLat, minLng, maxLng };
-  }, []);
-
-  const mergeRemoteEvents = useCallback(
-    (remote: any[], center: { latitude: number; longitude: number }) => {
-      const nowMs = Date.now();
-      const localeTag = 'es-ES';
-      const pad2 = (n: number) => String(n).padStart(2, '0');
-
-      let changed = false;
-      for (const raw of remote || []) {
-        const id = String(raw?.id || '');
-        if (!id) continue;
-        const venue = raw?.venues || {};
-        const lat = Number(venue.latitude);
-        const lng = Number(venue.longitude);
-        if (!Number.isFinite(lat) || !Number.isFinite(lng)) continue;
-
-        const eventDate = new Date(raw.event_date);
-        const localDate = `${eventDate.getFullYear()}-${pad2(eventDate.getMonth() + 1)}-${pad2(eventDate.getDate())}`;
-        const time = eventDate.toLocaleTimeString(localeTag, { hour: '2-digit', minute: '2-digit' });
-
-        const mapped: EventWithGeo = {
-          id,
-          title: String(raw.title || ''),
-          startsAt: raw.event_date,
-          updatedAt: raw.updated_at || null,
-          date: localDate,
-          time,
-          location: String(venue.name || 'Ubicación desconocida'),
-          price: String(raw.ticket_price ?? ''),
-          capacity: Number(raw.available_tickets ?? 0),
-          sold: Number(raw.sold_tickets ?? 0),
-          imageUrl: String(raw.poster_url || ''),
-          venuePlanUrl: raw.venue_plan_url || undefined,
-          description: String(raw.description || ''),
-          theme: raw.theme ?? null,
-          ageRestriction: raw.age_restriction != null ? String(raw.age_restriction) : undefined,
-          dressCode: raw.dress_code ?? null,
-          eventType: String(raw.event_type ?? '').trim() || 'party',
-          creatorId: raw.creator_id ?? undefined,
-          ticketTypes: [],
-          venues: { latitude: lat, longitude: lng, name: String(venue.name || '') },
-          _lat: lat,
-          _lng: lng,
-          _distanceKm: haversineKm(center.latitude, center.longitude, lat, lng),
-        } as any;
-
-        const prev = allEventsRef.current.get(id);
-        const prevUpdated = prev?.updatedAt ?? null;
-        const nextUpdated = mapped.updatedAt ?? null;
-        const shouldReplace = !prev || (nextUpdated && prevUpdated !== nextUpdated);
-
-        if (shouldReplace) {
-          allEventsRef.current.set(id, { ...mapped, _seenAt: nowMs });
-          changed = true;
-        } else if (prev) {
-          prev._seenAt = nowMs;
-        }
-      }
-
-      if (changed && selectedEventId) {
-        const cur = allEventsRef.current.get(selectedEventId);
-        if (cur) setSelectedEvent(cur);
-      }
-    },
-    [haversineKm, selectedEventId]
-  );
-
-  const pruneAllEvents = useCallback((regionForViewport: Region) => {
-    const maxKeep = MAX_EVENTS_CACHE;
-    const now = Date.now();
-
-    for (const [id, e] of allEventsRef.current.entries()) {
-      const seen = Number((e as any)?._seenAt || 0);
-      if (seen && now - seen > MAX_EVENT_CACHE_AGE_MS) {
-        allEventsRef.current.delete(id);
-      }
-    }
-
-    if (allEventsRef.current.size <= maxKeep) return;
-    const { minLat, maxLat, minLng, maxLng } = bboxForRegion(regionForViewport);
-    const farMinLat = minLat - regionForViewport.latitudeDelta * 3;
-    const farMaxLat = maxLat + regionForViewport.latitudeDelta * 3;
-    const farMinLng = minLng - regionForViewport.longitudeDelta * 3;
-    const farMaxLng = maxLng + regionForViewport.longitudeDelta * 3;
-
-    const candidates: [string, number][] = [];
-    for (const [id, e] of allEventsRef.current.entries()) {
-      const far =
-        e._lat < farMinLat || e._lat > farMaxLat || e._lng < farMinLng || e._lng > farMaxLng;
-      if (!far) continue;
-      candidates.push([id, e._seenAt || 0]);
-    }
-    candidates.sort((a, b) => a[1] - b[1]);
-    for (const [id] of candidates) {
-      allEventsRef.current.delete(id);
-      if (allEventsRef.current.size <= maxKeep) break;
-    }
-
-    if (allEventsRef.current.size > maxKeep) {
-      const all = Array.from(allEventsRef.current.entries()).sort((a, b) => (a[1]._seenAt || 0) - (b[1]._seenAt || 0));
-      for (const [id] of all) {
-        allEventsRef.current.delete(id);
-        if (allEventsRef.current.size <= maxKeep) break;
-      }
-    }
-  }, [bboxForRegion]);
-
-  const fetchEventsForRegion = useCallback(
-    async (regionForViewport: Region) => {
-      const safe = sanitizeRegion(regionForViewport);
-      const { minLat, maxLat, minLng, maxLng } = bboxForRegion(safe);
-      const todayStart = new Date();
-      todayStart.setHours(0, 0, 0, 0);
+      const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0);
       const fromIso = todayStart.toISOString();
-      const toIso = new Date(todayStart.getTime() + 1000 * 60 * 60 * 24 * FETCH_HORIZON_DAYS).toISOString();
+      const toIso   = new Date(todayStart.getTime() + 86400000 * FETCH_HORIZON_DAYS).toISOString();
+      const sel = 'id,title,description,poster_url,event_date,ticket_price,available_tickets,sold_tickets,event_type,creator_id,updated_at,venues!inner(name,latitude,longitude)';
+      const url =
+        `${supabaseUrl.replace(/\/$/, '')}/rest/v1/events` +
+        `?select=${encodeURIComponent(sel)}&order=event_date.asc` +
+        `&event_date=gte.${encodeURIComponent(fromIso)}&event_date=lte.${encodeURIComponent(toIso)}` +
+        `&venues.latitude=gte.${minLat}&venues.latitude=lte.${maxLat}` +
+        `&venues.longitude=gte.${minLng}&venues.longitude=lte.${maxLng}`;
 
-      const bboxKey = `${minLat.toFixed(4)}|${maxLat.toFixed(4)}|${minLng.toFixed(4)}|${maxLng.toFixed(4)}|${safe.latitudeDelta.toFixed(4)}`;
-      if (bboxKey === inFlightBboxKeyRef.current) return;
-      if (bboxKey === lastSuccessBboxKeyRef.current && Date.now() - lastSuccessAtRef.current < 15000) return;
+      const res = await withTimeout(fetch(url, { signal: ctrl.signal, headers: { apikey: supabaseAnonKey, Authorization: `Bearer ${supabaseAnonKey}` } }), 10000);
+      if (seq !== fetchSeqRef.current) return;
+      if (!res.ok) return;
+      const remote = await res.json();
+      if (!Array.isArray(remote)) return;
 
-      if (fetchAbortRef.current) fetchAbortRef.current.abort();
-      const ctrl = new AbortController();
-      fetchAbortRef.current = ctrl;
-      const seq = ++fetchSeqRef.current;
-      inFlightBboxKeyRef.current = bboxKey;
-
-      try {
-        if (!supabaseUrl || !supabaseAnonKey) throw new Error('missing_supabase_env');
-        const base = supabaseUrl.replace(/\/$/, '');
-        const select =
-          'id,title,description,poster_url,venue_plan_url,event_date,ticket_price,available_tickets,sold_tickets,dress_code,age_restriction,theme,event_type,creator_id,updated_at,venues!inner(name,latitude,longitude)';
-        const url =
-          `${base}/rest/v1/events` +
-          `?select=${encodeURIComponent(select)}` +
-          `&order=${encodeURIComponent('event_date.asc')}` +
-          `&event_date=${encodeURIComponent(`gte.${fromIso}`)}` +
-          `&event_date=${encodeURIComponent(`lte.${toIso}`)}` +
-          `&venues.latitude=${encodeURIComponent(`gte.${minLat}`)}` +
-          `&venues.latitude=${encodeURIComponent(`lte.${maxLat}`)}` +
-          `&venues.longitude=${encodeURIComponent(`gte.${minLng}`)}` +
-          `&venues.longitude=${encodeURIComponent(`lte.${maxLng}`)}`;
-
-        debugLog('fetch:start', { bboxKey, fromIso, toIso });
-        const res = await withTimeout(
-          fetch(url, {
-            method: 'GET',
-            signal: ctrl.signal,
-            headers: {
-              apikey: supabaseAnonKey,
-              Authorization: `Bearer ${supabaseAnonKey}`,
-            },
-          }),
-          12000
-        );
-        if (seq !== fetchSeqRef.current) return;
-        if (!res.ok) throw new Error(`http_${res.status}`);
-        const remote = await res.json();
-        debugLog('fetch:done', { bboxKey, count: Array.isArray(remote) ? remote.length : 0 });
-        if (!Array.isArray(remote)) return;
-        mergeRemoteEvents(remote, { latitude: safe.latitude, longitude: safe.longitude });
-        lastSuccessBboxKeyRef.current = bboxKey;
-        lastSuccessAtRef.current = Date.now();
-        pruneAllEvents(safe);
-        computeVisibleClusters(safe);
-      } catch (e: any) {
-        if (e?.name === 'AbortError') return;
-        debugLog('fetch:error', { bboxKey, message: String(e?.message || e) });
-        computeVisibleClusters(safe);
-      } finally {
-        if (inFlightBboxKeyRef.current === bboxKey) inFlightBboxKeyRef.current = '';
+      const now = Date.now();
+      const pad2 = (n: number) => String(n).padStart(2, '0');
+      for (const raw of remote) {
+        const id = String(raw?.id || ''); if (!id) continue;
+        const venue = raw?.venues || {};
+        const lat = Number(venue.latitude), lng = Number(venue.longitude);
+        if (!Number.isFinite(lat) || !Number.isFinite(lng)) continue;
+        const d = new Date(raw.event_date);
+        const prev = allEventsRef.current.get(id);
+        if (!prev || (raw.updated_at && prev.updatedAt !== raw.updated_at)) {
+          allEventsRef.current.set(id, {
+            id, title: String(raw.title || ''),
+            startsAt: raw.event_date, updatedAt: raw.updated_at || null,
+            date: `${d.getFullYear()}-${pad2(d.getMonth()+1)}-${pad2(d.getDate())}`,
+            time: `${pad2(d.getHours())}:${pad2(d.getMinutes())}`,
+            location: String(venue.name || 'Sin ubicación'),
+            price: String(raw.ticket_price ?? '0'),
+            capacity: Number(raw.available_tickets ?? 0),
+            sold: Number(raw.sold_tickets ?? 0),
+            imageUrl: String(raw.poster_url || ''),
+            description: String(raw.description || ''),
+            eventType: String(raw.event_type || 'party').trim(),
+            creatorId: raw.creator_id,
+            ticketTypes: [],
+            venues: { latitude: lat, longitude: lng, name: String(venue.name || '') },
+            _lat: lat, _lng: lng,
+            _distanceKm: haversineKm(safe.latitude, safe.longitude, lat, lng),
+            _seenAt: now,
+          } as any);
+        } else { prev._seenAt = now; }
       }
-    },
-    [bboxForRegion, computeVisibleClusters, debugLog, mergeRemoteEvents, pruneAllEvents, sanitizeRegion, supabaseAnonKey, supabaseUrl, withTimeout]
-  );
 
-  useEffect(() => {
-    debugLog('mount');
-    return () => debugLog('unmount');
-  }, [debugLog]);
+      // Prune old entries
+      const cutoff = now - MAX_EVENT_CACHE_AGE_MS;
+      for (const [id, e] of allEventsRef.current.entries()) {
+        if ((e as any)._seenAt < cutoff) allEventsRef.current.delete(id);
+      }
+      if (allEventsRef.current.size > MAX_EVENTS_CACHE) {
+        const sorted = [...allEventsRef.current.entries()].sort((a, b) => (a[1] as any)._seenAt - (b[1] as any)._seenAt);
+        sorted.slice(0, sorted.length - MAX_EVENTS_CACHE).forEach(([id]) => allEventsRef.current.delete(id));
+      }
 
+      lastFetchAtRef.current = now;
+      computeClusters(safe);
+      updateSearchResults(searchText, activeFilter);
+    } catch (e: any) {
+      if (e?.name !== 'AbortError') {
+        console.error('[PartyMap] 🔴 Fetch error:', e?.message || e);
+        computeClusters(safe);
+      }
+    }
+  }, [supabaseUrl, supabaseAnonKey, sanitizeRegion, withTimeout, haversineKm, computeClusters, updateSearchResults, searchText, activeFilter]);
+
+  // ─── Location permission ──────────────────────────────────────────────────────
   useEffect(() => {
     let mounted = true;
     (async () => {
       try {
-        const permission = await withTimeout(Location.requestForegroundPermissionsAsync(), 6000);
+        const perm = await withTimeout(Location.requestForegroundPermissionsAsync(), 6000);
         if (!mounted) return;
-        if (permission.status !== 'granted') {
-          setLocationPermission('denied');
-          return;
-        }
-        setLocationPermission('granted');
+        if (perm.status !== 'granted') { setLocPerm('denied'); return; }
+        setLocPerm('granted');
         const pos = await withTimeout(Location.getCurrentPositionAsync({}), 8000);
         if (!mounted) return;
         const next = sanitizeRegion({ latitude: pos.coords.latitude, longitude: pos.coords.longitude, latitudeDelta: 0.10, longitudeDelta: 0.10 });
-        viewportRegionRef.current = next;
+        viewportRef.current = next;
         setInitialRegion(next);
-        try {
-          mapRef.current?.animateToRegion(next, 700);
-        } catch {}
-      } catch {
-        if (mounted) setLocationPermission('denied');
-      }
+        try { mapRef.current?.animateToRegion(next, 600); } catch {}
+      } catch { if (mounted) setLocPerm('denied'); }
     })();
-    return () => {
-      mounted = false;
-    };
+    return () => { mounted = false; };
   }, [sanitizeRegion, withTimeout]);
 
-  const handleRegionChangeComplete = useCallback((r: Region) => {
-    const next = sanitizeRegion(r);
-    viewportRegionRef.current = next;
-    if (viewportDebounceRef.current) clearTimeout(viewportDebounceRef.current);
-    viewportDebounceRef.current = setTimeout(() => {
-      computeVisibleClusters(next);
-      void fetchEventsForRegion(next);
-    }, VIEWPORT_DEBOUNCE_MS);
-  }, [computeVisibleClusters, fetchEventsForRegion, sanitizeRegion]);
-
+  // ─── Map init timeout ─────────────────────────────────────────────────────────
   useEffect(() => {
-    return () => {
-      if (viewportDebounceRef.current) clearTimeout(viewportDebounceRef.current);
-    };
-  }, []);
-
-  useEffect(() => {
-    return () => {
-      if (fetchAbortRef.current) fetchAbortRef.current.abort();
-    };
-  }, []);
-
-  useEffect(() => {
-    if (locationPermission === 'loading') return;
-    if (!hasMapsKey) return;
-    setMapInitTimedOut(false);
+    if (locPerm === 'loading' || !hasMapsKey) return;
     if (mapEverReadyRef.current) return;
-    if (mapInitTimerRef.current) clearTimeout(mapInitTimerRef.current);
     mapInitTimerRef.current = setTimeout(() => {
-      setMapInitTimedOut(true);
-      if (!mapRetryRef.current) {
-        mapRetryRef.current = true;
-        setMapMountKey((k) => k + 1);
+      if (!mapEverReadyRef.current) {
+        console.warn('[PartyMap] ⏱ Map never fired onMapReady after 14s — remounting (key:', mapMountKeyRef.current + 1, '). Platform:', Platform.OS, 'hasMapsKey:', hasMapsKey);
+        setMapTimedOut(true);
+        setMapCrashed(false);
+        setMapMountKey(k => { mapMountKeyRef.current = k + 1; return k + 1; });
       }
-    }, 12000);
-    return () => {
-      if (mapInitTimerRef.current) clearTimeout(mapInitTimerRef.current);
-    };
-  }, [hasMapsKey, locationPermission, mapMountKey]);
+    }, 14000);
+    return () => { if (mapInitTimerRef.current) clearTimeout(mapInitTimerRef.current); };
+  }, [locPerm, hasMapsKey, mapMountKey]);
 
   useEffect(() => {
     if (!mapReady) return;
-    debugLog('ready');
     mapEverReadyRef.current = true;
+    setMapTimedOut(false);
     if (mapInitTimerRef.current) clearTimeout(mapInitTimerRef.current);
-    setMapInitTimedOut(false);
-  }, [debugLog, mapReady]);
+    computeClusters(viewportRef.current);
+    void fetchForRegion(viewportRef.current);
+  }, [mapReady, computeClusters, fetchForRegion]);
 
-  useEffect(() => {
-    if (!mapReady) return;
-    computeVisibleClusters(viewportRegionRef.current);
-    void fetchEventsForRegion(viewportRegionRef.current);
-  }, [computeVisibleClusters, fetchEventsForRegion, mapReady]);
+  // ─── Region change ────────────────────────────────────────────────────────────
+  const onRegionChangeComplete = useCallback((r: Region) => {
+    const next = sanitizeRegion(r);
+    viewportRef.current = next;
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => {
+      computeClusters(next);
+      void fetchForRegion(next);
+    }, VIEWPORT_DEBOUNCE_MS);
+  }, [computeClusters, fetchForRegion, sanitizeRegion]);
 
-  useEffect(() => {
-    if (selectedEventId) return;
-    if (!selectedEvent) return;
-    setSelectedEvent(null);
-  }, [selectedEvent, selectedEventId]);
-
+  // ─── Selection animation ──────────────────────────────────────────────────────
   useEffect(() => {
     if (!selectedEvent) {
-      cardOpacity.value = withTiming(0, { duration: 180 });
-      cardY.value = withTiming(18, { duration: 180 });
-      return;
+      cardOpacity.value = withTiming(0, { duration: 160 });
+      cardY.value       = withTiming(24, { duration: 160 });
+    } else {
+      cardOpacity.value = withTiming(1, { duration: 240 });
+      cardY.value       = withSpring(0, { damping: 20, stiffness: 280, mass: 0.8 });
     }
-    cardOpacity.value = 0;
-    cardY.value = 18;
-    cardOpacity.value = withTiming(1, { duration: 220 });
-    cardY.value = withSpring(0, { damping: 18, stiffness: 260, mass: 0.9 });
-  }, [cardOpacity, cardY, selectedEvent]);
+  }, [selectedEvent, cardOpacity, cardY]);
 
-  const applyGeocode = useCallback(
-    async (q: string) => {
-      const text = q.trim();
-      if (!text) return;
-      Keyboard.dismiss();
-      const reqId = ++geocodeSeqRef.current;
-      try {
-        const hits = await withTimeout(Location.geocodeAsync(text), 8000);
-        if (reqId !== geocodeSeqRef.current) return;
-        if (!hits?.length) {
-          showDialog({ title: t('home.location_not_found_title'), message: t('home.location_not_found_body') });
-          return;
-        }
-        const hit = hits[0];
-        const next = sanitizeRegion({ latitude: hit.latitude, longitude: hit.longitude, latitudeDelta: 0.14, longitudeDelta: 0.14 });
-        viewportRegionRef.current = next;
-        try {
-          mapRef.current?.animateToRegion(next, 850);
-        } catch {}
-        setSelectedEventId(null);
-        setSelectedEvent(null);
-        computeVisibleClusters(next);
-        void fetchEventsForRegion(next);
-      } catch {
-        showDialog({ title: t('common.error'), message: t('home.search_error') });
-      }
-    },
-    [computeVisibleClusters, fetchEventsForRegion, sanitizeRegion, showDialog, t, withTimeout]
-  );
+  // ─── Focus on event ───────────────────────────────────────────────────────────
+  const focusOnEvent = useCallback((e: EventWithGeo) => {
+    setSelectedId(e.id);
+    setSelectedEvent(e);
+    setSearchFocused(false);
+    Keyboard.dismiss();
+    const next = sanitizeRegion({ latitude: e._lat, longitude: e._lng, latitudeDelta: EVENT_FOCUS_DELTA, longitudeDelta: EVENT_FOCUS_DELTA });
+    try { mapRef.current?.animateToRegion(next, 650); } catch {}
+  }, [sanitizeRegion]);
 
+  // ─── Geocode search ───────────────────────────────────────────────────────────
+  const geocodeSearch = useCallback(async (q: string) => {
+    const text = q.trim();
+    if (!text) return;
+    Keyboard.dismiss();
+    setSearchFocused(false);
+    try {
+      const hits = await withTimeout(Location.geocodeAsync(text), 8000);
+      if (!hits?.length) return;
+      const next = sanitizeRegion({ latitude: hits[0].latitude, longitude: hits[0].longitude, latitudeDelta: 0.12, longitudeDelta: 0.12 });
+      viewportRef.current = next;
+      try { mapRef.current?.animateToRegion(next, 800); } catch {}
+      computeClusters(next);
+      void fetchForRegion(next);
+    } catch {}
+  }, [sanitizeRegion, computeClusters, fetchForRegion, withTimeout]);
+
+  // ─── Deep-link q param ───────────────────────────────────────────────────────
   useEffect(() => {
     const q = String(params?.q || '').trim();
     if (!q) return;
     setSearchText(q);
-    void applyGeocode(q);
-  }, [applyGeocode, params?.q]);
+    void geocodeSearch(q);
+  }, [params?.q, geocodeSearch]);
 
-  const focusOnEvent = useCallback(
-    (e: EventWithGeo) => {
-      setSelectedEventId(e.id);
-      setSelectedEvent(e);
-      bumpMarkerTracking();
-      const next = sanitizeRegion(__test_getFocusRegion(e._lat, e._lng));
-      try {
-        mapRef.current?.animateToRegion(next, 700);
-      } catch {}
-      Keyboard.dismiss();
-    },
-    [bumpMarkerTracking, sanitizeRegion]
-  );
+  // ─── Global error logger (scoped to this screen mount) ───────────────────────
+  useEffect(() => {
+    const prev = (global as any).ErrorUtils?.getGlobalHandler?.();
+    (global as any).ErrorUtils?.setGlobalHandler?.((error: Error, isFatal?: boolean) => {
+      console.error(`[PartyMap] 🔴 GLOBAL JS ERROR (fatal=${isFatal}):`, error?.message || error);
+      console.error('[PartyMap] 🔴 Global error stack:', error?.stack || '(no stack)');
+      if (prev) prev(error, isFatal);
+    });
+    console.log('[PartyMap] ✅ Screen mounted. Platform:', Platform.OS, '| hasMapsKey:', hasMapsKey);
+    return () => {
+      console.log('[PartyMap] 🔕 Screen unmounting — restoring error handler');
+      if (prev) (global as any).ErrorUtils?.setGlobalHandler?.(prev);
+    };
+  }, [hasMapsKey]);
+
+  // ─── Cleanup ──────────────────────────────────────────────────────────────────
+  useEffect(() => () => {
+    if (debounceRef.current)  clearTimeout(debounceRef.current);
+    if (fetchAbortRef.current) fetchAbortRef.current.abort();
+  }, []);
+
+  // ─── Recompute on filter change ───────────────────────────────────────────────
+  useEffect(() => {
+    computeClusters(viewportRef.current);
+  }, [activeFilter, computeClusters]);
+
+  // ─── Render ───────────────────────────────────────────────────────────────────
+  const showResults = searchFocused && (searchText.trim().length > 0 || activeFilter !== 'all');
 
   return (
     <View style={styles.container}>
       <StatusBar barStyle="light-content" />
-      <LinearGradient colors={[Colors.dark.background, '#12081C', Colors.dark.background]} style={StyleSheet.absoluteFill} />
 
-      <View pointerEvents="box-none" style={[styles.topOverlay, { paddingTop: Math.max(10, insets.top) }]}>
-        <GlassView intensity={16} style={styles.searchBar} contentContainerStyle={styles.searchBarContent}>
-          <Search size={18} color={Colors.dark.textSecondary} />
-          <TextInput
-            value={searchText}
-            onChangeText={setSearchText}
-            placeholder="Ciudad, barrio, calle…"
-            placeholderTextColor={Colors.dark.textSecondary}
-            autoCorrect={false}
-            autoCapitalize="words"
-            returnKeyType="search"
-            onSubmitEditing={() => void applyGeocode(searchText)}
-            style={styles.searchInput}
-          />
-          {searchText.trim().length ? (
-            <Pressable hitSlop={10} onPress={() => setSearchText('')} style={({ pressed }) => [{ opacity: pressed ? 0.7 : 0.9 }]}>
-              <X size={18} color={Colors.dark.textSecondary} />
-            </Pressable>
-          ) : null}
-        </GlassView>
-      </View>
-
-      <View style={styles.mapContainer}>
-        {locationPermission === 'loading' ? (
-          <View style={styles.loading}>
+      {/* ── Map layer ── */}
+      <View style={StyleSheet.absoluteFill}>
+        {locPerm === 'loading' ? (
+          <View style={styles.center}>
             <DiscoLoader size={74} />
-            <Text style={styles.loadingText}>{t('common.loading')}</Text>
+            <Text style={styles.loadingTxt}>Cargando mapa…</Text>
           </View>
         ) : !hasMapsKey ? (
-          <View style={styles.loading}>
-            <GlassView intensity={18} style={styles.errorCard} contentContainerStyle={styles.errorCardContent}>
-              <Text style={styles.errorTitle}>{t('home.map_unavailable_title')}</Text>
-              <Text style={styles.errorBody}>{t('home.map_unavailable_body')}</Text>
-            </GlassView>
+          <View style={styles.center}>
+            <Text style={styles.errTitle}>Mapa no disponible</Text>
+          </View>
+        ) : mapCrashed ? (
+          <View style={styles.center}>
+            <Text style={styles.errTitle}>Error al cargar el mapa</Text>
+            <TouchableOpacity onPress={() => { setMapCrashed(false); setMapReady(false); setMapMountKey(k => k + 1); }} style={styles.retryBtn}>
+              <Text style={styles.retryTxt}>Reintentar</Text>
+            </TouchableOpacity>
           </View>
         ) : (
-          <MapView
-            key={`map:${mapMountKey}`}
-            ref={mapRef}
-            provider={Platform.OS === 'android' ? PROVIDER_GOOGLE : undefined}
-            style={StyleSheet.absoluteFillObject}
-            initialRegion={initialRegion}
-            onMapReady={() => setMapReady(true)}
-            onMapLoaded={() => setMapReady(true)}
-            onRegionChangeComplete={handleRegionChangeComplete}
-            showsUserLocation={locationPermission === 'granted'}
-            showsMyLocationButton={false}
-            rotateEnabled={false}
-            pitchEnabled={false}
-            toolbarEnabled={false}
-            moveOnMarkerPress={false}
-            showsCompass={false}
-            loadingEnabled={false}
-            mapType={Platform.OS === 'ios' ? ((isDark ? 'mutedStandard' : 'standard') as any) : ('standard' as any)}
-            customMapStyle={Platform.OS === 'android' ? ((isDark ? MUTED_MAP_STYLE : LIGHT_MAP_STYLE) as any) : undefined}
-          >
-            {mapReady ? visibleClusters.map((c) => {
-              if (c.kind === 'cluster') {
+          <MapErrorBoundary onError={() => {
+            console.error('[PartyMap] 🔴 MapErrorBoundary triggered onError — marking crashed. mountKey:', mapMountKeyRef.current);
+            setMapCrashed(true); setMapReady(false);
+          }}>
+            <MapView
+              key={`map:${mapMountKey}`}
+              ref={mapRef}
+              provider={Platform.OS === 'android' ? PROVIDER_GOOGLE : undefined}
+              style={StyleSheet.absoluteFillObject}
+              initialRegion={initialRegion}
+              onMapReady={() => { console.log('[PartyMap] ✅ onMapReady fired. mountKey:', mapMountKeyRef.current); setMapReady(true); }}
+              onMapLoaded={() => { console.log('[PartyMap] ✅ onMapLoaded fired.'); setMapReady(true); }}
+              onRegionChangeComplete={onRegionChangeComplete}
+              showsUserLocation={locPerm === 'granted'}
+              showsMyLocationButton={false}
+              rotateEnabled={false}
+              pitchEnabled={false}
+              toolbarEnabled={false}
+              moveOnMarkerPress={false}
+              showsCompass={false}
+              loadingEnabled={false}
+              // tracksViewChanges is explicitly NEVER set to true on markers
+              // (known Android crash source) — each marker handles it individually
+              mapType="standard"
+              customMapStyle={Platform.OS === 'android' ? (DARK_MAP_STYLE as any) : undefined}
+            >
+              {mapReady && visibleClusters.map(c => {
+                if (c.kind === 'cluster') {
+                  return (
+                    <Marker
+                      key={c.key}
+                      coordinate={c.center}
+                      tracksViewChanges={false}
+                      onPress={() => {
+                        setSelectedId(null); setSelectedEvent(null);
+                        const base = viewportRef.current;
+                        const next = sanitizeRegion({
+                          latitude: c.center.latitude, longitude: c.center.longitude,
+                          latitudeDelta: Math.max(EVENT_FOCUS_DELTA * 1.5, base.latitudeDelta * 0.5),
+                          longitudeDelta: Math.max(EVENT_FOCUS_DELTA * 1.5, base.longitudeDelta * 0.5),
+                        });
+                        try { mapRef.current?.animateToRegion(next, 480); } catch {}
+                      }}
+                    >
+                      <ClusterBubble count={c.count} color={c.color} />
+                    </Marker>
+                  );
+                }
+                const e = c.event;
+                const isSel = selectedId === e.id;
                 return (
                   <Marker
                     key={c.key}
+                    identifier={`event:${e.id}`}
                     coordinate={c.center}
-                    tracksViewChanges={Platform.OS === 'android' ? trackMarkers : false}
-                    onPress={() => {
-                      bumpMarkerTracking();
-                      setSelectedEventId(null);
-                      setSelectedEvent(null);
-                      const base = viewportRegionRef.current;
-                      const next = sanitizeRegion({
-                        latitude: c.center.latitude,
-                        longitude: c.center.longitude,
-                        latitudeDelta: Math.max(EVENT_FOCUS_DELTA * 1.4, base.latitudeDelta * 0.55),
-                        longitudeDelta: Math.max(EVENT_FOCUS_DELTA * 1.4, base.longitudeDelta * 0.55),
-                      });
-                      try {
-                        mapRef.current?.animateToRegion(next, 520);
-                      } catch {}
-                    }}
+                    tracksViewChanges={false}
+                    onPress={() => focusOnEvent(e)}
                   >
-                    <ClusterBubble count={c.count} color={c.color} />
+                    <EventPin color={c.color} selected={isSel} eventType={e.eventType} />
                   </Marker>
                 );
-              }
-
-              const e = c.event;
-              return (
-                <Marker
-                  key={c.key}
-                  identifier={`event:${e.id}`}
-                  testID={`event-marker:${e.id}`}
-                  coordinate={c.center}
-                  tracksViewChanges={Platform.OS === 'android' ? trackMarkers : false}
-                  onPress={() => focusOnEvent(e)}
-                >
-                  <EventDot color={c.color} />
-                </Marker>
-              );
-            }) : null}
-          </MapView>
+              })}
+            </MapView>
+          </MapErrorBoundary>
         )}
       </View>
 
-      {locationPermission !== 'loading' && mapInitTimedOut && !mapReady ? (
-        <View pointerEvents="none" style={[styles.loading, { position: 'absolute', left: 0, right: 0, bottom: 0, top: 0, paddingTop: 120 }]}>
-          <GlassView intensity={18} style={styles.errorCard} contentContainerStyle={styles.errorCardContent}>
-            <Text style={styles.errorTitle}>{t('home.map_unavailable_title')}</Text>
-            <Text style={styles.errorBody}>{t('home.map_unavailable_body')}</Text>
-          </GlassView>
-        </View>
-      ) : null}
-
-      {selectedEvent ? (
-        <Animated.View style={[styles.bottomCardWrap, { paddingBottom: tabBarHeight + 10 + Math.max(0, insets.bottom - 2) }, cardStyle]}>
-          <GlassView intensity={20} style={styles.bottomCard} contentContainerStyle={styles.bottomCardContent}>
-            {!!selectedEvent.imageUrl ? (
-              <Image source={{ uri: selectedEvent.imageUrl }} style={styles.bottomImage} resizeMode="cover" />
-            ) : (
-              <View style={styles.bottomImage} />
+      {/* ── Top: search + filters ── */}
+      <View style={[styles.topOverlay, { paddingTop: Math.max(12, insets.top) }]}>
+        {/* Search bar */}
+        <GlassView intensity={20} style={styles.searchBar}>
+          <View style={styles.searchRow}>
+            <Search size={18} color="rgba(255,255,255,0.5)" />
+            <TextInput
+              value={searchText}
+              onChangeText={t => { setSearchText(t); setSearchFocused(true); }}
+              onFocus={() => setSearchFocused(true)}
+              placeholder="Busca eventos, ciudades, barrios…"
+              placeholderTextColor="rgba(255,255,255,0.35)"
+              autoCorrect={false}
+              autoCapitalize="words"
+              returnKeyType="search"
+              onSubmitEditing={() => void geocodeSearch(searchText)}
+              style={styles.searchInput}
+            />
+            {searchText.length > 0 && (
+              <Pressable hitSlop={10} onPress={() => { setSearchText(''); setSearchFocused(false); setSearchResults([]); }}>
+                <X size={18} color="rgba(255,255,255,0.5)" />
+              </Pressable>
             )}
-            <View style={{ flex: 1, minWidth: 0, gap: 10 }}>
-              <Text style={styles.bottomTitle} numberOfLines={1}>{selectedEvent.title}</Text>
-              <View style={styles.bottomRow}>
-                <View style={[styles.pill, { flex: 1, minWidth: 0 }]}>
-                  <MapPin size={14} color={Colors.dark.textSecondary} />
-                  <Text style={[styles.pillText, { flexShrink: 1 }]} numberOfLines={1}>{selectedEvent.location}</Text>
-                </View>
-                <View style={styles.pricePill}>
-                  <Text style={styles.priceText} numberOfLines={1}>{formatPriceEUR(selectedEvent.price)}</Text>
-                </View>
+          </View>
+        </GlassView>
+
+        {/* Filter chips */}
+        <View style={styles.filterRow}>
+          {EVENT_TYPES.map(({ key, label, color, Icon }) => {
+            const active = activeFilter === key;
+            return (
+              <Pressable
+                key={key}
+                onPress={() => setActiveFilter(key)}
+                style={[styles.filterChip, active && { backgroundColor: color + '30', borderColor: color + 'CC' }]}
+              >
+                <Icon size={12} color={active ? color : 'rgba(255,255,255,0.5)'} />
+                <Text style={[styles.filterChipTxt, active && { color }]}>{label}</Text>
+              </Pressable>
+            );
+          })}
+        </View>
+
+        {/* Dynamic search results */}
+        {showResults && searchResults.length > 0 && (
+          <Animated.View entering={FadeIn.duration(180)} exiting={FadeOut.duration(140)} style={styles.resultsPanel}>
+            <FlatList
+              data={searchResults}
+              keyExtractor={item => item.id}
+              keyboardShouldPersistTaps="handled"
+              showsVerticalScrollIndicator={false}
+              ItemSeparatorComponent={() => <View style={styles.resultSep} />}
+              renderItem={({ item }) => {
+                const color = getEventColor(item.eventType);
+                return (
+                  <TouchableOpacity
+                    activeOpacity={0.75}
+                    style={styles.resultRow}
+                    onPress={() => focusOnEvent(item)}
+                  >
+                    {item.imageUrl ? (
+                      <Image source={{ uri: item.imageUrl }} style={styles.resultImg} />
+                    ) : (
+                      <View style={[styles.resultImg, { backgroundColor: color + '30' }]}>
+                        <View style={[styles.resultImgDot, { backgroundColor: color }]} />
+                      </View>
+                    )}
+                    <View style={styles.resultInfo}>
+                      <Text style={styles.resultTitle} numberOfLines={1}>{item.title}</Text>
+                      <View style={styles.resultMeta}>
+                        <MapPin size={11} color="rgba(255,255,255,0.45)" />
+                        <Text style={styles.resultMetaTxt} numberOfLines={1}>{item.location}</Text>
+                        <Text style={[styles.resultDist, { color }]}>{item._distanceKm.toFixed(1)} km</Text>
+                      </View>
+                    </View>
+                    <View style={[styles.resultPriceBadge, { backgroundColor: color + '28' }]}>
+                      <Text style={[styles.resultPrice, { color }]}>{formatPrice(item.price)}</Text>
+                    </View>
+                  </TouchableOpacity>
+                );
+              }}
+            />
+          </Animated.View>
+        )}
+
+        {showResults && searchResults.length === 0 && searchText.trim().length > 1 && (
+          <Animated.View entering={FadeIn.duration(180)} style={styles.noResults}>
+            <Text style={styles.noResultsTxt}>Sin resultados para "{searchText}"</Text>
+            <TouchableOpacity onPress={() => void geocodeSearch(searchText)}>
+              <Text style={styles.noResultsSearch}>Buscar ubicación →</Text>
+            </TouchableOpacity>
+          </Animated.View>
+        )}
+      </View>
+
+      {/* ── Dismiss results overlay ── */}
+      {searchFocused && (
+        <Pressable
+          style={StyleSheet.absoluteFill}
+          onPress={() => { setSearchFocused(false); Keyboard.dismiss(); }}
+          pointerEvents="box-only"
+        />
+      )}
+
+      {/* ── Event detail card ── */}
+      {selectedEvent && (
+        <Animated.View
+          style={[styles.cardWrap, { paddingBottom: tabBarH + 10 + Math.max(0, insets.bottom - 2) }, cardStyle]}
+          entering={SlideInDown.springify().damping(20).stiffness(260)}
+          exiting={SlideOutDown.duration(180)}
+        >
+          <GlassView intensity={22} style={styles.card}>
+            {selectedEvent.imageUrl ? (
+              <Image source={{ uri: selectedEvent.imageUrl }} style={styles.cardImg} />
+            ) : (
+              <View style={[styles.cardImg, { backgroundColor: getEventColor(selectedEvent.eventType) + '28' }]} />
+            )}
+            <View style={styles.cardBody}>
+              {/* Type badge */}
+              <View style={[styles.typeBadge, { backgroundColor: getEventColor(selectedEvent.eventType) + '28' }]}>
+                <Text style={[styles.typeBadgeTxt, { color: getEventColor(selectedEvent.eventType) }]}>
+                  {(selectedEvent.eventType || 'Evento').toUpperCase()}
+                </Text>
               </View>
-              <View style={styles.bottomRow}>
-                <View style={styles.pill}>
-                  <Calendar size={14} color={Colors.dark.textSecondary} />
-                  <Text style={styles.pillText} numberOfLines={1}>{selectedEvent.date} · {selectedEvent.time}</Text>
-                </View>
-                <View style={styles.pillMuted}>
-                  <Text style={styles.pillText}>{selectedEvent._distanceKm.toFixed(1)} km</Text>
-                </View>
+              <Text style={styles.cardTitle} numberOfLines={2}>{selectedEvent.title}</Text>
+              <View style={styles.cardMetaRow}>
+                <MapPin size={12} color="rgba(255,255,255,0.5)" />
+                <Text style={styles.cardMeta} numberOfLines={1}>{selectedEvent.location}</Text>
               </View>
-              <View style={styles.actionsRow}>
-                <Pressable onPress={() => setSelectedEventId(null)} style={({ pressed }) => [styles.actionBtnGhost, { opacity: pressed ? 0.75 : 1 }]}>
-                  <Text style={styles.actionBtnGhostText}>Cerrar</Text>
+              <View style={styles.cardMetaRow}>
+                <Calendar size={12} color="rgba(255,255,255,0.5)" />
+                <Text style={styles.cardMeta}>{selectedEvent.date} · {selectedEvent.time}</Text>
+                <Text style={[styles.cardDist, { color: getEventColor(selectedEvent.eventType) }]}>
+                  {selectedEvent._distanceKm.toFixed(1)} km
+                </Text>
+              </View>
+              <View style={styles.cardActions}>
+                <Pressable
+                  onPress={() => { setSelectedId(null); setSelectedEvent(null); }}
+                  style={({ pressed }) => [styles.btnClose, { opacity: pressed ? 0.7 : 1 }]}
+                >
+                  <Text style={styles.btnCloseTxt}>Cerrar</Text>
                 </Pressable>
-                <Pressable onPress={() => router.push(`/(tabs)/event/${selectedEvent.id}`)} style={({ pressed }) => [{ opacity: pressed ? 0.9 : 1 }]}>
-                  <LinearGradient colors={[Colors.dark.primary, Colors.dark.secondary]} style={styles.actionBtn}>
-                    <Text style={styles.actionBtnText}>Ver detalle</Text>
+                <Pressable
+                  onPress={() => router.push(`/(tabs)/event/${selectedEvent.id}`)}
+                  style={({ pressed }) => [{ opacity: pressed ? 0.9 : 1, flex: 1 }]}
+                >
+                  <LinearGradient
+                    colors={[Colors.dark.primary, Colors.dark.secondary]}
+                    start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
+                    style={styles.btnDetail}
+                  >
+                    <Text style={styles.btnDetailTxt}>{formatPrice(selectedEvent.price)} · Ver evento</Text>
                   </LinearGradient>
                 </Pressable>
               </View>
             </View>
           </GlassView>
         </Animated.View>
-      ) : null}
+      )}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.dark.background },
-  topOverlay: { position: 'absolute', left: 16, right: 16, zIndex: 30 },
+  container: { flex: 1, backgroundColor: '#08080F' },
+  center:    { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12, paddingHorizontal: 20 },
+  loadingTxt:{ color: 'rgba(255,255,255,0.5)', fontWeight: '700', marginTop: 8 },
+  errTitle:  { color: 'white', fontWeight: '900', fontSize: 18, textAlign: 'center' },
+  retryBtn:  { marginTop: 12, paddingHorizontal: 24, paddingVertical: 12, borderRadius: 14, backgroundColor: Colors.dark.primary + '30', borderWidth: 1, borderColor: Colors.dark.primary + '60' },
+  retryTxt:  { color: Colors.dark.primary, fontWeight: '900', fontSize: 14 },
 
-  searchBar: { borderRadius: 20, borderWidth: 1, borderColor: 'rgba(255,255,255,0.12)', backgroundColor: 'rgba(10, 10, 16, 0.82)' },
-  searchBarContent: { paddingVertical: 12, paddingHorizontal: 14, flexDirection: 'row', alignItems: 'center', gap: 10 },
-  searchInput: { flex: 1, color: 'white', fontWeight: '800', paddingVertical: 0, fontSize: 15, letterSpacing: -0.2, height: 34 },
+  // ── Top overlay ──
+  topOverlay: { position: 'absolute', left: 14, right: 14, zIndex: 40 },
 
-  mapContainer: { flex: 1 },
-  loading: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 10, paddingHorizontal: 18 },
-  loadingText: { color: Colors.dark.textSecondary, fontWeight: '700' },
-  errorCard: { width: '100%', maxWidth: 560, borderRadius: 18, borderWidth: 1, borderColor: 'rgba(255,255,255,0.12)', backgroundColor: 'rgba(10,10,16,0.70)' },
-  errorCardContent: { padding: 18, gap: 10 },
-  errorTitle: { color: 'white', fontWeight: '900', fontSize: 18, textAlign: 'center' },
-  errorBody: { color: Colors.dark.textSecondary, fontWeight: '700', lineHeight: 20, textAlign: 'center' },
-
-  eventDot: {
-    width: 22,
-    height: 22,
-    borderRadius: 11,
-    borderWidth: 2,
-    backgroundColor: 'rgba(15, 15, 26, 0.70)',
-    alignItems: 'center',
-    justifyContent: 'center',
+  searchBar: {
+    borderRadius: 22, borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.10)',
+    backgroundColor: 'rgba(8,8,15,0.88)',
+    overflow: 'hidden',
   },
-  eventDotInner: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-  },
+  searchRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 16, paddingVertical: 13 },
+  searchInput: { flex: 1, color: 'white', fontWeight: '700', fontSize: 15, paddingVertical: 0, letterSpacing: -0.2 },
 
-  clusterBubble: {
-    minWidth: 38,
-    height: 38,
-    paddingHorizontal: 12,
-    borderRadius: 999,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 2,
-    backgroundColor: 'rgba(15, 15, 26, 0.75)',
+  filterRow: { flexDirection: 'row', gap: 8, marginTop: 8, flexWrap: 'nowrap' },
+  filterChip: {
+    flexDirection: 'row', alignItems: 'center', gap: 5,
+    paddingHorizontal: 12, paddingVertical: 7, borderRadius: 999,
+    backgroundColor: 'rgba(255,255,255,0.07)',
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.10)',
   },
-  clusterText: {
-    color: 'white',
-    fontSize: 14,
-    fontWeight: '900',
-    letterSpacing: -0.2,
-  },
+  filterChipTxt: { color: 'rgba(255,255,255,0.5)', fontWeight: '800', fontSize: 11 },
 
-  bottomCardWrap: { position: 'absolute', left: 16, right: 16, bottom: 0, zIndex: 20 },
-  bottomCard: { borderRadius: 24, overflow: 'hidden', borderWidth: 1, borderColor: 'rgba(255,255,255,0.12)', backgroundColor: 'rgba(10,10,16,0.80)' },
-  bottomCardContent: { flexDirection: 'row', gap: 12, padding: 12, alignItems: 'center' },
-  bottomImage: { width: 86, height: 116, borderRadius: 18, backgroundColor: 'rgba(255,255,255,0.06)' },
-  bottomTitle: { color: 'white', fontWeight: '900', fontSize: 16, letterSpacing: -0.3 },
-  bottomRow: { flexDirection: 'row', gap: 10, alignItems: 'center' },
-  pill: { flexDirection: 'row', gap: 8, alignItems: 'center', paddingHorizontal: 10, paddingVertical: 8, borderRadius: 14, backgroundColor: 'rgba(0,0,0,0.22)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)' },
-  pillMuted: { paddingHorizontal: 12, paddingVertical: 9, borderRadius: 14, backgroundColor: 'rgba(255,255,255,0.08)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.10)' },
-  pillText: { color: '#E4E4E7', fontWeight: '800', fontSize: 12 },
-  pricePill: { paddingHorizontal: 12, paddingVertical: 9, borderRadius: 14, backgroundColor: 'rgba(124,58,237,0.92)' },
-  priceText: { color: 'white', fontWeight: '900', fontSize: 12, letterSpacing: -0.2 },
-  actionsRow: { flexDirection: 'row', gap: 10, alignItems: 'center', marginTop: 2 },
-  actionBtnGhost: { height: 42, borderRadius: 16, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 14, backgroundColor: 'rgba(255,255,255,0.08)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.12)' },
-  actionBtnGhostText: { color: 'white', fontWeight: '900', fontSize: 13 },
-  actionBtn: { height: 42, borderRadius: 16, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 16 },
-  actionBtnText: { color: 'white', fontWeight: '900', fontSize: 13, letterSpacing: -0.2 },
+  // ── Search results ──
+  resultsPanel: {
+    marginTop: 8, borderRadius: 18, overflow: 'hidden',
+    backgroundColor: 'rgba(10,10,20,0.96)',
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.10)',
+    maxHeight: 340,
+  },
+  resultSep: { height: 1, backgroundColor: 'rgba(255,255,255,0.05)', marginHorizontal: 14 },
+  resultRow: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 12 },
+  resultImg: { width: 50, height: 50, borderRadius: 12, backgroundColor: 'rgba(255,255,255,0.06)', alignItems: 'center', justifyContent: 'center' },
+  resultImgDot: { width: 16, height: 16, borderRadius: 8 },
+  resultInfo: { flex: 1, gap: 4 },
+  resultTitle: { color: 'white', fontWeight: '800', fontSize: 14 },
+  resultMeta: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  resultMetaTxt: { color: 'rgba(255,255,255,0.45)', fontSize: 12, flex: 1 },
+  resultDist: { fontSize: 12, fontWeight: '800' },
+  resultPriceBadge: { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 10 },
+  resultPrice: { fontWeight: '900', fontSize: 12 },
+
+  noResults: {
+    marginTop: 8, borderRadius: 16, padding: 16,
+    backgroundColor: 'rgba(10,10,20,0.94)',
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)',
+    alignItems: 'center', gap: 6,
+  },
+  noResultsTxt:   { color: 'rgba(255,255,255,0.5)', fontWeight: '700', fontSize: 13 },
+  noResultsSearch:{ color: Colors.dark.primary, fontWeight: '900', fontSize: 13 },
+
+  // ── Map markers ──
+  pinWrap:      { alignItems: 'center', justifyContent: 'center' },
+  pinPulse:     { position: 'absolute', width: 44, height: 44, borderRadius: 22, borderWidth: 2 },
+  pinHalo:      { position: 'absolute', width: 38, height: 38, borderRadius: 19, shadowOpacity: 0.6, shadowRadius: 8, shadowOffset: { width: 0, height: 0 }, elevation: 4 },
+  pinBadge:     { width: 42, height: 42, borderRadius: 14, borderWidth: 2.5, alignItems: 'center', justifyContent: 'center', shadowOpacity: 0.8, shadowRadius: 10, shadowOffset: { width: 0, height: 2 }, elevation: 8 },
+  pinBadgeInner:{ width: 34, height: 34, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
+  pinEmoji:     { fontSize: 18, lineHeight: 22 },
+  pinTailOuter: { width: 0, height: 0, borderLeftWidth: 6, borderRightWidth: 6, borderTopWidth: 9, borderLeftColor: 'transparent', borderRightColor: 'transparent', marginTop: -1 },
+
+  clusterBubble: { borderWidth: 2, borderRadius: 999, overflow: 'hidden' },
+  clusterInner:  { paddingHorizontal: 10, paddingVertical: 7, alignItems: 'center', justifyContent: 'center' },
+  clusterText:   { fontSize: 13, fontWeight: '900', letterSpacing: -0.3 },
+
+  // ── Event card ──
+  cardWrap: { position: 'absolute', left: 14, right: 14, bottom: 0, zIndex: 30 },
+  card:     { borderRadius: 26, overflow: 'hidden', borderWidth: 1, borderColor: 'rgba(255,255,255,0.12)', backgroundColor: 'rgba(8,8,15,0.90)', flexDirection: 'row' },
+  cardImg:  { width: 100, height: 140 },
+  cardBody: { flex: 1, padding: 14, gap: 6 },
+
+  typeBadge:   { alignSelf: 'flex-start', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8, marginBottom: 2 },
+  typeBadgeTxt:{ fontSize: 10, fontWeight: '900', letterSpacing: 0.5 },
+
+  cardTitle:    { color: 'white', fontWeight: '900', fontSize: 15, letterSpacing: -0.3, lineHeight: 20 },
+  cardMetaRow:  { flexDirection: 'row', alignItems: 'center', gap: 5 },
+  cardMeta:     { color: 'rgba(255,255,255,0.5)', fontSize: 12, fontWeight: '700', flex: 1 },
+  cardDist:     { fontSize: 12, fontWeight: '900' },
+
+  cardActions: { flexDirection: 'row', gap: 8, marginTop: 4 },
+  btnClose:    { height: 40, paddingHorizontal: 14, borderRadius: 14, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,255,255,0.08)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.10)' },
+  btnCloseTxt: { color: 'rgba(255,255,255,0.75)', fontWeight: '900', fontSize: 12 },
+  btnDetail:   { height: 40, borderRadius: 14, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 14 },
+  btnDetailTxt:{ color: 'white', fontWeight: '900', fontSize: 12, letterSpacing: -0.2 },
 });

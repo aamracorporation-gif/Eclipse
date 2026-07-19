@@ -2,6 +2,30 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 import { SignJWT, importPKCS8 } from "https://esm.sh/jose@5.9.6";
 
+async function getServiceAccountToken(saEmail: string, privateKeyPem: string): Promise<string> {
+  const key = await importPKCS8(privateKeyPem, "RS256");
+  const now = Math.floor(Date.now() / 1000);
+  const jwt = await new SignJWT({
+    scope: "https://www.googleapis.com/auth/wallet_object.issuer",
+  })
+    .setProtectedHeader({ alg: "RS256", typ: "JWT" })
+    .setIssuer(saEmail)
+    .setSubject(saEmail)
+    .setAudience("https://oauth2.googleapis.com/token")
+    .setIssuedAt(now)
+    .setExpirationTime(now + 3600)
+    .sign(key);
+
+  const resp = await fetch("https://oauth2.googleapis.com/token", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: `grant_type=urn%3Aietf%3Aparams%3Aoauth%3Agrant-type%3Ajwt-bearer&assertion=${jwt}`,
+  });
+  const data = await resp.json();
+  if (!data.access_token) throw new Error("Token error: " + JSON.stringify(data));
+  return data.access_token;
+}
+
 function jsonResponse(body: any, status = 200) {
   return new Response(JSON.stringify(body), {
     status,
@@ -17,6 +41,34 @@ function jsonResponse(body: any, status = 200) {
 serve(async (req) => {
   // Manejo de CORS
   if (req.method === "OPTIONS") return jsonResponse({ ok: true });
+
+  // Special one-time endpoint to authorize service account in Google Wallet
+  const url = new URL(req.url);
+  if (url.pathname.endsWith("/authorize-sa")) {
+    try {
+      const GOOGLE_WALLET_ISSUER_ID = Deno.env.get("GOOGLE_WALLET_ISSUER_ID")!;
+      const GOOGLE_WALLET_SERVICE_ACCOUNT_EMAIL = Deno.env.get("GOOGLE_WALLET_SERVICE_ACCOUNT_EMAIL")!;
+      const GOOGLE_WALLET_PRIVATE_KEY = Deno.env.get("GOOGLE_WALLET_PRIVATE_KEY")!.replace(/\\n/g, "\n");
+
+      const token = await getServiceAccountToken(GOOGLE_WALLET_SERVICE_ACCOUNT_EMAIL, GOOGLE_WALLET_PRIVATE_KEY);
+
+      const permResp = await fetch(
+        `https://walletobjects.googleapis.com/walletobjects/v1/permissions/${GOOGLE_WALLET_ISSUER_ID}`,
+        {
+          method: "PUT",
+          headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+          body: JSON.stringify({
+            issuerId: GOOGLE_WALLET_ISSUER_ID,
+            permissions: [{ emailAddress: GOOGLE_WALLET_SERVICE_ACCOUNT_EMAIL, role: "WRITER" }],
+          }),
+        }
+      );
+      const permData = await permResp.json();
+      return jsonResponse({ ok: permResp.ok, status: permResp.status, data: permData });
+    } catch (e) {
+      return jsonResponse({ ok: false, error: e.message }, 500);
+    }
+  }
 
   try {
     const SUPABASE_URL = Deno.env.get("SUPABASE_URL");
@@ -173,14 +225,13 @@ serve(async (req) => {
     const key = await importPKCS8(privateKeyPem, "RS256");
     const nowSeconds = Math.floor(Date.now() / 1000);
     const jwt = await new SignJWT({
+      typ: "savetowallet",
+      iat: nowSeconds,
       payload: { genericClasses: [genericClass], genericObjects: [genericObject] },
     })
-      .setProtectedHeader({ alg: "RS256", typ: "JWT" })
-      .setIssuedAt(nowSeconds)
+      .setProtectedHeader({ alg: "RS256" })
       .setIssuer(GOOGLE_WALLET_SERVICE_ACCOUNT_EMAIL)
       .setAudience("google")
-      .setExpirationTime(nowSeconds + 60 * 5)
-      .setSubject("savetowallet")
       .sign(key);
 
     const url = `https://pay.google.com/gp/v/save/${jwt}`;

@@ -19,7 +19,6 @@ import { usePaymentSheetHandler } from '@/components/PaymentSheetHandler';
 import { PurchaseConfirmation } from '@/components/PurchaseConfirmation';
 import { useI18n } from '@/lib/I18nContext';
 import { useTranslation } from 'react-i18next';
-import { scheduleLocalNotification } from '@/lib/notifications';
 import { invokeEdgeFunctionStrict } from '@/lib/edgeFunctions';
 import { useAppDialog } from '@/components/ui/AppDialog';
 import { useFocusEffect } from '@react-navigation/native';
@@ -493,18 +492,6 @@ export default function EventDetailScreen() {
           : t('event.purchase.success_many', { count: qty });
 
       setPurchaseSuccess({ title: t('event.purchase.success_title'), message: msg });
-      try {
-        const notifBody =
-          qty === 1
-            ? `${t('event.purchase.success_one', { tickets: t('tickets.my_tickets') })} (${event?.title || ''})`
-            : `${t('event.purchase.success_many', { count: qty })} (${event?.title || ''})`;
-        await scheduleLocalNotification(
-          t('event.purchase.success_title'),
-          notifBody,
-          { type: 'purchase', eventId: event?.id },
-          1
-        );
-      } catch {}
     } catch (error) {
       console.error('Error purchasing ticket:', error);
       const msg = getErrorMessage(error);
@@ -618,14 +605,6 @@ export default function EventDetailScreen() {
         message: 'Tu reservado VIP se ha comprado correctamente.',
         variant: 'vip',
       });
-      try {
-        await scheduleLocalNotification(
-          '¡VIP confirmado!',
-          'Tu reservado VIP se ha comprado correctamente.',
-          { type: 'vip_purchase', eventId: event?.id },
-          1
-        );
-      } catch {}
     } catch (error) {
       console.error('Error purchasing VIP:', error);
       const msg = getErrorMessage(error);
@@ -1180,7 +1159,7 @@ export default function EventDetailScreen() {
               {purchaseTab === 'tickets' && event.event_ticket_types && event.event_ticket_types.length > 0 && (
                 <View style={styles.ticketTypeContainer}>
                   <Text style={styles.inputLabel}>{t('event.tickets.ticket_type')}</Text>
-                  <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
+                  <View style={{ gap: 10 }}>
                     {event.event_ticket_types.map((type) => {
                        const isSelected = selectedTicketType === type.id;
                        const available = type.quantity - (type.sold || 0);
@@ -1237,7 +1216,7 @@ export default function EventDetailScreen() {
                          </TouchableOpacity>
                        );
                     })}
-                  </ScrollView>
+                  </View>
                 </View>
               )}
 
@@ -1862,10 +1841,9 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   ticketTypeCard: {
-    padding: 14,
+    padding: 16,
     borderRadius: 18,
     backgroundColor: 'rgba(255,255,255,0.06)',
-    minWidth: 190,
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.18)',
     overflow: 'hidden',
