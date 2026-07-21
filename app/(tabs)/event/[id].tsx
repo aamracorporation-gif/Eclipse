@@ -44,6 +44,7 @@ export default function EventDetailScreen() {
   const [vipPurchasing, setVipPurchasing] = useState(false);
   const [selectedTicketType, setSelectedTicketType] = useState<string | null>(null);
   const [selectedVipReservadoId, setSelectedVipReservadoId] = useState<string | null>(null);
+  const [expandedTicketId, setExpandedTicketId] = useState<string | null>(null);
   const [purchaseTab, setPurchaseTab] = useState<'tickets' | 'vip'>('tickets');
   const [showVenuePlan, setShowVenuePlan] = useState(false);
   const [payWithWallet, setPayWithWallet] = useState(false);
@@ -1162,11 +1163,18 @@ export default function EventDetailScreen() {
                   <View style={{ gap: 10 }}>
                     {event.event_ticket_types.map((type) => {
                        const isSelected = selectedTicketType === type.id;
+                       const isExpanded = expandedTicketId === type.id;
                        const available = type.quantity - (type.sold || 0);
+                       const meta = (type as any).metadata ?? {};
+                       const catLabel = type.category === 'vip' ? 'VIP' : type.category === 'early' ? 'Early Access' : type.category === 'backstage' ? 'Backstage' : 'General';
+                       const catColor = type.category === 'vip' ? '#fbbf24' : type.category === 'early' ? Colors.dark.secondary : type.category === 'backstage' ? '#F472B6' : Colors.dark.primary;
                        return (
                          <TouchableOpacity
                            key={type.id}
-                           onPress={() => setSelectedTicketType(type.id)}
+                           onPress={() => {
+                             setSelectedTicketType(type.id);
+                             setExpandedTicketId(isExpanded ? null : type.id);
+                           }}
                            style={[
                              styles.ticketTypeCard,
                              isSelected && styles.ticketTypeCardSelected,
@@ -1186,25 +1194,33 @@ export default function EventDetailScreen() {
                              style={StyleSheet.absoluteFill}
                            />
                            <View style={styles.ticketTypeTopRow}>
-                             <Text style={[styles.ticketTypeName, isSelected && styles.ticketTypeNameSelected]} numberOfLines={1}>
-                               {type.name}
-                             </Text>
-                             <View
-                               style={[
-                                 styles.ticketTypeAvailPill,
-                                 available <= 0 && styles.ticketTypeAvailPillSoldOut,
-                                 isSelected && available > 0 && styles.ticketTypeAvailPillSelected,
-                               ]}
-                             >
-                               <Text
+                             <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                               <View style={[styles.ticketCatBadge, { backgroundColor: catColor + '22', borderColor: catColor + '55' }]}>
+                                 <Text style={[styles.ticketCatBadgeText, { color: catColor }]}>{catLabel}</Text>
+                               </View>
+                               <Text style={[styles.ticketTypeName, isSelected && styles.ticketTypeNameSelected]} numberOfLines={1}>
+                                 {type.name}
+                               </Text>
+                             </View>
+                             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                               <View
                                  style={[
-                                   styles.ticketTypeAvailText,
-                                   available <= 0 && styles.ticketTypeAvailTextSoldOut,
-                                   isSelected && available > 0 && styles.ticketTypeAvailTextSelected,
+                                   styles.ticketTypeAvailPill,
+                                   available <= 0 && styles.ticketTypeAvailPillSoldOut,
+                                   isSelected && available > 0 && styles.ticketTypeAvailPillSelected,
                                  ]}
                                >
-                                 {available <= 0 ? t('event.tickets.sold_out') : t('event.tickets.remaining', { count: available })}
-                               </Text>
+                                 <Text
+                                   style={[
+                                     styles.ticketTypeAvailText,
+                                     available <= 0 && styles.ticketTypeAvailTextSoldOut,
+                                     isSelected && available > 0 && styles.ticketTypeAvailTextSelected,
+                                   ]}
+                                 >
+                                   {available <= 0 ? t('event.tickets.sold_out') : t('event.tickets.remaining', { count: available })}
+                                 </Text>
+                               </View>
+                               <Text style={[styles.ticketExpandChevron, isExpanded && styles.ticketExpandChevronOpen]}>›</Text>
                              </View>
                            </View>
                            <View style={styles.ticketTypeBottomRow}>
@@ -1213,6 +1229,77 @@ export default function EventDetailScreen() {
                              </Text>
                              <Text style={styles.ticketTypeUnit}>{t('event.tickets.per_ticket')}</Text>
                            </View>
+
+                           {isExpanded && (
+                             <View style={styles.ticketExpandBody}>
+                               <View style={styles.ticketExpandDivider} />
+
+                               {!!meta.benefits && (
+                                 <View style={styles.ticketExpandRow}>
+                                   <Sparkles size={14} color={catColor} />
+                                   <Text style={styles.ticketExpandText}>{meta.benefits}</Text>
+                                 </View>
+                               )}
+
+                               {type.category === 'vip' && !!meta.vipGroupSize && (
+                                 <View style={styles.ticketExpandRow}>
+                                   <Users size={14} color={catColor} />
+                                   <Text style={styles.ticketExpandText}>Grupo de hasta {meta.vipGroupSize} personas</Text>
+                                 </View>
+                               )}
+
+                               {type.category === 'vip' && Array.isArray(meta.vipBottles) && meta.vipBottles.length > 0 && (
+                                 <View style={styles.ticketExpandRow}>
+                                   <Euro size={14} color={catColor} />
+                                   <Text style={styles.ticketExpandText}>
+                                     Botellas: {(meta.vipBottles as any[]).map((b: any) => `${b.brand} ×${b.quantity}`).join(', ')}
+                                   </Text>
+                                 </View>
+                               )}
+
+                               {type.category === 'general' && !!meta.accessZone && (
+                                 <View style={styles.ticketExpandRow}>
+                                   <MapPin size={14} color={catColor} />
+                                   <Text style={styles.ticketExpandText}>Zona: {meta.accessZone}</Text>
+                                 </View>
+                               )}
+
+                               {type.category === 'general' && meta.numberedSeat && (
+                                 <View style={styles.ticketExpandRow}>
+                                   <Ticket size={14} color={catColor} />
+                                   <Text style={styles.ticketExpandText}>Asiento numerado</Text>
+                                 </View>
+                               )}
+
+                               {type.category === 'early' && !!meta.earlyEntryMinutes && (
+                                 <View style={styles.ticketExpandRow}>
+                                   <Clock size={14} color={catColor} />
+                                   <Text style={styles.ticketExpandText}>Entrada {meta.earlyEntryMinutes} min antes</Text>
+                                 </View>
+                               )}
+
+                               {type.category === 'early' && meta.dedicatedLane && (
+                                 <View style={styles.ticketExpandRow}>
+                                   <UserIcon size={14} color={catColor} />
+                                   <Text style={styles.ticketExpandText}>Carril prioritario</Text>
+                                 </View>
+                               )}
+
+                               {type.category === 'backstage' && !!meta.backstageHost && (
+                                 <View style={styles.ticketExpandRow}>
+                                   <UserIcon size={14} color={catColor} />
+                                   <Text style={styles.ticketExpandText}>Meet & Greet con {meta.backstageHost}</Text>
+                                 </View>
+                               )}
+
+                               {meta.featured && (
+                                 <View style={[styles.ticketExpandRow, { marginTop: 4 }]}>
+                                   <Sparkles size={14} color="#fbbf24" />
+                                   <Text style={[styles.ticketExpandText, { color: '#fbbf24', fontWeight: '800' }]}>Entrada Premium</Text>
+                                 </View>
+                               )}
+                             </View>
+                           )}
                          </TouchableOpacity>
                        );
                     })}
@@ -1916,6 +2003,48 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '700',
     paddingBottom: 3,
+  },
+  ticketCatBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  ticketCatBadgeText: {
+    fontSize: 10,
+    fontWeight: '900',
+    letterSpacing: 0.6,
+  },
+  ticketExpandChevron: {
+    color: 'rgba(255,255,255,0.45)',
+    fontSize: 20,
+    fontWeight: '700',
+    transform: [{ rotate: '90deg' }],
+  },
+  ticketExpandChevronOpen: {
+    color: 'rgba(255,255,255,0.85)',
+    transform: [{ rotate: '-90deg' }],
+  },
+  ticketExpandBody: {
+    marginTop: 12,
+    gap: 8,
+  },
+  ticketExpandDivider: {
+    height: 1,
+    backgroundColor: 'rgba(255,255,255,0.10)',
+    marginBottom: 4,
+  },
+  ticketExpandRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  ticketExpandText: {
+    flex: 1,
+    color: 'rgba(255,255,255,0.80)',
+    fontSize: 13,
+    fontWeight: '600',
+    lineHeight: 18,
   },
   purchaseCard: {
     borderRadius: 24,

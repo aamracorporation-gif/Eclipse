@@ -988,6 +988,8 @@ export default function CreateEventScreen() {
               onChangeText={(value) => updateDraft('ageRestriction', value)}
               error={getError('ageRestriction')}
               keyboardType="numeric"
+              returnKeyType="done"
+              onSubmitEditing={() => Keyboard.dismiss()}
               icon={<Lock size={20} color={Colors.dark.textSecondary} />}
             />
 
