@@ -130,11 +130,13 @@ serve(async (req) => {
         .limit(1)
         .maybeSingle();
 
+      // Share URL always points to the edge function HTML handler (which works).
+      // WEB_BASE_URL may point to an API-only domain that doesn't serve /evento/ routes.
+      const fnBase = `${SUPABASE_URL.replace(/\/$/, "")}/functions/v1/event-share`;
+
       if (existing?.id && existing?.token) {
         const token = String(existing.token);
-        const shareUrl = WEB_BASE_URL
-          ? `${WEB_BASE_URL}/evento/${token}`
-          : `${SUPABASE_URL.replace(/\/$/, "")}/functions/v1/event-share/evento/${token}`;
+        const shareUrl = `${fnBase}/evento/${token}`;
         return jsonResponse({ ok: true, eventId, token, url: shareUrl, created_at: nowIso, reused: true });
       }
 
@@ -147,9 +149,7 @@ serve(async (req) => {
       if (createErr || !created?.token) return jsonResponse({ ok: false, error: "Failed to create link" }, 500);
 
       const token = String(created.token);
-      const shareUrl = WEB_BASE_URL
-        ? `${WEB_BASE_URL}/evento/${token}`
-        : `${SUPABASE_URL.replace(/\/$/, "")}/functions/v1/event-share/evento/${token}`;
+      const shareUrl = `${fnBase}/evento/${token}`;
 
       return jsonResponse({ ok: true, eventId, token, url: shareUrl, created_at: created.created_at, reused: false });
     }

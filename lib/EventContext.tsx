@@ -208,7 +208,8 @@ export function EventProvider({ children }: { children: React.ReactNode }) {
           )
         `
       )
-      .order('event_date', { ascending: true });
+      .order('event_date', { ascending: true })
+      .limit(200); // TODO: implement cursor-based pagination
   }, []);
 
   const fetchEvents = useCallback(async () => {

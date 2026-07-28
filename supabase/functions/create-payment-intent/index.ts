@@ -25,9 +25,9 @@ type CreatePaymentIntentRequest =
       reference_id: string;
     };
 
-function jsonResponse(body: Json, _status = 200) {
+function jsonResponse(body: Json, status = 200) {
   return new Response(JSON.stringify(body), {
-    status: 200,
+    status,
     headers: {
       "Content-Type": "application/json",
       "Access-Control-Allow-Origin": "*",
@@ -183,11 +183,21 @@ serve(async (req) => {
 
       const { data: eventRow, error: eventError } = await serviceClient
         .from("events")
-        .select("id, creator_id, ticket_price, available_tickets, event_ticket_types ( id, price, quantity, sold )")
+        .select("id, creator_id, ticket_price, available_tickets, event_date, event_ticket_types ( id, price, quantity, sold )")
         .eq("id", eventId)
         .maybeSingle();
 
       if (eventError || !eventRow) return jsonResponse({ ok: false, error: "Event not found" }, 404);
+
+      if (new Date((eventRow as any).event_date) < new Date()) {
+        return jsonResponse({ ok: false, error: "Este evento ya ha finalizado. No es posible comprar entradas." }, 400);
+      }
+
+      const buyer_email = typeof (body as any).buyer_email === "string" ? (body as any).buyer_email : "";
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (buyer_email && !emailRegex.test(buyer_email)) {
+        return jsonResponse({ ok: false, error: "El formato del email no es válido." }, 400);
+      }
 
       if ((eventRow as any).available_tickets < quantity) {
         return jsonResponse({ ok: false, error: "Not enough tickets available" }, 409);

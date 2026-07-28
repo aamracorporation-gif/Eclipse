@@ -242,17 +242,25 @@ export default function CreateEventScreen() {
     const e: Record<string, string> = {};
 
     if (!draft.title.trim()) e.title = 'Obligatorio.';
+    else if (draft.title.length > 100) e.title = 'El título no puede superar 100 caracteres';
     if (!draft.description.trim()) e.description = 'Obligatorio.';
+    else if (draft.description.length > 2000) e.description = 'La descripción no puede superar 2.000 caracteres';
     if (!draft.location.trim()) e.location = 'Selecciona la ubicación en el mapa.';
     if (!draft.imageUri.trim() && !isEditing) e.imageUri = 'Selecciona un cartel desde la cámara o la galería.';
 
     const age = parsePositiveInt(draft.ageRestriction);
-    if (age === null || age < 1 || age > 99) e.ageRestriction = 'Edad inválida (1–99).';
+    if (age === null || age < 16 || age > 99) e.ageRestriction = 'Edad mínima permitida: 16 años.';
 
     if (!draft.dateTime || !Number.isFinite(draft.dateTime.getTime())) {
       e.dateTime = 'Selecciona fecha y hora.';
     } else if (!isEditing && draft.dateTime.getTime() < minDateTime.getTime()) {
       e.dateTime = 'Debe ser una fecha/hora futura.';
+    } else {
+      const maxFutureDate = new Date();
+      maxFutureDate.setFullYear(maxFutureDate.getFullYear() + 5);
+      if (draft.dateTime.getTime() > maxFutureDate.getTime()) {
+        e.dateTime = 'La fecha no puede ser más de 5 años en el futuro';
+      }
     }
 
     if (!draft.coordinates) e.coordinates = 'Marca la ubicación exacta del evento.';
@@ -588,6 +596,7 @@ export default function CreateEventScreen() {
               onChangeText={(value) => updateDraft('title', value)}
               error={getError('title')}
               icon={<Tag size={20} color={Colors.dark.textSecondary} />}
+              maxLength={100}
             />
             <ThemedInput
               label="Descripción"
@@ -597,6 +606,7 @@ export default function CreateEventScreen() {
               error={getError('description')}
               multiline
               numberOfLines={4}
+              maxLength={2000}
               containerStyle={{ minHeight: 120 }}
             />
             <Text style={styles.fieldLabel}>Tipo de evento</Text>

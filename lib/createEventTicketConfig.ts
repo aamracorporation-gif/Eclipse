@@ -78,7 +78,10 @@ export function getTicketDraftErrors(ticket: TicketDraft) {
 
   if (!name) errors.name = 'Pon un nombre para la entrada.';
   if (price === null) errors.price = 'Precio inválido.';
+  else if (price > 0 && price < 0.50) errors.price = 'El precio mínimo es 0,50€';
+  else if (price > 500000) errors.price = 'El precio máximo por entrada es 500.000€';
   if (quantity === null) errors.quantity = 'Cantidad inválida.';
+  else if (quantity > 50000) errors.quantity = 'La capacidad máxima por tipo es 50.000 entradas';
 
   if (ticket.category === 'vip') {
     const groupSize = parsePositiveInt(ticket.vipGroupSize);

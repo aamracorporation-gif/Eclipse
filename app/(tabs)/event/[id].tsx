@@ -1,4 +1,4 @@
-import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, Linking, Platform, KeyboardAvoidingView, Modal, Switch, Animated, Easing, Share } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, Linking, Platform, KeyboardAvoidingView, Modal, Switch, Animated, Easing, Share, Alert } from 'react-native';
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { router, useLocalSearchParams, useSegments } from 'expo-router';
 import { supabase, Event } from '@/lib/supabase';
@@ -344,6 +344,20 @@ export default function EventDetailScreen() {
       return;
     }
 
+    // Check event is not in the past
+    const eventDateTime = new Date(event?.event_date);
+    if (eventDateTime < new Date()) {
+      Alert.alert('Evento finalizado', 'No es posible comprar entradas para un evento que ya ha tenido lugar.');
+      return;
+    }
+
+    // Email format validation
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (buyerEmail && !emailRegex.test(buyerEmail.trim())) {
+      Alert.alert('Email inválido', 'Introduce un email válido para recibir tu entrada.');
+      return;
+    }
+
     if (!buyerName.trim()) {
       showDialog({ title: t('common.error'), message: t('event.purchase.enter_name') });
       return;
@@ -525,6 +539,20 @@ export default function EventDetailScreen() {
           { label: 'Cancelar', variant: 'outline' },
         ],
       });
+      return;
+    }
+
+    // Check event is not in the past
+    const vipEventDateTime = new Date(event?.event_date);
+    if (vipEventDateTime < new Date()) {
+      Alert.alert('Evento finalizado', 'No es posible comprar entradas para un evento que ya ha tenido lugar.');
+      return;
+    }
+
+    // Email format validation
+    const vipEmailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (buyerEmail && !vipEmailRegex.test(buyerEmail.trim())) {
+      Alert.alert('Email inválido', 'Introduce un email válido para recibir tu entrada.');
       return;
     }
 

@@ -130,14 +130,23 @@ export default function HomeScreen() {
     const baseCount = base.length;
     const filtered = filterEventsByQuery(base as any, searchQuery) as EventWithDistance[];
 
+    const RADIUS_KM = 100;
+
     if (userLocation) {
       const withDistance = filtered.map((e) => {
         if (!e.venues) return e;
-        const d = haversineKm(userLocation.latitude, userLocation.longitude, Number(e.venues.latitude), Number(e.venues.longitude));
+        const d = haversineKm(
+          userLocation.latitude, userLocation.longitude,
+          Number(e.venues.latitude), Number(e.venues.longitude),
+        );
         return { ...e, distance: d };
       });
-      withDistance.sort((a, b) => (a.distance || 9999) - (b.distance || 9999));
-      return { processedEvents: withDistance, baseEventsCount: baseCount };
+      // Only show events within 100 km; events without coordinates are always shown
+      const nearby = withDistance.filter(
+        (e) => !e.venues || (e.distance ?? 9999) <= RADIUS_KM,
+      );
+      nearby.sort((a, b) => (a.distance || 9999) - (b.distance || 9999));
+      return { processedEvents: nearby, baseEventsCount: nearby.length };
     }
 
     return { processedEvents: filtered, baseEventsCount: baseCount };
@@ -146,8 +155,10 @@ export default function HomeScreen() {
   const emptyState = useMemo(() => {
     const q = normalizeSearchQuery(searchQuery);
     if (q && baseEventsCount > 0) return 'no_results' as const;
+    // Location available but no events within 100 km
+    if (userLocation && baseEventsCount === 0 && contextEvents.length > 0) return 'no_nearby' as const;
     return 'empty' as const;
-  }, [baseEventsCount, searchQuery]);
+  }, [baseEventsCount, contextEvents.length, searchQuery, userLocation]);
 
   useFocusEffect(
     useCallback(() => {
@@ -327,11 +338,15 @@ export default function HomeScreen() {
                   <Text style={styles.emptyTitle}>
                     {emptyState === 'no_results'
                       ? t('home.no_results_title', { defaultValue: 'Sin resultados' })
+                      : emptyState === 'no_nearby'
+                      ? t('home.no_nearby_title', { defaultValue: 'Sin eventos cerca' })
                       : t('home.empty_title')}
                   </Text>
                   <Text style={styles.emptySubtitle}>
                     {emptyState === 'no_results'
                       ? t('home.no_results_subtitle', { defaultValue: 'Prueba con otra ciudad o ajusta los filtros.' })
+                      : emptyState === 'no_nearby'
+                      ? t('home.no_nearby_subtitle', { defaultValue: 'No hay eventos en un radio de 100 km. Sigue atento, pronto habrá algo cerca.' })
                       : t('home.empty_subtitle')}
                   </Text>
                   <TouchableOpacity activeOpacity={0.9} onPress={resetDiscovery} style={styles.emptyCta}>

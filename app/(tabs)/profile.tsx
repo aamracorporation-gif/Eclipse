@@ -231,11 +231,11 @@ export default function ProfileScreen() {
 
     if (nonEmpty(profileDraft.age)) {
       const n = Number(profileDraft.age);
-      if (!Number.isFinite(n) || n < 1 || n > 120) errors.age = t('profile.edit.errors.invalid_age', { defaultValue: 'Edad inválida.' });
+      if (!Number.isFinite(n) || n < 16 || n > 120) errors.age = t('profile.edit.errors.invalid_age', { defaultValue: 'La edad mínima es 16 años.' });
     }
 
     const phone = normalizeWhitespace(profileDraft.phone);
-    if (nonEmpty(phone) && !/^[0-9+\s()-]{6,24}$/.test(phone)) errors.phone = t('profile.edit.errors.invalid_phone', { defaultValue: 'Teléfono inválido.' });
+    if (nonEmpty(phone) && !(/^[+]?[0-9\s()-]{6,24}$/.test(phone) && /[0-9]{6,}/.test(phone.replace(/[^0-9]/g, '')))) errors.phone = t('profile.edit.errors.invalid_phone', { defaultValue: 'Teléfono inválido.' });
 
     if (nonEmpty(profileDraft.club_name) && !isSafeOrgText(profileDraft.club_name)) errors.club_name = t('profile.edit.errors.invalid_text', { defaultValue: 'No se permiten emojis ni caracteres especiales.' });
     if (nonEmpty(profileDraft.business_email) && !emailOk(profileDraft.business_email)) errors.business_email = t('profile.edit.errors.invalid_email', { defaultValue: 'Email inválido.' });
@@ -1937,6 +1937,7 @@ export default function ProfileScreen() {
                         editable={!profileEditSaving}
                         autoCorrect={false}
                         autoCapitalize="words"
+                        maxLength={80}
                       />
                       {profileEditTouched.full_name && profileEditErrors.full_name ? <Text style={styles.modalErrorText}>{profileEditErrors.full_name}</Text> : null}
                     </View>

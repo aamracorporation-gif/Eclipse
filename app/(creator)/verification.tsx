@@ -198,6 +198,52 @@ export default function OrganizerVerificationScreen() {
     }
   };
 
+  const disconnectStripe = useCallback(async () => {
+    if (!userId || !stripeStatus.stripe_account_id) return;
+    Alert.alert(
+      'Desconectar cuenta',
+      'Se eliminará la cuenta de Stripe Connect vinculada. Tendrás que volver a conectarla para cobrar entradas. ¿Continuar?',
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Eliminar',
+          style: 'destructive',
+          onPress: async () => {
+            setStripeLoading(true);
+            try {
+              const { data: { session } } = await supabase.auth.getSession();
+              const jwt = session?.access_token;
+              if (!jwt) throw new Error('No session');
+              const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL || '';
+              const res = await fetch(`${supabaseUrl}/functions/v1/stripe-connect-delete-account`, {
+                method: 'POST',
+                headers: {
+                  Authorization: `Bearer ${jwt}`,
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({}),
+              });
+              const json = await res.json().catch(() => ({}));
+              if (!res.ok || !json?.ok) throw new Error(json?.error || 'Error al eliminar');
+              setStripeStatus({
+                stripe_account_id: null,
+                stripe_onboarding_completed: false,
+                stripe_details_submitted: false,
+                stripe_charges_enabled: false,
+                stripe_payouts_enabled: false,
+              });
+              Alert.alert('Cuenta eliminada', 'La cuenta de Stripe Connect ha sido desconectada correctamente.');
+            } catch (e: any) {
+              Alert.alert(t('common.error'), e?.message || 'No se pudo eliminar la cuenta.');
+            } finally {
+              setStripeLoading(false);
+            }
+          },
+        },
+      ]
+    );
+  }, [userId, stripeStatus.stripe_account_id, t]);
+
   const refreshStripe = useCallback(async () => {
     if (!userId) return;
     setStripeLoading(true);
@@ -564,6 +610,17 @@ export default function OrganizerVerificationScreen() {
                     disabled={stripeLoading || stripeStatus.stripe_onboarding_completed}
                   />
                 </View>
+                {stripeStatus.stripe_account_id && (
+                  <View style={{ marginTop: 8 }}>
+                    <TouchableOpacity
+                      onPress={disconnectStripe}
+                      disabled={stripeLoading}
+                      style={[styles.smallButtonOutline, { borderColor: 'rgba(239,68,68,0.5)', alignItems: 'center' }]}
+                    >
+                      <Text style={[styles.smallButtonText, { color: '#EF4444' }]}>Eliminar cuenta conectada</Text>
+                    </TouchableOpacity>
+                  </View>
+                )}
               </GlassView>
             )}
           </View>

@@ -9,7 +9,6 @@ import { Colors } from '@/constants/Colors';
 import { ThemedButton } from '@/components/ui/ThemedButton';
 import { ThemedInput } from '@/components/ui/ThemedInput';
 import { GlassView } from '@/components/ui/GlassView';
-import { scheduleLocalNotification } from '@/lib/notifications';
 import { supabase } from '@/lib/supabase';
 import { useTranslation } from 'react-i18next';
 import { theme } from '@/theme/styles';
@@ -48,6 +47,11 @@ export default function LoginScreen() {
       showDialog({ title: t('auth.reset_password.email_required_title'), message: t('auth.reset_password.email_required_body') });
       return;
     }
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email.trim())) {
+      showDialog({ title: t('common.error'), message: 'Introduce un email válido.' });
+      return;
+    }
     
     try {
       setLoading(true);
@@ -82,10 +86,16 @@ export default function LoginScreen() {
 
     // 1. Basic validation & Trim
     const cleanEmail = email.trim();
-    const cleanPassword = password.trim();
+    const cleanPassword = password;
 
     if (!cleanEmail || !cleanPassword) {
       showDialog({ title: t('auth.login_screen.missing_fields_title'), message: t('auth.login_screen.missing_fields_body') });
+      return;
+    }
+
+    const loginEmailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!loginEmailRegex.test(cleanEmail)) {
+      showDialog({ title: t('common.error'), message: 'Introduce un email válido.' });
       return;
     }
 
@@ -151,14 +161,6 @@ export default function LoginScreen() {
         
         // Esperar un poco a que la sesión se propague si es necesario, 
         // pero idealmente confiamos en el AuthContext.
-
-        // Schedule welcome notification
-        await scheduleLocalNotification(
-          t('auth.login_screen.welcome_notification_title'),
-          t('auth.login_screen.welcome_notification_body'),
-          { type: 'welcome' },
-          2 // 2 seconds delay
-        );
 
         let profileRole: string | null = metadataRole ?? null;
         try {

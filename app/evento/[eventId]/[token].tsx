@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { DiscoLoader } from '@/components/ui/DiscoLoader';
 import { router, useLocalSearchParams } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Colors } from '@/constants/Colors';
@@ -128,15 +129,14 @@ export default function SharedEventLinkScreen() {
   if (Platform.OS !== 'web') {
     return (
       <View style={styles.container}>
-        <ActivityIndicator color={Colors.dark.primary} />
-        <Text style={styles.text}>Abriendo…</Text>
+        <DiscoLoader size={80} label="Abriendo…" />
       </View>
     );
   }
 
   return (
     <View style={styles.container}>
-      {status === 'loading' ? <ActivityIndicator color={Colors.dark.primary} /> : null}
+      {status === 'loading' ? <DiscoLoader size={40} /> : null}
       <Text style={styles.title}>{status === 'error' ? 'No disponible' : 'Abrir evento'}</Text>
       <Text style={styles.text}>{message}</Text>
       {status === 'ok' && deepLink ? (

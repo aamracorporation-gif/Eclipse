@@ -54,8 +54,9 @@ Deno.serve(async (req) => {
     const password = String(body.password || "");
     const metadata = (body.metadata && typeof body.metadata === "object" ? body.metadata : {}) as Record<string, unknown>;
 
-    if (!email || !email.includes("@")) {
-      return new Response(JSON.stringify({ ok: false, error: "Invalid email." }), {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!email || !emailRegex.test(email)) {
+      return new Response(JSON.stringify({ ok: false, error: "Formato de email inválido" }), {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });

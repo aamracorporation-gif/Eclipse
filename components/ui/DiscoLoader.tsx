@@ -304,7 +304,7 @@ const styles = StyleSheet.create({
   ball: {
     alignItems: 'center',
     justifyContent: 'center',
-    overflow: 'hidden',
+    overflow: Platform.OS === 'android' ? 'visible' : 'hidden',
     backgroundColor: 'rgba(255,255,255,0.035)',
     borderColor: 'rgba(255,255,255,0.14)',
     ...(Platform.OS === 'ios'

@@ -1,8 +1,11 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { StyleSheet, Text, View, TouchableOpacity, Modal, Alert, Vibration } from 'react-native';
+import {
+  StyleSheet, Text, View, TouchableOpacity, Modal, Alert,
+  Vibration, TextInput, ScrollView, KeyboardAvoidingView, Platform,
+} from 'react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { router } from 'expo-router';
-import { Check, ChevronDown, X } from '@/lib/icons';
+import { Check, ChevronDown, X, Keyboard as KeyboardIcon, Users } from '@/lib/icons';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/lib/AuthContext';
 import { Colors } from '@/constants/Colors';
@@ -44,6 +47,15 @@ export default function WorkerScanScreen() {
   const [showEventSelector, setShowEventSelector] = useState(false);
   const isScanning = useRef(false);
 
+  // ── NEW: session counter & event capacity ──────────────────────────
+  const [sessionScans, setSessionScans] = useState(0);
+  const [eventAccessCount, setEventAccessCount] = useState<number | null>(null);
+
+  // ── NEW: manual entry ─────────────────────────────────────────────
+  const [showManualEntry, setShowManualEntry] = useState(false);
+  const [manualCode, setManualCode] = useState('');
+  const [manualLoading, setManualLoading] = useState(false);
+
   const safeBack = () => {
     const canGoBack = (router as any)?.canGoBack?.();
     if (canGoBack) router.back();
@@ -53,7 +65,6 @@ export default function WorkerScanScreen() {
   const fetchEventsAndSelectNearest = useCallback(async () => {
     if (!workerProfile) return;
     try {
-      // 1. Get current location if possible
       let userLoc = null;
       try {
         const { status } = await Location.requestForegroundPermissionsAsync();
@@ -62,75 +73,80 @@ export default function WorkerScanScreen() {
           userLoc = { lat: loc.coords.latitude, lon: loc.coords.longitude };
         }
       } catch (e) {
-        console.log("Could not get location:", e);
+        console.log('Could not get location:', e);
       }
 
-      // 2. Fetch events
       const { data, error } = await supabase
         .from('events')
-        .select(`
-          id, title, event_date,
-          venues (latitude, longitude)
-        `)
+        .select('id, title, event_date, venues (latitude, longitude)')
         .eq('creator_id', workerProfile.organizer_id)
-        .gte('event_date', new Date().toISOString().split('T')[0]) // Active events
+        .gte('event_date', new Date().toISOString().split('T')[0])
         .order('event_date', { ascending: true });
-      
+
       if (error) throw error;
 
       if (data && data.length > 0) {
         setEvents(data);
-        
-        // 3. Select logic:
-        // Priority 1: Event is TODAY (date match)
-        // Priority 2: Closest by distance (if location available)
-        // Priority 3: First in list (soonest upcoming)
-
         const todayStr = new Date().toISOString().split('T')[0];
         const todayEvents = data.filter(e => e.event_date.startsWith(todayStr));
 
         if (todayEvents.length > 0) {
-           // If multiple events today, use distance or just first
-           if (userLoc && todayEvents.length > 1) {
-              const sortedByDist = [...todayEvents].sort((a, b) => {
-                const vA: any = a.venues;
-                const vB: any = b.venues;
-                const distA = vA && vA.latitude != null && vA.longitude != null ? getDistanceFromLatLonInKm(userLoc.lat, userLoc.lon, vA.latitude, vA.longitude) : 99999;
-                const distB = vB && vB.latitude != null && vB.longitude != null ? getDistanceFromLatLonInKm(userLoc.lat, userLoc.lon, vB.latitude, vB.longitude) : 99999;
-                return distA - distB;
-              });
-              setSelectedEventId(sortedByDist[0].id);
-           } else {
-              setSelectedEventId(todayEvents[0].id);
-           }
-        } else if (userLoc) {
-           // No events today, pick closest upcoming event by distance
-           // Or maybe just the soonest one (data[0]) is better? 
-           // User asked for "evento mas cercano" (nearest). Let's respect distance if available.
-           const sortedByDist = [...data].sort((a, b) => {
+          if (userLoc && todayEvents.length > 1) {
+            const sortedByDist = [...todayEvents].sort((a, b) => {
               const vA: any = a.venues;
               const vB: any = b.venues;
-              const distA = vA && vA.latitude != null && vA.longitude != null ? getDistanceFromLatLonInKm(userLoc.lat, userLoc.lon, vA.latitude, vA.longitude) : 99999;
-              const distB = vB && vB.latitude != null && vB.longitude != null ? getDistanceFromLatLonInKm(userLoc.lat, userLoc.lon, vB.latitude, vB.longitude) : 99999;
+              const distA = vA?.latitude != null ? getDistanceFromLatLonInKm(userLoc.lat, userLoc.lon, vA.latitude, vA.longitude) : 99999;
+              const distB = vB?.latitude != null ? getDistanceFromLatLonInKm(userLoc.lat, userLoc.lon, vB.latitude, vB.longitude) : 99999;
               return distA - distB;
-           });
-           setSelectedEventId(sortedByDist[0].id);
+            });
+            setSelectedEventId(sortedByDist[0].id);
+          } else {
+            setSelectedEventId(todayEvents[0].id);
+          }
+        } else if (userLoc) {
+          const sortedByDist = [...data].sort((a, b) => {
+            const vA: any = a.venues;
+            const vB: any = b.venues;
+            const distA = vA?.latitude != null ? getDistanceFromLatLonInKm(userLoc.lat, userLoc.lon, vA.latitude, vA.longitude) : 99999;
+            const distB = vB?.latitude != null ? getDistanceFromLatLonInKm(userLoc.lat, userLoc.lon, vB.latitude, vB.longitude) : 99999;
+            return distA - distB;
+          });
+          setSelectedEventId(sortedByDist[0].id);
         } else {
-           // Fallback: Soonest upcoming
-           setSelectedEventId(data[0].id);
+          setSelectedEventId(data[0].id);
         }
       }
     } catch (e) {
-      console.error("Error fetching events for scanner:", e);
+      console.error('Error fetching events for scanner:', e);
     }
   }, [workerProfile]);
 
-  useEffect(() => {
-    if (!permission?.granted) {
-      requestPermission();
+  // ── Fetch how many people have already entered for the selected event ──
+  const fetchEventAccessCount = useCallback(async (eventId: string) => {
+    try {
+      const { count } = await supabase
+        .from('tickets')
+        .select('*', { count: 'exact', head: true })
+        .eq('event_id', eventId)
+        .eq('status', 'used');
+      setEventAccessCount(count ?? 0);
+    } catch {
+      setEventAccessCount(null);
     }
+  }, []);
+
+  useEffect(() => {
+    if (!permission?.granted) requestPermission();
     fetchEventsAndSelectNearest();
   }, [fetchEventsAndSelectNearest, permission?.granted, requestPermission]);
+
+  useEffect(() => {
+    if (selectedEventId) {
+      fetchEventAccessCount(selectedEventId);
+    } else {
+      setEventAccessCount(null);
+    }
+  }, [selectedEventId, fetchEventAccessCount]);
 
   const playFeedback = async (success: boolean) => {
     try {
@@ -139,17 +155,30 @@ export default function WorkerScanScreen() {
       } else {
         await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       }
-    } catch (error) {
-      console.log('Error playing haptics', error);
+    } catch {
       Vibration.vibrate(success ? 100 : 500);
     }
   };
 
+  // Core validation logic — shared between QR scan and manual entry
+  const validateCode = async (code: string): Promise<any> => {
+    if (!workerProfile?.id) throw new Error('Perfil de trabajador no encontrado');
+    const { data: validationData, error } = await supabase.rpc('validate_ticket_worker_v2', {
+      p_qr_token: code,
+      p_worker_id: workerProfile.id,
+      p_event_id: selectedEventId,
+    });
+    if (error) throw error;
+    if (validationData.valid && validationData.event_id && validationData.event_id !== selectedEventId) {
+      return { valid: false, message: 'ENTRADA DE OTRO EVENTO', attendee_name: validationData.attendee_name, ticket_type: validationData.ticket_type };
+    }
+    return validationData;
+  };
+
   const handleBarCodeScanned = async ({ type, data }: { type: string; data: string }) => {
     if (scanned || loading || isScanning.current) return;
-
     if (!selectedEventId) {
-      Alert.alert("Atención", "Por favor selecciona un evento antes de escanear.");
+      Alert.alert('Atención', 'Por favor selecciona un evento antes de escanear.');
       return;
     }
 
@@ -157,68 +186,59 @@ export default function WorkerScanScreen() {
     setScanned(true);
     setLoading(true);
     await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    
-    const cleanData = data.trim();
-    console.log(`[WorkerScanner] Code detected. Type: ${type}, Data: ${cleanData}`);
 
     try {
-      if (!workerProfile?.id) {
-        throw new Error('Perfil de trabajador no encontrado');
-      }
-
-      // Validate with Worker RPC (event-safe: it will NOT mark the ticket as used if it belongs to another event)
-      const { data: validationData, error } = await supabase
-        .rpc('validate_ticket_worker_v2', { 
-          p_qr_token: cleanData, 
-          p_worker_id: workerProfile.id,
-          p_event_id: selectedEventId
-        });
-
-      if (error) throw error;
-
-      console.log('[WorkerScanner] Validation Result:', validationData);
-
-      // STRICT EVENT VALIDATION
-      // If validationData is valid, we must ensure it belongs to the selected event
-      // Assuming validationData returns event_id. If not, we might need to update RPC or fetch ticket details.
-      // Based on previous knowledge, validationData usually has ticket info. Let's verify.
-      // If the RPC doesn't return event_id, we have a problem.
-      // However, usually it returns ticket details. Let's assume it does or we check against it.
-      
-      // If the RPC returns event_id, check it:
-      if (validationData.valid && validationData.event_id && validationData.event_id !== selectedEventId) {
-         // Ticket is valid but for WRONG event
-         const wrongEventResult = {
-            valid: false,
-            message: 'ENTRADA DE OTRO EVENTO',
-            attendee_name: validationData.attendee_name,
-            ticket_type: validationData.ticket_type
-         };
-         setResult(wrongEventResult);
-         await playFeedback(false);
-         setModalVisible(true);
-         return;
-      }
-
+      const validationData = await validateCode(data.trim());
       setResult(validationData);
       await playFeedback(validationData.valid);
+      if (validationData.valid) {
+        setSessionScans(prev => prev + 1);
+        // Update live access count
+        setEventAccessCount(prev => (prev !== null ? prev + 1 : 1));
+      }
       setModalVisible(true);
-
     } catch (error: any) {
       console.error('[WorkerScanner] Validation Error:', error);
-      Alert.alert(
-        'Error', 
-        'Error al validar el código: ' + error.message,
-        [{ 
-          text: 'OK', 
-          onPress: () => {
-            setScanned(false);
-            isScanning.current = false;
-          }
-        }]
-      );
+      Alert.alert('Error', 'Error al validar el código: ' + error.message, [{
+        text: 'OK',
+        onPress: () => { setScanned(false); isScanning.current = false; },
+      }]);
     } finally {
       setLoading(false);
+    }
+  };
+
+  // ── Manual entry handler ──────────────────────────────────────────
+  const handleManualValidate = async () => {
+    const code = manualCode.trim();
+    if (!code) {
+      Alert.alert('Atención', 'Introduce el código de la entrada.');
+      return;
+    }
+    if (!selectedEventId) {
+      Alert.alert('Atención', 'Por favor selecciona un evento primero.');
+      return;
+    }
+    if (manualLoading) return;
+
+    setManualLoading(true);
+    await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+
+    try {
+      const validationData = await validateCode(code);
+      setResult(validationData);
+      await playFeedback(validationData.valid);
+      if (validationData.valid) {
+        setSessionScans(prev => prev + 1);
+        setEventAccessCount(prev => (prev !== null ? prev + 1 : 1));
+      }
+      setManualCode('');
+      setShowManualEntry(false);
+      setModalVisible(true);
+    } catch (error: any) {
+      Alert.alert('Error', 'Error al validar: ' + error.message);
+    } finally {
+      setManualLoading(false);
     }
   };
 
@@ -229,9 +249,7 @@ export default function WorkerScanScreen() {
     isScanning.current = false;
   };
 
-  if (!permission) {
-    return <View />;
-  }
+  if (!permission) return <View />;
 
   if (!permission.granted) {
     return (
@@ -244,63 +262,57 @@ export default function WorkerScanScreen() {
     );
   }
 
+  const selectedEvent = events.find(e => e.id === selectedEventId);
+
   return (
     <View style={styles.container}>
       <CameraView
         style={StyleSheet.absoluteFillObject}
         facing="back"
-        onBarcodeScanned={scanned ? undefined : handleBarCodeScanned}
-        barcodeScannerSettings={{
-          barcodeTypes: ["qr"],
-        }}
+        onBarcodeScanned={scanned || showManualEntry ? undefined : handleBarCodeScanned}
+        barcodeScannerSettings={{ barcodeTypes: ['qr'] }}
       />
-      
+
       {/* Overlay UI */}
       <View style={[styles.overlay, { paddingTop: insets.top + 20, paddingHorizontal: horizontalPadding }]}>
         <View style={{ flex: 1, width: '100%', maxWidth: maxContentWidth, alignSelf: 'center' }}>
+
+          {/* Header */}
           <View style={styles.header}>
-            <TouchableOpacity 
-              style={styles.closeButton} 
-              onPress={safeBack}
-            >
+            <TouchableOpacity style={styles.closeButton} onPress={safeBack}>
               <X size={28} color="white" />
             </TouchableOpacity>
             <Text style={[styles.title, { fontSize: scaleFont(18) }]}>Escanear Entrada</Text>
+            {/* Session scan counter */}
+            <View style={styles.sessionCounterBadge}>
+              <Text style={styles.sessionCounterText}>✅ {sessionScans}</Text>
+            </View>
           </View>
 
+          {/* Event selector */}
           <View style={styles.eventSelectorContainer}>
             <Text style={[styles.selectorLabel, { fontSize: scaleFont(12) }]}>Evento seleccionado:</Text>
-            <TouchableOpacity 
+            <TouchableOpacity
               style={styles.eventSelector}
               onPress={() => setShowEventSelector(!showEventSelector)}
               activeOpacity={0.85}
             >
               <Text style={[styles.selectedEventText, { fontSize: scaleFont(16) }]} numberOfLines={1}>
-                {events.find(e => e.id === selectedEventId)?.title || 'Seleccionar evento...'}
+                {selectedEvent?.title || 'Seleccionar evento...'}
               </Text>
               <ChevronDown size={20} color="white" />
             </TouchableOpacity>
-            
+
             {showEventSelector && events.length > 0 && (
               <View style={styles.dropdownList}>
                 {events.map(event => (
-                  <TouchableOpacity 
+                  <TouchableOpacity
                     key={event.id}
-                    style={[
-                      styles.dropdownItem,
-                      selectedEventId === event.id && styles.activeDropdownItem
-                    ]}
-                    onPress={() => {
-                      setSelectedEventId(event.id);
-                      setShowEventSelector(false);
-                    }}
+                    style={[styles.dropdownItem, selectedEventId === event.id && styles.activeDropdownItem]}
+                    onPress={() => { setSelectedEventId(event.id); setShowEventSelector(false); }}
                     activeOpacity={0.85}
                   >
-                    <Text style={[
-                      styles.dropdownText,
-                      { fontSize: scaleFont(16) },
-                      selectedEventId === event.id && styles.activeDropdownText
-                    ]} numberOfLines={1}>
+                    <Text style={[styles.dropdownText, { fontSize: scaleFont(16) }, selectedEventId === event.id && styles.activeDropdownText]} numberOfLines={1}>
                       {event.title}
                     </Text>
                     <Text style={[styles.dropdownDate, { fontSize: scaleFont(12) }]} numberOfLines={1}>
@@ -312,50 +324,107 @@ export default function WorkerScanScreen() {
             )}
           </View>
 
-          <View style={styles.scanFrameContainer}>
-            <View
-              style={[
-                styles.scanFrame,
-                {
-                  width: Math.min(280, Math.max(220, width - horizontalPadding * 2 - 40)),
-                  height: Math.min(280, Math.max(220, width - horizontalPadding * 2 - 40)),
-                },
-              ]}
-            />
-            <Text style={[styles.scanInstruction, { fontSize: scaleFont(16) }]} numberOfLines={2}>
-              Escaneando para: {events.find(e => e.id === selectedEventId)?.title || '...'}
-            </Text>
-          </View>
+          {/* Scan frame or manual entry */}
+          {showManualEntry ? (
+            <KeyboardAvoidingView
+              behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+              style={styles.manualEntryContainer}
+            >
+              <GlassView intensity={35} style={styles.manualEntryCard}>
+                <Text style={styles.manualEntryTitle}>Entrada manual</Text>
+                <Text style={styles.manualEntrySubtitle}>
+                  Introduce el código QR impreso en la entrada
+                </Text>
+                <TextInput
+                  style={styles.manualInput}
+                  value={manualCode}
+                  onChangeText={setManualCode}
+                  placeholder="Código de la entrada…"
+                  placeholderTextColor="rgba(255,255,255,0.35)"
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  autoFocus
+                  returnKeyType="done"
+                  onSubmitEditing={handleManualValidate}
+                />
+                <View style={styles.manualActions}>
+                  <TouchableOpacity
+                    style={styles.manualCancelBtn}
+                    onPress={() => { setShowManualEntry(false); setManualCode(''); }}
+                  >
+                    <Text style={styles.manualCancelText}>Cancelar</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.manualValidateBtn, manualLoading && { opacity: 0.6 }]}
+                    onPress={handleManualValidate}
+                    disabled={manualLoading}
+                  >
+                    {manualLoading
+                      ? <DiscoLoader size={22} />
+                      : <Text style={styles.manualValidateText}>Validar</Text>}
+                  </TouchableOpacity>
+                </View>
+              </GlassView>
+            </KeyboardAvoidingView>
+          ) : (
+            <View style={styles.scanFrameContainer}>
+              <View
+                style={[
+                  styles.scanFrame,
+                  {
+                    width: Math.min(280, Math.max(220, width - horizontalPadding * 2 - 40)),
+                    height: Math.min(280, Math.max(220, width - horizontalPadding * 2 - 40)),
+                  },
+                ]}
+              />
+              {/* Access count badge below scan frame */}
+              {eventAccessCount !== null && (
+                <View style={styles.accessCountBadge}>
+                  <Users size={14} color="#a3e635" />
+                  <Text style={styles.accessCountText}>
+                    {eventAccessCount} accedido{eventAccessCount !== 1 ? 's' : ''}
+                  </Text>
+                </View>
+              )}
+              <Text style={[styles.scanInstruction, { fontSize: scaleFont(16) }]} numberOfLines={2}>
+                Escaneando: {selectedEvent?.title || '...'}
+              </Text>
+            </View>
+          )}
+
+          {/* Manual entry toggle (bottom) */}
+          {!showManualEntry && (
+            <TouchableOpacity
+              style={[styles.manualEntryToggle, { marginBottom: insets.bottom + 16 }]}
+              onPress={() => setShowManualEntry(true)}
+              activeOpacity={0.8}
+            >
+              <KeyboardIcon size={16} color="rgba(255,255,255,0.6)" />
+              <Text style={styles.manualEntryToggleText}>Entrada manual</Text>
+            </TouchableOpacity>
+          )}
         </View>
       </View>
 
       {/* Result Modal */}
-      <Modal
-        animationType="slide"
-        transparent={true}
-        visible={modalVisible}
-        onRequestClose={closeModal}
-      >
+      <Modal animationType="slide" transparent visible={modalVisible} onRequestClose={closeModal}>
         <View style={styles.modalContainer}>
           <GlassView intensity={40} style={styles.modalContent}>
             {loading ? (
               <DiscoLoader size={90} />
             ) : result ? (
               <>
-                <View style={[
-                  styles.resultIconContainer, 
-                  { backgroundColor: result.valid ? '#22c55e' : '#ef4444' }
-                ]}>
+                <View style={[styles.resultIconContainer, { backgroundColor: result.valid ? '#22c55e' : '#ef4444' }]}>
                   {result.valid ? <Check size={50} color="white" /> : <X size={50} color="white" />}
                 </View>
-                
+
                 <Text style={styles.resultTitle}>
                   {result.valid ? 'ENTRADA VÁLIDA' : 'ENTRADA INVÁLIDA'}
                 </Text>
 
                 {result.message === 'ENTRADA CADUCADA' && (
                   <View style={styles.expiredBanner}>
-                     <Text style={styles.expiredText}>ENTRADA CADUCADA</Text>
+                    <Text style={styles.expiredText}>ENTRADA CADUCADA</Text>
                   </View>
                 )}
 
@@ -367,10 +436,10 @@ export default function WorkerScanScreen() {
                   <View style={styles.ticketDetails}>
                     <Text style={styles.detailLabel}>Asistente:</Text>
                     <Text style={styles.detailValue}>{result.attendee_name || 'Desconocido'}</Text>
-                    
+
                     <Text style={styles.detailLabel}>Tipo:</Text>
                     <Text style={styles.detailValue}>{result.ticket_type || 'General'}</Text>
-                    
+
                     {result.scanned_at && (
                       <Text style={styles.scannedAtText}>
                         Escaneado: {new Date(result.scanned_at).toLocaleTimeString()}
@@ -379,8 +448,18 @@ export default function WorkerScanScreen() {
                   </View>
                 )}
 
-                <ThemedButton 
-                  title={result.valid ? "Siguiente" : "Reintentar"} 
+                {/* Session running total inside modal */}
+                {result.valid && sessionScans > 0 && (
+                  <View style={styles.sessionCountInsideModal}>
+                    <Text style={styles.sessionCountInsideText}>
+                      ✅ {sessionScans} escaneado{sessionScans !== 1 ? 's' : ''} esta sesión
+                      {eventAccessCount !== null ? `  ·  👥 ${eventAccessCount} en sala` : ''}
+                    </Text>
+                  </View>
+                )}
+
+                <ThemedButton
+                  title={result.valid ? 'Siguiente' : 'Reintentar'}
                   onPress={closeModal}
                   style={{ marginTop: 20, width: '100%' }}
                   variant={result.valid ? 'primary' : 'secondary'}
@@ -395,14 +474,9 @@ export default function WorkerScanScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: Colors.dark.background,
-  },
-  overlay: {
-    flex: 1,
-    paddingHorizontal: 20,
-  },
+  container: { flex: 1, backgroundColor: Colors.dark.background },
+  overlay:   { flex: 1, paddingHorizontal: 20 },
+
   header: {
     position: 'relative',
     flexDirection: 'row',
@@ -428,35 +502,24 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     includeFontPadding: false,
   },
-  scanFrameContainer: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 40,
-    zIndex: 1,
-  },
-  scanFrame: {
-    width: 250,
-    height: 250,
-    borderWidth: 2,
-    borderColor: Colors.dark.primary,
+  sessionCounterBadge: {
+    position: 'absolute',
+    right: 0,
+    backgroundColor: 'rgba(34,197,94,0.25)',
+    borderWidth: 1,
+    borderColor: 'rgba(34,197,94,0.5)',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
     borderRadius: 20,
-    backgroundColor: 'rgba(255,255,255,0.1)',
   },
-  scanInstruction: {
-    color: 'white',
-    marginTop: 20,
-    fontSize: 16,
-    textAlign: 'center',
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    padding: 10,
-    borderRadius: 10,
-    overflow: 'hidden',
-    includeFontPadding: false,
-    textAlignVertical: 'center',
+  sessionCounterText: {
+    color: '#4ade80',
+    fontWeight: 'bold',
+    fontSize: 13,
   },
+
   eventSelectorContainer: {
-    zIndex: 999, // Ensure dropdown is above other elements
+    zIndex: 999,
     marginBottom: 20,
     paddingHorizontal: 10,
     position: 'relative',
@@ -477,11 +540,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.2)',
   },
-  selectedEventText: {
-    color: 'white',
-    fontSize: 16,
-    fontWeight: '600',
-  },
+  selectedEventText: { color: 'white', fontSize: 16, fontWeight: '600' },
   dropdownList: {
     position: 'absolute',
     top: '100%',
@@ -506,22 +565,133 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: 'rgba(255,255,255,0.1)',
   },
-  activeDropdownItem: {
-    backgroundColor: 'rgba(59, 130, 246, 0.2)',
+  activeDropdownItem: { backgroundColor: 'rgba(59, 130, 246, 0.2)' },
+  dropdownText:   { color: 'white', fontSize: 16 },
+  activeDropdownText: { color: Colors.dark.primary, fontWeight: 'bold' },
+  dropdownDate:   { color: '#999', fontSize: 12, marginTop: 2 },
+
+  scanFrameContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 40,
+    zIndex: 1,
   },
-  dropdownText: {
+  scanFrame: {
+    width: 250,
+    height: 250,
+    borderWidth: 2,
+    borderColor: Colors.dark.primary,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255,255,255,0.1)',
+  },
+  accessCountBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    borderWidth: 1,
+    borderColor: 'rgba(163,230,53,0.4)',
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: 20,
+    marginTop: 14,
+  },
+  accessCountText: {
+    color: '#a3e635',
+    fontWeight: '700',
+    fontSize: 13,
+  },
+  scanInstruction: {
+    color: 'white',
+    marginTop: 16,
+    fontSize: 16,
+    textAlign: 'center',
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    padding: 10,
+    borderRadius: 10,
+    overflow: 'hidden',
+    includeFontPadding: false,
+    textAlignVertical: 'center',
+  },
+
+  // Manual entry toggle (footer button)
+  manualEntryToggle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 12,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(255,255,255,0.1)',
+  },
+  manualEntryToggleText: {
+    color: 'rgba(255,255,255,0.6)',
+    fontSize: 14,
+  },
+
+  // Manual entry card
+  manualEntryContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    marginBottom: 20,
+  },
+  manualEntryCard: {
+    padding: 24,
+    borderRadius: 20,
+    margin: 10,
+  },
+  manualEntryTitle: {
+    color: 'white',
+    fontSize: 18,
+    fontWeight: 'bold',
+    textAlign: 'center',
+    marginBottom: 6,
+  },
+  manualEntrySubtitle: {
+    color: Colors.dark.textSecondary,
+    fontSize: 13,
+    textAlign: 'center',
+    marginBottom: 20,
+  },
+  manualInput: {
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.15)',
+    borderRadius: 12,
     color: 'white',
     fontSize: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    marginBottom: 16,
+    fontFamily: Platform.select({ ios: 'Courier New', android: 'monospace' }),
   },
-  activeDropdownText: {
-    color: Colors.dark.primary,
-    fontWeight: 'bold',
+  manualActions: {
+    flexDirection: 'row',
+    gap: 10,
   },
-  dropdownDate: {
-    color: '#999',
-    fontSize: 12,
-    marginTop: 2,
+  manualCancelBtn: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 12,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.12)',
   },
+  manualCancelText: { color: Colors.dark.textSecondary, fontWeight: '600', fontSize: 15 },
+  manualValidateBtn: {
+    flex: 2,
+    paddingVertical: 12,
+    borderRadius: 12,
+    backgroundColor: Colors.dark.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 46,
+  },
+  manualValidateText: { color: 'white', fontWeight: 'bold', fontSize: 15 },
+
+  // Modal
   modalContainer: {
     flex: 1,
     justifyContent: 'center',
@@ -543,24 +713,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 20,
     elevation: 10,
-    shadowColor: "#000",
+    shadowColor: '#000',
     shadowOffset: { width: 0, height: 5 },
     shadowOpacity: 0.3,
     shadowRadius: 5,
   },
-  resultTitle: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: 'white',
-    marginBottom: 10,
-    textAlign: 'center',
-  },
-  resultMessage: {
-    fontSize: 16,
-    color: Colors.dark.textSecondary,
-    textAlign: 'center',
-    marginBottom: 20,
-  },
+  resultTitle:   { fontSize: 24, fontWeight: 'bold', color: 'white', marginBottom: 10, textAlign: 'center' },
+  resultMessage: { fontSize: 16, color: Colors.dark.textSecondary, textAlign: 'center', marginBottom: 20 },
   ticketDetails: {
     width: '100%',
     backgroundColor: 'rgba(255,255,255,0.05)',
@@ -568,23 +727,23 @@ const styles = StyleSheet.create({
     borderRadius: 15,
     marginBottom: 10,
   },
-  detailLabel: {
-    color: Colors.dark.textSecondary,
-    fontSize: 12,
-    marginBottom: 2,
+  detailLabel:   { color: Colors.dark.textSecondary, fontSize: 12, marginBottom: 2 },
+  detailValue:   { color: 'white', fontSize: 16, fontWeight: '600', marginBottom: 10 },
+  scannedAtText: { color: '#ef4444', fontSize: 12, marginTop: 5, fontStyle: 'italic' },
+
+  sessionCountInsideModal: {
+    backgroundColor: 'rgba(34,197,94,0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(34,197,94,0.25)',
+    borderRadius: 10,
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    marginTop: 4,
+    width: '100%',
+    alignItems: 'center',
   },
-  detailValue: {
-    color: 'white',
-    fontSize: 16,
-    fontWeight: '600',
-    marginBottom: 10,
-  },
-  scannedAtText: {
-    color: '#ef4444',
-    fontSize: 12,
-    marginTop: 5,
-    fontStyle: 'italic',
-  },
+  sessionCountInsideText: { color: '#4ade80', fontSize: 12, fontWeight: '600' },
+
   expiredBanner: {
     backgroundColor: '#ef4444',
     paddingHorizontal: 20,
@@ -594,10 +753,5 @@ const styles = StyleSheet.create({
     width: '100%',
     alignItems: 'center',
   },
-  expiredText: {
-    color: 'white',
-    fontWeight: 'bold',
-    fontSize: 18,
-    textTransform: 'uppercase',
-  },
+  expiredText: { color: 'white', fontWeight: 'bold', fontSize: 18, textTransform: 'uppercase' },
 });

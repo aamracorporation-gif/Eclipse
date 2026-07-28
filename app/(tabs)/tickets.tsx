@@ -73,7 +73,7 @@ export default function TicketsScreen() {
     const rawOriginal = selectedTicket ? (typeof selectedTicket.total_price === 'string' ? Number(selectedTicket.total_price) : (selectedTicket as any).total_price) : 0;
     const originalPrice = typeof rawOriginal === 'number' && Number.isFinite(rawOriginal) ? rawOriginal : 0;
     const minResalePrice = Math.max(originalPrice, 1);
-    const maxResalePrice = originalPrice * 1.2;
+    const maxResalePrice = originalPrice > 0 ? originalPrice * 1.2 : 0;
 
     if (Number.isFinite(minResalePrice) && price < minResalePrice) {
       return `Precio minimo: ${(minResalePrice || 0).toFixed(2)} EUR`;
@@ -270,6 +270,17 @@ export default function TicketsScreen() {
   };
 
   const handleSellPress = async (ticket: ExtendedTicket) => {
+    if (new Date(ticket.events?.event_date || (ticket as any).event_date) < new Date()) {
+      showDialog({ title: 'Evento finalizado', message: 'No puedes revender entradas de eventos que ya han tenido lugar.' });
+      return;
+    }
+
+    const originalPrice = typeof (ticket as any).total_price === 'string' ? Number((ticket as any).total_price) : ((ticket as any).total_price ?? 0);
+    if (originalPrice === 0) {
+      showDialog({ title: 'Entrada gratuita', message: 'Las entradas gratuitas no se pueden revender.' });
+      return;
+    }
+
     const allowResaleForEvent = (ticket as any)?.events?.allow_resale ?? true;
     if (!allowResaleForEvent) {
       showDialog({ title: t('tickets.action_not_allowed_title'), message: t('tickets.resale_disabled_event') });
@@ -455,7 +466,7 @@ export default function TicketsScreen() {
 
     const originalPrice = getOriginalTicketPrice(selectedTicket);
     const minResalePrice = Math.max(originalPrice, 1);
-    const maxResalePrice = originalPrice * 1.2;
+    const maxResalePrice = originalPrice > 0 ? originalPrice * 1.2 : 0;
 
     if (Number.isFinite(minResalePrice) && price < minResalePrice) {
       showDialog({

@@ -128,17 +128,60 @@ function RootLayoutNav({ fontsLoaded }: { fontsLoaded: boolean }) {
   useEffect(() => {
     if (!isAppReady) return;
 
-    const handleUrl = (url: string | null | undefined) => {
+    const handleUrl = async (url: string | null | undefined) => {
       if (!url) return;
+
+      // ── Auth callback (email verification / magic link) ───────────────────
+      // Deep link: eclipse://auth/callback?token_hash=...&type=...
+      // OR: eclipse://auth/callback#access_token=...&refresh_token=...
+      if (url.includes('auth/callback')) {
+        try {
+          // Parse query params and fragment
+          const parsed = ExpoLinking.parse(url);
+          const params = parsed.queryParams as Record<string, string> ?? {};
+
+          // Supabase PKCE flow: token_hash + type
+          if (params.token_hash && params.type) {
+            const { data, error } = await supabase.auth.verifyOtp({
+              token_hash: params.token_hash,
+              type: params.type as any,
+            });
+            if (!error && data.session) {
+              router.replace('/(tabs)');
+            }
+            return;
+          }
+
+          // Legacy implicit flow: access_token + refresh_token in hash/query
+          const accessToken = params.access_token;
+          const refreshToken = params.refresh_token;
+          if (accessToken && refreshToken) {
+            const { error } = await supabase.auth.setSession({
+              access_token: accessToken,
+              refresh_token: refreshToken,
+            });
+            if (!error) router.replace('/(tabs)');
+            return;
+          }
+        } catch {}
+        return;
+      }
+
+      // ── Event deep link ───────────────────────────────────────────────────
       const parsed = ExpoLinking.parse(url);
       const path = (parsed?.path || '').replace(/^\/+/, '');
       if (!path) return;
 
-      const normalizedPath = path.replace(/^\/+/, '');
-      const match = normalizedPath.match(/(^|\/)event\/([^/?#]+)/i);
+      const match = path.replace(/^\/+/, '').match(/(^|\/)event\/([^/?#]+)/i);
       if (match?.[2]) {
         router.push(`/(tabs)/event/${match[2]}`);
         return;
+      }
+
+      // ── Evento share token ────────────────────────────────────────────────
+      const eventoMatch = path.match(/^evento\/([^/?#]+)$/i);
+      if (eventoMatch?.[1]) {
+        router.push(`/evento/${eventoMatch[1]}`);
       }
     };
 
