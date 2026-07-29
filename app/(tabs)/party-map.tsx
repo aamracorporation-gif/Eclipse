@@ -721,6 +721,7 @@ export default function PartyMapScreen() {
                     identifier={`event:${e.id}`}
                     coordinate={c.center}
                     tracksViewChanges={false}
+                    anchor={{ x: 0.5, y: 0.5 }}
                     onPress={() => focusOnEvent(e)}
                   >
                     {(showPrice || isSel) ? (

@@ -276,7 +276,8 @@ export default function HomeScreen() {
           data={processedEvents}
           keyExtractor={(item) => item.id}
           renderItem={renderEventItem}
-          contentContainerStyle={[styles.listContent, { paddingHorizontal: horizontalPadding }]}
+          style={{ flex: 1, backgroundColor: 'transparent' }}
+          contentContainerStyle={[styles.listContent, { paddingHorizontal: horizontalPadding, flexGrow: 1 }]}
           showsVerticalScrollIndicator={false}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Colors.dark.primary} />}
           ListHeaderComponent={
@@ -332,31 +333,29 @@ export default function HomeScreen() {
             </View>
           }
           ListEmptyComponent={
-            <View style={[styles.emptyWrap, { maxWidth: maxContentWidth, alignSelf: 'center', width: '100%', paddingHorizontal: horizontalPadding }]}>
-              <Animated.View style={{ opacity: emptyEnter, transform: [{ translateY: emptyFloat.interpolate({ inputRange: [0, 1], outputRange: [0, -6] }) }] }}>
-                <View style={styles.emptyCard}>
-                  <Text style={styles.emptyTitle}>
-                    {emptyState === 'no_results'
-                      ? t('home.no_results_title', { defaultValue: 'Sin resultados' })
-                      : emptyState === 'no_nearby'
-                      ? t('home.no_nearby_title', { defaultValue: 'Sin eventos cerca' })
-                      : t('home.empty_title')}
-                  </Text>
-                  <Text style={styles.emptySubtitle}>
-                    {emptyState === 'no_results'
-                      ? t('home.no_results_subtitle', { defaultValue: 'Prueba con otra ciudad o ajusta los filtros.' })
-                      : emptyState === 'no_nearby'
-                      ? t('home.no_nearby_subtitle', { defaultValue: 'No hay eventos en un radio de 100 km. Sigue atento, pronto habrá algo cerca.' })
-                      : t('home.empty_subtitle')}
-                  </Text>
-                  <TouchableOpacity activeOpacity={0.9} onPress={resetDiscovery} style={styles.emptyCta}>
-                    <LinearGradient colors={[Colors.dark.primary, Colors.dark.secondary]} style={styles.emptyCtaGradient}>
-                      <Text style={styles.emptyCtaText}>{t('home.clear_filters')}</Text>
-                    </LinearGradient>
-                  </TouchableOpacity>
-                </View>
-              </Animated.View>
-            </View>
+            <Animated.View style={[styles.emptyWrap, { opacity: emptyEnter, transform: [{ translateY: emptyFloat.interpolate({ inputRange: [0, 1], outputRange: [0, -6] }) }] }]}>
+              <View style={styles.emptyCard}>
+                <Text style={styles.emptyTitle}>
+                  {emptyState === 'no_results'
+                    ? t('home.no_results_title', { defaultValue: 'Sin resultados' })
+                    : emptyState === 'no_nearby'
+                    ? t('home.no_nearby_title', { defaultValue: 'Sin eventos cerca' })
+                    : t('home.empty_title', { defaultValue: 'Sin fiestas para este momento' })}
+                </Text>
+                <Text style={styles.emptySubtitle}>
+                  {emptyState === 'no_results'
+                    ? t('home.no_results_subtitle', { defaultValue: 'Prueba con otra ciudad o ajusta los filtros.' })
+                    : emptyState === 'no_nearby'
+                    ? t('home.no_nearby_subtitle', { defaultValue: 'No hay eventos en un radio de 100 km. Sigue atento, pronto habrá algo cerca.' })
+                    : t('home.empty_subtitle', { defaultValue: 'Cambia la fecha o prueba a limpiar filtros para descubrir más.' })}
+                </Text>
+                <TouchableOpacity activeOpacity={0.9} onPress={resetDiscovery} style={styles.emptyCta}>
+                  <LinearGradient colors={[Colors.dark.primary, Colors.dark.secondary]} style={styles.emptyCtaGradient}>
+                    <Text style={styles.emptyCtaText}>{t('home.clear_filters', { defaultValue: 'Limpiar filtros' })}</Text>
+                  </LinearGradient>
+                </TouchableOpacity>
+              </View>
+            </Animated.View>
           }
         />
       </SafeAreaView>
@@ -790,17 +789,22 @@ const styles = StyleSheet.create({
     letterSpacing: -0.2,
   },
   emptyWrap: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 24,
     paddingTop: 20,
-    paddingBottom: 40,
+    paddingBottom: 60,
   },
   emptyCard: {
     borderRadius: 24,
     paddingVertical: 28,
     paddingHorizontal: 22,
     alignItems: 'center',
-    backgroundColor: 'rgba(18,10,35,0.92)',
+    backgroundColor: '#120A23',
     borderWidth: 1,
-    borderColor: 'rgba(124,58,237,0.25)',
+    borderColor: 'rgba(124,58,237,0.30)',
+    width: '100%',
   },
   emptyTitle: {
     color: '#FFFFFF',
@@ -808,14 +812,16 @@ const styles = StyleSheet.create({
     fontWeight: '900',
     textAlign: 'center',
     letterSpacing: -0.2,
+    opacity: 1,
   },
   emptySubtitle: {
     marginTop: 10,
-    color: 'rgba(255,255,255,0.65)',
+    color: 'rgba(255,255,255,0.7)',
     fontSize: 14,
     fontWeight: '600',
     textAlign: 'center',
     lineHeight: 20,
+    opacity: 1,
   },
   emptyCta: {
     marginTop: 16,

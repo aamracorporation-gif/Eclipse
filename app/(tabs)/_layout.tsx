@@ -35,8 +35,8 @@ export default function TabLayout() {
           elevation: 12,
         },
         tabBarHideOnKeyboard: true,
-        tabBarLabelStyle: { paddingBottom: 2, fontSize: 10, fontWeight: '600' },
-        tabBarItemStyle: { paddingTop: 2, flex: 1 },
+        tabBarLabelStyle: { paddingBottom: 2, fontSize: 10, fontWeight: '600', numberOfLines: 1 },
+        tabBarItemStyle: { paddingTop: 2, flex: 1, minWidth: 0 },
       }}>
       <Tabs.Screen
         name="index"
@@ -50,7 +50,7 @@ export default function TabLayout() {
       <Tabs.Screen
         name="party-map"
         options={{
-          title: t('home.view_map'),
+          title: 'Mapa',
           tabBarIcon: ({ size, color }) => (
             <MapIcon size={size} color={color} />
           ),
@@ -59,7 +59,7 @@ export default function TabLayout() {
       <Tabs.Screen
         name="tickets"
         options={{
-          title: t('tabs.tickets'),
+          title: 'Entradas',
           tabBarIcon: ({ size, color }) => (
             <Ticket size={size} color={color} />
           ),
@@ -87,6 +87,7 @@ export default function TabLayout() {
         name="event/[id]"
         options={{
           href: null,
+          tabBarButton: () => null,
         }}
       />
     </Tabs>

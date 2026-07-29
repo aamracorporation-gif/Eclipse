@@ -44,15 +44,10 @@ export default function ManageWorkers() {
         .order('created_at', { ascending: false });
 
       if (error) {
-        if (error.code === 'PGRST205' || error.message?.includes('does not exist')) {
-          Alert.alert(
-            t('creator.workers.system_not_initialized_title'),
-            t('creator.workers.system_not_initialized_body'),
-            [{ text: t('common.ok') }]
-          );
-          return;
-        }
-        throw error;
+        console.error('Workers fetch error:', error.code, error.message);
+        setWorkers([]);
+        setLoading(false);
+        return;
       }
 
       const workerList = data || [];
@@ -100,7 +95,7 @@ export default function ManageWorkers() {
       }
     } catch (error) {
       console.error('Error fetching workers:', error);
-      Alert.alert(t('common.error'), t('creator.workers.load_failed'));
+      setWorkers([]);
     } finally {
       setLoading(false);
     }
