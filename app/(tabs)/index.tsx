@@ -6,7 +6,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
 import { useFocusEffect } from '@react-navigation/native';
-import { MapPin, Calendar, Navigation, Search, X } from '@/lib/icons';
+import { MapPin, Calendar, Navigation, Search, X, ChevronRight } from '@/lib/icons';
 
 import { Colors } from '@/constants/Colors';
 import { useEvents, AppEvent } from '@/lib/EventContext';
@@ -69,6 +69,8 @@ export default function HomeScreen() {
 
   const emptyFloat = useRef(new Animated.Value(0)).current;
   const emptyEnter = useRef(new Animated.Value(0)).current;
+  const emptyPulse = useRef(new Animated.Value(0)).current;
+  const emptyDrift = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     let mounted = true;
@@ -173,26 +175,32 @@ export default function HomeScreen() {
   useEffect(() => {
     const enabled = processedEvents.length === 0;
     if (!enabled) {
-      emptyEnter.setValue(0);
-      emptyFloat.setValue(0);
+      emptyEnter.stopAnimation(); emptyFloat.stopAnimation();
+      emptyPulse.stopAnimation(); emptyDrift.stopAnimation();
+      emptyEnter.setValue(0); emptyFloat.setValue(0);
+      emptyPulse.setValue(0); emptyDrift.setValue(0);
       return;
     }
 
     emptyEnter.setValue(0);
     Animated.spring(emptyEnter, { toValue: 1, speed: 14, bounciness: 6, useNativeDriver: true }).start();
 
-    const floatAnim = Animated.loop(
-      Animated.sequence([
-        Animated.timing(emptyFloat, { toValue: 1, duration: 2200, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
-        Animated.timing(emptyFloat, { toValue: 0, duration: 2200, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
-      ])
-    );
-    floatAnim.start();
+    const floatAnim = Animated.loop(Animated.sequence([
+      Animated.timing(emptyFloat, { toValue: 1, duration: 2200, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
+      Animated.timing(emptyFloat, { toValue: 0, duration: 2200, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
+    ]));
+    const pulseAnim = Animated.loop(Animated.sequence([
+      Animated.timing(emptyPulse, { toValue: 1, duration: 2600, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
+      Animated.timing(emptyPulse, { toValue: 0, duration: 2600, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
+    ]));
+    const driftAnim = Animated.loop(Animated.sequence([
+      Animated.timing(emptyDrift, { toValue: 1, duration: 5200, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
+      Animated.timing(emptyDrift, { toValue: 0, duration: 5200, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
+    ]));
+    floatAnim.start(); pulseAnim.start(); driftAnim.start();
 
-    return () => {
-      floatAnim.stop();
-    };
-  }, [emptyEnter, emptyFloat, processedEvents.length]);
+    return () => { floatAnim.stop(); pulseAnim.stop(); driftAnim.stop(); };
+  }, [emptyEnter, emptyFloat, emptyPulse, emptyDrift, processedEvents.length]);
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);
@@ -333,29 +341,86 @@ export default function HomeScreen() {
             </View>
           }
           ListEmptyComponent={
-            <Animated.View style={[styles.emptyWrap, { opacity: emptyEnter, transform: [{ translateY: emptyFloat.interpolate({ inputRange: [0, 1], outputRange: [0, -6] }) }] }]}>
-              <View style={styles.emptyCard}>
-                <Text style={styles.emptyTitle}>
-                  {emptyState === 'no_results'
-                    ? t('home.no_results_title', { defaultValue: 'Sin resultados' })
-                    : emptyState === 'no_nearby'
-                    ? t('home.no_nearby_title', { defaultValue: 'Sin eventos cerca' })
-                    : t('home.empty_title', { defaultValue: 'Sin fiestas para este momento' })}
-                </Text>
-                <Text style={styles.emptySubtitle}>
-                  {emptyState === 'no_results'
-                    ? t('home.no_results_subtitle', { defaultValue: 'Prueba con otra ciudad o ajusta los filtros.' })
-                    : emptyState === 'no_nearby'
-                    ? t('home.no_nearby_subtitle', { defaultValue: 'No hay eventos en un radio de 100 km. Sigue atento, pronto habrá algo cerca.' })
-                    : t('home.empty_subtitle', { defaultValue: 'Cambia la fecha o prueba a limpiar filtros para descubrir más.' })}
-                </Text>
-                <TouchableOpacity activeOpacity={0.9} onPress={resetDiscovery} style={styles.emptyCta}>
-                  <LinearGradient colors={[Colors.dark.primary, Colors.dark.secondary]} style={styles.emptyCtaGradient}>
-                    <Text style={styles.emptyCtaText}>{t('home.clear_filters', { defaultValue: 'Limpiar filtros' })}</Text>
-                  </LinearGradient>
-                </TouchableOpacity>
-              </View>
-            </Animated.View>
+            <View style={styles.emptyScreen}>
+              <Animated.View style={[styles.emptyHeroWrap, { opacity: emptyEnter, transform: [{ scale: emptyEnter.interpolate({ inputRange: [0, 1], outputRange: [0.98, 1] }) }] }]}>
+                <GlassView intensity={28} style={styles.emptyHeroCard}>
+                  <LinearGradient
+                    colors={['rgba(124,58,237,0.22)', 'rgba(6,182,212,0.10)', 'rgba(255,255,255,0.02)', 'transparent']}
+                    locations={[0, 0.35, 0.7, 1]}
+                    style={StyleSheet.absoluteFill}
+                  />
+                  <Animated.View pointerEvents="none" style={[styles.emptyOrb, styles.emptyOrbA, {
+                    opacity: emptyPulse.interpolate({ inputRange: [0, 1], outputRange: [0.55, 0.95] }),
+                    transform: [
+                      { translateX: emptyDrift.interpolate({ inputRange: [0, 1], outputRange: [-14, 14] }) },
+                      { translateY: emptyDrift.interpolate({ inputRange: [0, 1], outputRange: [10, -10] }) },
+                      { scale: emptyPulse.interpolate({ inputRange: [0, 1], outputRange: [1, 1.08] }) },
+                    ],
+                  }]} />
+                  <Animated.View pointerEvents="none" style={[styles.emptyOrb, styles.emptyOrbB, {
+                    opacity: emptyPulse.interpolate({ inputRange: [0, 1], outputRange: [0.22, 0.55] }),
+                    transform: [
+                      { translateX: emptyDrift.interpolate({ inputRange: [0, 1], outputRange: [10, -10] }) },
+                      { translateY: emptyDrift.interpolate({ inputRange: [0, 1], outputRange: [-10, 10] }) },
+                      { scale: emptyPulse.interpolate({ inputRange: [0, 1], outputRange: [1.04, 0.98] }) },
+                    ],
+                  }]} />
+                  <View pointerEvents="none" style={styles.emptyHairlineTop} />
+
+                  <View style={styles.emptyHeader}>
+                    <Text style={styles.emptyEyebrow}>ECLIPSE | EVENTOS</Text>
+                  </View>
+
+                  <Animated.View style={[styles.emptyIconFloat, { transform: [{ translateY: emptyFloat.interpolate({ inputRange: [0, 1], outputRange: [0, -7] }) }] }]}>
+                    <Animated.View style={{ transform: [{ scale: emptyPulse.interpolate({ inputRange: [0, 1], outputRange: [1, 1.04] }) }] }}>
+                      <LinearGradient colors={[Colors.dark.primary, Colors.dark.secondary, 'rgba(255,255,255,0.10)']} style={styles.emptyIconRing}>
+                        <View style={styles.emptyIconInner}>
+                          <Calendar size={26} color="white" />
+                        </View>
+                      </LinearGradient>
+                    </Animated.View>
+                  </Animated.View>
+
+                  <Text style={styles.emptyTitle}>
+                    {emptyState === 'no_results'
+                      ? t('home.no_results_title', { defaultValue: 'Sin resultados' })
+                      : emptyState === 'no_nearby'
+                      ? t('home.no_nearby_title', { defaultValue: 'Sin eventos cerca' })
+                      : t('home.empty_title', { defaultValue: 'Sin fiestas por aquí' })}
+                  </Text>
+                  <Text style={styles.emptySubtitle}>
+                    {emptyState === 'no_results'
+                      ? t('home.no_results_subtitle', { defaultValue: 'Prueba con otra ciudad o ajusta los filtros.' })
+                      : emptyState === 'no_nearby'
+                      ? t('home.no_nearby_subtitle', { defaultValue: 'No hay eventos en un radio de 100 km. Sigue atento, pronto habrá algo cerca.' })
+                      : t('home.empty_subtitle', { defaultValue: 'Cambia la fecha o prueba a limpiar filtros para descubrir más.' })}
+                  </Text>
+
+                  <View style={styles.emptyActions}>
+                    <TouchableOpacity activeOpacity={0.88} onPress={resetDiscovery} style={styles.emptyCtaOuter}>
+                      <LinearGradient
+                        colors={['rgba(124,58,237,0.75)', 'rgba(6,182,212,0.55)']}
+                        start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
+                        style={styles.emptyCtaBorder}
+                      >
+                        <View style={styles.emptyCtaInner}>
+                          <LinearGradient
+                            colors={['rgba(124,58,237,0.22)', 'rgba(6,182,212,0.10)', 'transparent']}
+                            locations={[0, 0.6, 1]}
+                            start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
+                            style={StyleSheet.absoluteFill}
+                          />
+                          <View style={styles.emptyCtaRow}>
+                            <Text style={styles.emptyCtaText}>{t('home.clear_filters', { defaultValue: 'Limpiar filtros' })}</Text>
+                            <ChevronRight size={18} color="rgba(255,255,255,0.85)" />
+                          </View>
+                        </View>
+                      </LinearGradient>
+                    </TouchableOpacity>
+                  </View>
+                </GlassView>
+              </Animated.View>
+            </View>
           }
         />
       </SafeAreaView>
@@ -788,57 +853,54 @@ const styles = StyleSheet.create({
     fontWeight: '900',
     letterSpacing: -0.2,
   },
-  emptyWrap: {
-    flex: 1,
-    justifyContent: 'center',
+  emptyScreen: { paddingTop: 10, paddingHorizontal: 20, paddingBottom: 40 },
+  emptyHeroWrap: { alignSelf: 'center', width: '100%', maxWidth: 560 },
+  emptyHeroCard: {
     alignItems: 'center',
-    paddingHorizontal: 24,
-    paddingTop: 20,
-    paddingBottom: 60,
-  },
-  emptyCard: {
-    borderRadius: 24,
-    paddingVertical: 28,
-    paddingHorizontal: 22,
-    alignItems: 'center',
-    backgroundColor: '#120A23',
-    borderWidth: 1,
-    borderColor: 'rgba(124,58,237,0.30)',
     width: '100%',
+    maxWidth: 560,
+    paddingVertical: 24,
+    paddingHorizontal: 18,
+    borderRadius: 28,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.12)',
+    backgroundColor: 'rgba(255,255,255,0.04)',
+    alignSelf: 'center',
+    overflow: 'hidden',
+  },
+  emptyOrb: { position: 'absolute', borderRadius: 999 },
+  emptyOrbA: { width: 220, height: 220, top: -110, left: -90, backgroundColor: 'rgba(124,58,237,0.18)' },
+  emptyOrbB: { width: 260, height: 260, bottom: -140, right: -120, backgroundColor: 'rgba(10,132,255,0.14)' },
+  emptyHairlineTop: {
+    position: 'absolute', top: 0, left: 40, right: 40, height: 1,
+    backgroundColor: 'rgba(255,255,255,0.18)',
+  },
+  emptyHeader: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 4 },
+  emptyEyebrow: { fontSize: 10, fontWeight: '700', color: 'rgba(255,255,255,0.38)', letterSpacing: 2.5, textTransform: 'uppercase' },
+  emptyIconFloat: { marginTop: 8, marginBottom: 2 },
+  emptyIconRing: { width: 76, height: 76, borderRadius: 38, padding: 2 },
+  emptyIconInner: {
+    flex: 1, borderRadius: 36,
+    backgroundColor: 'rgba(0,0,0,0.35)',
+    alignItems: 'center', justifyContent: 'center',
   },
   emptyTitle: {
-    color: '#FFFFFF',
-    fontSize: 20,
-    fontWeight: '900',
-    textAlign: 'center',
-    letterSpacing: -0.2,
-    opacity: 1,
+    fontSize: 22, fontWeight: '900', color: 'white',
+    marginTop: 18, textAlign: 'center', letterSpacing: -0.4,
   },
   emptySubtitle: {
-    marginTop: 10,
-    color: 'rgba(255,255,255,0.7)',
-    fontSize: 14,
-    fontWeight: '600',
-    textAlign: 'center',
-    lineHeight: 20,
-    opacity: 1,
+    fontSize: 14, color: Colors.dark.textSecondary,
+    marginTop: 10, textAlign: 'center', maxWidth: 380, lineHeight: 20,
   },
-  emptyCta: {
-    marginTop: 16,
-    borderRadius: 18,
-    overflow: 'hidden',
-    width: '100%',
+  emptyActions: { marginTop: 24, width: '100%', alignItems: 'center', gap: 10 },
+  emptyCtaOuter: { width: '100%', maxWidth: 320, borderRadius: 18, overflow: 'hidden' },
+  emptyCtaBorder: { padding: 1.5, borderRadius: 18 },
+  emptyCtaInner: {
+    borderRadius: 16, overflow: 'hidden',
+    paddingVertical: 14, paddingHorizontal: 20,
+    backgroundColor: 'rgba(15,10,30,0.6)',
   },
-  emptyCtaGradient: {
-    paddingVertical: 14,
-    alignItems: 'center',
-    borderRadius: 18,
-  },
-  emptyCtaText: {
-    color: 'white',
-    fontSize: 15,
-    fontWeight: '900',
-    letterSpacing: -0.2,
-  },
+  emptyCtaRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 },
+  emptyCtaText: { color: 'rgba(255,255,255,0.92)', fontSize: 15, fontWeight: '800', letterSpacing: -0.2 },
 });
 
