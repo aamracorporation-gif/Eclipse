@@ -254,7 +254,8 @@ export default function PartyMapScreen() {
   const lastSigRef   = useRef('');
   const [selectedEvent, setSelectedEvent] = useState<EventWithGeo | null>(null);
   const [selectedId,    setSelectedId]    = useState<string | null>(null);
-  const selectedIdRef = useRef<string | null>(null);  // stable ref for callbacks
+  const selectedIdRef   = useRef<string | null>(null);  // stable ref for callbacks
+  const justFocusedRef  = useRef(false);               // blocks map onPress dismiss right after marker tap
 
   // ── Search ───────────────────────────────────────────────────────────────────
   const [searchText,    setSearchText]    = useState('');
@@ -567,6 +568,11 @@ export default function PartyMapScreen() {
 
   // ─── Focus on event ───────────────────────────────────────────────────────────
   const focusOnEvent = useCallback((e: EventWithGeo) => {
+    // Block map's onPress dismiss for 400ms — on both platforms the map's onPress
+    // fires right after the marker's onPress and would immediately clear the card.
+    justFocusedRef.current = true;
+    setTimeout(() => { justFocusedRef.current = false; }, 400);
+
     // Update selectedId ref immediately — must happen BEFORE any re-render
     selectedIdRef.current = e.id;
     setSelectedId(e.id);
@@ -637,6 +643,7 @@ export default function PartyMapScreen() {
   const showResults = searchFocused && (searchText.trim().length > 0 || activeFilter !== 'all');
 
   const dismissSelected = useCallback(() => {
+    if (justFocusedRef.current) return;
     selectedIdRef.current = null;
     setSelectedId(null);
     setSelectedEvent(null);
