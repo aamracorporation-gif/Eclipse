@@ -685,7 +685,6 @@ export default function PartyMapScreen() {
               onMapReady={() => setMapReady(true)}
               onMapLoaded={() => setMapReady(true)}
               onRegionChangeComplete={onRegionChangeComplete}
-              onPress={dismissSelected}
               showsUserLocation={locPerm === 'granted'}
               showsMyLocationButton={false}
               rotateEnabled={false}
