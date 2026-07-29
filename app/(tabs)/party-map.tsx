@@ -17,7 +17,6 @@ import { Search, X, MapPin, Calendar, Flame, Music, Sparkles, Tag } from '@/lib/
 import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 import { useTranslation } from 'react-i18next';
 import Animated, {
-  useAnimatedStyle, useSharedValue, withSpring, withTiming,
   FadeIn, FadeOut, SlideInDown, SlideOutDown,
 } from 'react-native-reanimated';
 import { PROVIDER_GOOGLE } from 'react-native-maps';
@@ -265,12 +264,7 @@ export default function PartyMapScreen() {
   const [isSearching,   setIsSearching]   = useState(false);
 
   // ── Animations ───────────────────────────────────────────────────────────────
-  const cardOpacity = useSharedValue(0);
-  const cardY       = useSharedValue(24);
-  const cardStyle   = useAnimatedStyle(() => ({
-    opacity:   cardOpacity.value,
-    transform: [{ translateY: cardY.value }],
-  }));
+  // Card uses only entering/exiting — no separate shared-value animation to avoid conflicts
 
   // ─── Helpers ──────────────────────────────────────────────────────────────────
   const clamp = (n: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, n));
@@ -555,17 +549,6 @@ export default function PartyMapScreen() {
     }, VIEWPORT_DEBOUNCE_MS);
   }, [computeClusters, fetchForRegion, sanitizeRegion]);
 
-  // ─── Selection animation ──────────────────────────────────────────────────────
-  useEffect(() => {
-    if (!selectedEvent) {
-      cardOpacity.value = withTiming(0, { duration: 160 });
-      cardY.value       = withTiming(24, { duration: 160 });
-    } else {
-      cardOpacity.value = withTiming(1, { duration: 240 });
-      cardY.value       = withSpring(0, { damping: 20, stiffness: 280, mass: 0.8 });
-    }
-  }, [selectedEvent, cardOpacity, cardY]);
-
   // ─── Focus on event ───────────────────────────────────────────────────────────
   const focusOnEvent = useCallback((e: EventWithGeo) => {
     // Block map's onPress dismiss for 400ms — on both platforms the map's onPress
@@ -726,7 +709,7 @@ export default function PartyMapScreen() {
                     key={c.key}
                     identifier={`event:${e.id}`}
                     coordinate={c.center}
-                    tracksViewChanges={isSel}
+                    tracksViewChanges={false}
                     anchor={{ x: 0.5, y: 0.5 }}
                     onPress={() => focusOnEvent(e)}
                   >
@@ -876,7 +859,7 @@ export default function PartyMapScreen() {
       {/* ── Event detail card ── */}
       {selectedEvent && (
         <Animated.View
-          style={[styles.cardWrap, { paddingBottom: tabBarH + 10 + Math.max(0, insets.bottom - 2) }, cardStyle]}
+          style={[styles.cardWrap, { paddingBottom: tabBarH + 10 + Math.max(0, insets.bottom - 2) }]}
           entering={SlideInDown.springify().damping(20).stiffness(260)}
           exiting={SlideOutDown.duration(180)}
         >
