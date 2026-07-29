@@ -3,7 +3,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'expo-router';
 import { useAuth } from '@/lib/AuthContext';
 import { supabase } from '@/lib/supabase';
-import { Users, Plus, ChevronLeft, Trash2, ScanLine, ShoppingBag, BarChart2 } from '@/lib/icons';
+import { Users, Plus, ChevronLeft, Trash2, BarChart2 } from '@/lib/icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Colors } from '@/constants/Colors';
 import { GlassView } from '@/components/ui/GlassView';
@@ -12,18 +12,11 @@ import { DiscoLoader } from '@/components/ui/DiscoLoader';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
 
-interface WorkerStats {
-  scanCount: number;
-  saleCount: number;
-  salesRevenue: number;
-}
-
 export default function ManageWorkers() {
   const { user } = useAuth();
   const router = useRouter();
   const { t } = useTranslation();
   const [workers, setWorkers] = useState<any[]>([]);
-  const [stats, setStats] = useState<Record<string, WorkerStats>>({});
   const [loading, setLoading] = useState(true);
 
   const safeBack = () => {
@@ -36,7 +29,6 @@ export default function ManageWorkers() {
     if (!user) return;
     try {
       setLoading(true);
-
       const { data, error } = await supabase
         .from('workers')
         .select('*')
@@ -46,60 +38,16 @@ export default function ManageWorkers() {
       if (error) {
         console.error('Workers fetch error:', error.code, error.message);
         setWorkers([]);
-        setLoading(false);
         return;
       }
-
-      const workerList = data || [];
-      setWorkers(workerList);
-
-      // ── Fetch stats for all workers (isolated — never crashes the worker list) ──
-      if (workerList.length > 0) {
-        try {
-          const ids = workerList.map((w: any) => w.id);
-
-          const [scanRes, saleRes] = await Promise.all([
-            supabase
-              .from('tickets')
-              .select('scanned_by_worker_id')
-              .in('scanned_by_worker_id', ids),
-            supabase
-              .from('tickets')
-              .select('sold_by_worker_id, total_price')
-              .in('sold_by_worker_id', ids)
-              .eq('payment_status', 'paid'),
-          ]);
-
-          const statsMap: Record<string, WorkerStats> = {};
-          ids.forEach((id: string) => {
-            statsMap[id] = { scanCount: 0, saleCount: 0, salesRevenue: 0 };
-          });
-
-          (scanRes.data || []).forEach((row: any) => {
-            if (row.scanned_by_worker_id && statsMap[row.scanned_by_worker_id]) {
-              statsMap[row.scanned_by_worker_id].scanCount++;
-            }
-          });
-
-          (saleRes.data || []).forEach((row: any) => {
-            if (row.sold_by_worker_id && statsMap[row.sold_by_worker_id]) {
-              statsMap[row.sold_by_worker_id].saleCount++;
-              statsMap[row.sold_by_worker_id].salesRevenue += Number(row.total_price || 0);
-            }
-          });
-
-          setStats(statsMap);
-        } catch (statsErr) {
-          console.warn('Worker stats fetch failed (non-critical):', statsErr);
-        }
-      }
+      setWorkers(data || []);
     } catch (error) {
       console.error('Error fetching workers:', error);
       setWorkers([]);
     } finally {
       setLoading(false);
     }
-  }, [t, user]);
+  }, [user]);
 
   useEffect(() => {
     fetchWorkers();
@@ -131,21 +79,23 @@ export default function ManageWorkers() {
   const permissionTags = (permissions: any) => {
     if (!permissions) return [];
     const tags: { label: string; icon: string; color: string }[] = [];
-    if (permissions.scan)  tags.push({ label: 'Scan',  icon: '🔍', color: 'rgba(59,130,246,0.25)' });
-    if (permissions.sell)  tags.push({ label: 'Venta', icon: '💰', color: 'rgba(245,158,11,0.25)' });
-    if (permissions.stats) tags.push({ label: 'Stats', icon: '📊', color: 'rgba(139,92,246,0.25)' });
+    if (permissions.scan)  tags.push({ label: 'Scan',  icon: '🔍', color: 'rgba(59,130,246,0.22)' });
+    if (permissions.sell)  tags.push({ label: 'Venta', icon: '💰', color: 'rgba(245,158,11,0.22)' });
+    if (permissions.stats) tags.push({ label: 'Stats', icon: '📊', color: 'rgba(139,92,246,0.22)' });
     return tags;
   };
 
   const renderWorker = ({ item }: { item: any }) => {
-    const workerStats = stats[item.id];
     const tags = permissionTags(item.permissions);
 
     return (
       <GlassView intensity={15} style={styles.workerCard}>
         {/* Top row: name + delete */}
         <View style={styles.cardHeader}>
-          <View style={{ flex: 1 }}>
+          <View style={styles.avatar}>
+            <Text style={styles.avatarText}>{(item.name || '?')[0].toUpperCase()}</Text>
+          </View>
+          <View style={{ flex: 1, marginLeft: 12 }}>
             <Text style={styles.workerName}>{item.name}</Text>
             <Text style={styles.workerEmail}>{item.email}</Text>
           </View>
@@ -153,7 +103,7 @@ export default function ManageWorkers() {
             onPress={() => handleDeleteWorker(item.id, item.name)}
             style={styles.deleteButton}
           >
-            <Trash2 size={20} color="#ef4444" />
+            <Trash2 size={18} color="#ef4444" />
           </TouchableOpacity>
         </View>
 
@@ -164,9 +114,7 @@ export default function ManageWorkers() {
               <Text style={styles.permTagText}>{tag.icon} {tag.label}</Text>
             </View>
           ))}
-          <View style={[styles.statusBadge,
-            item.status === 'active' ? styles.statusActive : styles.statusPending
-          ]}>
+          <View style={[styles.statusBadge, item.status === 'active' ? styles.statusActive : styles.statusPending]}>
             <Text style={styles.statusText}>
               {item.status === 'active'
                 ? t('creator.workers.status_active')
@@ -175,59 +123,38 @@ export default function ManageWorkers() {
           </View>
         </View>
 
-        {/* Stats row */}
-        {workerStats && (
-          <View style={styles.statsRow}>
-            <View style={styles.statChip}>
-              <ScanLine size={13} color="#60a5fa" />
-              <Text style={[styles.statValue, { color: '#60a5fa' }]}>{workerStats.scanCount}</Text>
-              <Text style={styles.statLabel}>escaneos</Text>
-            </View>
-            <View style={styles.statDivider} />
-            <View style={styles.statChip}>
-              <ShoppingBag size={13} color="#fbbf24" />
-              <Text style={[styles.statValue, { color: '#fbbf24' }]}>{workerStats.saleCount}</Text>
-              <Text style={styles.statLabel}>ventas</Text>
-            </View>
-            {workerStats.salesRevenue > 0 && (
-              <>
-                <View style={styles.statDivider} />
-                <View style={styles.statChip}>
-                  <BarChart2 size={13} color="#a78bfa" />
-                  <Text style={[styles.statValue, { color: '#a78bfa' }]}>
-                    {workerStats.salesRevenue.toFixed(0)}€
-                  </Text>
-                  <Text style={styles.statLabel}>recaudado</Text>
-                </View>
-              </>
-            )}
-          </View>
-        )}
-
-        <Text style={styles.dateText}>
-          Añadido: {new Date(item.created_at).toLocaleDateString()}
-        </Text>
+        {/* Footer: date + stats button */}
+        <View style={styles.cardFooter}>
+          <Text style={styles.dateText}>
+            Añadido: {new Date(item.created_at).toLocaleDateString('es-ES')}
+          </Text>
+          <TouchableOpacity
+            style={styles.statsBtn}
+            onPress={() => router.push(`/(creator)/workers/${item.id}` as any)}
+            activeOpacity={0.8}
+          >
+            <BarChart2 size={14} color="white" />
+            <Text style={styles.statsBtnText}>Ver estadísticas</Text>
+          </TouchableOpacity>
+        </View>
       </GlassView>
     );
   };
 
   return (
     <View style={styles.container}>
-      <LinearGradient
-        colors={[Colors.dark.background, '#1e1b4b']}
-        style={StyleSheet.absoluteFill}
-      />
+      <LinearGradient colors={[Colors.dark.background, '#1e1b4b']} style={StyleSheet.absoluteFill} />
       <SafeAreaView style={styles.safeArea}>
         <View style={styles.header}>
           <TouchableOpacity onPress={safeBack} style={styles.backButton}>
             <ChevronLeft size={24} color="white" />
           </TouchableOpacity>
           <Text style={styles.title}>{t('creator.workers.manage_title')}</Text>
-          <View style={{ width: 24 }} />
+          <View style={{ width: 40 }} />
         </View>
 
         {loading ? (
-          <View style={{ marginTop: 20, alignItems: 'center' }}>
+          <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
             <DiscoLoader size={90} />
           </View>
         ) : (
@@ -260,111 +187,80 @@ export default function ManageWorkers() {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  safeArea:  { flex: 1 },
+  safeArea: { flex: 1 },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: 20,
+    paddingHorizontal: 20,
+    paddingVertical: 16,
   },
   backButton: {
-    padding: 8,
+    width: 40,
+    height: 40,
     borderRadius: 12,
     backgroundColor: 'rgba(255,255,255,0.1)',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   title: { fontSize: 20, fontWeight: 'bold', color: 'white' },
-  listContent: { padding: 20 },
+  listContent: { padding: 20, gap: 12 },
 
-  workerCard: {
-    padding: 16,
-    borderRadius: 16,
-    marginBottom: 12,
-  },
-  cardHeader: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    marginBottom: 10,
-  },
-  workerName: {
-    color: 'white',
-    fontSize: 16,
-    fontWeight: 'bold',
-    marginBottom: 2,
-  },
-  workerEmail: {
-    color: Colors.dark.textSecondary,
-    fontSize: 13,
-  },
-  deleteButton: { padding: 6 },
+  workerCard: { borderRadius: 18, padding: 16 },
 
-  tagsRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 6,
-    marginBottom: 12,
-  },
-  permTag: {
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 8,
-  },
-  permTagText: { color: 'white', fontSize: 11, fontWeight: '600' },
-
-  statusBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 8,
-  },
-  statusActive:  { backgroundColor: 'rgba(74,222,128,0.2)' },
-  statusPending: { backgroundColor: 'rgba(251,191,36,0.2)' },
-  statusText: { fontSize: 11, fontWeight: 'bold', color: 'white' },
-
-  statsRow: {
-    flexDirection: 'row',
+  cardHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 12 },
+  avatar: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: 'rgba(124,58,237,0.3)',
     alignItems: 'center',
-    backgroundColor: 'rgba(255,255,255,0.05)',
+    justifyContent: 'center',
+  },
+  avatarText: { color: 'white', fontSize: 18, fontWeight: '700' },
+  workerName: { color: 'white', fontSize: 16, fontWeight: '700', marginBottom: 2 },
+  workerEmail: { color: Colors.dark.textSecondary, fontSize: 13 },
+  deleteButton: {
+    width: 36,
+    height: 36,
     borderRadius: 10,
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    marginBottom: 8,
-    gap: 0,
+    backgroundColor: 'rgba(239,68,68,0.12)',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  statChip: {
-    flex: 1,
+
+  tagsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 14 },
+  permTag: { paddingHorizontal: 9, paddingVertical: 4, borderRadius: 8 },
+  permTagText: { color: 'white', fontSize: 11, fontWeight: '600' },
+  statusBadge: { paddingHorizontal: 9, paddingVertical: 4, borderRadius: 8 },
+  statusActive: { backgroundColor: 'rgba(74,222,128,0.2)' },
+  statusPending: { backgroundColor: 'rgba(251,191,36,0.2)' },
+  statusText: { fontSize: 11, fontWeight: '700', color: 'white' },
+
+  cardFooter: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    gap: 5,
+    justifyContent: 'space-between',
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(255,255,255,0.08)',
+    paddingTop: 12,
   },
-  statDivider: {
-    width: 1,
-    height: 20,
-    backgroundColor: 'rgba(255,255,255,0.1)',
-  },
-  statValue: { fontSize: 15, fontWeight: 'bold' },
-  statLabel: { color: Colors.dark.textSecondary, fontSize: 11 },
-
-  dateText: {
-    color: Colors.dark.textSecondary,
-    fontSize: 11,
-  },
-
-  emptyState: {
+  dateText: { color: Colors.dark.textSecondary, fontSize: 11 },
+  statsBtn: {
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    padding: 40,
+    gap: 5,
+    backgroundColor: 'rgba(124,58,237,0.35)',
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 10,
   },
-  emptyText: {
-    color: 'white',
-    fontSize: 18,
-    fontWeight: 'bold',
-    marginTop: 16,
-  },
-  emptySubtext: {
-    color: Colors.dark.textSecondary,
-    textAlign: 'center',
-    marginTop: 8,
-  },
+  statsBtnText: { color: 'white', fontSize: 12, fontWeight: '700' },
+
+  emptyState: { alignItems: 'center', justifyContent: 'center', padding: 40 },
+  emptyText: { color: 'white', fontSize: 18, fontWeight: 'bold', marginTop: 16 },
+  emptySubtext: { color: Colors.dark.textSecondary, textAlign: 'center', marginTop: 8 },
+
   footer: {
     padding: 20,
     borderTopWidth: 1,

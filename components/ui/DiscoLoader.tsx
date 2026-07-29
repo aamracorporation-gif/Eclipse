@@ -208,7 +208,9 @@ export function DiscoLoader({ label, subLabel, size = 140, fullScreen = false, s
             />
           </View>
           {/* Logo and wordmark rendered above clip wrapper */}
-          <Image source={discoLogo} style={{ width: logoSize, height: logoSize, opacity: 0.92 }} resizeMode="contain" fadeDuration={0} />
+          <View style={{ width: logoSize, height: logoSize, borderRadius: logoSize / 2, overflow: 'hidden' }}>
+            <Image source={discoLogo} style={{ width: logoSize, height: logoSize, opacity: 0.92 }} resizeMode="cover" fadeDuration={0} />
+          </View>
           {size >= 86 ? (
             <Text
               style={[

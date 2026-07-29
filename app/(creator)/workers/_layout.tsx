@@ -5,6 +5,7 @@ export default function WorkersLayout() {
     <Stack screenOptions={{ headerShown: false }}>
       <Stack.Screen name="index" />
       <Stack.Screen name="add" options={{ presentation: 'modal', headerShown: false }} />
+      <Stack.Screen name="[id]" />
     </Stack>
   );
 }
