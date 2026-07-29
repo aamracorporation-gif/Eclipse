@@ -86,8 +86,10 @@ class MapErrorBoundary extends Component<
 
 // ─── Dot marker (low zoom) ────────────────────────────────────────────────────
 const EventDot = memo(({ color, selected }: { color: string; selected: boolean }) => (
-  <View style={[styles.dotOuter, { borderColor: selected ? color : color + '55' }]}>
-    <View style={[styles.dotInner, { backgroundColor: color, opacity: selected ? 1 : 0.85 }]} />
+  <View style={styles.markerHitArea}>
+    <View style={[styles.dotOuter, { borderColor: selected ? color : color + '55' }]}>
+      <View style={[styles.dotInner, { backgroundColor: color, opacity: selected ? 1 : 0.85 }]} />
+    </View>
   </View>
 ));
 EventDot.displayName = 'EventDot';
@@ -117,6 +119,7 @@ const EventPin = memo(({ color, selected, price }: { color: string; selected: bo
     : priceNum < 1000 ? `${Math.round(priceNum)}€` : `${(priceNum / 1000).toFixed(1)}k€`;
 
   return (
+    <View style={styles.markerHitArea}>
     <View style={[styles.pinWrap, selected && styles.pinWrapSelected]}>
       {selected && (
         <RNAnimated.View style={[
@@ -133,6 +136,7 @@ const EventPin = memo(({ color, selected, price }: { color: string; selected: bo
         </Text>
       </View>
       <View style={[styles.pinTailOuter, { borderTopColor: color }]} />
+    </View>
     </View>
   );
 });
@@ -964,6 +968,9 @@ const styles = StyleSheet.create({
   noResults:      { marginTop: 8, borderRadius: 16, padding: 16, backgroundColor: 'rgba(10,10,20,0.94)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)', alignItems: 'center', gap: 6 },
   noResultsTxt:   { color: 'rgba(255,255,255,0.5)', fontWeight: '700', fontSize: 13 },
   noResultsSearch:{ color: Colors.dark.primary, fontWeight: '900', fontSize: 13 },
+
+  // Transparent hit area wrapper — makes tap target bigger without changing visual
+  markerHitArea: { padding: 12, alignItems: 'center', justifyContent: 'center' },
 
   // Dot marker (low zoom)
   dotOuter: { width: 22, height: 22, borderRadius: 11, borderWidth: 2, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.55)' },

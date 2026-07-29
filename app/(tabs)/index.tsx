@@ -334,7 +334,7 @@ export default function HomeScreen() {
           ListEmptyComponent={
             <View style={[styles.emptyWrap, { maxWidth: maxContentWidth, alignSelf: 'center', width: '100%', paddingHorizontal: horizontalPadding }]}>
               <Animated.View style={{ opacity: emptyEnter, transform: [{ translateY: emptyFloat.interpolate({ inputRange: [0, 1], outputRange: [0, -6] }) }] }}>
-                <GlassView intensity={18} style={styles.emptyCard}>
+                <View style={styles.emptyCard}>
                   <Text style={styles.emptyTitle}>
                     {emptyState === 'no_results'
                       ? t('home.no_results_title', { defaultValue: 'Sin resultados' })
@@ -354,7 +354,7 @@ export default function HomeScreen() {
                       <Text style={styles.emptyCtaText}>{t('home.clear_filters')}</Text>
                     </LinearGradient>
                   </TouchableOpacity>
-                </GlassView>
+                </View>
               </Animated.View>
             </View>
           }
@@ -795,12 +795,15 @@ const styles = StyleSheet.create({
   },
   emptyCard: {
     borderRadius: 24,
-    paddingVertical: 22,
-    paddingHorizontal: 18,
+    paddingVertical: 28,
+    paddingHorizontal: 22,
     alignItems: 'center',
+    backgroundColor: 'rgba(18,10,35,0.92)',
+    borderWidth: 1,
+    borderColor: 'rgba(124,58,237,0.25)',
   },
   emptyTitle: {
-    color: 'white',
+    color: '#FFFFFF',
     fontSize: 20,
     fontWeight: '900',
     textAlign: 'center',
@@ -808,7 +811,7 @@ const styles = StyleSheet.create({
   },
   emptySubtitle: {
     marginTop: 10,
-    color: Colors.dark.textSecondary,
+    color: 'rgba(255,255,255,0.65)',
     fontSize: 14,
     fontWeight: '600',
     textAlign: 'center',

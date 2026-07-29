@@ -35,8 +35,8 @@ export default function TabLayout() {
           elevation: 12,
         },
         tabBarHideOnKeyboard: true,
-        tabBarLabelStyle: { paddingBottom: 2, fontSize: 11, fontWeight: '600' },
-        tabBarItemStyle: { paddingTop: 2 },
+        tabBarLabelStyle: { paddingBottom: 2, fontSize: 10, fontWeight: '600' },
+        tabBarItemStyle: { paddingTop: 2, flex: 1 },
       }}>
       <Tabs.Screen
         name="index"

@@ -58,41 +58,45 @@ export default function ManageWorkers() {
       const workerList = data || [];
       setWorkers(workerList);
 
-      // ── Fetch stats for all workers ──────────────────────────────────
+      // ── Fetch stats for all workers (isolated — never crashes the worker list) ──
       if (workerList.length > 0) {
-        const ids = workerList.map((w: any) => w.id);
+        try {
+          const ids = workerList.map((w: any) => w.id);
 
-        const [scanRes, saleRes] = await Promise.all([
-          supabase
-            .from('tickets')
-            .select('scanned_by_worker_id')
-            .in('scanned_by_worker_id', ids),
-          supabase
-            .from('tickets')
-            .select('sold_by_worker_id, total_price')
-            .in('sold_by_worker_id', ids)
-            .eq('payment_status', 'paid'),
-        ]);
+          const [scanRes, saleRes] = await Promise.all([
+            supabase
+              .from('tickets')
+              .select('scanned_by_worker_id')
+              .in('scanned_by_worker_id', ids),
+            supabase
+              .from('tickets')
+              .select('sold_by_worker_id, total_price')
+              .in('sold_by_worker_id', ids)
+              .eq('payment_status', 'paid'),
+          ]);
 
-        const statsMap: Record<string, WorkerStats> = {};
-        ids.forEach((id: string) => {
-          statsMap[id] = { scanCount: 0, saleCount: 0, salesRevenue: 0 };
-        });
+          const statsMap: Record<string, WorkerStats> = {};
+          ids.forEach((id: string) => {
+            statsMap[id] = { scanCount: 0, saleCount: 0, salesRevenue: 0 };
+          });
 
-        (scanRes.data || []).forEach((row: any) => {
-          if (row.scanned_by_worker_id && statsMap[row.scanned_by_worker_id]) {
-            statsMap[row.scanned_by_worker_id].scanCount++;
-          }
-        });
+          (scanRes.data || []).forEach((row: any) => {
+            if (row.scanned_by_worker_id && statsMap[row.scanned_by_worker_id]) {
+              statsMap[row.scanned_by_worker_id].scanCount++;
+            }
+          });
 
-        (saleRes.data || []).forEach((row: any) => {
-          if (row.sold_by_worker_id && statsMap[row.sold_by_worker_id]) {
-            statsMap[row.sold_by_worker_id].saleCount++;
-            statsMap[row.sold_by_worker_id].salesRevenue += Number(row.total_price || 0);
-          }
-        });
+          (saleRes.data || []).forEach((row: any) => {
+            if (row.sold_by_worker_id && statsMap[row.sold_by_worker_id]) {
+              statsMap[row.sold_by_worker_id].saleCount++;
+              statsMap[row.sold_by_worker_id].salesRevenue += Number(row.total_price || 0);
+            }
+          });
 
-        setStats(statsMap);
+          setStats(statsMap);
+        } catch (statsErr) {
+          console.warn('Worker stats fetch failed (non-critical):', statsErr);
+        }
       }
     } catch (error) {
       console.error('Error fetching workers:', error);
