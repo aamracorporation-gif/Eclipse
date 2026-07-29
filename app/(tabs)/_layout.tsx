@@ -35,7 +35,7 @@ export default function TabLayout() {
           elevation: 12,
         },
         tabBarHideOnKeyboard: true,
-        tabBarLabelStyle: { paddingBottom: 2, fontSize: 10, fontWeight: '600', numberOfLines: 1 },
+        tabBarLabelStyle: { paddingBottom: 2, fontSize: 10, fontWeight: '600' },
         tabBarItemStyle: { paddingTop: 2, flex: 1, minWidth: 0 },
       }}>
       <Tabs.Screen
@@ -87,7 +87,6 @@ export default function TabLayout() {
         name="event/[id]"
         options={{
           href: null,
-          tabBarButton: () => null,
         }}
       />
     </Tabs>
