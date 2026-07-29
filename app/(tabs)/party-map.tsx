@@ -678,6 +678,7 @@ export default function PartyMapScreen() {
               onMapReady={() => setMapReady(true)}
               onMapLoaded={() => setMapReady(true)}
               onRegionChangeComplete={onRegionChangeComplete}
+              onPress={dismissSelected}
               showsUserLocation={locPerm === 'granted'}
               showsMyLocationButton={false}
               rotateEnabled={false}
@@ -697,7 +698,6 @@ export default function PartyMapScreen() {
                       coordinate={c.center}
                       tracksViewChanges={false}
                       onPress={() => {
-                        dismissSelected();
                         const base = viewportRef.current;
                         const next = sanitizeRegion({
                           latitude:       c.center.latitude,
@@ -720,7 +720,7 @@ export default function PartyMapScreen() {
                     key={c.key}
                     identifier={`event:${e.id}`}
                     coordinate={c.center}
-                    tracksViewChanges={false}
+                    tracksViewChanges={isSel}
                     anchor={{ x: 0.5, y: 0.5 }}
                     onPress={() => focusOnEvent(e)}
                   >
@@ -875,7 +875,6 @@ export default function PartyMapScreen() {
           exiting={SlideOutDown.duration(180)}
         >
           <View style={styles.card}>
-            <Pressable onPress={dismissSelected} style={styles.cardDismiss} />
             {selectedEvent.imageUrl ? (
               <Image source={{ uri: selectedEvent.imageUrl }} style={styles.cardBanner} resizeMode="cover" />
             ) : (
@@ -992,7 +991,6 @@ const styles = StyleSheet.create({
   // Event card
   cardWrap:          { position: 'absolute', left: 12, right: 12, bottom: 0, zIndex: 30 },
   card:              { borderRadius: 22, overflow: 'hidden', borderWidth: 1, borderColor: 'rgba(255,255,255,0.14)', backgroundColor: '#0c0c1a' },
-  cardDismiss:       { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 },
   cardBanner:        { width: '100%', height: 130 },
   cardBannerOverlay: { position: 'absolute', top: 0, left: 0, right: 0, height: 130 },
   cardCloseBtn:      { position: 'absolute', top: 10, right: 10, width: 28, height: 28, borderRadius: 14, backgroundColor: 'rgba(0,0,0,0.55)', alignItems: 'center', justifyContent: 'center' },
