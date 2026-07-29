@@ -284,17 +284,38 @@ export default function MyResalesScreen() {
         </View>
       ) : listings.length === 0 ? (
         <View style={styles.emptyContainer}>
-          <GlassView intensity={15} style={styles.emptyCard}>
-            <View style={styles.emptyIcon}>
-              <Tag size={28} color={Colors.dark.textSecondary} />
+          <LinearGradient
+            colors={[Colors.dark.primary, Colors.dark.secondary, 'rgba(255,255,255,0.10)']}
+            start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
+            style={styles.emptyCardBorder}
+          >
+            <View style={styles.emptyCard}>
+              <LinearGradient colors={['#1E1040', '#0F0A22', '#0A0618']} locations={[0, 0.5, 1]} style={StyleSheet.absoluteFill} />
+              <View pointerEvents="none" style={[styles.emptyOrb, styles.emptyOrbA]} />
+              <View pointerEvents="none" style={[styles.emptyOrb, styles.emptyOrbB]} />
+              <Text style={styles.emptyEyebrow}>✦ ECLIPSE ✦</Text>
+              <LinearGradient colors={[Colors.dark.primary, Colors.dark.secondary]} style={styles.emptyIconRing}>
+                <View style={styles.emptyIconInner}>
+                  <Tag size={28} color="white" />
+                </View>
+              </LinearGradient>
+              <Text style={styles.emptyText}>{t('resale.my_sales_empty')}</Text>
+              <Text style={styles.emptySubtext}>{t('resale.my_sales_empty_subtitle', { defaultValue: 'Aquí aparecerán tus entradas en venta.' })}</Text>
+              <TouchableOpacity
+                activeOpacity={0.85}
+                onPress={() => router.push('/(tabs)/tickets')}
+                style={styles.emptyCtaOuter}
+              >
+                <LinearGradient
+                  colors={[Colors.dark.primary, Colors.dark.secondary]}
+                  start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
+                  style={styles.emptyCtaInner}
+                >
+                  <Text style={styles.emptyCtaText}>{t('resale.view_my_tickets')}</Text>
+                </LinearGradient>
+              </TouchableOpacity>
             </View>
-            <Text style={styles.emptyText}>{t('resale.my_sales_empty')}</Text>
-            <ThemedButton
-              title={t('resale.view_my_tickets')}
-              onPress={() => router.push('/(tabs)/tickets')}
-              style={styles.emptyButton}
-            />
-          </GlassView>
+          </LinearGradient>
         </View>
       ) : (
         <FlatList
@@ -342,33 +363,15 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 20,
   },
-  emptyContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 20,
-  },
-  emptyCard: {
-    width: '100%',
-    maxWidth: 520,
-    paddingVertical: 22,
-    paddingHorizontal: 18,
-    borderRadius: 22,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.12)',
-    backgroundColor: 'rgba(255,255,255,0.04)',
-    alignItems: 'center',
-  },
-  emptyIcon: {
-    width: 54,
-    height: 54,
-    borderRadius: 27,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'rgba(255,255,255,0.06)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.10)',
-  },
+  emptyContainer: { flex: 1, justifyContent: 'center', paddingHorizontal: 24, paddingVertical: 40 },
+  emptyCardBorder: { borderRadius: 28, padding: 1.5, width: '100%', maxWidth: 520, alignSelf: 'center' },
+  emptyCard: { borderRadius: 26, overflow: 'hidden', alignItems: 'center', paddingTop: 28, paddingBottom: 32, paddingHorizontal: 24 },
+  emptyOrb: { position: 'absolute', borderRadius: 999 },
+  emptyOrbA: { width: 200, height: 200, top: -80, left: -70, backgroundColor: 'rgba(124,58,237,0.28)' },
+  emptyOrbB: { width: 240, height: 240, bottom: -120, right: -100, backgroundColor: 'rgba(10,132,255,0.18)' },
+  emptyEyebrow: { fontSize: 11, fontWeight: '700', color: 'rgba(255,255,255,0.40)', letterSpacing: 3, textTransform: 'uppercase', marginBottom: 20 },
+  emptyIconRing: { width: 80, height: 80, borderRadius: 40, alignItems: 'center', justifyContent: 'center' },
+  emptyIconInner: { width: 64, height: 64, borderRadius: 32, backgroundColor: 'rgba(0,0,0,0.40)', alignItems: 'center', justifyContent: 'center' },
   loadingOverlay: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: 'rgba(0,0,0,0.5)',
@@ -387,17 +390,11 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: 'bold',
   },
-  emptyText: {
-    color: Colors.dark.textSecondary,
-    fontSize: 16,
-    marginTop: 16,
-    marginBottom: 18,
-    fontWeight: '600',
-    textAlign: 'center',
-  },
-  emptyButton: {
-    width: 200,
-  },
+  emptyText: { fontSize: 22, fontWeight: '900', color: '#FFFFFF', marginTop: 20, textAlign: 'center', letterSpacing: -0.5 },
+  emptySubtext: { fontSize: 14, color: 'rgba(255,255,255,0.60)', marginTop: 10, textAlign: 'center', lineHeight: 21, maxWidth: 300 },
+  emptyCtaOuter: { marginTop: 28, borderRadius: 16, overflow: 'hidden', alignSelf: 'center', minWidth: 200 },
+  emptyCtaInner: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 14, paddingHorizontal: 24, gap: 6 },
+  emptyCtaText: { color: 'white', fontSize: 15, fontWeight: '800', letterSpacing: -0.2 },
   card: {
     marginBottom: 16,
     padding: 16,

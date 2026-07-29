@@ -685,160 +685,75 @@ export default function ResaleScreen() {
             </View>
           ) : (
             <View style={styles.emptyScreen}>
-              <Animated.View style={[styles.emptyHeroWrap, { opacity: emptyEnter, transform: [{ scale: emptyEnter.interpolate({ inputRange: [0, 1], outputRange: [0.98, 1] }) }] }]}>
-                <GlassView intensity={28} style={styles.emptyHeroCard}>
-                  <LinearGradient
-                    colors={['rgba(6,182,212,0.18)', 'rgba(124,58,237,0.12)', 'rgba(255,255,255,0.02)', 'transparent']}
-                    locations={[0, 0.35, 0.7, 1]}
-                    style={StyleSheet.absoluteFill}
-                  />
-                  <Animated.View
-                    pointerEvents="none"
-                    style={[
-                      styles.emptyOrb,
-                      styles.emptyOrbA,
-                      {
-                        opacity: emptyPulse.interpolate({ inputRange: [0, 1], outputRange: [0.55, 0.95] }),
-                        transform: [
-                          { translateX: emptyDrift.interpolate({ inputRange: [0, 1], outputRange: [-14, 14] }) },
-                          { translateY: emptyDrift.interpolate({ inputRange: [0, 1], outputRange: [10, -10] }) },
-                          { scale: emptyPulse.interpolate({ inputRange: [0, 1], outputRange: [1, 1.08] }) },
-                        ],
-                      },
-                    ]}
-                  />
-                  <Animated.View
-                    pointerEvents="none"
-                    style={[
-                      styles.emptyOrb,
-                      styles.emptyOrbB,
-                      {
-                        opacity: emptyPulse.interpolate({ inputRange: [0, 1], outputRange: [0.22, 0.55] }),
-                        transform: [
-                          { translateX: emptyDrift.interpolate({ inputRange: [0, 1], outputRange: [10, -10] }) },
-                          { translateY: emptyDrift.interpolate({ inputRange: [0, 1], outputRange: [-10, 10] }) },
-                          { scale: emptyPulse.interpolate({ inputRange: [0, 1], outputRange: [1.04, 0.98] }) },
-                        ],
-                      },
-                    ]}
-                  />
-                  <View pointerEvents="none" style={styles.emptyHairlineTop} />
+              <Animated.View style={[styles.emptyHeroWrap, { opacity: emptyEnter, transform: [{ scale: emptyEnter.interpolate({ inputRange: [0, 1], outputRange: [0.96, 1] }) }] }]}>
+                <LinearGradient
+                  colors={[Colors.dark.secondary, Colors.dark.primary, 'rgba(255,255,255,0.10)']}
+                  start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
+                  style={styles.emptyCardBorder}
+                >
+                  <View style={styles.emptyHeroCard}>
+                    <LinearGradient colors={['#1E1040', '#0F0A22', '#0A0618']} locations={[0, 0.5, 1]} style={StyleSheet.absoluteFill} />
+                    <Animated.View pointerEvents="none" style={[styles.emptyOrb, styles.emptyOrbA, {
+                      opacity: emptyPulse.interpolate({ inputRange: [0, 1], outputRange: [0.6, 1] }),
+                      transform: [
+                        { translateX: emptyDrift.interpolate({ inputRange: [0, 1], outputRange: [-12, 12] }) },
+                        { translateY: emptyDrift.interpolate({ inputRange: [0, 1], outputRange: [8, -8] }) },
+                        { scale: emptyPulse.interpolate({ inputRange: [0, 1], outputRange: [1, 1.1] }) },
+                      ],
+                    }]} />
+                    <Animated.View pointerEvents="none" style={[styles.emptyOrb, styles.emptyOrbB, {
+                      opacity: emptyPulse.interpolate({ inputRange: [0, 1], outputRange: [0.3, 0.6] }),
+                      transform: [
+                        { translateX: emptyDrift.interpolate({ inputRange: [0, 1], outputRange: [10, -10] }) },
+                        { translateY: emptyDrift.interpolate({ inputRange: [0, 1], outputRange: [-8, 8] }) },
+                        { scale: emptyPulse.interpolate({ inputRange: [0, 1], outputRange: [1.05, 0.97] }) },
+                      ],
+                    }]} />
 
-                  <View style={styles.emptyHeader}>
-                    <Text style={styles.emptyEyebrow}>{`ECLIPSE · ${String(t('tabs.resale')).toUpperCase()}`}</Text>
-                  </View>
+                    <Text style={styles.emptyEyebrow}>✦ ECLIPSE ✦</Text>
 
-                  <Animated.View style={[styles.emptyIconFloat, { transform: [{ translateY: emptyFloat.interpolate({ inputRange: [0, 1], outputRange: [0, -7] }) }] }]}>
-                    <Animated.View style={{ transform: [{ scale: emptyPulse.interpolate({ inputRange: [0, 1], outputRange: [1, 1.04] }) }] }}>
-                      <LinearGradient colors={[Colors.dark.secondary, Colors.dark.primary, 'rgba(255,255,255,0.10)']} style={styles.emptyIconRing}>
-                        <View style={styles.emptyIconInner}>
-                          <Tag size={26} color="white" />
-                        </View>
-                      </LinearGradient>
+                    <Animated.View style={[styles.emptyIconFloat, { transform: [{ translateY: emptyFloat.interpolate({ inputRange: [0, 1], outputRange: [0, -8] }) }] }]}>
+                      <Animated.View style={{ transform: [{ scale: emptyPulse.interpolate({ inputRange: [0, 1], outputRange: [1, 1.05] }) }] }}>
+                        <LinearGradient colors={[Colors.dark.secondary, Colors.dark.primary]} style={styles.emptyIconRing}>
+                          <View style={styles.emptyIconInner}>
+                            <Tag size={28} color="white" />
+                          </View>
+                        </LinearGradient>
+                      </Animated.View>
                     </Animated.View>
-                  </Animated.View>
 
-                  <Text style={styles.emptyTitle}>
-                    {hasActiveFilters ? t('resale.empty_no_results') : t('resale.empty_no_listings')}
-                  </Text>
-                  <Text style={styles.emptySubtitle}>
-                    {hasActiveFilters
-                      ? t('resale.empty_no_results_subtitle')
-                      : t('resale.empty_no_listings_subtitle')}
-                  </Text>
-                  <View style={styles.emptyActions}>
-                  {hasActiveFilters ? (
+                    <Text style={styles.emptyTitle}>
+                      {hasActiveFilters ? t('resale.empty_no_results') : t('resale.empty_no_listings')}
+                    </Text>
+                    <Text style={styles.emptySubtitle}>
+                      {hasActiveFilters ? t('resale.empty_no_results_subtitle') : t('resale.empty_no_listings_subtitle')}
+                    </Text>
+
                     <TouchableOpacity
-                      activeOpacity={0.88}
-                      onPress={() => {
-                        Haptics.selectionAsync();
-                        clearFilters();
-                      }}
+                      activeOpacity={0.85}
+                      onPress={() => { Haptics.selectionAsync(); hasActiveFilters ? clearFilters() : router.push('/(tabs)'); }}
                       style={styles.emptyCtaOuter}
                     >
                       <LinearGradient
-                        colors={['rgba(124,58,237,0.75)', 'rgba(6,182,212,0.55)']}
-                        start={{ x: 0, y: 0 }}
-                        end={{ x: 1, y: 1 }}
-                        style={styles.emptyCtaBorder}
+                        colors={[Colors.dark.primary, Colors.dark.secondary]}
+                        start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
+                        style={styles.emptyCtaInner}
                       >
-                        <View style={styles.emptyCtaInner}>
-                          <LinearGradient
-                            colors={['rgba(124,58,237,0.22)', 'rgba(6,182,212,0.10)', 'transparent']}
-                            locations={[0, 0.6, 1]}
-                            start={{ x: 0, y: 0 }}
-                            end={{ x: 1, y: 1 }}
-                            style={StyleSheet.absoluteFill}
-                          />
-                          <View style={styles.emptyCtaRow}>
-                            <Text style={styles.emptyCtaText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.85}>
-                              {t('home.clear_filters')}
-                            </Text>
-                            <ChevronRight size={18} color="rgba(255,255,255,0.85)" />
-                          </View>
-                        </View>
+                        <Text style={styles.emptyCtaText}>
+                          {hasActiveFilters ? t('home.clear_filters') : t('tickets.buy_tickets')}
+                        </Text>
+                        <ChevronRight size={16} color="white" />
                       </LinearGradient>
                     </TouchableOpacity>
-                  ) : (
                     <TouchableOpacity
-                      activeOpacity={0.88}
-                      onPress={() => {
-                        Haptics.selectionAsync();
-                        router.push('/(tabs)');
-                      }}
-                      style={styles.emptyCtaOuter}
+                      activeOpacity={0.75}
+                      onPress={() => { Haptics.selectionAsync(); router.push('/(tabs)/tickets'); }}
+                      style={styles.emptyCtaSecondary}
                     >
-                      <LinearGradient
-                        colors={['rgba(124,58,237,0.75)', 'rgba(6,182,212,0.55)']}
-                        start={{ x: 0, y: 0 }}
-                        end={{ x: 1, y: 1 }}
-                        style={styles.emptyCtaBorder}
-                      >
-                        <View style={styles.emptyCtaInner}>
-                          <LinearGradient
-                            colors={['rgba(124,58,237,0.22)', 'rgba(6,182,212,0.10)', 'transparent']}
-                            locations={[0, 0.6, 1]}
-                            start={{ x: 0, y: 0 }}
-                            end={{ x: 1, y: 1 }}
-                            style={StyleSheet.absoluteFill}
-                          />
-                          <View style={styles.emptyCtaRow}>
-                            <Text style={styles.emptyCtaText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.85}>
-                              {t('tickets.buy_tickets')}
-                            </Text>
-                            <ChevronRight size={18} color="rgba(255,255,255,0.85)" />
-                          </View>
-                        </View>
-                      </LinearGradient>
+                      <Text style={styles.emptyCtaSecondaryText}>{t('resale.view_my_tickets')}</Text>
                     </TouchableOpacity>
-                  )}
-                  <View style={{ height: 10 }} />
-                  <TouchableOpacity
-                    activeOpacity={0.88}
-                    onPress={() => {
-                      Haptics.selectionAsync();
-                      router.push('/(tabs)/tickets');
-                    }}
-                    style={styles.emptyCtaOuter}
-                  >
-                    <LinearGradient
-                      colors={['rgba(255,255,255,0.16)', 'rgba(255,255,255,0.06)']}
-                      start={{ x: 0, y: 0 }}
-                      end={{ x: 1, y: 1 }}
-                      style={styles.emptyCtaBorder}
-                    >
-                      <View style={[styles.emptyCtaInner, { backgroundColor: 'rgba(255,255,255,0.04)' }]}>
-                        <View style={styles.emptyCtaRow}>
-                          <Text style={styles.emptyCtaTextSecondary} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.85}>
-                            {t('resale.view_my_tickets')}
-                          </Text>
-                          <ChevronRight size={18} color="rgba(255,255,255,0.55)" />
-                        </View>
-                      </View>
-                    </LinearGradient>
-                  </TouchableOpacity>
-                </View>
-                </GlassView>
+                  </View>
+                </LinearGradient>
               </Animated.View>
             </View>
           )
@@ -1164,142 +1079,27 @@ const styles = StyleSheet.create({
   },
 
   // Empty State
-  emptyScreen: {
-    paddingTop: 10,
-    paddingHorizontal: 20,
-    paddingBottom: 40,
-  },
-  emptyHeroWrap: {
-    alignSelf: 'center',
-    width: '100%',
-    maxWidth: 560,
-  },
-  emptyHeroCard: {
-    width: '100%',
-    maxWidth: 560,
-    paddingVertical: 24,
-    paddingHorizontal: 18,
-    borderRadius: 28,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.12)',
-    backgroundColor: 'rgba(255,255,255,0.04)',
-    alignItems: 'center',
-    overflow: 'hidden',
-    alignSelf: 'center',
-  },
-  emptyHairlineTop: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    height: 1,
-    backgroundColor: 'rgba(255,255,255,0.10)',
-  },
-  emptyOrb: {
-    position: 'absolute',
-    borderRadius: 999,
-  },
-  emptyOrbA: {
-    width: 220,
-    height: 220,
-    top: -110,
-    left: -90,
-    backgroundColor: 'rgba(10,132,255,0.16)',
-  },
-  emptyOrbB: {
-    width: 260,
-    height: 260,
-    bottom: -140,
-    right: -120,
-    backgroundColor: 'rgba(191,90,242,0.14)',
-  },
-  emptyHeader: {
-    width: '100%',
-    alignItems: 'center',
-  },
-  emptyEyebrow: {
-    color: 'rgba(255,255,255,0.55)',
-    fontSize: 11,
-    fontWeight: '700',
-    letterSpacing: 2.2,
-    textTransform: 'uppercase',
-  },
-  emptyIconFloat: {
-    marginTop: 18,
-  },
-  emptyIconRing: {
-    width: 76,
-    height: 76,
-    borderRadius: 38,
-    padding: 2,
-  },
-  emptyIconInner: {
-    flex: 1,
-    borderRadius: 36,
-    backgroundColor: 'rgba(0,0,0,0.38)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.16)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  emptyTitle: {
-    fontSize: 22,
-    fontWeight: '900',
-    color: 'white',
-    marginTop: 18,
-    textAlign: 'center',
-    letterSpacing: -0.4,
-  },
-  emptySubtitle: {
-    fontSize: 14,
-    color: Colors.dark.textSecondary,
-    marginTop: 10,
-    textAlign: 'center',
-    maxWidth: 380,
-    lineHeight: 20,
-  },
-  emptyActions: {
-    width: '100%',
-    marginTop: 18,
-  },
+  emptyScreen: { flex: 1, justifyContent: 'center', paddingHorizontal: 24, paddingTop: 32, paddingBottom: 60 },
+  emptyHeroWrap: { width: '100%' },
+  emptyCardBorder: { borderRadius: 28, padding: 1.5 },
+  emptyHeroCard: { borderRadius: 26, overflow: 'hidden', alignItems: 'center', paddingTop: 28, paddingBottom: 32, paddingHorizontal: 24 },
+  emptyOrb: { position: 'absolute', borderRadius: 999 },
+  emptyOrbA: { width: 200, height: 200, top: -80, left: -70, backgroundColor: 'rgba(6,182,212,0.28)' },
+  emptyOrbB: { width: 240, height: 240, bottom: -120, right: -100, backgroundColor: 'rgba(124,58,237,0.18)' },
+  emptyEyebrow: { fontSize: 11, fontWeight: '700', color: 'rgba(255,255,255,0.40)', letterSpacing: 3, textTransform: 'uppercase', marginBottom: 20 },
+  emptyIconFloat: { marginBottom: 4 },
+  emptyIconRing: { width: 80, height: 80, borderRadius: 40, alignItems: 'center', justifyContent: 'center' },
+  emptyIconInner: { width: 64, height: 64, borderRadius: 32, backgroundColor: 'rgba(0,0,0,0.40)', alignItems: 'center', justifyContent: 'center' },
+  emptyTitle: { fontSize: 22, fontWeight: '900', color: '#FFFFFF', marginTop: 20, textAlign: 'center', letterSpacing: -0.5 },
+  emptySubtitle: { fontSize: 14, color: 'rgba(255,255,255,0.60)', marginTop: 10, textAlign: 'center', lineHeight: 21, maxWidth: 300 },
   emptyButton: {
     width: '100%',
   },
-  emptyCtaOuter: {
-    width: '100%',
-    minWidth: 200,
-    alignSelf: 'center',
-    borderRadius: 18,
-    shadowColor: '#000',
-    shadowOpacity: 0.28,
-    shadowRadius: 18,
-    shadowOffset: { width: 0, height: 12 },
-    elevation: 8,
-  },
-  emptyCtaBorder: {
-    borderRadius: 18,
-    padding: 1.5,
-  },
-  emptyCtaInner: {
-    height: 52,
-    borderRadius: 16.5,
-    backgroundColor: 'rgba(0,0,0,0.45)',
-    justifyContent: 'center',
-    overflow: 'hidden',
-    minWidth: 200,
-  },
-  emptyCtaRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 24,
-  },
-  emptyCtaText: {
-    color: 'white',
-    fontSize: 16,
-    fontWeight: '800',
-    letterSpacing: -0.2,
-  },
+  emptyCtaOuter: { marginTop: 28, borderRadius: 16, overflow: 'hidden', alignSelf: 'center', minWidth: 200 },
+  emptyCtaInner: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 14, paddingHorizontal: 24, gap: 6 },
+  emptyCtaText: { color: 'white', fontSize: 15, fontWeight: '800', letterSpacing: -0.2 },
+  emptyCtaSecondary: { marginTop: 14, alignSelf: 'center', padding: 8 },
+  emptyCtaSecondaryText: { color: 'rgba(255,255,255,0.50)', fontSize: 14, fontWeight: '600', textDecorationLine: 'underline' },
   emptyCtaTextSecondary: {
     color: 'rgba(255,255,255,0.72)',
     fontSize: 16,
