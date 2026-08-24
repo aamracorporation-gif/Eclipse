@@ -23,6 +23,7 @@ type AuthContextType = {
   signUp: (email: string, password: string, metadata?: any) => Promise<{ data: any; error: any }>;
   signOut: () => Promise<void>;
   resetPassword: (email: string) => Promise<{ error: any }>;
+  resendVerificationEmail: (email: string) => Promise<{ error: any }>;
 };
 
 const AuthContext = createContext<AuthContextType>({
@@ -34,6 +35,7 @@ const AuthContext = createContext<AuthContextType>({
   signUp: async () => ({ data: null, error: null }),
   signOut: async () => {},
   resetPassword: async () => ({ error: null }),
+  resendVerificationEmail: async () => ({ error: null }),
 });
 
 export const useAuth = () => {
@@ -182,6 +184,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const signUp = async (email: string, password: string, metadata: any = {}) => {
     try {
+      // NOTE: For production, set EXPO_PUBLIC_EMAIL_REDIRECT_URL to the
+      // `auth-redirect` edge function URL so Supabase emails land on an
+      // HTTPS page first, then bounce to eclipse://auth/callback. Example:
+      //   EXPO_PUBLIC_EMAIL_REDIRECT_URL = https://<project-ref>.supabase.co/functions/v1/auth-redirect
       const emailRedirectTo =
         String((process.env.EXPO_PUBLIC_EMAIL_REDIRECT_URL as any) || '').trim() ||
         Linking.createURL('auth/callback');
@@ -211,12 +217,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const resetPassword = async (email: string) => {
     try {
+      // redirectTo must be whitelisted in Supabase Dashboard → Auth → URL Configuration.
+      // Primary: the auth-redirect edge function (HTTPS, works in all email clients).
+      // Fallback: deep link directly (works if eclipse:// is also whitelisted).
+      const redirectTo =
+        String((process.env.EXPO_PUBLIC_EMAIL_REDIRECT_URL as any) || '').trim() ||
+        'eclipse://auth/callback';
       const { error } = await withTimeout(
-        supabase.auth.resetPasswordForEmail(email, {
-          redirectTo:
-            String((process.env.EXPO_PUBLIC_EMAIL_REDIRECT_URL as any) || '').trim() ||
-            Linking.createURL('auth/callback'),
-        }),
+        supabase.auth.resetPasswordForEmail(email.trim(), { redirectTo }),
         20000,
         'Reset password'
       );
@@ -226,8 +234,29 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  const resendVerificationEmail = async (email: string) => {
+    try {
+      const emailRedirectTo =
+        String((process.env.EXPO_PUBLIC_EMAIL_VERIFY_URL as any) || '').trim() ||
+        String((process.env.EXPO_PUBLIC_EMAIL_REDIRECT_URL as any) || '').trim() ||
+        Linking.createURL('auth/callback');
+      const { data, error } = await withTimeout(
+        supabase.auth.resend({
+          type: 'signup',
+          email: String(email || '').trim(),
+          options: { emailRedirectTo },
+        } as any),
+        20000,
+        'Resend verification email'
+      );
+      return { data, error };
+    } catch (err: any) {
+      return { data: null, error: err };
+    }
+  };
+
   return (
-    <AuthContext.Provider value={{ user, session, loading, workerProfile, signIn, signUp, signOut, resetPassword }}>
+    <AuthContext.Provider value={{ user, session, loading, workerProfile, signIn, signUp, signOut, resetPassword, resendVerificationEmail }}>
       {children}
     </AuthContext.Provider>
   );
