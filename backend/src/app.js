@@ -334,6 +334,7 @@ function createApp() {
 </head><body><div class="card"><h2>⚠️ Enlace expirado o ya usado</h2><p>Los enlaces de recuperación expiran en 1 hora y solo se pueden usar una vez. Solicita uno nuevo desde la app.</p></div></body></html>`);
     }
 
+    const ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp1cmJkcmZtd2pxYnJzY2FpcnViIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjcyODgyNTcsImV4cCI6MjA4Mjg2NDI1N30.e81tNdU21I67m9UleGKf5t4n6vy8dGdLuJIJtSPFDIQ';
     return res.status(200).send(`<!doctype html>
 <html lang="es"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
 <title>Nueva contraseña — Eclipse</title>
@@ -341,91 +342,120 @@ function createApp() {
 *{box-sizing:border-box}
 body{font-family:-apple-system,Arial,sans-serif;background:#0b0b0f;color:#fff;margin:0;display:flex;align-items:center;justify-content:center;min-height:100vh;padding:24px}
 .card{max-width:420px;width:100%;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);border-radius:18px;padding:32px}
-.logo{text-align:center;margin-bottom:24px;font-size:32px}
+.logo{text-align:center;margin-bottom:20px;font-size:32px}
 h2{margin:0 0 6px;font-size:22px;font-weight:800;text-align:center}
-.sub{color:rgba(255,255,255,.55);font-size:14px;text-align:center;margin:0 0 28px;line-height:1.4}
+.sub{color:rgba(255,255,255,.55);font-size:14px;text-align:center;margin:0 0 24px;line-height:1.4}
 label{display:block;font-size:13px;color:rgba(255,255,255,.55);margin-bottom:6px;font-weight:500}
-input[type=password]{width:100%;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.15);border-radius:10px;padding:13px 14px;color:#fff;font-size:15px;outline:none;transition:border .2s;-webkit-appearance:none}
-input[type=password]:focus{border-color:#7C3AED}
+.input-wrap{position:relative}
+.input-wrap input{width:100%;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.15);border-radius:10px;padding:13px 44px 13px 14px;color:#fff;font-size:15px;outline:none;transition:border .2s;-webkit-appearance:none;box-sizing:border-box}
+.input-wrap input:focus{border-color:#7C3AED}
+.input-wrap input.has-error{border-color:#f87171}
+.eye-btn{position:absolute;right:12px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;color:rgba(255,255,255,.45);padding:4px;width:auto;font-size:18px}
 .field{margin-bottom:16px}
-.error{color:#f87171;font-size:13px;margin-top:6px;display:none}
-button{width:100%;padding:14px;background:#7C3AED;color:#fff;border:none;border-radius:10px;font-size:16px;font-weight:700;cursor:pointer;margin-top:8px;transition:opacity .2s}
-button:disabled{opacity:.5;cursor:not-allowed}
-.msg{text-align:center;padding:16px;border-radius:10px;font-size:14px;margin-top:16px;display:none}
+.hint{font-size:12px;color:rgba(255,255,255,.35);margin-top:5px}
+.err-txt{color:#f87171;font-size:13px;margin-top:5px;display:none}
+.submit-btn{width:100%;padding:14px;background:#7C3AED;color:#fff;border:none;border-radius:10px;font-size:16px;font-weight:700;cursor:pointer;margin-top:8px;transition:opacity .2s;display:flex;align-items:center;justify-content:center;gap:8px}
+.submit-btn:disabled{opacity:.5;cursor:not-allowed}
+.msg{text-align:center;padding:14px;border-radius:10px;font-size:14px;margin-top:16px;display:none}
 .msg.ok{background:rgba(74,222,128,.15);border:1px solid rgba(74,222,128,.3);color:#4ade80}
 .msg.err{background:rgba(248,113,113,.15);border:1px solid rgba(248,113,113,.3);color:#f87171}
-.spinner{width:20px;height:20px;border:2px solid rgba(255,255,255,.3);border-top-color:#fff;border-radius:50%;animation:spin .7s linear infinite;display:inline-block;vertical-align:middle;margin-right:8px;display:none}
+.spinner{width:18px;height:18px;border:2px solid rgba(255,255,255,.3);border-top-color:#fff;border-radius:50%;animation:spin .7s linear infinite;display:none}
 @keyframes spin{to{transform:rotate(360deg)}}
-</style>
-</head>
+</style></head>
 <body>
 <div class="card">
   <div class="logo">☀️</div>
   <h2>Nueva contraseña</h2>
   <p class="sub">Elige una contraseña segura para tu cuenta Eclipse.</p>
   <div class="field">
-    <label for="pw">Nueva contraseña</label>
-    <input type="password" id="pw" placeholder="Mínimo 8 caracteres" autocomplete="new-password"/>
-    <div class="error" id="pwErr">Mínimo 8 caracteres.</div>
+    <label>Nueva contraseña</label>
+    <div class="input-wrap">
+      <input type="password" id="pw" placeholder="Mínimo 8 caracteres" autocomplete="new-password"/>
+      <button class="eye-btn" type="button" onclick="toggleEye('pw','eye1')" id="eye1">👁</button>
+    </div>
+    <div class="hint">Mínimo 8 caracteres</div>
+    <div class="err-txt" id="pwErr">Mínimo 8 caracteres.</div>
   </div>
   <div class="field">
-    <label for="pw2">Repetir contraseña</label>
-    <input type="password" id="pw2" placeholder="Repite la contraseña" autocomplete="new-password"/>
-    <div class="error" id="pw2Err">Las contraseñas no coinciden.</div>
+    <label>Repetir contraseña</label>
+    <div class="input-wrap">
+      <input type="password" id="pw2" placeholder="Repite la contraseña" autocomplete="new-password"/>
+      <button class="eye-btn" type="button" onclick="toggleEye('pw2','eye2')" id="eye2">👁</button>
+    </div>
+    <div class="err-txt" id="pw2Err">Las contraseñas no coinciden.</div>
   </div>
-  <button id="btn" onclick="submit()"><span class="spinner" id="sp"></span>Actualizar contraseña</button>
+  <button class="submit-btn" id="btn" type="button" onclick="doUpdate()">
+    <span class="spinner" id="sp"></span>Actualizar contraseña
+  </button>
   <div class="msg" id="msg"></div>
 </div>
 <script>
-const SUPABASE_URL = ${JSON.stringify(SUPABASE_URL)};
-const TOKEN_HASH = ${JSON.stringify(tokenHash)};
-let accessToken = null;
+const SB_URL = ${JSON.stringify(SUPABASE_URL)};
+const TH = ${JSON.stringify(tokenHash)};
+const AK = ${JSON.stringify(ANON)};
+let _token = null;
 
-async function getSession() {
-  const r = await fetch(SUPABASE_URL + '/auth/v1/verify', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'apikey': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp1cmJkcmZtd2pxYnJzY2FpcnViIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjcyODgyNTcsImV4cCI6MjA4Mjg2NDI1N30.e81tNdU21I67m9UleGKf5t4n6vy8dGdLuJIJtSPFDIQ' },
-    body: JSON.stringify({ token_hash: TOKEN_HASH, type: 'recovery' })
-  });
-  const d = await r.json();
-  if (!r.ok) throw new Error(d.error_description || d.msg || 'Token inválido');
-  return d.access_token;
+function toggleEye(inputId, btnId) {
+  const inp = document.getElementById(inputId);
+  const btn = document.getElementById(btnId);
+  if (inp.type === 'password') { inp.type = 'text'; btn.textContent = '🙈'; }
+  else { inp.type = 'password'; btn.textContent = '👁'; }
 }
 
-async function submit() {
+function validate() {
   const pw = document.getElementById('pw').value;
   const pw2 = document.getElementById('pw2').value;
   const pwErr = document.getElementById('pwErr');
   const pw2Err = document.getElementById('pw2Err');
-  pwErr.style.display = pw.length > 0 && pw.length < 8 ? 'block' : 'none';
-  pw2Err.style.display = pw2.length > 0 && pw2 !== pw ? 'block' : 'none';
-  if (pw.length < 8 || pw !== pw2) return;
+  const pwInp = document.getElementById('pw');
+  const pw2Inp = document.getElementById('pw2');
+  const showPwErr = pw.length > 0 && pw.length < 8;
+  const showPw2Err = pw2.length > 0 && pw2 !== pw;
+  pwErr.style.display = showPwErr ? 'block' : 'none';
+  pw2Err.style.display = showPw2Err ? 'block' : 'none';
+  pwInp.classList.toggle('has-error', showPwErr);
+  pw2Inp.classList.toggle('has-error', showPw2Err);
+  return pw.length >= 8 && pw === pw2;
+}
 
+document.getElementById('pw').addEventListener('input', validate);
+document.getElementById('pw2').addEventListener('input', validate);
+document.getElementById('pw').addEventListener('keydown', function(e){ if(e.key==='Enter') document.getElementById('pw2').focus(); });
+document.getElementById('pw2').addEventListener('keydown', function(e){ if(e.key==='Enter') doUpdate(); });
+
+async function doUpdate() {
+  if (!validate()) return;
+  const pw = document.getElementById('pw').value;
   const btn = document.getElementById('btn');
   const sp = document.getElementById('sp');
   const msg = document.getElementById('msg');
-  btn.disabled = true; sp.style.display = 'inline-block';
-  msg.style.display = 'none';
-
+  btn.disabled = true; sp.style.display = 'block'; msg.style.display = 'none';
   try {
-    if (!accessToken) accessToken = await getSession();
-    const r = await fetch(SUPABASE_URL + '/auth/v1/user', {
+    if (!_token) {
+      const r1 = await fetch(SB_URL + '/auth/v1/verify', {
+        method: 'POST',
+        headers: {'Content-Type':'application/json','apikey':AK},
+        body: JSON.stringify({token_hash: TH, type: 'recovery'})
+      });
+      const d1 = await r1.json();
+      if (!r1.ok) throw new Error(d1.error_description || d1.msg || 'Token inválido o expirado');
+      _token = d1.access_token;
+    }
+    const r2 = await fetch(SB_URL + '/auth/v1/user', {
       method: 'PUT',
-      headers: { 'Content-Type': 'application/json', 'apikey': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp1cmJkcmZtd2pxYnJzY2FpcnViIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjcyODgyNTcsImV4cCI6MjA4Mjg2NDI1N30.e81tNdU21I67m9UleGKf5t4n6vy8dGdLuJIJtSPFDIQ', 'Authorization': 'Bearer ' + accessToken },
-      body: JSON.stringify({ password: pw })
+      headers: {'Content-Type':'application/json','apikey':AK,'Authorization':'Bearer '+_token},
+      body: JSON.stringify({password: pw})
     });
-    const d = await r.json();
-    if (!r.ok) throw new Error(d.error_description || d.msg || 'Error al actualizar');
-    msg.className = 'msg ok'; msg.textContent = '✓ Contraseña actualizada. Ya puedes iniciar sesión en Eclipse.';
+    const d2 = await r2.json();
+    if (!r2.ok) throw new Error(d2.error_description || d2.msg || 'Error al actualizar');
+    msg.className = 'msg ok';
+    msg.textContent = '✓ Contraseña actualizada. Ya puedes iniciar sesión en Eclipse.';
     msg.style.display = 'block'; btn.style.display = 'none';
   } catch(e) {
     msg.className = 'msg err'; msg.textContent = e.message;
     msg.style.display = 'block'; btn.disabled = false; sp.style.display = 'none';
   }
 }
-
-document.getElementById('pw').addEventListener('keydown', function(e){ if(e.key==='Enter') document.getElementById('pw2').focus(); });
-document.getElementById('pw2').addEventListener('keydown', function(e){ if(e.key==='Enter') submit(); });
 </script>
 </body></html>`);
   });
