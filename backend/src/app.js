@@ -430,17 +430,167 @@ document.getElementById('pw2').addEventListener('keydown', function(e){ if(e.key
 </body></html>`);
   });
 
-  // Email verification: Supabase redirects here after confirming signup/email change.
+  // Email verification / password recovery landing page.
+  // Supabase sends tokens in the URL hash (#access_token=...&type=recovery).
+  // JavaScript reads the hash and either shows the reset form (type=recovery)
+  // or redirects to the Eclipse app deep link (type=signup / other).
   app.get('/auth/verify', (req, res) => {
-    const qs = new URLSearchParams(req.query).toString();
-    const deepLink = `eclipse://auth/callback${qs ? '?' + qs : ''}`;
+    const SUPABASE_URL = 'https://zurbdrfmwjqbrscairub.supabase.co';
+    const ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp1cmJkcmZtd2pxYnJzY2FpcnViIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjcyODgyNTcsImV4cCI6MjA4Mjg2NDI1N30.e81tNdU21I67m9UleGKf5t4n6vy8dGdLuJIJtSPFDIQ';
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
-    return res.status(200).send(authRedirectHtml(
-      'Verificando cuenta — Eclipse',
-      'Verificando tu cuenta…',
-      'Redirigiendo a Eclipse. Si no se abre automáticamente, pulsa el botón.',
-      deepLink
-    ));
+    return res.status(200).send(`<!doctype html>
+<html lang="es"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Eclipse</title>
+<style>
+*{box-sizing:border-box}
+body{font-family:-apple-system,Arial,sans-serif;background:#0b0b0f;color:#fff;margin:0;display:flex;align-items:center;justify-content:center;min-height:100vh;padding:24px}
+.card{max-width:420px;width:100%;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);border-radius:18px;padding:32px}
+.logo{text-align:center;margin-bottom:20px;font-size:32px}
+h2{margin:0 0 6px;font-size:22px;font-weight:800;text-align:center}
+.sub{color:rgba(255,255,255,.55);font-size:14px;text-align:center;margin:0 0 24px;line-height:1.4}
+label{display:block;font-size:13px;color:rgba(255,255,255,.55);margin-bottom:6px;font-weight:500}
+input[type=password]{width:100%;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.15);border-radius:10px;padding:13px 14px;color:#fff;font-size:15px;outline:none;transition:border .2s;-webkit-appearance:none}
+input[type=password]:focus{border-color:#7C3AED}
+.field{margin-bottom:16px}
+.err-txt{color:#f87171;font-size:13px;margin-top:5px;display:none}
+button{width:100%;padding:14px;background:#7C3AED;color:#fff;border:none;border-radius:10px;font-size:16px;font-weight:700;cursor:pointer;margin-top:8px;transition:opacity .2s}
+button:disabled{opacity:.5;cursor:not-allowed}
+.msg{text-align:center;padding:14px;border-radius:10px;font-size:14px;margin-top:16px;display:none}
+.msg.ok{background:rgba(74,222,128,.15);border:1px solid rgba(74,222,128,.3);color:#4ade80}
+.msg.err{background:rgba(248,113,113,.15);border:1px solid rgba(248,113,113,.3);color:#f87171}
+.spinner{width:36px;height:36px;border:3px solid rgba(255,255,255,.15);border-top-color:#7C3AED;border-radius:50%;animation:spin .8s linear infinite;margin:0 auto 16px}
+@keyframes spin{to{transform:rotate(360deg)}}
+#loading{text-align:center}
+#resetForm{display:none}
+#deepLinkBtn{display:inline-block;padding:14px 28px;border-radius:12px;background:#7C3AED;color:#fff;font-weight:700;font-size:16px;text-decoration:none;margin-top:8px;width:100%;text-align:center}
+</style></head>
+<body>
+<div class="card">
+  <div class="logo">☀️</div>
+  <div id="loading">
+    <div class="spinner"></div>
+    <h2>Verificando…</h2>
+    <p class="sub">Un momento por favor.</p>
+  </div>
+  <div id="resetForm">
+    <h2>Nueva contraseña</h2>
+    <p class="sub">Elige una contraseña segura para tu cuenta Eclipse.</p>
+    <div class="field">
+      <label>Nueva contraseña</label>
+      <input type="password" id="pw" placeholder="Mínimo 8 caracteres" autocomplete="new-password"/>
+      <div class="err-txt" id="pwErr">Mínimo 8 caracteres.</div>
+    </div>
+    <div class="field">
+      <label>Repetir contraseña</label>
+      <input type="password" id="pw2" placeholder="Repite la contraseña" autocomplete="new-password"/>
+      <div class="err-txt" id="pw2Err">Las contraseñas no coinciden.</div>
+    </div>
+    <button id="btn" onclick="doUpdate()">Actualizar contraseña</button>
+    <div class="msg" id="msg"></div>
+  </div>
+</div>
+<script>
+const SUPABASE_URL = ${JSON.stringify(SUPABASE_URL)};
+const ANON_KEY = ${JSON.stringify(ANON_KEY)};
+
+function parseHash() {
+  const h = window.location.hash.slice(1);
+  const p = {};
+  h.split('&').forEach(function(part) {
+    const kv = part.split('=');
+    if (kv[0]) p[decodeURIComponent(kv[0])] = decodeURIComponent(kv[1] || '');
+  });
+  return p;
+}
+
+(function init() {
+  const params = parseHash();
+  // Also check query string (token_hash flow)
+  const qs = new URLSearchParams(window.location.search);
+  const tokenHash = qs.get('token_hash');
+  const type = params.type || qs.get('type') || '';
+  const accessToken = params.access_token || '';
+  const error = params.error || '';
+
+  if (error) {
+    document.getElementById('loading').innerHTML = '<h2>⚠️ Enlace expirado</h2><p class="sub">Este enlace ya fue usado o ha expirado. Solicita uno nuevo desde la app.</p>';
+    return;
+  }
+
+  if (type === 'recovery' && accessToken) {
+    // Implicit flow: access_token is in the hash
+    window._accessToken = accessToken;
+    document.getElementById('loading').style.display = 'none';
+    document.getElementById('resetForm').style.display = 'block';
+    return;
+  }
+
+  if (type === 'recovery' && tokenHash) {
+    // token_hash flow: verify first, then show form
+    fetch(SUPABASE_URL + '/auth/v1/verify', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'apikey': ANON_KEY },
+      body: JSON.stringify({ token_hash: tokenHash, type: 'recovery' })
+    }).then(function(r){ return r.json(); }).then(function(d) {
+      if (d.access_token) {
+        window._accessToken = d.access_token;
+        document.getElementById('loading').style.display = 'none';
+        document.getElementById('resetForm').style.display = 'block';
+      } else {
+        document.getElementById('loading').innerHTML = '<h2>⚠️ Enlace expirado</h2><p class="sub">Este enlace ya fue usado o ha expirado. Solicita uno nuevo desde la app.</p>';
+      }
+    });
+    return;
+  }
+
+  // Signup / other: deep link into the app
+  var deepLink = 'eclipse://auth/callback?' + (qs.toString() || '') + (window.location.hash.length > 1 ? '&' + window.location.hash.slice(1) : '');
+  document.getElementById('loading').innerHTML = '<div class="spinner"></div><h2>Verificando tu cuenta…</h2><p class="sub">Redirigiendo a Eclipse. Si no se abre automáticamente, pulsa el botón.</p><a id="deepLinkBtn" href="' + deepLink + '">Abrir Eclipse</a>';
+  try { window.location.href = deepLink; } catch(e){}
+})();
+
+async function doUpdate() {
+  const pw = document.getElementById('pw').value;
+  const pw2 = document.getElementById('pw2').value;
+  const pwErr = document.getElementById('pwErr');
+  const pw2Err = document.getElementById('pw2Err');
+  pwErr.style.display = pw.length > 0 && pw.length < 8 ? 'block' : 'none';
+  pw2Err.style.display = pw2.length > 0 && pw2 !== pw ? 'block' : 'none';
+  if (pw.length < 8 || pw !== pw2) return;
+
+  const btn = document.getElementById('btn');
+  const msg = document.getElementById('msg');
+  btn.disabled = true; btn.textContent = 'Guardando…';
+  msg.style.display = 'none';
+
+  try {
+    const r = await fetch(SUPABASE_URL + '/auth/v1/user', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', 'apikey': ANON_KEY, 'Authorization': 'Bearer ' + window._accessToken },
+      body: JSON.stringify({ password: pw })
+    });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error_description || d.msg || 'Error al actualizar');
+    msg.className = 'msg ok';
+    msg.textContent = '✓ Contraseña actualizada. Ya puedes iniciar sesión en Eclipse.';
+    msg.style.display = 'block';
+    btn.style.display = 'none';
+  } catch(e) {
+    msg.className = 'msg err';
+    msg.textContent = e.message;
+    msg.style.display = 'block';
+    btn.disabled = false; btn.textContent = 'Actualizar contraseña';
+  }
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+  var pw = document.getElementById('pw');
+  var pw2 = document.getElementById('pw2');
+  if (pw) pw.addEventListener('keydown', function(e){ if(e.key==='Enter') pw2.focus(); });
+  if (pw2) pw2.addEventListener('keydown', function(e){ if(e.key==='Enter') doUpdate(); });
+});
+</script>
+</body></html>`);
   });
   // ────────────────────────────────────────────────────────────────────────────
 
