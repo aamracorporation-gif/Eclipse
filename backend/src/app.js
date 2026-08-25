@@ -493,24 +493,14 @@ button:disabled{opacity:.5;cursor:not-allowed}
 const SUPABASE_URL = ${JSON.stringify(SUPABASE_URL)};
 const ANON_KEY = ${JSON.stringify(ANON_KEY)};
 
-function parseHash() {
-  const h = window.location.hash.slice(1);
-  const p = {};
-  h.split('&').forEach(function(part) {
-    const kv = part.split('=');
-    if (kv[0]) p[decodeURIComponent(kv[0])] = decodeURIComponent(kv[1] || '');
-  });
-  return p;
-}
-
 (function init() {
-  const params = parseHash();
-  // Also check query string (token_hash flow)
+  // Parse both hash and query params robustly
+  const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ''));
   const qs = new URLSearchParams(window.location.search);
-  const tokenHash = qs.get('token_hash');
-  const type = params.type || qs.get('type') || '';
-  const accessToken = params.access_token || '';
-  const error = params.error || '';
+  const type = hashParams.get('type') || qs.get('type') || '';
+  const accessToken = hashParams.get('access_token') || qs.get('access_token') || '';
+  const tokenHash = qs.get('token_hash') || '';
+  const error = hashParams.get('error') || qs.get('error') || '';
 
   if (error) {
     document.getElementById('loading').innerHTML = '<h2>⚠️ Enlace expirado</h2><p class="sub">Este enlace ya fue usado o ha expirado. Solicita uno nuevo desde la app.</p>';
