@@ -336,126 +336,175 @@ function createApp() {
 
     const ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp1cmJkcmZtd2pxYnJzY2FpcnViIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjcyODgyNTcsImV4cCI6MjA4Mjg2NDI1N30.e81tNdU21I67m9UleGKf5t4n6vy8dGdLuJIJtSPFDIQ';
     return res.status(200).send(`<!doctype html>
+<!-- v2 -->
 <html lang="es"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
 <title>Nueva contraseña — Eclipse</title>
 <style>
-*{box-sizing:border-box}
-body{font-family:-apple-system,Arial,sans-serif;background:#0b0b0f;color:#fff;margin:0;display:flex;align-items:center;justify-content:center;min-height:100vh;padding:24px}
-.card{max-width:420px;width:100%;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);border-radius:18px;padding:32px}
-.logo{text-align:center;margin-bottom:20px;font-size:32px}
-h2{margin:0 0 6px;font-size:22px;font-weight:800;text-align:center}
-.sub{color:rgba(255,255,255,.55);font-size:14px;text-align:center;margin:0 0 24px;line-height:1.4}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;background:#0b0b0f;color:#fff;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px}
+.card{max-width:400px;width:100%;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1);border-radius:20px;padding:32px}
+.logo-wrap{display:flex;justify-content:center;margin-bottom:20px}
+.logo-box{width:64px;height:64px;border-radius:18px;background:linear-gradient(135deg,#7C3AED,#06B6D4);display:flex;align-items:center;justify-content:center}
+.logo-box svg{width:30px;height:30px}
+h2{font-size:22px;font-weight:800;text-align:center;margin-bottom:6px}
+.sub{color:rgba(255,255,255,.5);font-size:14px;text-align:center;line-height:1.5;margin-bottom:24px}
+.field{margin-bottom:14px}
 label{display:block;font-size:13px;color:rgba(255,255,255,.55);margin-bottom:6px;font-weight:500}
-.input-wrap{position:relative}
-.input-wrap input{width:100%;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.15);border-radius:10px;padding:13px 44px 13px 14px;color:#fff;font-size:15px;outline:none;transition:border .2s;-webkit-appearance:none;box-sizing:border-box}
-.input-wrap input:focus{border-color:#7C3AED}
-.input-wrap input.has-error{border-color:#f87171}
-.eye-btn{position:absolute;right:12px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;color:rgba(255,255,255,.45);padding:4px;width:auto;font-size:18px}
-.field{margin-bottom:16px}
-.hint{font-size:12px;color:rgba(255,255,255,.35);margin-top:5px}
-.err-txt{color:#f87171;font-size:13px;margin-top:5px;display:none}
-.submit-btn{width:100%;padding:14px;background:#7C3AED;color:#fff;border:none;border-radius:10px;font-size:16px;font-weight:700;cursor:pointer;margin-top:8px;transition:opacity .2s;display:flex;align-items:center;justify-content:center;gap:8px}
-.submit-btn:disabled{opacity:.5;cursor:not-allowed}
-.msg{text-align:center;padding:14px;border-radius:10px;font-size:14px;margin-top:16px;display:none}
-.msg.ok{background:rgba(74,222,128,.15);border:1px solid rgba(74,222,128,.3);color:#4ade80}
-.msg.err{background:rgba(248,113,113,.15);border:1px solid rgba(248,113,113,.3);color:#f87171}
-.spinner{width:18px;height:18px;border:2px solid rgba(255,255,255,.3);border-top-color:#fff;border-radius:50%;animation:spin .7s linear infinite;display:none}
+.iw{position:relative;display:flex;align-items:center}
+.iw input{flex:1;background:rgba(255,255,255,.06);border:1.5px solid rgba(255,255,255,.12);border-radius:10px;padding:12px 44px 12px 14px;color:#fff;font-size:15px;outline:none;transition:border-color .2s;width:100%}
+.iw input:focus{border-color:#7C3AED}
+.iw input.err{border-color:#f87171}
+.eye{position:absolute;right:0;top:0;bottom:0;width:44px;display:flex;align-items:center;justify-content:center;background:none;border:none;cursor:pointer;color:rgba(255,255,255,.4);transition:color .2s;flex-shrink:0}
+.eye:hover{color:rgba(255,255,255,.8)}
+.eye svg{width:18px;height:18px;pointer-events:none}
+.reqs{margin-top:12px;margin-bottom:4px;display:flex;flex-direction:column;gap:6px}
+.req{display:flex;align-items:center;gap:8px;font-size:13px;color:rgba(255,255,255,.4);transition:color .2s}
+.req.ok{color:#4ade80}
+.req-icon{width:16px;height:16px;border-radius:50%;border:1.5px solid rgba(255,255,255,.2);display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:all .2s}
+.req.ok .req-icon{border-color:#4ade80;background:#4ade80}
+.req-icon svg{width:9px;height:9px;display:none}
+.req.ok .req-icon svg{display:block}
+.match-err{color:#f87171;font-size:13px;margin-top:6px;display:none}
+.btn{width:100%;padding:14px;background:linear-gradient(135deg,#7C3AED,#6D28D9);color:#fff;border:none;border-radius:10px;font-size:16px;font-weight:700;cursor:pointer;margin-top:18px;transition:opacity .2s;display:flex;align-items:center;justify-content:center;gap:8px}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+.sp{width:18px;height:18px;border:2px solid rgba(255,255,255,.3);border-top-color:#fff;border-radius:50%;animation:spin .7s linear infinite;display:none;flex-shrink:0}
 @keyframes spin{to{transform:rotate(360deg)}}
+.msg{border-radius:10px;padding:14px;font-size:14px;text-align:center;margin-top:14px;display:none}
+.msg.ok{background:rgba(74,222,128,.12);border:1px solid rgba(74,222,128,.3);color:#4ade80}
+.msg.er{background:rgba(248,113,113,.12);border:1px solid rgba(248,113,113,.3);color:#f87171}
 </style></head>
-<body>
-<div class="card">
-  <div class="logo">☀️</div>
+<body><div class="card">
+  <div class="logo-wrap">
+    <div class="logo-box">
+      <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M12 2L13.09 8.26L19 6L14.74 10.74L21 12L14.74 13.26L19 18L13.09 15.74L12 22L10.91 15.74L5 18L9.26 13.26L3 12L9.26 10.74L5 6L10.91 8.26L12 2Z" fill="white"/>
+      </svg>
+    </div>
+  </div>
   <h2>Nueva contraseña</h2>
-  <p class="sub">Elige una contraseña segura para tu cuenta Eclipse.</p>
+  <p class="sub">Elige una contraseña segura para tu cuenta.</p>
+
   <div class="field">
     <label>Nueva contraseña</label>
-    <div class="input-wrap">
-      <input type="password" id="pw" placeholder="Mínimo 8 caracteres" autocomplete="new-password"/>
-      <button class="eye-btn" type="button" onclick="toggleEye('pw','eye1')" id="eye1">👁</button>
+    <div class="iw">
+      <input type="password" id="pw" placeholder="Introduce tu contraseña" autocomplete="new-password"/>
+      <button class="eye" type="button" id="eye1" aria-label="Mostrar contraseña">
+        <svg id="eyeIcon1" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+      </button>
     </div>
-    <div class="hint">Mínimo 8 caracteres</div>
-    <div class="err-txt" id="pwErr">Mínimo 8 caracteres.</div>
+    <div class="reqs" id="reqs">
+      <div class="req" id="r1"><div class="req-icon"><svg viewBox="0 0 10 8" fill="none"><polyline points="1,4 4,7 9,1" stroke="white" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></div><span>Mínimo 6 caracteres</span></div>
+      <div class="req" id="r2"><div class="req-icon"><svg viewBox="0 0 10 8" fill="none"><polyline points="1,4 4,7 9,1" stroke="white" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></div><span>Al menos una mayúscula (A-Z)</span></div>
+      <div class="req" id="r3"><div class="req-icon"><svg viewBox="0 0 10 8" fill="none"><polyline points="1,4 4,7 9,1" stroke="white" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></div><span>Al menos una minúscula (a-z)</span></div>
+      <div class="req" id="r4"><div class="req-icon"><svg viewBox="0 0 10 8" fill="none"><polyline points="1,4 4,7 9,1" stroke="white" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></div><span>Al menos un número (0-9)</span></div>
+      <div class="req" id="r5"><div class="req-icon"><svg viewBox="0 0 10 8" fill="none"><polyline points="1,4 4,7 9,1" stroke="white" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></div><span>Al menos un carácter especial (!@#$...)</span></div>
+    </div>
   </div>
+
   <div class="field">
     <label>Repetir contraseña</label>
-    <div class="input-wrap">
+    <div class="iw">
       <input type="password" id="pw2" placeholder="Repite la contraseña" autocomplete="new-password"/>
-      <button class="eye-btn" type="button" onclick="toggleEye('pw2','eye2')" id="eye2">👁</button>
+      <button class="eye" type="button" id="eye2" aria-label="Mostrar contraseña">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+      </button>
     </div>
-    <div class="err-txt" id="pw2Err">Las contraseñas no coinciden.</div>
+    <div class="match-err" id="matchErr">Las contraseñas no coinciden.</div>
   </div>
-  <button class="submit-btn" id="btn" type="button" onclick="doUpdate()">
-    <span class="spinner" id="sp"></span>Actualizar contraseña
+
+  <button class="btn" id="btn" type="button">
+    <span class="sp" id="sp"></span>Actualizar contraseña
   </button>
   <div class="msg" id="msg"></div>
 </div>
 <script>
-const SB_URL = ${JSON.stringify(SUPABASE_URL)};
+(function(){
+const SB = ${JSON.stringify(SUPABASE_URL)};
 const TH = ${JSON.stringify(tokenHash)};
 const AK = ${JSON.stringify(ANON)};
-let _token = null;
+const SPECIALS = '!@#$%^&*(),.?":{}|<>';
+let _tok = null;
 
-function toggleEye(inputId, btnId) {
-  const inp = document.getElementById(inputId);
-  const btn = document.getElementById(btnId);
-  if (inp.type === 'password') { inp.type = 'text'; btn.textContent = '🙈'; }
-  else { inp.type = 'password'; btn.textContent = '👁'; }
+function check(pw) {
+  return {
+    len: pw.length >= 6,
+    upper: /[A-Z]/.test(pw),
+    lower: /[a-z]/.test(pw),
+    num: /[0-9]/.test(pw),
+    special: [...SPECIALS].some(function(c){ return pw.includes(c); })
+  };
 }
 
-function validate() {
-  const pw = document.getElementById('pw').value;
-  const pw2 = document.getElementById('pw2').value;
-  const pwErr = document.getElementById('pwErr');
-  const pw2Err = document.getElementById('pw2Err');
-  const pwInp = document.getElementById('pw');
-  const pw2Inp = document.getElementById('pw2');
-  const showPwErr = pw.length > 0 && pw.length < 8;
-  const showPw2Err = pw2.length > 0 && pw2 !== pw;
-  pwErr.style.display = showPwErr ? 'block' : 'none';
-  pw2Err.style.display = showPw2Err ? 'block' : 'none';
-  pwInp.classList.toggle('has-error', showPwErr);
-  pw2Inp.classList.toggle('has-error', showPw2Err);
-  return pw.length >= 8 && pw === pw2;
+function updateReqs(pw) {
+  var r = check(pw);
+  var ids = ['r1','r2','r3','r4','r5'];
+  var keys = ['len','upper','lower','num','special'];
+  for (var i=0;i<ids.length;i++) {
+    document.getElementById(ids[i]).classList.toggle('ok', r[keys[i]]);
+  }
+  return r.len && r.upper && r.lower && r.num && r.special;
 }
 
-document.getElementById('pw').addEventListener('input', validate);
-document.getElementById('pw2').addEventListener('input', validate);
+function isStrong() { return updateReqs(document.getElementById('pw').value); }
+
+document.getElementById('pw').addEventListener('input', function(){
+  updateReqs(this.value);
+  var pw2 = document.getElementById('pw2').value;
+  if (pw2) document.getElementById('matchErr').style.display = pw2 !== this.value ? 'block' : 'none';
+  document.getElementById('pw').classList.remove('err');
+});
+document.getElementById('pw2').addEventListener('input', function(){
+  var pw = document.getElementById('pw').value;
+  document.getElementById('matchErr').style.display = this.value && this.value !== pw ? 'block' : 'none';
+  document.getElementById('pw2').classList.toggle('err', !!this.value && this.value !== pw);
+});
+
+function setupEye(inputId, btnId) {
+  var btn = document.getElementById(btnId);
+  var inp = document.getElementById(inputId);
+  btn.addEventListener('click', function(e){
+    e.preventDefault();
+    var show = inp.type === 'password';
+    inp.type = show ? 'text' : 'password';
+    btn.innerHTML = show
+      ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19"/><line x1="1" y1="1" x2="23" y2="23"/></svg>'
+      : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>';
+  });
+}
+setupEye('pw','eye1');
+setupEye('pw2','eye2');
+
 document.getElementById('pw').addEventListener('keydown', function(e){ if(e.key==='Enter') document.getElementById('pw2').focus(); });
 document.getElementById('pw2').addEventListener('keydown', function(e){ if(e.key==='Enter') doUpdate(); });
+document.getElementById('btn').addEventListener('click', doUpdate);
 
 async function doUpdate() {
-  if (!validate()) return;
-  const pw = document.getElementById('pw').value;
-  const btn = document.getElementById('btn');
-  const sp = document.getElementById('sp');
-  const msg = document.getElementById('msg');
+  var pw = document.getElementById('pw').value;
+  var pw2 = document.getElementById('pw2').value;
+  if (!isStrong()) { document.getElementById('pw').classList.add('err'); return; }
+  if (pw !== pw2) { document.getElementById('matchErr').style.display='block'; document.getElementById('pw2').classList.add('err'); return; }
+  var btn = document.getElementById('btn');
+  var sp = document.getElementById('sp');
+  var msg = document.getElementById('msg');
   btn.disabled = true; sp.style.display = 'block'; msg.style.display = 'none';
   try {
-    if (!_token) {
-      const r1 = await fetch(SB_URL + '/auth/v1/verify', {
-        method: 'POST',
-        headers: {'Content-Type':'application/json','apikey':AK},
-        body: JSON.stringify({token_hash: TH, type: 'recovery'})
-      });
-      const d1 = await r1.json();
-      if (!r1.ok) throw new Error(d1.error_description || d1.msg || 'Token inválido o expirado');
-      _token = d1.access_token;
+    if (!_tok) {
+      var r1 = await fetch(SB+'/auth/v1/verify',{method:'POST',headers:{'Content-Type':'application/json','apikey':AK},body:JSON.stringify({token_hash:TH,type:'recovery'})});
+      var d1 = await r1.json();
+      if (!r1.ok) throw new Error(d1.error_description||d1.msg||'Enlace expirado o ya usado. Solicita uno nuevo.');
+      _tok = d1.access_token;
     }
-    const r2 = await fetch(SB_URL + '/auth/v1/user', {
-      method: 'PUT',
-      headers: {'Content-Type':'application/json','apikey':AK,'Authorization':'Bearer '+_token},
-      body: JSON.stringify({password: pw})
-    });
-    const d2 = await r2.json();
-    if (!r2.ok) throw new Error(d2.error_description || d2.msg || 'Error al actualizar');
-    msg.className = 'msg ok';
-    msg.textContent = '✓ Contraseña actualizada. Ya puedes iniciar sesión en Eclipse.';
-    msg.style.display = 'block'; btn.style.display = 'none';
+    var r2 = await fetch(SB+'/auth/v1/user',{method:'PUT',headers:{'Content-Type':'application/json','apikey':AK,'Authorization':'Bearer '+_tok},body:JSON.stringify({password:pw})});
+    var d2 = await r2.json();
+    if (!r2.ok) throw new Error(d2.error_description||d2.msg||'Error al actualizar');
+    msg.className='msg ok'; msg.innerHTML='✓ Contraseña actualizada. Ya puedes iniciar sesión en Eclipse.';
+    msg.style.display='block'; btn.style.display='none';
   } catch(e) {
-    msg.className = 'msg err'; msg.textContent = e.message;
-    msg.style.display = 'block'; btn.disabled = false; sp.style.display = 'none';
+    msg.className='msg er'; msg.textContent=e.message;
+    msg.style.display='block'; btn.disabled=false; sp.style.display='none';
   }
 }
+})();
 </script>
 </body></html>`);
   });
