@@ -217,14 +217,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const resetPassword = async (email: string) => {
     try {
-      // redirectTo must be whitelisted in Supabase Dashboard → Auth → URL Configuration.
-      // Primary: the auth-redirect edge function (HTTPS, works in all email clients).
-      // Fallback: deep link directly (works if eclipse:// is also whitelisted).
-      const redirectTo =
-        String((process.env.EXPO_PUBLIC_EMAIL_REDIRECT_URL as any) || '').trim() ||
-        'eclipse://auth/callback';
+      // No redirectTo — Supabase uses site_url (https://api.weareeclipseoficial.com/auth/verify)
+      // which forwards token_hash to the app via deep link.
       const { error } = await withTimeout(
-        supabase.auth.resetPasswordForEmail(email.trim(), { redirectTo }),
+        supabase.auth.resetPasswordForEmail(email.trim()),
         20000,
         'Reset password'
       );
