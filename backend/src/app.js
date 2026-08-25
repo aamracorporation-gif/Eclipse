@@ -323,6 +323,8 @@ function createApp() {
   // Shows a web form so the user can set a new password directly in the browser.
   app.get('/auth/reset-password', (req, res) => {
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+    res.setHeader('Pragma', 'no-cache');
     const tokenHash = req.query.token_hash || '';
     const SUPABASE_URL = process.env.SUPABASE_URL || 'https://zurbdrfmwjqbrscairub.supabase.co';
 
@@ -418,12 +420,12 @@ label{display:block;font-size:13px;color:rgba(255,255,255,.55);margin-bottom:6px
   <div class="msg" id="msg"></div>
 </div>
 <script>
-(function(){
-const SB = ${JSON.stringify(SUPABASE_URL)};
-const TH = ${JSON.stringify(tokenHash)};
-const AK = ${JSON.stringify(ANON)};
-const SPECIALS = '!@#$%^&*(),.?":{}|<>';
-let _tok = null;
+document.addEventListener('DOMContentLoaded', function() {
+var SB = ${JSON.stringify(SUPABASE_URL)};
+var TH = ${JSON.stringify(tokenHash)};
+var AK = ${JSON.stringify(ANON)};
+var SPECIALS = '!@#$%^&*(),.?":{}|<>';
+var _tok = null;
 
 function check(pw) {
   return {
@@ -431,80 +433,78 @@ function check(pw) {
     upper: /[A-Z]/.test(pw),
     lower: /[a-z]/.test(pw),
     num: /[0-9]/.test(pw),
-    special: [...SPECIALS].some(function(c){ return pw.includes(c); })
+    special: Array.prototype.some.call(SPECIALS, function(c){ return pw.indexOf(c) !== -1; })
   };
 }
 
 function updateReqs(pw) {
   var r = check(pw);
-  var ids = ['r1','r2','r3','r4','r5'];
-  var keys = ['len','upper','lower','num','special'];
-  for (var i=0;i<ids.length;i++) {
-    document.getElementById(ids[i]).classList.toggle('ok', r[keys[i]]);
-  }
+  var map = {r1:'len',r2:'upper',r3:'lower',r4:'num',r5:'special'};
+  Object.keys(map).forEach(function(id){
+    document.getElementById(id).classList.toggle('ok', r[map[id]]);
+  });
   return r.len && r.upper && r.lower && r.num && r.special;
 }
 
-function isStrong() { return updateReqs(document.getElementById('pw').value); }
+var pwEl = document.getElementById('pw');
+var pw2El = document.getElementById('pw2');
+var matchErrEl = document.getElementById('matchErr');
+var btnEl = document.getElementById('btn');
+var spEl = document.getElementById('sp');
+var msgEl = document.getElementById('msg');
 
-document.getElementById('pw').addEventListener('input', function(){
-  updateReqs(this.value);
-  var pw2 = document.getElementById('pw2').value;
-  if (pw2) document.getElementById('matchErr').style.display = pw2 !== this.value ? 'block' : 'none';
-  document.getElementById('pw').classList.remove('err');
+pwEl.addEventListener('input', function(){
+  updateReqs(pwEl.value);
+  if (pw2El.value) matchErrEl.style.display = pw2El.value !== pwEl.value ? 'block' : 'none';
+  pwEl.classList.remove('err');
 });
-document.getElementById('pw2').addEventListener('input', function(){
-  var pw = document.getElementById('pw').value;
-  document.getElementById('matchErr').style.display = this.value && this.value !== pw ? 'block' : 'none';
-  document.getElementById('pw2').classList.toggle('err', !!this.value && this.value !== pw);
+pw2El.addEventListener('input', function(){
+  matchErrEl.style.display = pw2El.value && pw2El.value !== pwEl.value ? 'block' : 'none';
+  pw2El.classList.toggle('err', !!(pw2El.value && pw2El.value !== pwEl.value));
 });
 
-function setupEye(inputId, btnId) {
-  var btn = document.getElementById(btnId);
-  var inp = document.getElementById(inputId);
+function setupEye(inp, btn) {
   btn.addEventListener('click', function(e){
     e.preventDefault();
+    e.stopPropagation();
     var show = inp.type === 'password';
     inp.type = show ? 'text' : 'password';
     btn.innerHTML = show
-      ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19"/><line x1="1" y1="1" x2="23" y2="23"/></svg>'
-      : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>';
+      ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:18px;height:18px"><path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19"/><line x1="1" y1="1" x2="23" y2="23"/></svg>'
+      : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:18px;height:18px"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>';
   });
 }
-setupEye('pw','eye1');
-setupEye('pw2','eye2');
+setupEye(pwEl, document.getElementById('eye1'));
+setupEye(pw2El, document.getElementById('eye2'));
 
-document.getElementById('pw').addEventListener('keydown', function(e){ if(e.key==='Enter') document.getElementById('pw2').focus(); });
-document.getElementById('pw2').addEventListener('keydown', function(e){ if(e.key==='Enter') doUpdate(); });
-document.getElementById('btn').addEventListener('click', doUpdate);
+pwEl.addEventListener('keydown', function(e){ if(e.key==='Enter') pw2El.focus(); });
+pw2El.addEventListener('keydown', function(e){ if(e.key==='Enter') doUpdate(); });
+btnEl.addEventListener('click', doUpdate);
 
 async function doUpdate() {
-  var pw = document.getElementById('pw').value;
-  var pw2 = document.getElementById('pw2').value;
-  if (!isStrong()) { document.getElementById('pw').classList.add('err'); return; }
-  if (pw !== pw2) { document.getElementById('matchErr').style.display='block'; document.getElementById('pw2').classList.add('err'); return; }
-  var btn = document.getElementById('btn');
-  var sp = document.getElementById('sp');
-  var msg = document.getElementById('msg');
-  btn.disabled = true; sp.style.display = 'block'; msg.style.display = 'none';
+  var pw = pwEl.value;
+  var pw2 = pw2El.value;
+  if (!updateReqs(pw)) { pwEl.classList.add('err'); return; }
+  if (pw !== pw2) { matchErrEl.style.display='block'; pw2El.classList.add('err'); return; }
+  btnEl.disabled = true; spEl.style.display = 'block'; msgEl.style.display = 'none';
   try {
     if (!_tok) {
       var r1 = await fetch(SB+'/auth/v1/verify',{method:'POST',headers:{'Content-Type':'application/json','apikey':AK},body:JSON.stringify({token_hash:TH,type:'recovery'})});
       var d1 = await r1.json();
-      if (!r1.ok) throw new Error(d1.error_description||d1.msg||'Enlace expirado o ya usado. Solicita uno nuevo.');
+      if (!r1.ok) throw new Error(d1.error_description||d1.msg||'Enlace expirado o ya usado.');
       _tok = d1.access_token;
     }
     var r2 = await fetch(SB+'/auth/v1/user',{method:'PUT',headers:{'Content-Type':'application/json','apikey':AK,'Authorization':'Bearer '+_tok},body:JSON.stringify({password:pw})});
     var d2 = await r2.json();
-    if (!r2.ok) throw new Error(d2.error_description||d2.msg||'Error al actualizar');
-    msg.className='msg ok'; msg.innerHTML='✓ Contraseña actualizada. Ya puedes iniciar sesión en Eclipse.';
-    msg.style.display='block'; btn.style.display='none';
+    if (!r2.ok) throw new Error(d2.error_description||d2.msg||'Error al actualizar.');
+    msgEl.className='msg ok'; msgEl.innerHTML='&#10003; Contraseña actualizada. Ya puedes iniciar sesión en Eclipse.';
+    msgEl.style.display='block'; btnEl.style.display='none';
   } catch(e) {
-    msg.className='msg er'; msg.textContent=e.message;
-    msg.style.display='block'; btn.disabled=false; sp.style.display='none';
+    msgEl.className='msg er'; msgEl.textContent=e.message;
+    msgEl.style.display='block'; btnEl.disabled=false; spEl.style.display='none';
   }
 }
-})();
+});
 </script>
 </body></html>`);
   });
