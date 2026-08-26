@@ -448,61 +448,81 @@ window.addEventListener('load', function(){
   app.get('/event/:id', (req, res) => {
     const id = String(req.params.id || '').trim();
     if (!id) return res.status(400).send('Missing id');
-    const deepLink = `eclipse://event/${encodeURIComponent(id)}`;
+    const deepLink = `eclipse://(tabs)/event/${encodeURIComponent(id)}`;
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
-    return res.status(200).send(`<!doctype html>
-<html lang="es">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width,initial-scale=1" />
-    <title>Abrir evento</title>
-    <style>
-      body { margin:0; font-family: -apple-system, BlinkMacSystemFont, Segoe UI, Roboto, Arial, sans-serif; background:#0f0f1a; color:#fff; }
-      .wrap { min-height:100vh; display:flex; align-items:center; justify-content:center; padding:24px; }
-      .card { max-width:520px; width:100%; background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.12); border-radius:18px; padding:22px; }
-      h1 { margin:0 0 10px; font-size:22px; }
-      p { margin:0 0 16px; color:rgba(255,255,255,0.78); line-height:1.45; }
-      a.btn { display:inline-block; background:#7c3aed; color:#fff; text-decoration:none; padding:12px 16px; border-radius:14px; font-weight:800; }
-      .muted { margin-top:10px; font-size:12px; color:rgba(255,255,255,0.55); }
-    </style>
-  </head>
-  <body>
-    <div class="wrap">
-      <div class="card">
-        <h1>Abrir evento</h1>
-        <p>Si tienes la app instalada, se abrirá automáticamente.</p>
-        <a class="btn" href="${deepLink}">Abrir en la app</a>
-        <div class="muted">Si no se abre automáticamente, pulsa el botón.</div>
-      </div>
-    </div>
-    <script>
-      setTimeout(function(){ window.location.href = ${JSON.stringify(deepLink)}; }, 350);
-    </script>
-  </body>
-</html>`);
+    res.setHeader('Cache-Control', 'no-store');
+    return res.status(200).send(deepLinkPage(deepLink, 'Ver evento', 'Abriendo Eclipse para ver el evento…'));
   });
+
   app.get('/evento/:token', async (req, res) => {
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    res.setHeader('Cache-Control', 'no-store');
+    const token = String(req.params.token || '').trim();
+    if (!token) return res.status(400).send('Missing token');
+
     try {
-      const token = String(req.params.token || '').trim();
-      if (!token) return res.status(400).send('Missing token');
       const supabaseUrl = String(env.supabaseUrl || '').replace(/\/$/, '');
-      const target = `${supabaseUrl}/functions/v1/event-share/evento/${encodeURIComponent(token)}`;
-      if (typeof fetch !== 'function') return res.status(500).send('Server fetch not available');
-      const upstream = await fetch(target, {
-        method: 'GET',
-        headers: {
-          accept: 'text/html',
-          apikey: env.supabaseAnonKey,
-          Authorization: `Bearer ${env.supabaseAnonKey}`,
-        },
+      const resolveUrl = `${supabaseUrl}/functions/v1/event-share/resolve?token=${encodeURIComponent(token)}`;
+      const upstream = await fetch(resolveUrl, {
+        headers: { apikey: env.supabaseAnonKey, Authorization: `Bearer ${env.supabaseAnonKey}` },
       });
-      const html = await upstream.text().catch(() => '');
-      res.setHeader('Content-Type', upstream.headers.get('content-type') || 'text/html; charset=utf-8');
-      res.setHeader('X-Eclipse-Proxy', 'evento-v2');
-      res.setHeader('X-Eclipse-Upstream-Status', String(upstream.status));
-      return res.status(upstream.status).send(html);
+      const data = await upstream.json().catch(() => ({}));
+      const eventId = String(data?.event?.id || '').trim();
+      const eventTitle = String(data?.event?.title || 'Evento').trim();
+      const posterUrl = String(data?.event?.poster_url || '').trim();
+
+      if (!eventId) {
+        return res.status(200).send(deepLinkPage('eclipse://', 'Evento no disponible', 'Este enlace ha expirado o el evento ya no está disponible.'));
+      }
+
+      const deepLink = `eclipse://(tabs)/event/${encodeURIComponent(eventId)}`;
+
+      // Página bonita con imagen y nombre del evento
+      return res.status(200).send(`<!doctype html>
+<html lang="es"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>${eventTitle} — Eclipse</title>
+<meta property="og:title" content="${eventTitle}"/>
+<meta property="og:description" content="Ver este evento en Eclipse"/>
+${posterUrl ? `<meta property="og:image" content="${posterUrl}"/>` : ''}
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;background:#0b0b0f;color:#fff;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px}
+.card{max-width:380px;width:100%;text-align:center}
+.poster{width:100%;max-width:280px;aspect-ratio:4/3;object-fit:cover;border-radius:16px;margin:0 auto 20px;display:block}
+.poster-placeholder{width:100%;max-width:280px;aspect-ratio:4/3;border-radius:16px;background:linear-gradient(135deg,rgba(124,58,237,.3),rgba(6,182,212,.2));border:1px solid rgba(255,255,255,.1);display:flex;align-items:center;justify-content:center;margin:0 auto 20px;font-size:48px}
+.logo-box{width:52px;height:52px;border-radius:16px;background:linear-gradient(135deg,#7C3AED,#06B6D4);display:flex;align-items:center;justify-content:center;margin:0 auto 16px}
+.logo-box svg{width:26px;height:26px}
+h2{font-size:22px;font-weight:800;margin-bottom:8px;line-height:1.2}
+p{color:rgba(255,255,255,.5);font-size:14px;line-height:1.5;margin-bottom:24px}
+.sp{width:32px;height:32px;border:3px solid rgba(255,255,255,.15);border-top-color:#7C3AED;border-radius:50%;animation:spin .8s linear infinite;margin:0 auto 16px}
+@keyframes spin{to{transform:rotate(360deg)}}
+.open-btn{display:block;padding:15px;background:linear-gradient(135deg,#7C3AED,#06B6D4);color:#fff;font-weight:800;font-size:16px;text-decoration:none;border-radius:14px;margin-bottom:10px}
+.hint{font-size:12px;color:rgba(255,255,255,.3)}
+</style></head>
+<body>
+<div class="card">
+  <div class="logo-box">
+    <svg viewBox="0 0 24 24" fill="white"><path d="M12 2L13.09 8.26L19 6L14.74 10.74L21 12L14.74 13.26L19 18L13.09 15.74L12 22L10.91 15.74L5 18L9.26 13.26L3 12L9.26 10.74L5 6L10.91 8.26L12 2Z"/></svg>
+  </div>
+  ${posterUrl
+    ? `<img class="poster" src="${posterUrl}" alt="${eventTitle}" onerror="this.style.display='none'"/>`
+    : `<div class="poster-placeholder">🎉</div>`
+  }
+  <div class="sp"></div>
+  <h2>${eventTitle}</h2>
+  <p>Abriendo Eclipse para ver el evento…</p>
+  <a class="open-btn" id="openBtn" href="${deepLink}">Ver en Eclipse</a>
+  <p class="hint">Si no se abre, asegúrate de tener Eclipse instalado.</p>
+</div>
+<script>
+window.addEventListener('load', function(){
+  document.querySelector('.sp').style.display = 'none';
+  try { window.location.href = ${JSON.stringify(deepLink)}; } catch(e){}
+});
+</script>
+</body></html>`);
     } catch {
-      return res.status(500).send('Failed to resolve share link');
+      return res.status(200).send(deepLinkPage('eclipse://', 'Evento', 'Abre Eclipse para ver el evento.'));
     }
   });
   app.get('/stripe/complete', async (req, res) => {

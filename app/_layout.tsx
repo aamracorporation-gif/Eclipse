@@ -318,6 +318,28 @@ function RootLayoutNav({ fontsLoaded }: { fontsLoaded: boolean }) {
     const handleUrl = async (url: string | null | undefined) => {
       if (!url) return;
 
+      // eclipse://evento/{token} — resolve token → navigate to event
+      if (url.includes('/evento/') || url.includes('//evento/')) {
+        try {
+          const parsed = ExpoLinking.parse(url);
+          const parts = String(parsed.path || '').replace(/^\/+/, '').split('/');
+          const token = parts[parts.length - 1];
+          if (token) {
+            const supabaseUrl = String(process.env.EXPO_PUBLIC_SUPABASE_URL || '').replace(/\/$/, '');
+            const anonKey = String(process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '');
+            const r = await fetch(`${supabaseUrl}/functions/v1/event-share/resolve?token=${encodeURIComponent(token)}`, {
+              headers: { apikey: anonKey, Authorization: `Bearer ${anonKey}` },
+            });
+            const data = await r.json().catch(() => ({}));
+            const eventId = String(data?.event?.id || '').trim();
+            if (eventId) router.push(`/(tabs)/event/${eventId}`);
+          }
+        } catch (e) {
+          console.warn('[linking] evento token resolve error:', e);
+        }
+        return;
+      }
+
       if (url.includes('auth/reset-password')) {
         try {
           const parsed = ExpoLinking.parse(url);
