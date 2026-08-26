@@ -110,6 +110,7 @@ export default function ScanScreen() {
   const [banner, setBanner] = useState<{ tone: 'ok' | 'warn' | 'error'; text: string } | null>(null);
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
   const [eventPickerOpen, setEventPickerOpen] = useState(false);
+  const [sessionCount, setSessionCount] = useState(0);
 
   const scannedRef = useRef(false);
   const pulse = useRef(new Animated.Value(0)).current;
@@ -123,6 +124,9 @@ export default function ScanScreen() {
   }, [windowWidth]);
   const frameRadius = useMemo(() => Math.max(18, Math.round(frameSize * 0.085)), [frameSize]);
 
+  const adminEmail = 'aamracorporation@gmail.com';
+  const isAdmin = !!user?.email && user.email.toLowerCase() === adminEmail;
+
   const myEvents = useMemo(() => {
     const uid = user?.id;
     if (!uid) return [];
@@ -130,14 +134,14 @@ export default function ScanScreen() {
     const graceMs = 6 * 60 * 60 * 1000;
     const cutoff = new Date(now.getTime() - graceMs);
     const filtered = (events || [])
-      .filter((e: any) => String(e?.creatorId || '') === uid)
+      .filter((e: any) => isAdmin || String(e?.creatorId || '') === uid)
       .filter((e: any) => {
         const startsAt = e?.startsAt ? new Date(String(e.startsAt)) : new Date(`${String(e?.date || '')}T${String(e?.time || '00:00')}`);
         if (Number.isNaN(startsAt.getTime())) return false;
         return startsAt >= cutoff;
       });
     return [...filtered].sort((a: any, b: any) => String(a?.date || '').localeCompare(String(b?.date || '')));
-  }, [events, user?.id]);
+  }, [events, user?.id, isAdmin]);
 
   const selectedEvent = useMemo(() => {
     if (!selectedEventId) return null;
@@ -149,6 +153,11 @@ export default function ScanScreen() {
       scannedRef.current = false;
     }
   }, [view]);
+
+  // Reset session counter when the selected event changes
+  useEffect(() => {
+    setSessionCount(0);
+  }, [selectedEventId]);
 
   useEffect(() => {
     refreshEvents().catch(() => null);
@@ -217,43 +226,38 @@ export default function ScanScreen() {
       return;
     }
     if (!selectedEventId) {
-      setBanner({ tone: 'error', text: t('creator.scan.select_event_required', { defaultValue: 'Selecciona una fiesta antes de validar.' }) });
+      setBanner({ tone: 'error', text: 'Selecciona una fiesta antes de validar.' });
       return;
     }
 
     setBusy(true);
     setBanner(null);
     try {
-      let data: any = null;
-      let error: any = null;
-      {
-        const res = await supabase.rpc('validate_ticket_qr_v3', {
-          p_qr_token: token,
-          p_scanned_by_text: user.id,
-          p_event_id: selectedEventId,
-        });
-        data = res.data as any;
-        error = res.error as any;
+      const res = await supabase.rpc('validate_ticket_qr_v3', {
+        p_qr_token: token,
+        p_scanned_by_text: user.id,
+        p_event_id: selectedEventId,
+      });
+
+      if (res.error) {
+        // RPC call itself failed (network, DB error, etc.) — show generic message
+        setBanner({ tone: 'error', text: 'Error al validar. Comprueba tu conexión e inténtalo de nuevo.' });
+        await playFeedback(false);
+        return;
       }
-      if (error && (String(error.code || '') === '42883' || String(error.message || '').toLowerCase().includes('validate_ticket_qr_v3'))) {
-        const res = await supabase.rpc('validate_ticket_qr_v2', { p_qr_token: token, p_scanned_by_text: user.id });
-        data = res.data as any;
-        error = res.error as any;
-      }
-      if (error) throw error;
-      const vr = (data || {}) as ValidationResult;
+
+      const vr = (res.data || {}) as ValidationResult;
       setResult(vr);
+      if (vr.valid) setSessionCount(c => c + 1);
       setModalOpen(true);
       await playFeedback(!!vr.valid);
       setBanner({
         tone: vr.valid ? 'ok' : 'warn',
-        text: vr.valid
-          ? (t('creator.scan.valid_title', { defaultValue: 'Entrada válida' }))
-          : (t('creator.scan.invalid_title', { defaultValue: 'Entrada no válida' })),
+        text: vr.valid ? 'Entrada válida' : 'Entrada no válida',
       });
-    } catch (e: any) {
-      setBanner({ tone: 'error', text: String(e?.message || t('common.error')) });
-      Alert.alert(t('common.error'), t('creator.scan.validation_error', { detail: String(e?.message || '') }));
+    } catch {
+      setBanner({ tone: 'error', text: 'Error al validar. Comprueba tu conexión e inténtalo de nuevo.' });
+      await playFeedback(false);
     } finally {
       setBusy(false);
     }
@@ -360,7 +364,11 @@ export default function ScanScreen() {
             <ChevronDown size={16} color="rgba(255,255,255,0.85)" />
           </Pressable>
         </View>
-        <View style={{ width: 44, height: 44 }} />
+        {/* Session counter badge */}
+        <View style={ui.sessionBadge} accessibilityLabel={`${sessionCount} escaneos en esta sesión`}>
+          <Users size={14} color="rgba(255,255,255,0.7)" />
+          <Text style={ui.sessionBadgeText}>{sessionCount}</Text>
+        </View>
       </View>
 
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
@@ -766,6 +774,18 @@ const ui = StyleSheet.create({
     borderColor: 'rgba(255,255,255,0.14)',
   },
   busyText: { color: 'white', fontWeight: '900' },
+  sessionBadge: {
+    width: 44,
+    height: 44,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(0,0,0,0.35)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.12)',
+    gap: 2,
+  },
+  sessionBadgeText: { color: 'white', fontWeight: '900', fontSize: 13, lineHeight: 16 },
   eventSheet: {
     borderRadius: 20,
     padding: 14,
