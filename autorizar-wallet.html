@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Autorizar Google Wallet Service Account</title>
+  <script src="https://accounts.google.com/gsi/client" async></script>
+  <style>
+    body { font-family: Arial, sans-serif; max-width: 600px; margin: 50px auto; padding: 20px; }
+    button { background: #1a73e8; color: white; padding: 12px 24px; border: none; border-radius: 4px; cursor: pointer; font-size: 16px; margin: 5px; }
+    pre { background: #f5f5f5; padding: 15px; border-radius: 4px; overflow: auto; }
+    .success { color: green; font-weight: bold; font-size: 18px; }
+    .error { color: red; font-weight: bold; }
+  </style>
+</head>
+<body>
+  <h2>Autorizar Service Account - Google Wallet</h2>
+  <p>Haz clic en el botón e inicia sesión con <b>aamracorporation@gmail.com</b></p>
+
+  <button onclick="authorize()">🔑 Autorizar con Google y configurar Wallet</button>
+  <div id="status" style="margin-top:20px; font-size:16px;"></div>
+  <pre id="result" style="display:none"></pre>
+
+  <script>
+    const ISSUER_ID = '3388000000023149098';
+    const SA_EMAIL = 'eclipse-wallet-sa@project-c84930b2-d666-436f-b72.iam.gserviceaccount.com';
+    let tokenClient;
+
+    function initClient() {
+      tokenClient = google.accounts.oauth2.initTokenClient({
+        client_id: '62862248715-ufub0bgori4vcfbqqlj7b5b6ks3arrck.apps.googleusercontent.com',
+        scope: 'https://www.googleapis.com/auth/wallet_object.issuer',
+        callback: async (r) => {
+          if (r.error) {
+            document.getElementById('status').innerHTML = '<span class="error">Error token: ' + r.error + ' - ' + (r.error_description||'') + '</span>';
+            return;
+          }
+          document.getElementById('status').innerHTML = '⏳ Token obtenido. Autorizando service account...';
+          const resp = await fetch(
+            'https://walletobjects.googleapis.com/walletobjects/v1/permissions/' + ISSUER_ID,
+            {
+              method: 'PUT',
+              headers: { 'Authorization': 'Bearer ' + r.access_token, 'Content-Type': 'application/json' },
+              body: JSON.stringify({ issuerId: ISSUER_ID, permissions: [{ emailAddress: SA_EMAIL, role: 'WRITER' }] })
+            }
+          );
+          const data = await resp.json();
+          document.getElementById('result').style.display = 'block';
+          document.getElementById('result').textContent = JSON.stringify(data, null, 2);
+          if (resp.ok) {
+            document.getElementById('status').innerHTML = '<span class="success">✅ ¡SERVICE ACCOUNT AUTORIZADO! Google Wallet ya funciona para todos.</span>';
+          } else {
+            document.getElementById('status').innerHTML = '<span class="error">❌ ' + (data.error?.message || JSON.stringify(data)) + '</span>';
+          }
+        },
+      });
+    }
+
+    function authorize() {
+      if (!tokenClient) { alert('Espera a que cargue la página completamente'); return; }
+      tokenClient.requestAccessToken({ prompt: 'consent' });
+    }
+
+    // Wait for GIS to load
+    const interval = setInterval(() => {
+      if (typeof google !== 'undefined' && google.accounts) {
+        clearInterval(interval);
+        initClient();
+        document.getElementById('status').innerHTML = '✅ Listo para autorizar. Haz clic en el botón.';
+      }
+    }, 100);
+  </script>
+</body>
+</html>

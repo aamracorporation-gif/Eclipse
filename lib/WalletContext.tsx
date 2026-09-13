@@ -13,7 +13,9 @@ type LedgerMovimiento = {
 };
 
 type CreditContextType = {
-  creditBalance: number;
+  creditBalance: number;   // total = balanceReal + balancePromo
+  balanceReal: number;     // ganancias de reventa, respaldadas por Stripe
+  balancePromo: number;    // crédito promocional
   movimientos: LedgerMovimiento[];
   loading: boolean;
   refreshCredit: () => Promise<void>;
@@ -21,11 +23,13 @@ type CreditContextType = {
   cancelResaleListing: (ticketId: string) => Promise<void>;
   buyResaleTicketWithCredit: (listingId: string) => Promise<void>;
   buyTicketWithCredit: (params: any) => Promise<void>;
-  buyVipWithCredit: (params: { p_vip_reservado_id: string; p_buyer_name: string; p_buyer_email: string }) => Promise<any>;
+  buyVipWithCredit: (params: { p_vip_reservado_id: string; p_buyer_name: string; p_buyer_email: string; p_service_fee?: number }) => Promise<any>;
 };
 
 const CreditContext = createContext<CreditContextType>({
   creditBalance: 0,
+  balanceReal: 0,
+  balancePromo: 0,
   movimientos: [],
   loading: true,
   refreshCredit: async () => {},
@@ -41,6 +45,8 @@ export const useCredit = () => useContext(CreditContext);
 export function CreditProvider({ children }: { children: React.ReactNode }) {
   const { user } = useAuth();
   const [creditBalance, setCreditBalance] = useState(0);
+  const [balanceReal, setBalanceReal] = useState(0);
+  const [balancePromo, setBalancePromo] = useState(0);
   const [movimientos, setMovimientos] = useState<LedgerMovimiento[]>([]);
   const [loading, setLoading] = useState(true);
   const refreshTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -50,6 +56,8 @@ export function CreditProvider({ children }: { children: React.ReactNode }) {
       refreshCredit();
     } else {
       setCreditBalance(0);
+      setBalanceReal(0);
+      setBalancePromo(0);
       setMovimientos([]);
       setLoading(false);
       if (refreshTimeoutRef.current) {
@@ -62,20 +70,21 @@ export function CreditProvider({ children }: { children: React.ReactNode }) {
   const refreshCredit = useCallback(async () => {
     if (!user) return;
     try {
-      let { data: credito, error: creditoError } = await supabase
-        .from('creditos_usuario')
-        .select('id, usuario_id, saldo_credito')
-        .eq('usuario_id', user.id)
+      // Leer saldo del sistema unificado user_credit
+      const { data: uc } = await supabase
+        .from('user_credit')
+        .select('balance_real, balance_promo')
+        .eq('user_id', user.id)
         .maybeSingle();
 
-      if (!credito && !creditoError) {
-        const insertRes = await supabase.from('creditos_usuario').insert({ usuario_id: user.id, saldo_credito: 0 }).select('id, usuario_id, saldo_credito').maybeSingle();
-        credito = insertRes.data as any;
-      }
+      const real  = typeof uc?.balance_real  === 'string' ? Number(uc.balance_real)  : (uc?.balance_real  ?? 0);
+      const promo = typeof uc?.balance_promo === 'string' ? Number(uc.balance_promo) : (uc?.balance_promo ?? 0);
+      const safeReal  = Number.isFinite(real)  ? real  : 0;
+      const safePromo = Number.isFinite(promo) ? promo : 0;
 
-      const rawSaldo = (credito as any)?.saldo_credito;
-      const parsedSaldo = typeof rawSaldo === 'string' ? Number(rawSaldo) : rawSaldo;
-      setCreditBalance(typeof parsedSaldo === 'number' && Number.isFinite(parsedSaldo) ? parsedSaldo : 0);
+      setBalanceReal(safeReal);
+      setBalancePromo(safePromo);
+      setCreditBalance(safeReal + safePromo);
 
       const { data: rows } = await supabase
         .from('ledger_movimientos')
@@ -116,7 +125,12 @@ export function CreditProvider({ children }: { children: React.ReactNode }) {
       .channel(`credito_${user.id}`)
       .on(
         'postgres_changes',
-        { event: '*', schema: 'public', table: 'creditos_usuario', filter: `usuario_id=eq.${user.id}` },
+        { event: '*', schema: 'public', table: 'user_credit', filter: `user_id=eq.${user.id}` },
+        () => scheduleRefresh()
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'wallet_reserves', filter: `user_id=eq.${user.id}` },
         () => scheduleRefresh()
       )
       .on('postgres_changes', { event: '*', schema: 'public', table: 'ledger_movimientos', filter: `usuario_id=eq.${user.id}` }, () => scheduleRefresh())
@@ -294,7 +308,7 @@ export function CreditProvider({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <CreditContext.Provider value={{ creditBalance, movimientos, loading, refreshCredit, createResaleListing, cancelResaleListing, buyResaleTicketWithCredit, buyTicketWithCredit, buyVipWithCredit }}>
+    <CreditContext.Provider value={{ creditBalance, balanceReal, balancePromo, movimientos, loading, refreshCredit, createResaleListing, cancelResaleListing, buyResaleTicketWithCredit, buyTicketWithCredit, buyVipWithCredit }}>
       {children}
     </CreditContext.Provider>
   );

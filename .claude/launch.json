@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "eclipse-web",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["serve", "-p", "4400", "C:\\Users\\Achraf\\Downloads\\eclipse_webV2-contacto-actualizado (2)\\eclipse_webV2-claude-gallant-brahmagupta-Od17K"],
+      "port": 4400
+    }
+  ]
+}

@@ -981,31 +981,91 @@ export default function RegisterScreen() {
     </View>
   );
 
+  const handleEmailConfirmed = async () => {
+    if (emailConfirmedLoading) return;
+    setEmailConfirmedLoading(true);
+
+    let signInOk = false;
+    let finalRole: string | null = formData.role === 'organizer' ? 'organizer' : 'attendee';
+
+    try {
+      const { error: signInError, data: signInData } = await supabase.auth.signInWithPassword({
+        email: formData.email.trim(),
+        password: formData.password,
+      });
+
+      if (signInError) {
+        const msg = String(signInError?.message || '');
+        const lower = msg.toLowerCase();
+        if (lower.includes('email not confirmed') || lower.includes('email_not_confirmed') || lower.includes('confirm your email')) {
+          showDialog({
+            title: 'Aún no verificado',
+            message: 'Parece que tu email aún no está confirmado. Abre tu correo y pulsa en el enlace de verificación que te enviamos. Si no lo encuentras, revisa la carpeta de Spam o pide reenviarlo desde la pantalla de login.',
+          });
+          return;
+        }
+        if (lower.includes('invalid login credentials')) {
+          showDialog({
+            title: 'Datos incorrectos',
+            message: 'No se pudo comprobar la cuenta. Revisa la contraseña o regístrate de nuevo si la cuenta no existe.',
+          });
+          return;
+        }
+        throw signInError;
+      }
+
+      signInOk = true;
+
+      const uid = signInData?.user?.id;
+      if (uid) {
+        try {
+          const { data: profile } = await supabase.from('profiles').select('role').eq('id', uid).maybeSingle();
+          if (profile?.role) finalRole = profile.role as string;
+        } catch {}
+      }
+
+      try {
+        await invokeEdgeFunction('record-legal-acceptance', {});
+      } catch (e) {
+        console.warn('[register-step5] record-legal-acceptance failed (non-blocking):', e);
+      }
+
+      if (finalRole === 'admin' || finalRole === 'organizer') {
+        router.replace('/(creator)/verification');
+      } else {
+        router.replace('/(tabs)');
+      }
+    } catch (e: any) {
+      if (!signInOk) {
+        const msg = String(e?.message || e || 'Ocurrió un error.');
+        showDialog({
+          title: 'Error al comprobar la cuenta',
+          message: msg,
+        });
+        return;
+      }
+      console.warn('[register-step5] login OK but post-step failed (non-blocking):', e);
+      if (finalRole === 'admin' || finalRole === 'organizer') {
+        router.replace('/(creator)/verification');
+      } else {
+        router.replace('/(tabs)');
+      }
+    } finally {
+      setEmailConfirmedLoading(false);
+    }
+  };
+
   const renderStep5 = () => (
     <View style={styles.stepContainer}>
       <Text style={styles.stepTitle}>Verifica tu email</Text>
       <Text style={styles.roleDesc}>
-        Te enviamos un enlace de confirmación. Abre tu correo y confirma tu cuenta para poder continuar.
+        Te enviamos un enlace de confirmación. Abre tu correo y confirma tu cuenta para poder continuar.{'\n\n'}
+        • Haz clic en el enlace del email: la app se abrirá sola y te llevará directamente a tu panel.{'\n'}
+        • O bien, confirma el email y luego pulsa el botón de abajo.
       </Text>
       <ThemedButton
         title={emailConfirmedLoading ? 'Comprobando…' : 'Ya confirmé mi email'}
-        onPress={async () => {
-          if (emailConfirmedLoading) return;
-          setEmailConfirmedLoading(true);
-          try {
-            const { error: signInError } = await supabase.auth.signInWithPassword({
-              email: formData.email.trim(),
-              password: formData.password,
-            });
-            if (signInError) throw signInError;
-            await invokeEdgeFunction('record-legal-acceptance', {});
-            router.replace(formData.role === 'organizer' ? '/(creator)/verification' : '/(tabs)');
-          } catch {
-            showDialog({ title: 'Aún no verificado', message: 'Confirma el email y vuelve a intentarlo.' });
-          } finally {
-            setEmailConfirmedLoading(false);
-          }
-        }}
+        onPress={handleEmailConfirmed}
       />
     </View>
   );

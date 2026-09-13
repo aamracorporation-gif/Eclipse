@@ -11,6 +11,7 @@ export type CreatePaymentIntentRequest =
       buyer_name?: string;
       buyer_email?: string;
       credit_debit_eur?: number;
+      discount_code_id?: string;
     }
   | {
       kind: 'resale_ticket';
@@ -32,6 +33,8 @@ export type CreatePaymentIntentResponse = {
   client_secret: string;
   payment_intent_id: string;
   amount_cents: number;
+  ticket_amount_cents?: number;
+  service_fee_cents?: number;
   currency: Currency;
   merchant_display_name?: string;
   transaction_id?: string;

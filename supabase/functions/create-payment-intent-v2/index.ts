@@ -33,9 +33,9 @@ function getStripeMode(): "test" | "live" {
   return "live";
 }
 
-function getCommissionBps(): number {
+function getEclipseNetRateBps(): number {
   const raw = (Deno.env.get("STRIPE_PLATFORM_FEE_BPS") ?? "").trim();
-  const parsed = raw ? Number(raw) : 1000;
+  const parsed = raw ? Number(raw) : 1000; // default 10%
   if (!Number.isFinite(parsed)) return 1000;
   const bps = Math.trunc(parsed);
   if (bps < 0) return 0;
@@ -43,12 +43,13 @@ function getCommissionBps(): number {
   return bps;
 }
 
-function computeFeeCents(amountCents: number, bps: number): number {
-  const fee = Math.round((amountCents * bps) / 10000);
-  if (!Number.isFinite(fee)) return 0;
-  if (fee < 0) return 0;
-  if (fee > amountCents) return amountCents;
-  return fee;
+// Tasa de servicio que paga el COMPRADOR: cubre únicamente el coste de Stripe (1.5% + €0.25).
+// La comisión de Eclipse (eclipseNetRateBps%) se cobra aparte al ORGANIZADOR vía application_fee_amount.
+// Formula: stripePassthrough × (1 - 0.015) = ticketCents × 0.015 + 0.25
+//          stripePassthrough = (ticketCents × 0.015 + 25) / 0.985
+function computeStripePassthroughCents(ticketAmountCents: number): number {
+  const fee = Math.round((ticketAmountCents * 0.015 + 25) / 0.985);
+  return Math.max(fee, 50); // mínimo de Stripe EUR
 }
 
 function isStripeConnectPlatformError(message: string): boolean {
@@ -245,6 +246,45 @@ Deno.serve(async (req) => {
       const originalTotalCents = Math.round(price * 100) * quantity;
       if (!Number.isFinite(originalTotalCents) || originalTotalCents <= 0) return jsonResponse({ ok: false, error: "Invalid price" });
 
+      // --- Discount code (server-side validation) ---
+      const discountCodeId = body?.discount_code_id ? String(body.discount_code_id) : null;
+      let discountAmountCents = 0;
+      if (discountCodeId) {
+        const dcRes = await restGet(
+          SUPABASE_URL,
+          SUPABASE_SERVICE_ROLE_KEY,
+          `discount_codes?id=eq.${encodeURIComponent(discountCodeId)}&select=id,event_id,discount_type,discount_value,max_uses,uses_count,valid_from,valid_until,is_active`,
+        );
+        const dcRow = Array.isArray(dcRes.json) && dcRes.json.length > 0 ? dcRes.json[0] : null;
+        if (!dcRow) return jsonResponse({ ok: false, error: "Discount code not found" });
+        if (String(dcRow.event_id) !== eventId) return jsonResponse({ ok: false, error: "Discount code not valid for this event" });
+        if (!dcRow.is_active) return jsonResponse({ ok: false, error: "Discount code is inactive" });
+        const now = new Date().toISOString();
+        if (dcRow.valid_until && String(dcRow.valid_until) < now) return jsonResponse({ ok: false, error: "Discount code has expired" });
+        if (dcRow.valid_from && String(dcRow.valid_from) > now) return jsonResponse({ ok: false, error: "Discount code is not yet active" });
+        if (dcRow.max_uses !== null && Number(dcRow.uses_count ?? 0) >= Number(dcRow.max_uses)) {
+          return jsonResponse({ ok: false, error: "Discount code has reached its usage limit" });
+        }
+        if (String(dcRow.discount_type) === "percentage") {
+          discountAmountCents = Math.round(originalTotalCents * (Number(dcRow.discount_value) / 100));
+        } else {
+          discountAmountCents = Math.min(Math.round(Number(dcRow.discount_value) * 100), originalTotalCents);
+        }
+      }
+      const discountedTotalCents = originalTotalCents - discountAmountCents;
+      if (discountedTotalCents < 0) return jsonResponse({ ok: false, error: "Invalid discount" });
+
+      // Tasa de servicio (paga el COMPRADOR): solo cubre el coste de Stripe
+      const eclipseNetRateBps = getEclipseNetRateBps();
+      const eclipseRate = eclipseNetRateBps / 10000;
+      // Fees and commission calculated on the discounted price
+      const stripePassthroughCents = computeStripePassthroughCents(discountedTotalCents);
+      // Comisión Eclipse (paga el ORGANIZADOR): eclipseRate% del precio descontado
+      const eclipseCommissionCents = Math.round(discountedTotalCents * eclipseRate);
+      // application_fee = comisión + passthrough; Stripe transfiere automáticamente el resto al organizador
+      const applicationFeeAmountCents = eclipseCommissionCents + stripePassthroughCents;
+
+      // El crédito puede cubrir hasta (ticket descontado - comisión)
       const creditDebitRaw = body?.credit_debit_eur ?? body?.wallet_debit_eur;
       let creditDebitCents = 0;
       if (typeof creditDebitRaw === "number" && Number.isFinite(creditDebitRaw)) creditDebitCents = Math.round(creditDebitRaw * 100);
@@ -253,9 +293,10 @@ Deno.serve(async (req) => {
         if (Number.isFinite(n)) creditDebitCents = Math.round(n * 100);
       }
       if (!Number.isFinite(creditDebitCents) || creditDebitCents < 0) creditDebitCents = 0;
-      if (creditDebitCents > originalTotalCents) creditDebitCents = originalTotalCents;
+      const maxCreditCents = discountedTotalCents - eclipseCommissionCents;
+      if (creditDebitCents > maxCreditCents) creditDebitCents = maxCreditCents;
 
-      const amountCents = originalTotalCents - creditDebitCents;
+      const amountCents = discountedTotalCents + stripePassthroughCents - creditDebitCents;
       if (!Number.isFinite(amountCents) || amountCents <= 0) return jsonResponse({ ok: false, error: "Invalid price" });
 
       const organizerId = eventRow.creator_id ? String(eventRow.creator_id) : "";
@@ -287,9 +328,9 @@ Deno.serve(async (req) => {
         });
       }
 
-      const commissionBps = getCommissionBps();
-      let platformFeeCents = hasConnect ? computeFeeCents(amountCents, commissionBps) : 0;
-      let destinationAmountCents = hasConnect ? amountCents - platformFeeCents : 0;
+      // Eclipse retiene comisión + passthrough como application_fee; organizer recibe el resto (90%)
+      const platformFeeCents = eclipseCommissionCents;
+      const destinationAmountCents = hasConnect ? (amountCents - applicationFeeAmountCents) : 0;
 
       const intentParams: Record<string, string> = {
         amount: String(amountCents),
@@ -302,11 +343,16 @@ Deno.serve(async (req) => {
         ...(ticketTypeId ? { "metadata[ticket_type_id]": ticketTypeId } : {}),
         "metadata[quantity]": String(quantity),
         "metadata[original_total_cents]": String(originalTotalCents),
+        "metadata[discount_amount_cents]": String(discountAmountCents),
+        "metadata[discounted_total_cents]": String(discountedTotalCents),
+        "metadata[service_fee_cents]": String(stripePassthroughCents),
+        "metadata[eclipse_commission_cents]": String(eclipseCommissionCents),
         "metadata[credit_debit_cents]": String(creditDebitCents),
+        ...(discountCodeId ? { "metadata[discount_code_id]": discountCodeId } : {}),
       };
       if (hasConnect) {
         intentParams["transfer_data[destination]"] = rawStripeAccountId;
-        if (platformFeeCents > 0) intentParams.application_fee_amount = String(platformFeeCents);
+        intentParams.application_fee_amount = String(applicationFeeAmountCents);
       }
 
       let intent;
@@ -352,6 +398,11 @@ Deno.serve(async (req) => {
         buyer_name: buyerName,
         buyer_email: buyerEmail,
         original_total_cents: originalTotalCents,
+        discount_amount_cents: discountAmountCents,
+        discounted_total_cents: discountedTotalCents,
+        discount_code_id: discountCodeId ?? "",
+        service_fee_cents: stripePassthroughCents,
+        eclipse_commission_cents: eclipseCommissionCents,
         credit_debit_cents: creditDebitCents,
         event_title: String(eventRow.title || ""),
         platform_fee_cents: platformFeeCents,
@@ -365,10 +416,10 @@ Deno.serve(async (req) => {
         currency: intent.currency,
         stripe_payment_intent_id: intent.id,
         status: "created",
-        platform_fee_cents: hasConnect ? platformFeeCents : 0,
+        platform_fee_cents: platformFeeCents,
         destination_account_id: hasConnect ? String(organizerProfile?.stripe_account_id || rawStripeAccountId) : null,
         destination_amount_cents: hasConnect ? destinationAmountCents : 0,
-        commission_bps: hasConnect ? commissionBps : 0,
+        commission_bps: eclipseNetRateBps,
         metadata,
       });
 
@@ -381,6 +432,8 @@ Deno.serve(async (req) => {
         client_secret: intent.client_secret,
         payment_intent_id: intent.id,
         amount_cents: intent.amount,
+        ticket_amount_cents: originalTotalCents,
+        service_fee_cents: stripePassthroughCents,
         currency: intent.currency,
         transaction_id: String(txInsert.json[0]?.id || ""),
         stripe_mode: getStripeMode(),
@@ -435,11 +488,17 @@ Deno.serve(async (req) => {
       if (allowResale === false) return jsonResponse({ ok: false, error: "Resale not allowed for this event" });
 
       const priceEur = Number(listing.price ?? 0);
-      const amountCents = Math.round(priceEur * 100);
-      if (!Number.isFinite(amountCents) || amountCents <= 0) return jsonResponse({ ok: false, error: "Invalid price" });
+      const originalResaleCents = Math.round(priceEur * 100);
+      if (!Number.isFinite(originalResaleCents) || originalResaleCents <= 0) return jsonResponse({ ok: false, error: "Invalid price" });
+
+      const resaleEclipseRateBps = getEclipseNetRateBps();
+      // Reventa: sin Connect, la comisión se descuenta del crédito del vendedor en fulfill.
+      // El comprador solo paga la tasa de Stripe.
+      const resaleServiceFeeCents = computeStripePassthroughCents(originalResaleCents);
+      const resaleAmountCents = originalResaleCents + resaleServiceFeeCents;
 
       const intentParams: Record<string, string> = {
-        amount: String(amountCents),
+        amount: String(resaleAmountCents),
         currency: "eur",
         "automatic_payment_methods[enabled]": "true",
         description: `Resale ticket - ${eventId}`,
@@ -449,7 +508,8 @@ Deno.serve(async (req) => {
         "metadata[listing_id]": listingId,
         "metadata[ticket_id]": ticketId,
         "metadata[seller_id]": String(listing.seller_id || ""),
-        "metadata[original_total_cents]": String(amountCents),
+        "metadata[original_total_cents]": String(originalResaleCents),
+        "metadata[service_fee_cents]": String(resaleServiceFeeCents),
         "metadata[credit_debit_cents]": "0",
       };
 
@@ -461,7 +521,8 @@ Deno.serve(async (req) => {
         listing_id: listingId,
         ticket_id: ticketId,
         seller_id: String(listing.seller_id || ""),
-        original_total_cents: amountCents,
+        original_total_cents: originalResaleCents,
+        service_fee_cents: resaleServiceFeeCents,
         credit_debit_cents: 0,
       };
 
@@ -472,10 +533,10 @@ Deno.serve(async (req) => {
         currency: intent.currency,
         stripe_payment_intent_id: intent.id,
         status: "created",
-        platform_fee_cents: 0,
+        platform_fee_cents: resaleServiceFeeCents,
         destination_account_id: null,
         destination_amount_cents: 0,
-        commission_bps: 0,
+        commission_bps: resaleEclipseRateBps,
         metadata,
       });
 
@@ -488,6 +549,8 @@ Deno.serve(async (req) => {
         client_secret: intent.client_secret,
         payment_intent_id: intent.id,
         amount_cents: intent.amount,
+        ticket_amount_cents: originalResaleCents,
+        service_fee_cents: resaleServiceFeeCents,
         currency: intent.currency,
         transaction_id: String(txInsert.json[0]?.id || ""),
         stripe_mode: getStripeMode(),
@@ -521,8 +584,14 @@ Deno.serve(async (req) => {
       const eventRow = ev.json[0];
 
       const basePrice = Number(vip.base_price ?? 0);
-      const originalTotalCents = Math.round(basePrice * 100);
-      if (!Number.isFinite(originalTotalCents) || originalTotalCents <= 0) return jsonResponse({ ok: false, error: "Invalid price" });
+      const vipOriginalCents = Math.round(basePrice * 100);
+      if (!Number.isFinite(vipOriginalCents) || vipOriginalCents <= 0) return jsonResponse({ ok: false, error: "Invalid price" });
+
+      const vipEclipseRateBps = getEclipseNetRateBps();
+      const vipEclipseRate = vipEclipseRateBps / 10000;
+      const vipStripePassthroughCents = computeStripePassthroughCents(vipOriginalCents);
+      const vipEclipseCommissionCents = Math.round(vipOriginalCents * vipEclipseRate);
+      const vipApplicationFeeAmountCents = vipEclipseCommissionCents + vipStripePassthroughCents;
 
       const creditDebitRaw = body?.credit_debit_eur ?? body?.wallet_debit_eur;
       let creditDebitCents = 0;
@@ -532,9 +601,10 @@ Deno.serve(async (req) => {
         if (Number.isFinite(n)) creditDebitCents = Math.round(n * 100);
       }
       if (!Number.isFinite(creditDebitCents) || creditDebitCents < 0) creditDebitCents = 0;
-      if (creditDebitCents > originalTotalCents) creditDebitCents = originalTotalCents;
+      const vipMaxCreditCents = vipOriginalCents - vipEclipseCommissionCents;
+      if (creditDebitCents > vipMaxCreditCents) creditDebitCents = vipMaxCreditCents;
 
-      const amountCents = originalTotalCents - creditDebitCents;
+      const amountCents = vipOriginalCents + vipStripePassthroughCents - creditDebitCents;
       if (!Number.isFinite(amountCents) || amountCents <= 0) return jsonResponse({ ok: false, error: "Invalid price" });
 
       const organizerId = eventRow.creator_id ? String(eventRow.creator_id) : "";
@@ -564,9 +634,8 @@ Deno.serve(async (req) => {
         });
       }
 
-      const commissionBps = getCommissionBps();
-      let platformFeeCents = hasConnect ? computeFeeCents(amountCents, commissionBps) : 0;
-      let destinationAmountCents = hasConnect ? amountCents - platformFeeCents : 0;
+      const vipPlatformFeeCents = vipEclipseCommissionCents;
+      const destinationAmountCents = hasConnect ? (amountCents - vipApplicationFeeAmountCents) : 0;
 
       const intentParams: Record<string, string> = {
         amount: String(amountCents),
@@ -578,12 +647,14 @@ Deno.serve(async (req) => {
         "metadata[event_id]": eventId,
         "metadata[reference_id]": vipId,
         "metadata[vip_reservado_id]": vipId,
-        "metadata[original_total_cents]": String(originalTotalCents),
+        "metadata[original_total_cents]": String(vipOriginalCents),
+        "metadata[service_fee_cents]": String(vipStripePassthroughCents),
+        "metadata[eclipse_commission_cents]": String(vipEclipseCommissionCents),
         "metadata[credit_debit_cents]": String(creditDebitCents),
       };
       if (hasConnect) {
         intentParams["transfer_data[destination]"] = rawStripeAccountId;
-        if (platformFeeCents > 0) intentParams.application_fee_amount = String(platformFeeCents);
+        intentParams.application_fee_amount = String(vipApplicationFeeAmountCents);
       }
 
       let intent;
@@ -626,11 +697,13 @@ Deno.serve(async (req) => {
         reference_id: vipId,
         buyer_name: buyerName,
         buyer_email: buyerEmail,
-        original_total_cents: originalTotalCents,
+        original_total_cents: vipOriginalCents,
+        service_fee_cents: vipStripePassthroughCents,
+        eclipse_commission_cents: vipEclipseCommissionCents,
         credit_debit_cents: creditDebitCents,
         event_title: String(eventRow.title || ""),
         vip_name: String(vip.name || ""),
-        platform_fee_cents: platformFeeCents,
+        platform_fee_cents: vipPlatformFeeCents,
         destination_amount_cents: destinationAmountCents,
       };
 
@@ -641,10 +714,10 @@ Deno.serve(async (req) => {
         currency: intent.currency,
         stripe_payment_intent_id: intent.id,
         status: "created",
-        platform_fee_cents: hasConnect ? platformFeeCents : 0,
+        platform_fee_cents: vipPlatformFeeCents,
         destination_account_id: hasConnect ? rawStripeAccountId : null,
         destination_amount_cents: hasConnect ? destinationAmountCents : 0,
-        commission_bps: hasConnect ? commissionBps : 0,
+        commission_bps: vipEclipseRateBps,
         metadata,
       });
 
@@ -657,6 +730,8 @@ Deno.serve(async (req) => {
         client_secret: intent.client_secret,
         payment_intent_id: intent.id,
         amount_cents: intent.amount,
+        ticket_amount_cents: vipOriginalCents,
+        service_fee_cents: vipStripePassthroughCents,
         currency: intent.currency,
         transaction_id: String(txInsert.json[0]?.id || ""),
         stripe_mode: getStripeMode(),

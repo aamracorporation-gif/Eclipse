@@ -1,9 +1,9 @@
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, Alert } from 'react-native';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, Alert, RefreshControl } from 'react-native';
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'expo-router';
 import { useAuth } from '@/lib/AuthContext';
 import { supabase } from '@/lib/supabase';
-import { Users, Plus, ChevronLeft, Trash2, BarChart2 } from '@/lib/icons';
+import { Users, Plus, ChevronLeft, Trash2, BarChart2, ScanLine, ShoppingBag } from '@/lib/icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Colors } from '@/constants/Colors';
 import { GlassView } from '@/components/ui/GlassView';
@@ -17,7 +17,10 @@ export default function ManageWorkers() {
   const router = useRouter();
   const { t } = useTranslation();
   const [workers, setWorkers] = useState<any[]>([]);
+  const [scanCounts, setScanCounts] = useState<Record<string, number>>({});
+  const [saleCounts, setSaleCounts] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
 
   const safeBack = () => {
     const canGoBack = (router as any)?.canGoBack?.();
@@ -25,10 +28,10 @@ export default function ManageWorkers() {
     else router.replace('/(creator)');
   };
 
-  const fetchWorkers = useCallback(async () => {
+  const fetchWorkers = useCallback(async (silent = false) => {
     if (!user) return;
     try {
-      setLoading(true);
+      if (!silent) setLoading(true);
       const { data, error } = await supabase
         .from('workers')
         .select('*')
@@ -40,17 +43,50 @@ export default function ManageWorkers() {
         setWorkers([]);
         return;
       }
-      setWorkers(data || []);
+      const list = data || [];
+      setWorkers(list);
+
+      // Fetch scan + sale counts for all workers in parallel
+      if (list.length > 0) {
+        const ids = list.map((w: any) => w.id);
+        const [scansRes, salesRes] = await Promise.all([
+          supabase
+            .from('tickets')
+            .select('scanned_by_worker_id')
+            .in('scanned_by_worker_id', ids),
+          supabase
+            .from('tickets')
+            .select('sold_by_worker_id')
+            .in('sold_by_worker_id', ids)
+            .eq('payment_status', 'paid'),
+        ]);
+        const scans: Record<string, number> = {};
+        const sales: Record<string, number> = {};
+        (scansRes.data || []).forEach((r: any) => {
+          if (r.scanned_by_worker_id) scans[r.scanned_by_worker_id] = (scans[r.scanned_by_worker_id] || 0) + 1;
+        });
+        (salesRes.data || []).forEach((r: any) => {
+          if (r.sold_by_worker_id) sales[r.sold_by_worker_id] = (sales[r.sold_by_worker_id] || 0) + 1;
+        });
+        setScanCounts(scans);
+        setSaleCounts(sales);
+      }
     } catch (error) {
       console.error('Error fetching workers:', error);
       setWorkers([]);
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
   }, [user]);
 
   useEffect(() => {
     fetchWorkers();
+  }, [fetchWorkers]);
+
+  const onRefresh = useCallback(() => {
+    setRefreshing(true);
+    fetchWorkers(true);
   }, [fetchWorkers]);
 
   const handleDeleteWorker = (id: string, name: string) => {
@@ -87,6 +123,8 @@ export default function ManageWorkers() {
 
   const renderWorker = ({ item }: { item: any }) => {
     const tags = permissionTags(item.permissions);
+    const scans = scanCounts[item.id] || 0;
+    const sales = saleCounts[item.id] || 0;
 
     return (
       <GlassView intensity={15} style={styles.workerCard}>
@@ -105,6 +143,21 @@ export default function ManageWorkers() {
           >
             <Trash2 size={18} color="#ef4444" />
           </TouchableOpacity>
+        </View>
+
+        {/* Mini stats row */}
+        <View style={styles.miniStatsRow}>
+          <View style={styles.miniStat}>
+            <ScanLine size={13} color="#60a5fa" />
+            <Text style={[styles.miniStatVal, { color: '#60a5fa' }]}>{scans}</Text>
+            <Text style={styles.miniStatLabel}>escaneos</Text>
+          </View>
+          <View style={styles.miniStatDivider} />
+          <View style={styles.miniStat}>
+            <ShoppingBag size={13} color="#fbbf24" />
+            <Text style={[styles.miniStatVal, { color: '#fbbf24' }]}>{sales}</Text>
+            <Text style={styles.miniStatLabel}>ventas</Text>
+          </View>
         </View>
 
         {/* Permission tags + status */}
@@ -163,6 +216,14 @@ export default function ManageWorkers() {
             renderItem={renderWorker}
             keyExtractor={item => item.id}
             contentContainerStyle={styles.listContent}
+            refreshControl={
+              <RefreshControl
+                refreshing={refreshing}
+                onRefresh={onRefresh}
+                tintColor="#7C3AED"
+                colors={['#7C3AED']}
+              />
+            }
             ListEmptyComponent={
               <View style={styles.emptyState}>
                 <Users size={48} color={Colors.dark.textSecondary} />
@@ -227,6 +288,32 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(239,68,68,0.12)',
     alignItems: 'center',
     justifyContent: 'center',
+  },
+
+  miniStatsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    borderRadius: 10,
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    marginBottom: 12,
+    gap: 0,
+  },
+  miniStat: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 5,
+  },
+  miniStatVal: { fontSize: 14, fontWeight: '800' },
+  miniStatLabel: { color: Colors.dark.textSecondary, fontSize: 11 },
+  miniStatDivider: {
+    width: 1,
+    height: 18,
+    backgroundColor: 'rgba(255,255,255,0.12)',
+    marginHorizontal: 8,
   },
 
   tagsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 14 },

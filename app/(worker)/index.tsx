@@ -71,23 +71,26 @@ export default function WorkerDashboard() {
       
       setStats(prev => ({ ...prev, tickets_sold: count || 0 }));
 
-      // 2. Fetch ALL Organizer Events (Active/Future) instead of assigned only
-      const { data: eventsData, error: eventsError } = await supabase
-        .from('events')
+      // 2. Fetch only events this worker is assigned to
+      // Use a 12-hour lookback so overnight events still appear the morning after
+      const cutoff = new Date(Date.now() - 12 * 60 * 60 * 1000).toISOString();
+      const { data: assignmentsData, error: eventsError } = await supabase
+        .from('worker_event_assignments')
         .select(`
-          id, title, event_date, 
-          venues (name, latitude, longitude)
+          events!inner (id, title, event_date, venues (name, latitude, longitude))
         `)
-        .eq('creator_id', workerProfile.organizer_id)
-        // Show only future or today's events
-        .gte('event_date', new Date().toISOString())
-        .order('event_date', { ascending: true });
+        .eq('worker_id', workerProfile.id)
+        .eq('status', 'active')
+        .gte('events.event_date', cutoff);
 
       if (eventsError) throw eventsError;
 
-      if (eventsData) {
-        setAssignedEvents(eventsData);
-      }
+      const eventsData = (assignmentsData || [])
+        .map((r: any) => r.events)
+        .filter(Boolean)
+        .sort((a: any, b: any) => String(a.event_date).localeCompare(String(b.event_date)));
+
+      setAssignedEvents(eventsData);
 
     } catch (error) {
       console.error('Error fetching worker dashboard:', error);
@@ -226,7 +229,7 @@ export default function WorkerDashboard() {
             </LinearGradient>
           </TouchableOpacity>
 
-          <TouchableOpacity 
+          <TouchableOpacity
             style={styles.actionButton}
             onPress={() => router.push('/(worker)/sell')}
             activeOpacity={0.8}
@@ -235,6 +238,19 @@ export default function WorkerDashboard() {
               <Ticket size={32} color="white" />
               <Text style={[styles.actionText, { fontSize: scaleFont(16) }]} numberOfLines={1} adjustsFontSizeToFit>
                 Venta Manual
+              </Text>
+            </GlassView>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.actionButton, { width: '100%' }]}
+            onPress={() => router.push('/(tabs)/join-worker' as any)}
+            activeOpacity={0.8}
+          >
+            <GlassView intensity={30} style={[styles.actionGlass, { flexDirection: 'row', gap: 12, justifyContent: 'center' }]}>
+              <QrCode size={24} color="white" />
+              <Text style={[styles.actionText, { fontSize: scaleFont(15) }]} numberOfLines={1} adjustsFontSizeToFit>
+                Unirme a nuevo evento como Worker
               </Text>
             </GlassView>
           </TouchableOpacity>

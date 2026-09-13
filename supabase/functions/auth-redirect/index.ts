@@ -45,13 +45,24 @@ function htmlPage(title: string, body: string) {
 serve(async (req) => {
   const url = new URL(req.url);
 
-  // Build the deep link: preserve all query params + hash from the inbound request.
-  // Supabase appends token_hash, type, etc. as query params on some flows.
+  // Supabase appends token_hash + type as query params when the redirect_to URL
+  // is whitelisted. If both are missing the URL is not whitelisted yet.
   const qs = url.searchParams.toString();
+  const hasToken = url.searchParams.has("token_hash") || url.searchParams.has("access_token") || url.searchParams.has("code");
+
+  if (!hasToken && !qs) {
+    // No token received — URL is not in Supabase's allowed redirect list.
+    return htmlPage(
+      "Enlace inválido",
+      `<h2>⚠️ Enlace expirado o inválido</h2>
+      <p>El enlace de recuperación no incluye el token de seguridad. Esto ocurre cuando el enlace ya fue usado, ha expirado (duran 1 hora), o si fue abierto desde un dispositivo diferente al que solicitó el cambio.</p>
+      <p style="font-size:13px;color:rgba(255,255,255,0.45)">Si el problema persiste, solicita un nuevo enlace desde la pantalla de inicio de sesión.</p>
+      <a class="btn sec" href="${APP_SCHEME}://auth/login">Ir al inicio de sesión</a>`
+    );
+  }
+
   const deepLink = `${APP_SCHEME}://auth/callback${qs ? "?" + qs : ""}`;
 
-  // Auto-redirect page: browser first tries the deep link, then falls back to
-  // a manual "Abrir app" button so iOS/Android users can still proceed.
   return htmlPage(
     "Verificando cuenta…",
     `<div class="spinner"></div>
@@ -61,10 +72,10 @@ serve(async (req) => {
     <script>
       (function(){
         var deep = ${JSON.stringify(deepLink)};
-        // Pass the URL hash (tokens) to the deep link too
+        // Also pick up tokens sent as URL hash fragment (legacy implicit flow)
         var hash = window.location.hash;
-        if (hash) {
-          var sep = deep.includes('?') ? '&' : (deep.includes('://auth/callback') ? '?' : '?');
+        if (hash && hash.length > 1) {
+          var sep = deep.includes('?') ? '&' : '?';
           deep = deep + sep + hash.slice(1);
           document.getElementById('openBtn').href = deep;
         }

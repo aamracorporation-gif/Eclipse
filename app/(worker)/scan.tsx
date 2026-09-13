@@ -76,14 +76,21 @@ export default function WorkerScanScreen() {
         console.log('Could not get location:', e);
       }
 
-      const { data, error } = await supabase
-        .from('events')
-        .select('id, title, event_date, venues (latitude, longitude)')
-        .eq('creator_id', workerProfile.organizer_id)
-        .gte('event_date', new Date().toISOString().split('T')[0])
-        .order('event_date', { ascending: true });
+      // Include events from the last 12 hours so overnight parties still show up
+      const cutoff = new Date(Date.now() - 12 * 60 * 60 * 1000).toISOString();
+      const { data: assignmentsData, error } = await supabase
+        .from('worker_event_assignments')
+        .select('events!inner(id, title, event_date, venues(latitude, longitude))')
+        .eq('worker_id', workerProfile.id)
+        .eq('status', 'active')
+        .gte('events.event_date', cutoff);
 
       if (error) throw error;
+
+      const data = (assignmentsData || [])
+        .map((r: any) => r.events)
+        .filter(Boolean)
+        .sort((a: any, b: any) => String(a.event_date).localeCompare(String(b.event_date)));
 
       if (data && data.length > 0) {
         setEvents(data);
@@ -333,15 +340,15 @@ export default function WorkerScanScreen() {
               <GlassView intensity={35} style={styles.manualEntryCard}>
                 <Text style={styles.manualEntryTitle}>Entrada manual</Text>
                 <Text style={styles.manualEntrySubtitle}>
-                  Introduce el código QR impreso en la entrada
+                  Introduce el código corto de la entrada (ej. ECL-A3F9)
                 </Text>
                 <TextInput
                   style={styles.manualInput}
                   value={manualCode}
-                  onChangeText={setManualCode}
-                  placeholder="Código de la entrada…"
+                  onChangeText={(t) => setManualCode(t.toUpperCase())}
+                  placeholder="ECL-XXXX"
                   placeholderTextColor="rgba(255,255,255,0.35)"
-                  autoCapitalize="none"
+                  autoCapitalize="characters"
                   autoCorrect={false}
                   autoFocus
                   returnKeyType="done"

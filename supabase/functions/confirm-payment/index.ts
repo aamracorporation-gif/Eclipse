@@ -155,6 +155,20 @@ serve(async (req) => {
     });
 
     if (fulfillError) {
+      // Before refunding, check if the transaction was already fulfilled (e.g. by webhook racing this call).
+      // If so, return success instead of incorrectly refunding and showing an error.
+      const recheckRes = await serviceClient
+        .from("payment_transactions")
+        .select("status, kind")
+        .eq("stripe_payment_intent_id", paymentIntentId)
+        .maybeSingle();
+      if (recheckRes?.data?.status === "fulfilled") {
+        return jsonResponse({
+          fulfilled: true,
+          kind: recheckRes.data.kind || (tx as any).kind,
+        }, 200);
+      }
+
       try {
         await stripeRefundPaymentIntent(paymentIntentId);
       } catch {}
@@ -178,25 +192,21 @@ serve(async (req) => {
       }, 200);
     }
 
-    // Trigger push delivery immediately (best-effort)
-    try {
-      const url = `${SUPABASE_URL}/functions/v1/send-push`;
-      const res = await fetch(url, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
-          apikey: SUPABASE_SERVICE_ROLE_KEY,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ limit: 25 }),
-      });
-      if (!res.ok) {
-        const txt = await res.text().catch(() => "");
-        console.error("[PUSH] send-push returned non-200:", res.status, txt || "");
-      }
-    } catch (e) {
-      console.error("[PUSH] send-push invocation failed:", (e as any)?.message || e);
-    }
+    // Trigger push delivery (best-effort, non-blocking — do not await so we respond immediately)
+    const SUPABASE_SERVICE_ROLE_KEY_PUSH = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
+    fetch(`${SUPABASE_URL}/functions/v1/send-push`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY_PUSH}`,
+        apikey: SUPABASE_SERVICE_ROLE_KEY_PUSH,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ limit: 25 }),
+    }).then((res) => {
+      if (!res.ok) res.text().catch(() => "").then((txt) => console.error("[PUSH] send-push non-200:", res.status, txt));
+    }).catch((e) => {
+      console.error("[PUSH] send-push failed:", (e as any)?.message || e);
+    });
 
     return jsonResponse(fulfillment as any, 200);
   } catch (e: any) {

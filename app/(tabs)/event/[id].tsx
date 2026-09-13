@@ -1,4 +1,4 @@
-import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, Linking, Platform, KeyboardAvoidingView, Modal, Switch, Animated, Easing, Share, Alert } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, Linking, Platform, KeyboardAvoidingView, Modal, Switch, Animated, Easing, Share, Alert, TextInput } from 'react-native';
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { router, useLocalSearchParams, useSegments } from 'expo-router';
 import { supabase, Event } from '@/lib/supabase';
@@ -6,7 +6,7 @@ import { useAuth } from '@/lib/AuthContext';
 import { useEvents } from '@/lib/EventContext';
 import { useCredit } from '@/lib/WalletContext';
 import { getErrorMessage } from '@/lib/errorHelpers';
-import { MapPin, Calendar, Ticket, ArrowLeft, User as UserIcon, Shirt, Users, Music, PartyPopper, Clock, Euro, Image as ImageIcon, X, CreditCard, Minus, Plus, Sparkles, Wallet, Share2, Mail } from '@/lib/icons';
+import { MapPin, Calendar, Ticket, ArrowLeft, User as UserIcon, Shirt, Users, Music, PartyPopper, Clock, Euro, Image as ImageIcon, X, CreditCard, Minus, Plus, Sparkles, Wallet, Share2, Mail, Tag } from '@/lib/icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Colors } from '@/constants/Colors';
@@ -36,6 +36,7 @@ export default function EventDetailScreen() {
   const { show: showDialog } = useAppDialog();
   const [event, setEvent] = useState<Event | null>(null);
   const [loading, setLoading] = useState(true);
+  const [countdown, setCountdown] = useState<{ hours: number; minutes: number } | null>(null);
   const [vipLoadError, setVipLoadError] = useState<string | null>(null);
   const [buyerName, setBuyerName] = useState('');
   const [buyerEmail, setBuyerEmail] = useState('');
@@ -49,6 +50,11 @@ export default function EventDetailScreen() {
   const [showVenuePlan, setShowVenuePlan] = useState(false);
   const [payWithWallet, setPayWithWallet] = useState(false);
   const [payVipWithWallet, setPayVipWithWallet] = useState(false);
+  const [discountCode, setDiscountCode] = useState('');
+  const [checkingCode, setCheckingCode] = useState(false);
+  const [appliedDiscount, setAppliedDiscount] = useState<{
+    id: string; type: 'percentage' | 'fixed'; value: number; label: string;
+  } | null>(null);
   const [purchaseSuccess, setPurchaseSuccess] = useState<{ title: string; message: string; variant?: 'default' | 'vip' } | null>(null);
   const { horizontalPadding, maxContentWidth, scaleFont } = useResponsive();
   const { language } = useI18n();
@@ -101,6 +107,8 @@ export default function EventDetailScreen() {
     setSelectedTicketType(null);
     setSelectedVipReservadoId(null);
     setPurchaseTab('tickets');
+    setAppliedDiscount(null);
+    setDiscountCode('');
   }, [eventId]);
 
   useEffect(() => {
@@ -237,6 +245,12 @@ export default function EventDetailScreen() {
       if (!String(normalizedEvent?.event_type || '').trim()) {
         normalizedEvent.event_type = 'party';
       }
+      // Filter out soft-deleted ticket types so the customer never sees them
+      if (Array.isArray(normalizedEvent.event_ticket_types)) {
+        normalizedEvent.event_ticket_types = normalizedEvent.event_ticket_types.filter(
+          (t: any) => !t?.deleted_at && (t?.is_active ?? true)
+        );
+      }
 
       if (__DEV__) {
         try {
@@ -262,6 +276,99 @@ export default function EventDetailScreen() {
       setBuyerName(user.user_metadata.full_name);
     }
   }, [fetchEvent, user?.user_metadata?.full_name]);
+
+  // ── Realtime: actualiza aforo sin recargar toda la pantalla ──────────────────
+  const refreshTicketCounts = useCallback(async () => {
+    if (!eventId) return;
+    try {
+      const [typesRes, eventRes] = await Promise.all([
+        supabase
+          .from('event_ticket_types')
+          .select('id, sold, quantity, is_active, deleted_at')
+          .eq('event_id', eventId),
+        supabase
+          .from('events')
+          .select('available_tickets')
+          .eq('id', eventId)
+          .maybeSingle(),
+      ]);
+      setEvent(prev => {
+        if (!prev) return prev;
+        const freshTypes = typesRes.data ?? [];
+        const updatedTypes = (prev.event_ticket_types ?? []).map((t: any) => {
+          const fresh = freshTypes.find((f: any) => f.id === t.id);
+          return fresh ? { ...t, sold: fresh.sold, quantity: fresh.quantity } : t;
+        });
+        return {
+          ...prev,
+          event_ticket_types: updatedTypes,
+          available_tickets: eventRes.data?.available_tickets ?? prev.available_tickets,
+        };
+      });
+    } catch {}
+  }, [eventId]);
+
+  useEffect(() => {
+    if (!eventId) return;
+
+    // Realtime subscription (requires supabase_realtime publication on these tables)
+    const channel = supabase
+      .channel(`event-stock-${eventId}`)
+      .on('postgres_changes', {
+        event: 'UPDATE', schema: 'public', table: 'event_ticket_types',
+        filter: `event_id=eq.${eventId}`,
+      }, () => { refreshTicketCounts(); })
+      .on('postgres_changes', {
+        event: 'UPDATE', schema: 'public', table: 'events',
+        filter: `id=eq.${eventId}`,
+      }, (payload: any) => {
+        setEvent(prev => prev
+          ? { ...prev, available_tickets: payload.new.available_tickets ?? prev.available_tickets }
+          : prev);
+        refreshTicketCounts();
+      })
+      .subscribe();
+
+    // Polling fallback every 8s — guarantees updates even if realtime isn't firing
+    const poll = setInterval(() => { refreshTicketCounts(); }, 8000);
+
+    return () => {
+      supabase.removeChannel(channel);
+      clearInterval(poll);
+    };
+  }, [eventId, refreshTicketCounts]);
+
+  useEffect(() => {
+    if (!event?.event_date) return;
+
+    const calc = () => {
+      const now = Date.now();
+      const ms = new Date(event.event_date).getTime() - now;
+      if (ms > 0 && ms < 24 * 60 * 60 * 1000) {
+        // Math.ceil so that "16:50:30 → event at 18:10" shows 1h 20min (same as the phone clock)
+        const totalMin = Math.ceil(ms / 60000);
+        setCountdown({ hours: Math.floor(totalMin / 60), minutes: totalMin % 60 });
+      } else {
+        setCountdown(null);
+      }
+    };
+
+    calc();
+
+    // Sync to the next exact minute boundary so updates happen at :00 seconds,
+    // exactly when the phone clock changes minute
+    const msToNextMinute = 60000 - (Date.now() % 60000);
+    let interval: ReturnType<typeof setInterval>;
+    const timeout = setTimeout(() => {
+      calc();
+      interval = setInterval(calc, 60000);
+    }, msToNextMinute);
+
+    return () => {
+      clearTimeout(timeout);
+      clearInterval(interval);
+    };
+  }, [event?.event_date]);
 
   const openMaps = () => {
     if (!event?.venues) return;
@@ -423,7 +530,12 @@ export default function EventDetailScreen() {
       }
 
       const pricePerTicket = selectedType ? selectedType.price : event.ticket_price;
-      const totalPrice = pricePerTicket * qty;
+      const baseTotal = pricePerTicket * qty;
+      const totalPrice = appliedDiscount
+        ? appliedDiscount.type === 'percentage'
+          ? Math.max(0, baseTotal * (1 - appliedDiscount.value / 100))
+          : Math.max(0, baseTotal - appliedDiscount.value)
+        : baseTotal;
 
       const payTicketsWithCard = async (creditDebitEur?: number) => {
         const result = await present({
@@ -433,6 +545,7 @@ export default function EventDetailScreen() {
           quantity: qty,
           buyer_name: buyerName,
           buyer_email: buyerEmail || user.email || '',
+          ...(appliedDiscount ? { discount_code_id: appliedDiscount.id } : {}),
           ...(typeof creditDebitEur === 'number' && Number.isFinite(creditDebitEur) && creditDebitEur > 0
             ? { credit_debit_eur: creditDebitEur }
             : {}),
@@ -444,6 +557,12 @@ export default function EventDetailScreen() {
         }
         return { paid: true as const };
       };
+
+      // Service fee — integer-cent arithmetic, identical to create-payment-intent-v2
+      const _totalPriceCents = Math.round(totalPrice * 100);
+      const _svcFeeCents = Math.max(Math.round((_totalPriceCents * 0.015 + 25) / 0.985), 50);
+      const serviceFeeForPurchase = _svcFeeCents / 100;
+      const grandTotalForPurchase = (_totalPriceCents + _svcFeeCents) / 100;
 
       const payTicketsWithWalletOnly = async () => {
         setPurchasing(true);
@@ -462,6 +581,7 @@ export default function EventDetailScreen() {
           p_total_price: totalPrice,
           p_qr_code: qrCode,
           p_ticket_type_id: selectedTicketType,
+          p_service_fee: serviceFeeForPurchase,
         });
       };
 
@@ -469,19 +589,23 @@ export default function EventDetailScreen() {
         const r = await payTicketsWithCard();
         if (!r.paid) return;
       } else {
+        // Wallet covers only the ticket price (not service fee) in split payments
         const walletDebit = Math.min(Math.max(creditBalance, 0), totalPrice);
 
-        if (walletDebit >= totalPrice) {
+        if (creditBalance >= grandTotalForPurchase) {
+          // Full wallet: deducts ticket + service fee from balance
           await payTicketsWithWalletOnly();
         } else if (walletDebit <= 0) {
+          // No wallet balance: full card (Edge Function adds service fee)
           const r = await payTicketsWithCard();
           if (!r.paid) return;
         } else {
-          const remainder = totalPrice - walletDebit;
+          // Split: wallet covers part of ticket, card covers rest of ticket + full service fee
+          const cardAmount = totalPrice - walletDebit + serviceFeeForPurchase;
           const decision = await new Promise<'hybrid' | 'cancel'>((resolve) => {
             showDialog({
               title: t('event.purchase.insufficient_balance_title'),
-              message: t('event.purchase.wallet_split', { wallet: walletDebit.toFixed(2), card: remainder.toFixed(2) }),
+              message: t('event.purchase.wallet_split', { wallet: walletDebit.toFixed(2), card: cardAmount.toFixed(2) }),
               actions: [
                 { label: t('event.purchase.use_wallet_card'), onPress: () => resolve('hybrid'), variant: 'primary' },
                 { label: t('common.cancel'), onPress: () => resolve('cancel'), variant: 'outline' },
@@ -500,6 +624,17 @@ export default function EventDetailScreen() {
       setQuantity('1');
       await refreshEvents(); // Update global context so dashboards reflect the sale immediately
       await fetchEvent();
+
+      // Consume discount code atomically after successful purchase
+      if (appliedDiscount) {
+        await supabase.rpc('consume_discount_code', {
+          p_code_id: appliedDiscount.id,
+          p_buyer_name: buyerName || null,
+          p_buyer_email: buyerEmail || null,
+        }).catch(() => {});
+        setAppliedDiscount(null);
+        setDiscountCode('');
+      }
 
       const msg =
         qty === 1
@@ -579,12 +714,17 @@ export default function EventDetailScreen() {
         return;
       }
       if (payVipWithWallet) {
+        const vipServiceFee = Math.round(((vip.base_price * 0.015 + 0.25) / 0.985) * 100) / 100;
+        const vipGrandTotal = vip.base_price + vipServiceFee;
         const walletDebit = Math.min(Math.max(creditBalance, 0), vip.base_price);
-        if (walletDebit >= vip.base_price) {
+
+        if (creditBalance >= vipGrandTotal) {
+          // Full wallet: deducts VIP price + service fee from balance
           await buyVipWithCredit({
             p_vip_reservado_id: vip.id,
             p_buyer_name: buyerName,
             p_buyer_email: buyerEmail || user.email || '',
+            p_service_fee: vipServiceFee,
           });
         } else if (walletDebit <= 0) {
           const result = await present({ kind: 'vip_table', reference_id: vip.id, buyer_name: buyerName, buyer_email: buyerEmail || user.email || '' });
@@ -593,11 +733,11 @@ export default function EventDetailScreen() {
             throw new Error(result.message || 'El pago no se pudo completar.');
           }
         } else {
-          const remainder = vip.base_price - walletDebit;
+          const cardAmount = vip.base_price - walletDebit + vipServiceFee;
           const decision = await new Promise<'hybrid' | 'cancel'>((resolve) => {
             showDialog({
               title: t('event.purchase.insufficient_balance_title'),
-              message: t('event.purchase.wallet_split', { wallet: walletDebit.toFixed(2), card: remainder.toFixed(2) }),
+              message: t('event.purchase.wallet_split', { wallet: walletDebit.toFixed(2), card: cardAmount.toFixed(2) }),
               actions: [
                 { label: t('event.purchase.use_wallet_card'), onPress: () => resolve('hybrid'), variant: 'primary' },
                 { label: t('common.cancel'), onPress: () => resolve('cancel'), variant: 'outline' },
@@ -702,8 +842,54 @@ export default function EventDetailScreen() {
   if (!event) {
     return (
       <View style={styles.loadingContainer}>
-        <Text style={styles.errorText}>Evento no encontrado</Text>
-        <ThemedButton title="Volver" onPress={safeBack} style={{ marginTop: 20, width: 200 }} />
+        <View style={{
+          alignItems: 'center',
+          paddingHorizontal: 32,
+          maxWidth: 340,
+        }}>
+          <View style={{
+            width: 80,
+            height: 80,
+            borderRadius: 40,
+            backgroundColor: 'rgba(255,255,255,0.06)',
+            alignItems: 'center',
+            justifyContent: 'center',
+            marginBottom: 24,
+            borderWidth: 1,
+            borderColor: 'rgba(255,255,255,0.10)',
+          }}>
+            <Text style={{ fontSize: 36 }}>🌙</Text>
+          </View>
+          <Text style={{
+            color: '#FFFFFF',
+            fontSize: 22,
+            fontWeight: '700',
+            textAlign: 'center',
+            marginBottom: 12,
+            letterSpacing: -0.3,
+          }}>
+            Esta fiesta ya no está disponible
+          </Text>
+          <Text style={{
+            color: 'rgba(255,255,255,0.50)',
+            fontSize: 15,
+            textAlign: 'center',
+            lineHeight: 22,
+            marginBottom: 32,
+          }}>
+            El evento al que intentas acceder ha caducado o ha sido eliminado por el organizador.
+          </Text>
+          <ThemedButton
+            title="Explorar eventos"
+            onPress={() => router.replace('/(tabs)')}
+            style={{ width: '100%', marginBottom: 12 }}
+          />
+          <ThemedButton
+            title="Volver"
+            onPress={safeBack}
+            style={{ width: '100%', backgroundColor: 'rgba(255,255,255,0.08)' }}
+          />
+        </View>
       </View>
     );
   }
@@ -716,6 +902,43 @@ export default function EventDetailScreen() {
 
   const safeQty = Math.max(1, parseInt(quantity || '1') || 1);
   const total = currentPrice * safeQty;
+  const discountedTotal = appliedDiscount
+    ? appliedDiscount.type === 'percentage'
+      ? Math.max(0, total * (1 - appliedDiscount.value / 100))
+      : Math.max(0, total - appliedDiscount.value)
+    : total;
+  const discountSaving = total - discountedTotal;
+
+  // Service fee — integer-cent arithmetic, identical to create-payment-intent-v2
+  const _discountedCents = Math.round(discountedTotal * 100);
+  const _serviceFeeCents = Math.max(Math.round((_discountedCents * 0.015 + 25) / 0.985), 50);
+  const estimatedServiceFee = _serviceFeeCents / 100;
+  const grandTotal = (_discountedCents + _serviceFeeCents) / 100;
+
+  const applyDiscountCode = async () => {
+    const code = discountCode.trim();
+    if (!code || !event) return;
+    setCheckingCode(true);
+    try {
+      const { data, error } = await supabase.rpc('validate_discount_code', {
+        p_code: code,
+        p_event_id: event.id,
+        p_quantity: safeQty,
+      });
+      if (error) throw error;
+      const row = Array.isArray(data) ? data[0] : data;
+      if (!row) throw new Error('Código no válido');
+      const label = row.discount_type === 'percentage'
+        ? `${row.discount_value}% de descuento`
+        : `${Number(row.discount_value).toFixed(2)} € de descuento`;
+      setAppliedDiscount({ id: row.id, type: row.discount_type, value: row.discount_value, label });
+    } catch (e: any) {
+      Alert.alert('Código inválido', e?.message || 'Este código no es válido para este evento');
+      setAppliedDiscount(null);
+    } finally {
+      setCheckingCode(false);
+    }
+  };
   const hasVip = !!(event.reservados_vip && event.reservados_vip.length > 0);
   const selectedVip = event.reservados_vip?.find((v) => v.id === selectedVipReservadoId) ?? null;
   const vipAvailable = selectedVip ? (selectedVip.quantity_available ?? 0) : 0;
@@ -779,6 +1002,31 @@ export default function EventDetailScreen() {
           <Text style={[styles.title, { fontSize: scaleFont(32) }]}>{event.title}</Text>
           <Text style={styles.description}>{event.description}</Text>
 
+          {/* ── Countdown banner (< 24 h) ── */}
+          {countdown !== null && (
+            <View style={styles.countdownCard}>
+              <LinearGradient
+                colors={['rgba(124,58,237,0.22)', 'rgba(91,33,182,0.14)']}
+                style={StyleSheet.absoluteFill}
+                start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
+              />
+              <View style={styles.countdownLeft}>
+                <Clock size={18} color="#B39DFF" />
+                <Text style={styles.countdownLabel}>El evento empieza en</Text>
+              </View>
+              <View style={styles.countdownRight}>
+                {countdown.hours > 0 && (
+                  <>
+                    <Text style={styles.countdownNum}>{String(countdown.hours).padStart(2, '0')}</Text>
+                    <Text style={styles.countdownSep}>h</Text>
+                  </>
+                )}
+                <Text style={styles.countdownNum}>{String(countdown.minutes).padStart(2, '0')}</Text>
+                <Text style={styles.countdownSep}>min</Text>
+              </View>
+            </View>
+          )}
+
           {/* Key Info */}
           <GlassView intensity={20} style={styles.infoCard}>
             <View style={styles.infoRow}>
@@ -802,6 +1050,25 @@ export default function EventDetailScreen() {
                 <Text style={styles.infoValue}>{formatTime(event.event_date)}</Text>
               </View>
             </View>
+
+            {(event as any).end_datetime ? (
+              <>
+                <View style={styles.divider} />
+                <View style={styles.infoRow}>
+                  <View style={styles.iconBox}>
+                    <Clock size={20} color="rgba(255,255,255,0.35)" />
+                  </View>
+                  <View style={styles.infoContent}>
+                    <Text style={styles.infoLabel}>Fin del evento</Text>
+                    <Text style={styles.infoValue}>
+                      {new Date((event as any).end_datetime).toLocaleDateString('es-ES', { day: '2-digit', month: 'long', year: 'numeric' })}
+                      {' • '}
+                      {new Date((event as any).end_datetime).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}
+                    </Text>
+                  </View>
+                </View>
+              </>
+            ) : null}
 
             <View style={styles.divider} />
 
@@ -1184,6 +1451,16 @@ export default function EventDetailScreen() {
                 </View>
               )}
 
+              {/* Resale prohibited banner */}
+              {purchaseTab === 'tickets' && (event as any).allow_resale === false && (
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: 'rgba(255,255,255,0.04)', borderRadius: 12, paddingHorizontal: 14, paddingVertical: 10, borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)', marginBottom: 12 }}>
+                  <Text style={{ fontSize: 14 }}>🔒</Text>
+                  <Text style={{ flex: 1, fontSize: 12, color: 'rgba(255,255,255,0.40)', fontWeight: '600', lineHeight: 17 }}>
+                    La reventa no está disponible para este evento.
+                  </Text>
+                </View>
+              )}
+
               {/* Ticket Type Selector */}
               {purchaseTab === 'tickets' && event.event_ticket_types && event.event_ticket_types.length > 0 && (
                 <View style={styles.ticketTypeContainer}>
@@ -1226,8 +1503,8 @@ export default function EventDetailScreen() {
                                <View style={[styles.ticketCatBadge, { backgroundColor: catColor + '22', borderColor: catColor + '55' }]}>
                                  <Text style={[styles.ticketCatBadgeText, { color: catColor }]}>{catLabel}</Text>
                                </View>
-                               <Text style={[styles.ticketTypeName, isSelected && styles.ticketTypeNameSelected]} numberOfLines={1}>
-                                 {type.name}
+                               <Text style={[styles.ticketTypeName, isSelected && styles.ticketTypeNameSelected]}>
+                                 {String(type.name || '').replace(/^Premium · /i, '')}
                                </Text>
                              </View>
                              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
@@ -1320,12 +1597,6 @@ export default function EventDetailScreen() {
                                  </View>
                                )}
 
-                               {meta.featured && (
-                                 <View style={[styles.ticketExpandRow, { marginTop: 4 }]}>
-                                   <Sparkles size={14} color="#fbbf24" />
-                                   <Text style={[styles.ticketExpandText, { color: '#fbbf24', fontWeight: '800' }]}>Entrada Premium</Text>
-                                 </View>
-                               )}
                              </View>
                            )}
                          </TouchableOpacity>
@@ -1394,6 +1665,51 @@ export default function EventDetailScreen() {
                     </View>
                   </View>
 
+                  {/* Discount code field */}
+                  {user && currentAvailable > 0 && (
+                    <View style={styles.discountRow}>
+                      {appliedDiscount ? (
+                        <View style={styles.discountApplied}>
+                          <View style={styles.discountAppliedLeft}>
+                            <Tag size={14} color="#22c55e" />
+                            <Text style={styles.discountAppliedText}>{appliedDiscount.label}</Text>
+                          </View>
+                          <TouchableOpacity
+                            onPress={() => { setAppliedDiscount(null); setDiscountCode(''); }}
+                            style={styles.discountRemoveBtn}
+                            activeOpacity={0.7}
+                          >
+                            <Text style={styles.discountRemoveText}>✕</Text>
+                          </TouchableOpacity>
+                        </View>
+                      ) : (
+                        <View style={styles.discountInputRow}>
+                          <TextInput
+                            style={styles.discountInput}
+                            placeholder="Código de descuento"
+                            placeholderTextColor="rgba(255,255,255,0.3)"
+                            value={discountCode}
+                            onChangeText={(v) => setDiscountCode(v.toUpperCase())}
+                            autoCapitalize="characters"
+                            autoCorrect={false}
+                            returnKeyType="done"
+                            onSubmitEditing={applyDiscountCode}
+                          />
+                          <TouchableOpacity
+                            style={[styles.discountApplyBtn, (!discountCode.trim() || checkingCode) && { opacity: 0.5 }]}
+                            onPress={applyDiscountCode}
+                            disabled={!discountCode.trim() || checkingCode}
+                            activeOpacity={0.8}
+                          >
+                            <Text style={styles.discountApplyText}>
+                              {checkingCode ? '...' : 'Aplicar'}
+                            </Text>
+                          </TouchableOpacity>
+                        </View>
+                      )}
+                    </View>
+                  )}
+
                   {user && (
                     <View style={styles.walletPayContainer}>
                       <View style={styles.walletPayHeader}>
@@ -1415,17 +1731,40 @@ export default function EventDetailScreen() {
                       {payWithWallet && creditBalance <= 0 && (
                         <Text style={styles.insufficientFundsText}>{t('event.purchase.no_wallet_balance')}</Text>
                       )}
-                      {payWithWallet && creditBalance > 0 && creditBalance < total && (
+                      {payWithWallet && creditBalance > 0 && creditBalance < grandTotal && (
                         <Text style={styles.insufficientFundsText}>
-                          {t('event.purchase.wallet_split', { wallet: creditBalance.toFixed(2), card: (total - creditBalance).toFixed(2) })}
+                          {t('event.purchase.wallet_split', {
+                            wallet: Math.min(creditBalance, discountedTotal).toFixed(2),
+                            card: (discountedTotal - Math.min(creditBalance, discountedTotal) + estimatedServiceFee).toFixed(2),
+                          })}
                         </Text>
                       )}
                     </View>
                   )}
 
+                  {/* Fee breakdown */}
+                  <View style={{ gap: 6, marginBottom: 10, paddingTop: 12, borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.10)' }}>
+                    <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                      <Text style={{ color: 'rgba(255,255,255,0.55)', fontSize: 13 }}>Entradas</Text>
+                      <View style={{ alignItems: 'flex-end' }}>
+                        {appliedDiscount && <Text style={{ color: 'rgba(255,255,255,0.35)', fontSize: 12, textDecorationLine: 'line-through' }}>{formatEuro(total)}</Text>}
+                        <Text style={{ color: 'rgba(255,255,255,0.55)', fontSize: 13 }}>{formatEuro(discountedTotal)}</Text>
+                      </View>
+                    </View>
+                    <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                      <Text style={{ color: 'rgba(255,255,255,0.55)', fontSize: 13 }}>Tasa de servicio</Text>
+                      <Text style={{ color: 'rgba(255,255,255,0.55)', fontSize: 13 }}>{formatEuro(estimatedServiceFee)}</Text>
+                    </View>
+                    {appliedDiscount && discountSaving > 0 && (
+                      <Text style={[styles.totalSaving, { textAlign: 'right' }]}>Ahorras {formatEuro(discountSaving)}</Text>
+                    )}
+                  </View>
+
                   <View style={styles.totalContainer}>
                     <Text style={styles.totalLabel}>{t('event.purchase.total')}</Text>
-                    <Text style={styles.totalAmount}>{formatEuro(total)}</Text>
+                    <Text style={[styles.totalAmount, appliedDiscount && { color: '#22c55e' }]}>
+                      {formatEuro(grandTotal)}
+                    </Text>
                   </View>
 
                   <ThemedButton
@@ -1434,7 +1773,7 @@ export default function EventDetailScreen() {
                         ? t('event.tickets.sold_out')
                         : user
                           ? payWithWallet
-                            ? creditBalance > 0 && creditBalance < total
+                            ? creditBalance > 0 && creditBalance < grandTotal
                               ? t('event.purchase.pay_split')
                               : t('event.purchase.pay_wallet')
                             : t('event.purchase.pay_card')
@@ -1584,6 +1923,23 @@ const styles = StyleSheet.create({
     lineHeight: 24,
     marginBottom: 24,
   },
+  countdownCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: 'rgba(124,58,237,0.35)',
+    paddingHorizontal: 18,
+    paddingVertical: 14,
+    marginBottom: 16,
+    overflow: 'hidden',
+  },
+  countdownLeft: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  countdownLabel: { color: '#B39DFF', fontSize: 13, fontWeight: '600' },
+  countdownRight: { flexDirection: 'row', alignItems: 'baseline', gap: 3 },
+  countdownNum: { color: 'white', fontSize: 26, fontWeight: '800', letterSpacing: -1 },
+  countdownSep: { color: '#B39DFF', fontSize: 14, fontWeight: '700', marginRight: 4 },
   infoCard: {
     marginBottom: 32,
     padding: 0, // Reset padding as inner views handle it
@@ -2263,6 +2619,86 @@ const styles = StyleSheet.create({
     fontSize: 24,
     fontWeight: 'bold',
     color: 'white',
+  },
+  totalOriginal: {
+    fontSize: 13,
+    color: 'rgba(255,255,255,0.4)',
+    textDecorationLine: 'line-through',
+  },
+  totalSaving: {
+    fontSize: 11,
+    color: '#22c55e',
+    fontWeight: '700',
+    marginTop: 2,
+  },
+  discountRow: {
+    marginTop: 4,
+    marginBottom: 4,
+  },
+  discountInputRow: {
+    flexDirection: 'row',
+    gap: 8,
+    alignItems: 'center',
+  },
+  discountInput: {
+    flex: 1,
+    height: 44,
+    backgroundColor: 'rgba(255,255,255,0.07)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.12)',
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '600',
+    letterSpacing: 1,
+  },
+  discountApplyBtn: {
+    height: 44,
+    paddingHorizontal: 16,
+    backgroundColor: 'rgba(124,58,237,0.25)',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(124,58,237,0.4)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  discountApplyText: {
+    color: '#c4b5fd',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  discountApplied: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: 'rgba(34,197,94,0.1)',
+    borderWidth: 1,
+    borderColor: 'rgba(34,197,94,0.3)',
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  discountAppliedLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  discountAppliedText: {
+    color: '#22c55e',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  discountRemoveBtn: {
+    width: 24,
+    height: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  discountRemoveText: {
+    color: 'rgba(255,255,255,0.4)',
+    fontSize: 14,
+    fontWeight: '700',
   },
   confirmButton: {
     marginTop: 8,

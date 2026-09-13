@@ -1,6 +1,6 @@
 import { Stack, Tabs, Redirect, useSegments } from 'expo-router';
 import { useAuth } from '@/lib/AuthContext';
-import { View } from 'react-native';
+import { View, Text } from 'react-native';
 import { Colors } from '@/constants/Colors';
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
@@ -138,6 +138,15 @@ export default function CreatorLayout() {
           }}
         />
         <Tabs.Screen
+          name="discount-codes"
+          options={{
+            title: 'Descuentos',
+            tabBarIcon: ({ color }) => (
+              <Text style={{ color, fontSize: 18, fontWeight: '900', lineHeight: 22 }}>%</Text>
+            ),
+          }}
+        />
+        <Tabs.Screen
           name="organizer-profile"
           options={{
             title: t('tabs.profile'),
@@ -152,6 +161,9 @@ export default function CreatorLayout() {
         <Tabs.Screen name="global-stats" options={{ href: null }} />
         <Tabs.Screen name="stats" options={{ href: null }} />
         <Tabs.Screen name="event-stats/[id]" options={{ href: null }} />
+        <Tabs.Screen name="event-discounts" options={{ href: null }} />
+        <Tabs.Screen name="admin-tickets" options={{ href: null }} />
+        <Tabs.Screen name="worker-qr" options={{ href: null }} />
       </Tabs>
     );
   }
@@ -171,6 +183,9 @@ export default function CreatorLayout() {
       <Stack.Screen name="scan" />
       <Stack.Screen name="stats" />
       <Stack.Screen name="event-stats/[id]" />
+      <Stack.Screen name="admin-tickets" />
+      <Stack.Screen name="event-discounts" />
+      <Stack.Screen name="worker-qr" />
     </Stack>
   );
 }

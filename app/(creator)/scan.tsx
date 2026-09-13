@@ -189,6 +189,8 @@ export default function ScanScreen() {
     return () => loop.stop();
   }, [pulse, view]);
 
+  const lastAutoValidatedRef = useRef<string>('');
+
   useEffect(() => {
     if (view !== 'home') return;
     if (!selectedEventId) return;
@@ -196,11 +198,15 @@ export default function ScanScreen() {
     if (raw.length < 6) {
       if (manualAutoTimerRef.current) clearTimeout(manualAutoTimerRef.current);
       manualAutoTimerRef.current = null;
+      lastAutoValidatedRef.current = '';
       return;
     }
     if (busy) return;
+    // Don't re-validate the same token that was just auto-validated
+    if (raw === lastAutoValidatedRef.current) return;
     if (manualAutoTimerRef.current) clearTimeout(manualAutoTimerRef.current);
     manualAutoTimerRef.current = setTimeout(() => {
+      lastAutoValidatedRef.current = raw;
       validateToken(raw).catch(() => null);
     }, 650);
     return () => {
@@ -449,11 +455,11 @@ export default function ScanScreen() {
                   />
                   <TextInput
                     value={manualToken}
-                    onChangeText={setManualToken}
-                    placeholder={t('creator.scan.manual_placeholder', { defaultValue: 'Pega aquí el código del QR' })}
+                    onChangeText={(t) => setManualToken(t.toUpperCase())}
+                    placeholder={t('creator.scan.manual_placeholder', { defaultValue: 'Código corto (ECL-XXXX) o UUID' })}
                     placeholderTextColor="rgba(255,255,255,0.45)"
                     style={ui.input}
-                    autoCapitalize="none"
+                    autoCapitalize="characters"
                     autoCorrect={false}
                     keyboardType="default"
                     accessibilityLabel={t('creator.scan.actions.validate', { defaultValue: 'Código (manual)' })}
@@ -479,11 +485,32 @@ export default function ScanScreen() {
                 title={t('creator.scan.actions.staff', { defaultValue: 'Staff' })}
                 subtitle={t('creator.scan.staff_subtitle', { defaultValue: 'Invita y gestiona tu equipo para el control de accesos.' })}
               >
-                <PrimaryButton
-                  label={t('creator.workers.manage_title', { defaultValue: 'Gestionar staff' })}
-                  onPress={() => router.push('/(creator)/workers')}
-                  disabled={busy}
-                />
+                <View style={{ gap: 12 }}>
+                  {selectedEvent && (
+                    <PrimaryButton
+                      label="Ver QR de Workers"
+                      onPress={() => router.push({
+                        pathname: '/(creator)/worker-qr',
+                        params: {
+                          event_id: selectedEvent.id,
+                          event_title: encodeURIComponent(String(selectedEvent.title || '')),
+                        },
+                      } as any)}
+                      disabled={busy}
+                      accessibilityHint="Muestra el QR para que los workers se unan a este evento"
+                    />
+                  )}
+                  {!selectedEvent && (
+                    <Text style={[ui.helperText, { marginBottom: 4 }]}>
+                      Selecciona una fiesta arriba para ver su QR de workers.
+                    </Text>
+                  )}
+                  <SecondaryButton
+                    label={t('creator.workers.manage_title', { defaultValue: 'Gestionar staff' })}
+                    onPress={() => router.push('/(creator)/workers')}
+                    disabled={busy}
+                  />
+                </View>
               </SectionCard>
             </>
           )}

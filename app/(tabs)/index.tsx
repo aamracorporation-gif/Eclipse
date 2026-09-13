@@ -14,7 +14,8 @@ import { useAuth } from '@/lib/AuthContext';
 import { useResponsive } from '@/lib/responsive';
 import { GlassView } from '@/components/ui/GlassView';
 import DateSelector from '@/components/DateSelector';
-import AdvancedFilters, { FilterState } from '@/components/AdvancedFilters';
+import AdvancedFilters from '@/components/AdvancedFilters';
+import { useFilters } from '@/lib/FilterContext';
 import { filterEventsByQuery, normalizeSearchQuery } from '@/lib/validators';
 
 type EventWithDistance = AppEvent & {
@@ -46,7 +47,7 @@ export default function HomeScreen() {
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const [userLocation, setUserLocation] = useState<{ latitude: number; longitude: number } | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
-  const [advancedFilters, setAdvancedFilters] = useState<FilterState>({ minAge: null, dressCode: null, musicType: null });
+  const { filters: advancedFilters, setFilters: setAdvancedFilters } = useFilters();
 
   const inCreator = segments?.[0] === '(creator)';
   const userRole = (user?.user_metadata as any)?.role ?? null;
@@ -91,10 +92,14 @@ export default function HomeScreen() {
 
   const { processedEvents, baseEventsCount } = useMemo(() => {
     let base = [...(contextEvents || [])] as EventWithDistance[];
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-
-    base = base.filter((e) => new Date(e.date) >= today);
+    // Events stay visible until 3 hours after their scheduled start time
+    const cutoffMs = Date.now() - 3 * 60 * 60 * 1000;
+    base = base.filter((e) => {
+      const startMs = e.startsAt
+        ? new Date(e.startsAt).getTime()
+        : new Date(`${e.date}T${e.time || '00:00'}`).getTime();
+      return startMs > cutoffMs;
+    });
 
     base = base.filter((event) => {
       const eventDate = new Date(event.date);
@@ -115,6 +120,10 @@ export default function HomeScreen() {
 
     if (advancedFilters.dressCode) {
       base = base.filter((e) => e.dressCode?.toLowerCase().includes(advancedFilters.dressCode!.toLowerCase()));
+    }
+
+    if (advancedFilters.maxPrice) {
+      base = base.filter((e) => parseFloat(String(e.price ?? '0')) <= advancedFilters.maxPrice!);
     }
 
     if (advancedFilters.musicType) {
@@ -213,7 +222,7 @@ export default function HomeScreen() {
     Keyboard.dismiss();
     setSearchQuery('');
     setSelectedDate(new Date());
-    setAdvancedFilters({ minAge: null, dressCode: null, musicType: null });
+    setAdvancedFilters({ minAge: null, dressCode: null, musicType: null, maxPrice: null });
   };
 
   const renderEventItem = ({ item }: { item: EventWithDistance }) => (
@@ -342,83 +351,83 @@ export default function HomeScreen() {
           }
           ListEmptyComponent={
             <View style={styles.emptyScreen}>
-              <Animated.View style={[styles.emptyHeroWrap, { opacity: emptyEnter, transform: [{ scale: emptyEnter.interpolate({ inputRange: [0, 1], outputRange: [0.98, 1] }) }] }]}>
-                <GlassView intensity={28} style={styles.emptyHeroCard}>
-                  <LinearGradient
-                    colors={['rgba(124,58,237,0.22)', 'rgba(6,182,212,0.10)', 'rgba(255,255,255,0.02)', 'transparent']}
-                    locations={[0, 0.35, 0.7, 1]}
-                    style={StyleSheet.absoluteFill}
-                  />
-                  <Animated.View pointerEvents="none" style={[styles.emptyOrb, styles.emptyOrbA, {
-                    opacity: emptyPulse.interpolate({ inputRange: [0, 1], outputRange: [0.55, 0.95] }),
-                    transform: [
-                      { translateX: emptyDrift.interpolate({ inputRange: [0, 1], outputRange: [-14, 14] }) },
-                      { translateY: emptyDrift.interpolate({ inputRange: [0, 1], outputRange: [10, -10] }) },
-                      { scale: emptyPulse.interpolate({ inputRange: [0, 1], outputRange: [1, 1.08] }) },
-                    ],
-                  }]} />
-                  <Animated.View pointerEvents="none" style={[styles.emptyOrb, styles.emptyOrbB, {
-                    opacity: emptyPulse.interpolate({ inputRange: [0, 1], outputRange: [0.22, 0.55] }),
-                    transform: [
-                      { translateX: emptyDrift.interpolate({ inputRange: [0, 1], outputRange: [10, -10] }) },
-                      { translateY: emptyDrift.interpolate({ inputRange: [0, 1], outputRange: [-10, 10] }) },
-                      { scale: emptyPulse.interpolate({ inputRange: [0, 1], outputRange: [1.04, 0.98] }) },
-                    ],
-                  }]} />
-                  <View pointerEvents="none" style={styles.emptyHairlineTop} />
+              <Animated.View style={[styles.emptyHeroWrap, { opacity: emptyEnter, transform: [{ scale: emptyEnter.interpolate({ inputRange: [0, 1], outputRange: [0.96, 1] }) }] }]}>
+                {/* gradient border wrapper */}
+                <LinearGradient
+                  colors={[Colors.dark.primary, Colors.dark.secondary, 'rgba(255,255,255,0.10)']}
+                  start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
+                  style={styles.emptyCardBorder}
+                >
+                  <View style={styles.emptyHeroCard}>
+                    {/* background gradient */}
+                    <LinearGradient
+                      colors={['#1E1040', '#0F0A22', '#0A0618']}
+                      locations={[0, 0.5, 1]}
+                      style={StyleSheet.absoluteFill}
+                    />
+                    {/* animated orbs */}
+                    <Animated.View pointerEvents="none" style={[styles.emptyOrb, styles.emptyOrbA, {
+                      opacity: emptyPulse.interpolate({ inputRange: [0, 1], outputRange: [0.6, 1] }),
+                      transform: [
+                        { translateX: emptyDrift.interpolate({ inputRange: [0, 1], outputRange: [-12, 12] }) },
+                        { translateY: emptyDrift.interpolate({ inputRange: [0, 1], outputRange: [8, -8] }) },
+                        { scale: emptyPulse.interpolate({ inputRange: [0, 1], outputRange: [1, 1.1] }) },
+                      ],
+                    }]} />
+                    <Animated.View pointerEvents="none" style={[styles.emptyOrb, styles.emptyOrbB, {
+                      opacity: emptyPulse.interpolate({ inputRange: [0, 1], outputRange: [0.3, 0.6] }),
+                      transform: [
+                        { translateX: emptyDrift.interpolate({ inputRange: [0, 1], outputRange: [10, -10] }) },
+                        { translateY: emptyDrift.interpolate({ inputRange: [0, 1], outputRange: [-8, 8] }) },
+                        { scale: emptyPulse.interpolate({ inputRange: [0, 1], outputRange: [1.05, 0.97] }) },
+                      ],
+                    }]} />
 
-                  <View style={styles.emptyHeader}>
-                    <Text style={styles.emptyEyebrow}>ECLIPSE | EVENTOS</Text>
-                  </View>
+                    <Text style={styles.emptyEyebrow}>✦ ECLIPSE ✦</Text>
 
-                  <Animated.View style={[styles.emptyIconFloat, { transform: [{ translateY: emptyFloat.interpolate({ inputRange: [0, 1], outputRange: [0, -7] }) }] }]}>
-                    <Animated.View style={{ transform: [{ scale: emptyPulse.interpolate({ inputRange: [0, 1], outputRange: [1, 1.04] }) }] }}>
-                      <LinearGradient colors={[Colors.dark.primary, Colors.dark.secondary, 'rgba(255,255,255,0.10)']} style={styles.emptyIconRing}>
-                        <View style={styles.emptyIconInner}>
-                          <Calendar size={26} color="white" />
-                        </View>
-                      </LinearGradient>
-                    </Animated.View>
-                  </Animated.View>
-
-                  <Text style={styles.emptyTitle}>
-                    {emptyState === 'no_results'
-                      ? t('home.no_results_title', { defaultValue: 'Sin resultados' })
-                      : emptyState === 'no_nearby'
-                      ? t('home.no_nearby_title', { defaultValue: 'Sin eventos cerca' })
-                      : t('home.empty_title', { defaultValue: 'Sin fiestas por aquí' })}
-                  </Text>
-                  <Text style={styles.emptySubtitle}>
-                    {emptyState === 'no_results'
-                      ? t('home.no_results_subtitle', { defaultValue: 'Prueba con otra ciudad o ajusta los filtros.' })
-                      : emptyState === 'no_nearby'
-                      ? t('home.no_nearby_subtitle', { defaultValue: 'No hay eventos en un radio de 100 km. Sigue atento, pronto habrá algo cerca.' })
-                      : t('home.empty_subtitle', { defaultValue: 'Cambia la fecha o prueba a limpiar filtros para descubrir más.' })}
-                  </Text>
-
-                  <View style={styles.emptyActions}>
-                    <TouchableOpacity activeOpacity={0.88} onPress={resetDiscovery} style={styles.emptyCtaOuter}>
-                      <LinearGradient
-                        colors={['rgba(124,58,237,0.75)', 'rgba(6,182,212,0.55)']}
-                        start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
-                        style={styles.emptyCtaBorder}
-                      >
-                        <View style={styles.emptyCtaInner}>
-                          <LinearGradient
-                            colors={['rgba(124,58,237,0.22)', 'rgba(6,182,212,0.10)', 'transparent']}
-                            locations={[0, 0.6, 1]}
-                            start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
-                            style={StyleSheet.absoluteFill}
-                          />
-                          <View style={styles.emptyCtaRow}>
-                            <Text style={styles.emptyCtaText}>{t('home.clear_filters', { defaultValue: 'Limpiar filtros' })}</Text>
-                            <ChevronRight size={18} color="rgba(255,255,255,0.85)" />
+                    {/* floating icon */}
+                    <Animated.View style={[styles.emptyIconFloat, {
+                      transform: [{ translateY: emptyFloat.interpolate({ inputRange: [0, 1], outputRange: [0, -8] }) }],
+                    }]}>
+                      <Animated.View style={{ transform: [{ scale: emptyPulse.interpolate({ inputRange: [0, 1], outputRange: [1, 1.05] }) }] }}>
+                        <LinearGradient
+                          colors={[Colors.dark.primary, Colors.dark.secondary]}
+                          style={styles.emptyIconRing}
+                        >
+                          <View style={styles.emptyIconInner}>
+                            <Calendar size={28} color="white" />
                           </View>
-                        </View>
+                        </LinearGradient>
+                      </Animated.View>
+                    </Animated.View>
+
+                    <Text style={styles.emptyTitle}>
+                      {emptyState === 'no_results'
+                        ? 'Sin resultados'
+                        : emptyState === 'no_nearby'
+                        ? 'Sin eventos cerca'
+                        : 'No hay fiestas hoy'}
+                    </Text>
+                    <Text style={styles.emptySubtitle}>
+                      {emptyState === 'no_results'
+                        ? 'Prueba con otra búsqueda o ajusta los filtros para descubrir más.'
+                        : emptyState === 'no_nearby'
+                        ? 'No hay eventos en tu zona todavía. Prueba a ampliar la búsqueda.'
+                        : 'De momento no hay eventos para esta fecha. Cambia el día o limpia los filtros y descubre lo que viene.'}
+                    </Text>
+
+                    <TouchableOpacity activeOpacity={0.85} onPress={resetDiscovery} style={styles.emptyCtaOuter}>
+                      <LinearGradient
+                        colors={[Colors.dark.primary, Colors.dark.secondary]}
+                        start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
+                        style={styles.emptyCtaInner}
+                      >
+                        <Text style={styles.emptyCtaText}>Limpiar filtros</Text>
+                        <ChevronRight size={16} color="white" />
                       </LinearGradient>
                     </TouchableOpacity>
                   </View>
-                </GlassView>
+                </LinearGradient>
               </Animated.View>
             </View>
           }
@@ -853,54 +862,53 @@ const styles = StyleSheet.create({
     fontWeight: '900',
     letterSpacing: -0.2,
   },
-  emptyScreen: { paddingTop: 10, paddingHorizontal: 20, paddingBottom: 40 },
-  emptyHeroWrap: { alignSelf: 'center', width: '100%', maxWidth: 560 },
+  emptyScreen: {
+    flex: 1,
+    justifyContent: 'center',
+    paddingHorizontal: 24,
+    paddingTop: 32,
+    paddingBottom: 60,
+  },
+  emptyHeroWrap: { width: '100%' },
+  emptyCardBorder: { borderRadius: 28, padding: 1.5 },
   emptyHeroCard: {
-    alignItems: 'center',
-    width: '100%',
-    maxWidth: 560,
-    paddingVertical: 24,
-    paddingHorizontal: 18,
-    borderRadius: 28,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.12)',
-    backgroundColor: 'rgba(255,255,255,0.04)',
-    alignSelf: 'center',
+    borderRadius: 26,
     overflow: 'hidden',
+    alignItems: 'center',
+    paddingTop: 28,
+    paddingBottom: 32,
+    paddingHorizontal: 24,
   },
   emptyOrb: { position: 'absolute', borderRadius: 999 },
-  emptyOrbA: { width: 220, height: 220, top: -110, left: -90, backgroundColor: 'rgba(124,58,237,0.18)' },
-  emptyOrbB: { width: 260, height: 260, bottom: -140, right: -120, backgroundColor: 'rgba(10,132,255,0.14)' },
-  emptyHairlineTop: {
-    position: 'absolute', top: 0, left: 40, right: 40, height: 1,
-    backgroundColor: 'rgba(255,255,255,0.18)',
+  emptyOrbA: { width: 200, height: 200, top: -80, left: -70, backgroundColor: 'rgba(124,58,237,0.28)' },
+  emptyOrbB: { width: 240, height: 240, bottom: -120, right: -100, backgroundColor: 'rgba(10,132,255,0.18)' },
+  emptyEyebrow: {
+    fontSize: 11, fontWeight: '700', color: 'rgba(255,255,255,0.40)',
+    letterSpacing: 3, textTransform: 'uppercase', marginBottom: 20,
   },
-  emptyHeader: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 4 },
-  emptyEyebrow: { fontSize: 10, fontWeight: '700', color: 'rgba(255,255,255,0.38)', letterSpacing: 2.5, textTransform: 'uppercase' },
-  emptyIconFloat: { marginTop: 8, marginBottom: 2 },
-  emptyIconRing: { width: 76, height: 76, borderRadius: 38, padding: 2 },
+  emptyIconFloat: { marginBottom: 4 },
+  emptyIconRing: { width: 80, height: 80, borderRadius: 40, alignItems: 'center', justifyContent: 'center' },
   emptyIconInner: {
-    flex: 1, borderRadius: 36,
-    backgroundColor: 'rgba(0,0,0,0.35)',
+    width: 64, height: 64, borderRadius: 32,
+    backgroundColor: 'rgba(0,0,0,0.40)',
     alignItems: 'center', justifyContent: 'center',
   },
   emptyTitle: {
-    fontSize: 22, fontWeight: '900', color: 'white',
-    marginTop: 18, textAlign: 'center', letterSpacing: -0.4,
+    fontSize: 22, fontWeight: '900', color: '#FFFFFF',
+    marginTop: 20, textAlign: 'center', letterSpacing: -0.5,
   },
   emptySubtitle: {
-    fontSize: 14, color: Colors.dark.textSecondary,
-    marginTop: 10, textAlign: 'center', maxWidth: 380, lineHeight: 20,
+    fontSize: 14, color: 'rgba(255,255,255,0.60)',
+    marginTop: 10, textAlign: 'center', lineHeight: 21, maxWidth: 300,
   },
-  emptyActions: { marginTop: 24, width: '100%', alignItems: 'center', gap: 10 },
-  emptyCtaOuter: { width: '100%', maxWidth: 320, borderRadius: 18, overflow: 'hidden' },
-  emptyCtaBorder: { padding: 1.5, borderRadius: 18 },
+  emptyCtaOuter: {
+    marginTop: 28, borderRadius: 16, overflow: 'hidden',
+    alignSelf: 'center', minWidth: 200,
+  },
   emptyCtaInner: {
-    borderRadius: 16, overflow: 'hidden',
-    paddingVertical: 14, paddingHorizontal: 20,
-    backgroundColor: 'rgba(15,10,30,0.6)',
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    paddingVertical: 14, paddingHorizontal: 24, gap: 6,
   },
-  emptyCtaRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 },
-  emptyCtaText: { color: 'rgba(255,255,255,0.92)', fontSize: 15, fontWeight: '800', letterSpacing: -0.2 },
+  emptyCtaText: { color: 'white', fontSize: 15, fontWeight: '800', letterSpacing: -0.2 },
 });
 

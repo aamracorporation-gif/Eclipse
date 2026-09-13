@@ -1,441 +1,355 @@
-import { View, Text, StyleSheet, TouchableOpacity, Modal, ScrollView, useWindowDimensions } from 'react-native';
-import { useState } from 'react';
+import {
+  View, Text, StyleSheet, TouchableOpacity, Modal,
+  ScrollView, TextInput, KeyboardAvoidingView, Platform,
+} from 'react-native';
+import { useState, useRef } from 'react';
 import { BlurView } from 'expo-blur';
-import { X, Music, Shirt, User, SlidersHorizontal } from '@/lib/icons';
+import { X, Music, Shirt, User, SlidersHorizontal, Euro } from '@/lib/icons';
 import { Colors } from '@/constants/Colors';
 import { LinearGradient } from 'expo-linear-gradient';
 
-export type FilterState = {
-  minAge: number | null;
-  dressCode: string | null;
-  musicType: string | null;
-};
+import { EMPTY_FILTERS as EMPTY, type FilterState } from '@/lib/FilterContext';
+export type { FilterState } from '@/lib/FilterContext';
 
-interface AdvancedFiltersProps {
+interface Props {
   filters: FilterState;
-  onFilterChange: (filters: FilterState) => void;
+  onFilterChange: (f: FilterState) => void;
 }
 
-export default function AdvancedFilters({ filters, onFilterChange }: AdvancedFiltersProps) {
-  const [modalVisible, setModalVisible] = useState(false);
-  const [tempFilters, setTempFilters] = useState<FilterState>(filters);
-  const { width } = useWindowDimensions();
-  const isSmallPhone = width < 360;
+export default function AdvancedFilters({ filters, onFilterChange }: Props) {
+  const [open, setOpen] = useState(false);
+  const [temp, setTemp] = useState<FilterState>(filters);
+  const [priceText, setPriceText] = useState(filters.maxPrice ? String(filters.maxPrice) : '');
+  const priceRef = useRef<TextInput>(null);
 
-  const activeFiltersCount = [
-    filters.minAge,
-    filters.dressCode,
-    filters.musicType
-  ].filter(Boolean).length;
+  const activeCount = [filters.minAge, filters.dressCode, filters.musicType, filters.maxPrice].filter(Boolean).length;
 
   const handleOpen = () => {
-    setTempFilters(filters);
-    setModalVisible(true);
+    setTemp(filters);
+    setPriceText(filters.maxPrice ? String(filters.maxPrice) : '');
+    setOpen(true);
   };
 
   const handleApply = () => {
-    onFilterChange(tempFilters);
-    setModalVisible(false);
+    const parsed = parseFloat(priceText.replace(',', '.'));
+    const finalFilters: FilterState = {
+      ...temp,
+      maxPrice: !isNaN(parsed) && parsed > 0 ? parsed : null,
+    };
+    onFilterChange(finalFilters);
+    setOpen(false);
   };
 
   const handleClear = () => {
-    const cleared: FilterState = { minAge: null, dressCode: null, musicType: null };
-    setTempFilters(cleared); // Clear temp
-    onFilterChange(cleared); // Clear actual
-    setModalVisible(false);
+    setTemp(EMPTY);
+    setPriceText('');
+    onFilterChange(EMPTY);
+    setOpen(false);
   };
 
-  // Quick toggle handlers (apply immediately)
-  const quickToggleAge = (age: number) => {
-    onFilterChange({
-      ...filters,
-      minAge: filters.minAge === age ? null : age
-    });
-  };
+  const toggle = <K extends 'minAge' | 'dressCode' | 'musicType'>(
+    key: K, value: FilterState[K],
+  ) => setTemp(prev => ({ ...prev, [key]: prev[key] === value ? null : value }));
 
-  const quickToggleMusic = (music: string) => {
-    onFilterChange({
-      ...filters,
-      musicType: filters.musicType === music ? null : music
-    });
-  };
+  // Quick toggles (apply instantly, outside modal)
+  const quickMusic = (m: string) => onFilterChange({ ...filters, musicType: filters.musicType === m ? null : m });
+  const quickAge   = (a: number) => onFilterChange({ ...filters, minAge:   filters.minAge   === a ? null : a });
 
-  // Modal toggle handlers (update temp state)
-  const toggleTempAge = (age: number) => {
-    setTempFilters(prev => ({
-      ...prev,
-      minAge: prev.minAge === age ? null : age
-    }));
-  };
-
-  const toggleTempMusic = (music: string) => {
-    setTempFilters(prev => ({
-      ...prev,
-      musicType: prev.musicType === music ? null : music
-    }));
-  };
-
-  const toggleTempDress = (code: string) => {
-    setTempFilters(prev => ({
-      ...prev,
-      dressCode: prev.dressCode === code ? null : code
-    }));
-  };
-
-  const QuickFilterChip = ({ label, selected, onPress }: { label: string, selected: boolean, onPress: () => void }) => (
-    <TouchableOpacity
-      onPress={onPress}
-      activeOpacity={0.7}
-      style={[styles.quickChip, selected && styles.quickChipSelected]}
-    >
-      <Text style={[styles.quickChipText, selected && styles.quickChipTextSelected]}>{label}</Text>
-    </TouchableOpacity>
-  );
-
-  const FilterOption = ({ 
-    label, 
-    selected, 
-    onPress 
-  }: { 
-    label: string, 
-    selected: boolean, 
-    onPress: () => void 
-  }) => (
-      <TouchableOpacity 
-      onPress={onPress} 
-      style={[
-        styles.optionChip, 
-        selected && styles.optionChipSelected,
-        isSmallPhone && { paddingHorizontal: 12, paddingVertical: 6 }
-      ]}>
-      <Text style={[styles.optionText, selected && styles.optionTextSelected, isSmallPhone && { fontSize: 13 }]}>{label}</Text>
+  const Chip = ({ label, selected, onPress }: { label: string; selected: boolean; onPress: () => void }) => (
+    <TouchableOpacity onPress={onPress} activeOpacity={0.75} style={[styles.chip, selected && styles.chipOn]}>
+      {selected && (
+        <LinearGradient
+          colors={['#7C3AED', '#5B21B6']}
+          style={StyleSheet.absoluteFill}
+          start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
+        />
+      )}
+      <Text style={[styles.chipText, selected && styles.chipTextOn]}>{label}</Text>
     </TouchableOpacity>
   );
 
   return (
     <>
-      <View style={styles.container}>
-        <ScrollView 
-          horizontal 
-          showsHorizontalScrollIndicator={false} 
-          contentContainerStyle={styles.scrollContent}
-        >
-          <TouchableOpacity onPress={handleOpen} style={styles.filterButton}>
-             <View style={[styles.filterIconContainer, activeFiltersCount > 0 && styles.filterIconContainerActive]}>
-                <SlidersHorizontal size={18} color={activeFiltersCount > 0 ? 'white' : '#A1A1AA'} />
-                {activeFiltersCount > 0 && (
-                  <View style={styles.badge}>
-                    <Text style={styles.badgeText}>{activeFiltersCount}</Text>
-                  </View>
-                )}
-             </View>
+      {/* ── Horizontal quick-filter bar ── */}
+      <View style={styles.bar}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.barScroll}>
+          {/* Filter icon */}
+          <TouchableOpacity onPress={handleOpen} activeOpacity={0.8}>
+            <View style={styles.iconBtn}>
+              {activeCount > 0
+                ? <LinearGradient colors={['#7C3AED', '#5B21B6']} style={styles.iconBtnGrad} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
+                    <SlidersHorizontal size={17} color="white" />
+                  </LinearGradient>
+                : <View style={styles.iconBtnEmpty}><SlidersHorizontal size={17} color="#A1A1AA" /></View>}
+              {activeCount > 0 && (
+                <View style={styles.badge}><Text style={styles.badgeText}>{activeCount}</Text></View>
+              )}
+            </View>
           </TouchableOpacity>
 
-          <View style={styles.divider} />
+          <View style={styles.sep} />
 
-          <QuickFilterChip 
-            label="Techno" 
-            selected={filters.musicType === 'Techno'} 
-            onPress={() => quickToggleMusic('Techno')} 
-          />
-          <QuickFilterChip 
-            label="Reggaeton" 
-            selected={filters.musicType === 'Reggaeton'} 
-            onPress={() => quickToggleMusic('Reggaeton')} 
-          />
-          <QuickFilterChip 
-            label="+18" 
-            selected={filters.minAge === 18} 
-            onPress={() => quickToggleAge(18)} 
-          />
-           <QuickFilterChip 
-            label="House" 
-            selected={filters.musicType === 'House'} 
-            onPress={() => quickToggleMusic('House')} 
-          />
-          <QuickFilterChip 
-            label="Comercial" 
-            selected={filters.musicType === 'Comercial'} 
-            onPress={() => quickToggleMusic('Comercial')} 
-          />
+          {['+18', 'Techno', 'Reggaeton', 'House', 'Comercial'].map(item => {
+            const isAge  = item === '+18';
+            const sel    = isAge ? filters.minAge === 18 : filters.musicType === item;
+            return (
+              <TouchableOpacity
+                key={item}
+                onPress={() => isAge ? quickAge(18) : quickMusic(item)}
+                activeOpacity={0.75}
+                style={[styles.quickChip, sel && styles.quickChipOn]}
+              >
+                <Text style={[styles.quickChipText, sel && styles.quickChipTextOn]}>{item}</Text>
+              </TouchableOpacity>
+            );
+          })}
         </ScrollView>
       </View>
 
-      <Modal
-        animationType="slide"
-        transparent={true}
-        visible={modalVisible}
-        onRequestClose={() => setModalVisible(false)}
-      >
-        <View style={styles.modalContainer}>
-          <BlurView intensity={40} tint="dark" style={StyleSheet.absoluteFill} />
-          <View style={styles.modalContent}>
+      {/* ── Modal ── */}
+      <Modal visible={open} animationType="slide" transparent onRequestClose={() => setOpen(false)}>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1, justifyContent: 'flex-end' }}>
+          <TouchableOpacity style={StyleSheet.absoluteFill} activeOpacity={1} onPress={() => setOpen(false)} />
+
+          <View style={styles.sheet}>
+            <BlurView intensity={60} tint="dark" style={StyleSheet.absoluteFill} />
             <LinearGradient
-              colors={['#1e1b4b', Colors.dark.background]}
-              style={styles.modalGradient}
+              colors={['rgba(30,20,70,0.98)', 'rgba(5,5,16,0.98)']}
+              style={StyleSheet.absoluteFill}
+            />
+
+            {/* Handle */}
+            <View style={styles.handle} />
+
+            {/* Header */}
+            <View style={styles.header}>
+              <Text style={styles.headerTitle}>Filtros</Text>
+              <TouchableOpacity onPress={() => setOpen(false)} style={styles.closeBtn} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                <X size={20} color="#A1A1AA" />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView
+              style={{ flex: 1 }}
+              showsVerticalScrollIndicator={false}
+              contentContainerStyle={styles.content}
+              keyboardShouldPersistTaps="handled"
             >
-              <View style={styles.modalHeader}>
-                <Text style={styles.modalTitle}>Filtros</Text>
-                <TouchableOpacity onPress={() => setModalVisible(false)} style={styles.closeButton}>
-                  <X size={24} color={Colors.dark.text} />
-                </TouchableOpacity>
-              </View>
 
-              <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
-                
-                {/* Age Section */}
-                <View style={styles.section}>
-                  <View style={styles.sectionHeader}>
-                    <User size={18} color={Colors.dark.primary} />
-                    <Text style={styles.sectionTitle}>Edad Mínima</Text>
+              {/* ── Precio Máximo ── */}
+              <Section icon={<Euro size={16} color="#7C3AED" />} title="Precio Máximo">
+                <View style={styles.priceRow}>
+                  <View style={styles.priceInputWrap}>
+                    <TextInput
+                      ref={priceRef}
+                      style={styles.priceInput}
+                      placeholder="Ej: 25"
+                      placeholderTextColor="rgba(161,161,170,0.5)"
+                      keyboardType="decimal-pad"
+                      value={priceText}
+                      onChangeText={setPriceText}
+                      returnKeyType="done"
+                      onSubmitEditing={() => priceRef.current?.blur()}
+                    />
+                    <Text style={styles.priceUnit}>€</Text>
                   </View>
-                  <View style={styles.optionsRow}>
-                    <FilterOption label="+16" selected={tempFilters.minAge === 16} onPress={() => toggleTempAge(16)} />
-                    <FilterOption label="+18" selected={tempFilters.minAge === 18} onPress={() => toggleTempAge(18)} />
-                    <FilterOption label="+21" selected={tempFilters.minAge === 21} onPress={() => toggleTempAge(21)} />
-                    <FilterOption label="+23" selected={tempFilters.minAge === 23} onPress={() => toggleTempAge(23)} />
-                  </View>
+                  <Text style={styles.priceHint}>Escribe el precio máximo que estás dispuesto a pagar</Text>
                 </View>
-
-                {/* Music Section */}
-                <View style={styles.section}>
-                  <View style={styles.sectionHeader}>
-                    <Music size={18} color={Colors.dark.primary} />
-                    <Text style={styles.sectionTitle}>Tipo de Música</Text>
-                  </View>
-                  <View style={styles.optionsGrid}>
-                    {['Reggaeton', 'Techno', 'House', 'Comercial', 'Hip Hop', 'Latino'].map(genre => (
-                      <FilterOption 
-                        key={genre} 
-                        label={genre} 
-                        selected={tempFilters.musicType === genre} 
-                        onPress={() => toggleTempMusic(genre)} 
-                      />
-                    ))}
-                  </View>
+                <View style={styles.pricePresets}>
+                  {[10, 20, 30, 50].map(p => (
+                    <TouchableOpacity
+                      key={p}
+                      onPress={() => setPriceText(priceText === String(p) ? '' : String(p))}
+                      activeOpacity={0.75}
+                      style={[styles.presetChip, priceText === String(p) && styles.presetChipOn]}
+                    >
+                      {priceText === String(p) && (
+                        <LinearGradient colors={['#7C3AED', '#5B21B6']} style={StyleSheet.absoluteFill} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} />
+                      )}
+                      <Text style={[styles.presetText, priceText === String(p) && styles.presetTextOn]}>hasta {p}€</Text>
+                    </TouchableOpacity>
+                  ))}
                 </View>
+              </Section>
 
-                {/* Dress Code Section */}
-                <View style={styles.section}>
-                  <View style={styles.sectionHeader}>
-                    <Shirt size={18} color={Colors.dark.primary} />
-                    <Text style={styles.sectionTitle}>Código de Vestimenta</Text>
-                  </View>
-                  <View style={styles.optionsRow}>
-                    {['Casual', 'Elegante', 'Sport', 'Formal'].map(code => (
-                      <FilterOption 
-                        key={code} 
-                        label={code} 
-                        selected={tempFilters.dressCode === code} 
-                        onPress={() => toggleTempDress(code)} 
-                      />
-                    ))}
-                  </View>
+              {/* ── Edad mínima ── */}
+              <Section icon={<User size={16} color="#7C3AED" />} title="Edad mínima">
+                <View style={styles.row}>
+                  {[{ label: 'Todos', val: null }, { label: '+16', val: 16 }, { label: '+18', val: 18 }, { label: '+21', val: 21 }].map(({ label, val }) => (
+                    <Chip
+                      key={label}
+                      label={label}
+                      selected={temp.minAge === val}
+                      onPress={() => setTemp(p => ({ ...p, minAge: val }))}
+                    />
+                  ))}
                 </View>
+              </Section>
 
-              </ScrollView>
+              {/* ── Música ── */}
+              <Section icon={<Music size={16} color="#7C3AED" />} title="Tipo de música">
+                <View style={styles.row}>
+                  {['Todos', 'Reggaeton', 'Techno', 'House', 'Comercial', 'Hip Hop', 'Latino', 'EDM'].map(g => (
+                    <Chip
+                      key={g}
+                      label={g}
+                      selected={g === 'Todos' ? temp.musicType === null : temp.musicType === g}
+                      onPress={() => setTemp(p => ({ ...p, musicType: g === 'Todos' ? null : g }))}
+                    />
+                  ))}
+                </View>
+              </Section>
 
-              <View style={styles.footer}>
-                <TouchableOpacity onPress={handleClear} style={styles.clearButton}>
-                  <Text style={styles.clearButtonText}>Borrar</Text>
-                </TouchableOpacity>
-                <TouchableOpacity onPress={handleApply} style={styles.applyButton}>
-                  <LinearGradient
-                    colors={[Colors.dark.primary, Colors.dark.secondary]}
-                    style={styles.applyGradient}
-                    start={{ x: 0, y: 0 }}
-                    end={{ x: 1, y: 0 }}
-                  >
-                    <Text style={styles.applyButtonText}>Aplicar Filtros</Text>
-                  </LinearGradient>
-                </TouchableOpacity>
-              </View>
-            </LinearGradient>
+              {/* ── Dress code ── */}
+              <Section icon={<Shirt size={16} color="#7C3AED" />} title="Código de vestimenta">
+                <View style={styles.row}>
+                  {['Todos', 'Casual', 'Elegante', 'Sport', 'Formal'].map(c => (
+                    <Chip
+                      key={c}
+                      label={c}
+                      selected={c === 'Todos' ? temp.dressCode === null : temp.dressCode === c}
+                      onPress={() => setTemp(p => ({ ...p, dressCode: c === 'Todos' ? null : c }))}
+                    />
+                  ))}
+                </View>
+              </Section>
+
+            </ScrollView>
+
+            {/* Footer */}
+            <View style={styles.footer}>
+              <TouchableOpacity onPress={handleClear} style={styles.clearBtn} activeOpacity={0.7}>
+                <Text style={styles.clearTxt}>Limpiar</Text>
+              </TouchableOpacity>
+              <TouchableOpacity onPress={handleApply} style={styles.applyBtn} activeOpacity={0.85}>
+                <LinearGradient colors={['#7C3AED', '#5B21B6']} style={styles.applyGrad} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}>
+                  <Text style={styles.applyTxt}>Aplicar filtros</Text>
+                </LinearGradient>
+              </TouchableOpacity>
+            </View>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
     </>
   );
 }
 
+function Section({ icon, title, children }: { icon: React.ReactNode; title: string; children: React.ReactNode }) {
+  return (
+    <View style={styles.section}>
+      <View style={styles.sectionHeader}>
+        {icon}
+        <Text style={styles.sectionTitle}>{title}</Text>
+      </View>
+      {children}
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
-  container: {
-    height: 50,
-    marginBottom: 8,
-  },
-  scrollContent: {
-    paddingHorizontal: 0,
-    alignItems: 'center',
-    gap: 8,
-  },
-  filterButton: {
-    marginRight: 4,
-  },
-  filterIconContainer: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: 'rgba(255, 255, 255, 0.08)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.1)',
-  },
-  filterIconContainerActive: {
-    backgroundColor: Colors.dark.primary,
-    borderColor: Colors.dark.primary,
+  // ── Bar ──────────────────────────────────────────────────────
+  bar: { height: 50, marginBottom: 8 },
+  barScroll: { paddingHorizontal: 2, alignItems: 'center', gap: 8 },
+  iconBtn: { width: 44, height: 44 },
+  iconBtnGrad: { flex: 1, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },
+  iconBtnEmpty: {
+    flex: 1, borderRadius: 22,
+    alignItems: 'center', justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.10)',
   },
   badge: {
-    position: 'absolute',
-    top: -2,
-    right: -2,
+    position: 'absolute', top: -3, right: -3,
     backgroundColor: '#EF4444',
-    width: 18,
-    height: 18,
-    borderRadius: 9,
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 2,
-    borderColor: '#000',
+    width: 17, height: 17, borderRadius: 9,
+    alignItems: 'center', justifyContent: 'center',
+    borderWidth: 2, borderColor: Colors.dark.background,
   },
-  badgeText: {
-    color: 'white',
-    fontSize: 10,
-    fontWeight: '800',
-  },
-  divider: {
-    width: 1,
-    height: 24,
-    backgroundColor: 'rgba(255, 255, 255, 0.15)',
-    marginHorizontal: 8,
-  },
+  badgeText: { color: 'white', fontSize: 9, fontWeight: '800' },
+  sep: { width: 1, height: 24, backgroundColor: 'rgba(255,255,255,0.12)', marginHorizontal: 4 },
   quickChip: {
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    borderRadius: 24,
-    backgroundColor: 'rgba(255, 255, 255, 0.08)',
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.1)',
-    height: 44,
-    justifyContent: 'center',
+    paddingHorizontal: 18, height: 44,
+    borderRadius: 22, justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.07)',
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.10)',
   },
-  quickChipSelected: {
-    backgroundColor: 'white',
-    borderColor: 'white',
-  },
-  quickChipText: {
-    color: '#D4D4D8',
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  quickChipTextSelected: {
-    color: 'black',
-    fontWeight: '700',
-  },
-  modalContainer: {
-    flex: 1,
-    justifyContent: 'flex-end',
-  },
-  modalContent: {
+  quickChipOn: { backgroundColor: 'rgba(255,255,255,0.95)', borderColor: 'white' },
+  quickChipText: { color: '#D4D4D8', fontSize: 14, fontWeight: '600' },
+  quickChipTextOn: { color: '#050510', fontWeight: '700' },
+
+  // ── Modal / Sheet ─────────────────────────────────────────────
+  backdrop: { flex: 1 },
+  sheet: {
     height: '85%',
-    borderTopLeftRadius: 30,
-    borderTopRightRadius: 30,
+    borderTopLeftRadius: 28, borderTopRightRadius: 28,
     overflow: 'hidden',
   },
-  modalGradient: {
-    flex: 1,
-    padding: 24,
+  handle: {
+    width: 40, height: 4, borderRadius: 2,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    alignSelf: 'center', marginTop: 12, marginBottom: 4,
   },
-  modalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 24,
+  header: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingHorizontal: 24, paddingVertical: 18,
+    borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.07)',
   },
-  modalTitle: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: 'white',
+  headerTitle: { fontSize: 20, fontWeight: '800', color: 'white', letterSpacing: -0.3 },
+  closeBtn: {
+    width: 34, height: 34, borderRadius: 17,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    alignItems: 'center', justifyContent: 'center',
   },
-  closeButton: {
-    padding: 4,
-  },
-  scrollView: {
-    flex: 1,
-  },
-  section: {
-    marginBottom: 24,
-  },
-  sectionHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginBottom: 12,
-  },
-  sectionTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: Colors.dark.textSecondary,
-  },
-  optionsRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 10,
-  },
-  optionsGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 10,
-  },
-  optionChip: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.1)',
+
+  // ── Content ───────────────────────────────────────────────────
+  content: { paddingHorizontal: 20, paddingTop: 8, paddingBottom: 8 },
+  section: { paddingVertical: 18, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.06)' },
+  sectionHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 14 },
+  sectionTitle: { fontSize: 13, fontWeight: '700', color: '#A1A1AA', letterSpacing: 0.8, textTransform: 'uppercase' },
+  row: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+
+  // ── Generic chip ──────────────────────────────────────────────
+  chip: {
+    paddingHorizontal: 16, paddingVertical: 9,
+    borderRadius: 20, overflow: 'hidden',
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.12)',
     backgroundColor: 'rgba(255,255,255,0.05)',
   },
-  optionChipSelected: {
-    backgroundColor: Colors.dark.primary,
-    borderColor: Colors.dark.primary,
+  chipOn: { borderColor: '#7C3AED' },
+  chipText: { color: '#A1A1AA', fontSize: 14, fontWeight: '600' },
+  chipTextOn: { color: 'white', fontWeight: '700' },
+
+  // ── Price ─────────────────────────────────────────────────────
+  priceRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 14 },
+  priceInputWrap: {
+    flexDirection: 'row', alignItems: 'center',
+    flex: 1, maxWidth: 130,
+    backgroundColor: 'rgba(255,255,255,0.07)',
+    borderWidth: 1, borderColor: 'rgba(124,58,237,0.4)',
+    borderRadius: 14, paddingHorizontal: 14, paddingVertical: 10,
   },
-  optionText: {
-    color: Colors.dark.textSecondary,
-    fontSize: 14,
+  priceInput: { flex: 1, color: 'white', fontSize: 20, fontWeight: '700', padding: 0 },
+  priceUnit: { color: '#7C3AED', fontSize: 18, fontWeight: '700', marginLeft: 4 },
+  priceHint: { flex: 1, color: 'rgba(161,161,170,0.7)', fontSize: 12, lineHeight: 17 },
+  pricePresets: { flexDirection: 'row', gap: 8, flexWrap: 'wrap' },
+  presetChip: {
+    paddingHorizontal: 14, paddingVertical: 8, borderRadius: 16, overflow: 'hidden',
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.10)',
+    backgroundColor: 'rgba(255,255,255,0.05)',
   },
-  optionTextSelected: {
-    color: 'white',
-    fontWeight: '600',
-  },
+  presetChipOn: { borderColor: '#7C3AED' },
+  presetText: { color: '#A1A1AA', fontSize: 13, fontWeight: '600' },
+  presetTextOn: { color: 'white', fontWeight: '700' },
+
+  // ── Footer ────────────────────────────────────────────────────
   footer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 16,
-    paddingTop: 20,
-    borderTopWidth: 1,
-    borderTopColor: 'rgba(255,255,255,0.1)',
+    flexDirection: 'row', alignItems: 'center', gap: 12,
+    paddingHorizontal: 20, paddingTop: 16, paddingBottom: 32,
+    borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.07)',
   },
-  clearButton: {
-    paddingVertical: 12,
-    paddingHorizontal: 20,
-  },
-  clearButtonText: {
-    color: Colors.dark.textSecondary,
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  applyButton: {
-    flex: 1,
-    borderRadius: 16,
-    overflow: 'hidden',
-  },
-  applyGradient: {
-    paddingVertical: 16,
-    alignItems: 'center',
-  },
-  applyButtonText: {
-    color: 'white',
-    fontSize: 16,
-    fontWeight: 'bold',
-  },
+  clearBtn: { paddingVertical: 14, paddingHorizontal: 18 },
+  clearTxt: { color: '#A1A1AA', fontSize: 15, fontWeight: '600' },
+  applyBtn: { flex: 1, borderRadius: 16, overflow: 'hidden' },
+  applyGrad: { paddingVertical: 15, alignItems: 'center' },
+  applyTxt: { color: 'white', fontSize: 16, fontWeight: '700' },
 });

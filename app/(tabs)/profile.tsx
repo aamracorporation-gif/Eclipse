@@ -1,9 +1,10 @@
-import { View, Text, StyleSheet, TouchableOpacity, Platform, ScrollView, Image, RefreshControl, StatusBar, Modal, TextInput, KeyboardAvoidingView, Switch, Alert, useWindowDimensions } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Platform, ScrollView, Image, RefreshControl, StatusBar, Modal, TextInput, KeyboardAvoidingView, Switch, Alert, useWindowDimensions, Pressable } from 'react-native';
+import DateTimePicker from '@react-native-community/datetimepicker';
 import { router, useSegments } from 'expo-router';
 import { useAuth } from '@/lib/AuthContext';
 import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
-import { User, Ticket, ChevronRight, Tag, TrendingUp, UserPlus, Calendar, Sparkles, CheckCircle2, ShieldCheck, Wallet, QrCode, Clock, MapPin, Pencil, X, FileText, LogOut } from '@/lib/icons';
+import { User, Ticket, ChevronRight, Tag, TrendingUp, UserPlus, Calendar, Sparkles, CheckCircle2, ShieldCheck, Wallet, QrCode, Clock, MapPin, Pencil, X, FileText, LogOut, Eye, EyeOff, MessageCircle } from '@/lib/icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Colors } from '@/constants/Colors';
 import { GlassView } from '@/components/ui/GlassView';
@@ -15,6 +16,7 @@ import { useResponsive } from '@/lib/responsive';
 import * as Haptics from 'expo-haptics';
 import { useFocusEffect } from '@react-navigation/native';
 import { useEvents } from '@/lib/EventContext';
+import { useCredit } from '@/lib/WalletContext';
 import { useTranslation } from 'react-i18next';
 import { useI18n } from '@/lib/I18nContext';
 import { invokeEdgeFunction } from '@/lib/edgeFunctions';
@@ -25,6 +27,7 @@ import * as Location from 'expo-location';
 export default function ProfileScreen() {
   const { user, signOut, workerProfile } = useAuth();
   const { events, refreshEvents } = useEvents();
+  const { balanceReal, refreshCredit } = useCredit();
   const { t } = useTranslation();
   const { language, setLanguage, setDeviceLanguage } = useI18n();
   const { show: showDialog } = useAppDialog();
@@ -56,7 +59,62 @@ export default function ProfileScreen() {
     verification_rejection_reason?: string | null;
   } | null>(null);
   const [deletingAccount, setDeletingAccount] = useState(false);
+
+  // ── Support modal ─────────────────────────────────────────────────────────
+  const [supportOpen,      setSupportOpen]      = useState(false);
+  const [supportCategory,  setSupportCategory]  = useState('Problema técnico');
+  const [supportMessage,   setSupportMessage]   = useState('');
+  const [supportSending,   setSupportSending]   = useState(false);
+
+
+  const handleSendSupport = async () => {
+    if (!supportMessage.trim()) {
+      Alert.alert('Mensaje vacío', 'Escribe tu mensaje antes de enviar.');
+      return;
+    }
+    setSupportSending(true);
+    try {
+      const userName = profileDraft.full_name || profileDraft.first_name || user?.user_metadata?.full_name || 'Usuario';
+      const userEmail = user?.email || 'sin email';
+      const userId = user?.id || 'desconocido';
+
+      const { data, error } = await supabase.functions.invoke('send-support-email', {
+        body: { userName, userEmail, userId, category: supportCategory, message: supportMessage.trim() },
+      });
+
+      if (error) throw error;
+      if (data && !data.ok) {
+        const detail = JSON.stringify(data.data || data.error || data);
+        console.error('[Support] Resend error:', detail);
+        Alert.alert('Error al enviar', 'Resend rechazó el email:\n' + detail);
+        return;
+      }
+
+      setSupportOpen(false);
+      setSupportMessage('');
+      setSupportCategory('Problema técnico');
+      Alert.alert('¡Mensaje enviado!', 'Hemos recibido tu consulta. Te responderemos lo antes posible.');
+    } catch (e: any) {
+      console.error('[Support] send error:', e);
+      Alert.alert('Error al enviar', 'No se pudo enviar el mensaje. Inténtalo de nuevo o escríbenos a ' + SUPPORT_EMAIL);
+    } finally {
+      setSupportSending(false);
+    }
+  };
+
+  // ── Change password modal ───────────────────────────────────────────────────
+  const [changePwdOpen,    setChangePwdOpen]    = useState(false);
+  const [pwdStep,          setPwdStep]          = useState<'verify' | 'change' | 'done'>('verify');
+  const [pwdCurrent,       setPwdCurrent]       = useState('');
+  const [pwdNew,           setPwdNew]           = useState('');
+  const [pwdConfirm,       setPwdConfirm]       = useState('');
+  const [pwdError,         setPwdError]         = useState('');
+  const [pwdLoading,       setPwdLoading]       = useState(false);
+  const [pwdShowCurrent,   setPwdShowCurrent]   = useState(false);
+  const [pwdShowNew,       setPwdShowNew]       = useState(false);
+  const [pwdShowConfirm,   setPwdShowConfirm]   = useState(false);
   const [resaleListings, setResaleListings] = useState<any[]>([]);
+  const [resaleTransactions, setResaleTransactions] = useState<any[]>([]);
   const [loadingResales, setLoadingResales] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [isCancelling, setIsCancelling] = useState(false);
@@ -91,7 +149,9 @@ export default function ProfileScreen() {
     organizer_responsible_name: '',
     organizer_responsible_birthdate: '',
     organizer_iban: '',
+    birthdate: '',          // ISO date string YYYY-MM-DD for all users
   });
+  const [showDatePicker, setShowDatePicker] = useState(false);
 
   const profileEditModalHeight = useMemo(() => {
     const available = Math.max(0, windowHeight - 32);
@@ -271,6 +331,7 @@ export default function ProfileScreen() {
       organizer_responsible_name: normalize(draft.organizer_responsible_name),
       organizer_responsible_birthdate: String(draft.organizer_responsible_birthdate || '').trim(),
       organizer_iban: String(draft.organizer_iban || '').trim().toUpperCase(),
+      birthdate: String(draft.birthdate || '').trim(),
     });
   }, []);
 
@@ -380,7 +441,7 @@ export default function ProfileScreen() {
       const { data, error } = await supabase
         .from('profiles')
         .select(
-          'full_name, first_name, last_name, phone, city, country, gender, age, club_name, business_email, instagram_account, address, organizer_venue_address, organizer_fiscal_address, organizer_postal_code, organizer_responsible_name, organizer_responsible_birthdate, organizer_iban'
+          'full_name, first_name, last_name, phone, city, country, gender, age, birthdate, club_name, business_email, instagram_account, address, organizer_venue_address, organizer_fiscal_address, organizer_postal_code, organizer_responsible_name, organizer_responsible_birthdate, organizer_iban'
         )
         .eq('id', user.id)
         .maybeSingle();
@@ -395,6 +456,7 @@ export default function ProfileScreen() {
         country: String((data as any)?.country ?? ''),
         gender: String((data as any)?.gender ?? ''),
         age: (data as any)?.age != null ? String((data as any).age) : '',
+        birthdate: String((data as any)?.birthdate ?? ''),
         club_name: String((data as any)?.club_name ?? ''),
         business_email: String((data as any)?.business_email ?? ''),
         instagram_account: String((data as any)?.instagram_account ?? ''),
@@ -437,7 +499,22 @@ export default function ProfileScreen() {
         const s = String(v || '').trim();
         return s.length ? s : null;
       };
-      const ageNum = String(profileDraft.age || '').trim().length ? Number(profileDraft.age) : null;
+      const birthdateStr = String(profileDraft.birthdate || '').trim();
+      // Derive age from birthdate if provided, otherwise use manual age field
+      let ageNum: number | null = null;
+      if (birthdateStr) {
+        const bd = new Date(birthdateStr);
+        if (!isNaN(bd.getTime())) {
+          const today = new Date();
+          let years = today.getFullYear() - bd.getFullYear();
+          const m = today.getMonth() - bd.getMonth();
+          if (m < 0 || (m === 0 && today.getDate() < bd.getDate())) years--;
+          ageNum = years;
+        }
+      } else if (String(profileDraft.age || '').trim().length) {
+        ageNum = Number(profileDraft.age);
+        if (!Number.isFinite(ageNum)) ageNum = null;
+      }
 
       const payload: any = {
         full_name: normalizeOrNull(profileDraft.full_name) || normalizeOrNull(`${profileDraft.first_name} ${profileDraft.last_name}`),
@@ -448,6 +525,7 @@ export default function ProfileScreen() {
         country: normalizeOrNull(profileDraft.country),
         gender: normalizeOrNull(profileDraft.gender),
         age: ageNum != null && Number.isFinite(ageNum) ? ageNum : null,
+        birthdate: birthdateStr || null,
         club_name: normalizeOrNull(profileDraft.club_name),
         business_email: normalizeTrimOrNull(profileDraft.business_email)?.toLowerCase() ?? null,
         instagram_account: normalizeTrimOrNull(profileDraft.instagram_account),
@@ -760,31 +838,45 @@ export default function ProfileScreen() {
       .map((x) => x.e);
   }, [myOrganizerEvents]);
 
-  // Fetch Resale Listings
+  // Fetch Resale Listings + Transaction History
   const fetchResales = useCallback(async () => {
     if (!user) return;
     try {
       setLoadingResales(true);
-      const { data, error } = await supabase
-        .from('resale_listings')
-        .select(`
-          *,
-          tickets (
-            *,
-            events (
-              id,
-              title,
-              event_date,
-              description,
-              poster_url
-            )
-          )
-        `)
-        .eq('seller_id', user.id)
-        .order('created_at', { ascending: false });
 
-      if (error) throw error;
-      setResaleListings(data || []);
+      const [listingsRes, txRes] = await Promise.all([
+        supabase
+          .from('resale_listings')
+          .select(`
+            id, status, price, created_at, ticket_id,
+            tickets (
+              id,
+              events (
+                id, title, event_date, poster_url
+              )
+            )
+          `)
+          .eq('seller_id', user.id)
+          .order('created_at', { ascending: false }),
+        supabase
+          .from('resale_transactions')
+          .select(`
+            id, seller_id, buyer_id, price, seller_amount, created_at,
+            tickets (
+              id,
+              events (
+                id, title, event_date, poster_url
+              )
+            )
+          `)
+          .or(`seller_id.eq.${user.id},buyer_id.eq.${user.id}`)
+          .order('created_at', { ascending: false })
+          .limit(50),
+      ]);
+
+      if (listingsRes.error) throw listingsRes.error;
+      setResaleListings(listingsRes.data || []);
+      setResaleTransactions(txRes.data || []);
     } catch (error) {
       console.error('Error fetching resales:', error);
     } finally {
@@ -825,20 +917,22 @@ export default function ProfileScreen() {
   useEffect(() => {
     if (activeTab === 'resale') {
       fetchResales();
+      refreshCredit();
     }
-  }, [activeTab, fetchResales]);
+  }, [activeTab, fetchResales, refreshCredit]);
 
   const onRefresh = useCallback(() => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setRefreshing(true);
     if (activeTab === 'resale') {
       fetchResales();
+      refreshCredit();
     } else {
       refreshEvents()
         .catch(() => null)
         .finally(() => setRefreshing(false));
     }
-  }, [activeTab, fetchResales, refreshEvents]);
+  }, [activeTab, fetchResales, refreshCredit, refreshEvents]);
 
   useEffect(() => {
     if (!profileEditOpen) return;
@@ -957,6 +1051,59 @@ export default function ProfileScreen() {
         },
       ],
     });
+  };
+
+  const openChangePwd = () => {
+    setPwdStep('verify');
+    setPwdCurrent('');
+    setPwdNew('');
+    setPwdConfirm('');
+    setPwdError('');
+    setPwdShowCurrent(false);
+    setPwdShowNew(false);
+    setPwdShowConfirm(false);
+    setChangePwdOpen(true);
+  };
+
+  const handleVerifyPassword = async () => {
+    if (!pwdCurrent.trim()) { setPwdError('Introduce tu contraseña actual.'); return; }
+    setPwdLoading(true);
+    setPwdError('');
+    try {
+      const { error } = await supabase.auth.signInWithPassword({
+        email: user!.email!,
+        password: pwdCurrent,
+      });
+      if (error) throw error;
+      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      setPwdStep('change');
+    } catch {
+      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      setPwdError('Contraseña incorrecta. Inténtalo de nuevo.');
+    } finally {
+      setPwdLoading(false);
+    }
+  };
+
+  const handleChangePassword = async () => {
+    if (pwdNew.length < 8) { setPwdError('La contraseña debe tener al menos 8 caracteres.'); return; }
+    if (!/[A-Z]/.test(pwdNew)) { setPwdError('Debe contener al menos una letra mayúscula.'); return; }
+    if (!/[0-9]/.test(pwdNew)) { setPwdError('Debe contener al menos un número.'); return; }
+    if (pwdNew !== pwdConfirm) { setPwdError('Las contraseñas no coinciden.'); return; }
+    if (pwdNew === pwdCurrent) { setPwdError('La nueva contraseña debe ser diferente a la actual.'); return; }
+    setPwdLoading(true);
+    setPwdError('');
+    try {
+      const { error } = await supabase.auth.updateUser({ password: pwdNew });
+      if (error) throw error;
+      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      setPwdStep('done');
+    } catch (e: any) {
+      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      setPwdError(String(e?.message || 'No se pudo cambiar la contraseña.'));
+    } finally {
+      setPwdLoading(false);
+    }
   };
 
   if (!user) {
@@ -1710,6 +1857,42 @@ export default function ProfileScreen() {
                 </>
               )}
 
+              {/* Security — visible to all users */}
+              <Text style={styles.sectionHeader}>Seguridad</Text>
+              <View style={styles.iosGroup}>
+                <GlassView intensity={14} style={[styles.iosGroupContainer, styles.premiumCard]}>
+                  <TouchableOpacity
+                    activeOpacity={0.75}
+                    onPress={openChangePwd}
+                    style={styles.iosButtonRow}
+                  >
+                    <View style={[styles.iosIcon, { backgroundColor: '#F59E0B' }]}>
+                      <ShieldCheck size={16} color="#FFF" />
+                    </View>
+                    <Text style={styles.iosButtonText}>Cambiar contraseña</Text>
+                    <ChevronRight size={16} color="#8E8E93" />
+                  </TouchableOpacity>
+                </GlassView>
+              </View>
+
+              {/* Support — visible to all users */}
+              <Text style={styles.sectionHeader}>Ayuda y Soporte</Text>
+              <View style={styles.iosGroup}>
+                <GlassView intensity={14} style={[styles.iosGroupContainer, styles.premiumCard]}>
+                  <TouchableOpacity
+                    activeOpacity={0.75}
+                    onPress={() => setSupportOpen(true)}
+                    style={styles.iosButtonRow}
+                  >
+                    <View style={[styles.iosIcon, { backgroundColor: '#0EA5E9' }]}>
+                      <MessageCircle size={16} color="#FFF" />
+                    </View>
+                    <Text style={styles.iosButtonText}>Contactar con soporte</Text>
+                    <ChevronRight size={16} color="#8E8E93" />
+                  </TouchableOpacity>
+                </GlassView>
+              </View>
+
               <View style={styles.logoutContainer}>
                 <TouchableOpacity
                   style={[
@@ -1741,139 +1924,137 @@ export default function ProfileScreen() {
             </View>
           ) : (
             <View style={styles.content}>
-               {/* Resale Tab Content for Profile (User's Listings) */}
+               {/* Resale Tab */}
                {loadingResales ? (
                  <View style={{ padding: 40, alignItems: 'center' }}>
                    <DiscoLoader label={t('profile.resale.loading_title')} subLabel={t('profile.resale.loading_subtitle')} size={130} />
                  </View>
                ) : (
                  <View style={{ gap: 24, paddingBottom: 40 }}>
-                    {/* Active Listings */}
-                    <View>
-                      <View style={[styles.premiumHeaderRow, { marginTop: 0 }]}>
-                        <View style={styles.premiumIconWrap}>
-                          <LinearGradient
-                            colors={['rgba(124,58,237,0.85)', 'rgba(6,182,212,0.55)', 'rgba(255,255,255,0.10)']}
-                            style={styles.premiumIconRing}
-                          >
-                            <View style={styles.premiumIconInner}>
-                              <Tag size={16} color="white" />
-                            </View>
-                          </LinearGradient>
-                        </View>
-                        <View style={{ flex: 1 }}>
-                          <Text style={styles.premiumTitle}>{t('profile.resale.active_title')}</Text>
-                          <Text style={styles.premiumSubtitle}>{t('profile.resale.active_subtitle')}</Text>
-                        </View>
-                      </View>
-                      {activeListings.length > 0 ? (
-                        activeListings.map((listing) => (
-                           <View key={listing.id} style={styles.resaleItem}>
-                              <GlassView intensity={14} style={[styles.resaleCard, styles.premiumCard]}>
-                                 <TouchableOpacity
-                                   activeOpacity={0.85}
-                                   disabled={!listing.tickets?.events?.id}
-                                   onPress={() => {
-                                     const eventId = listing.tickets?.events?.id;
-                                     if (!eventId) return;
-                                     router.push(`/(tabs)/event/${eventId}`);
-                                   }}
-                                   style={styles.resaleHeader}
-                                 >
-                                    <View>
-                                      <Text style={styles.resaleEventTitle}>{listing.tickets?.events?.title || t('home.unknown_event')}</Text>
-                                      <Text style={styles.resaleDate}>
-                                        {listing.tickets?.events?.event_date ? new Date(listing.tickets.events.event_date).toLocaleDateString(localeTag, { year: 'numeric', month: 'short', day: 'numeric' }) : t('profile.unknown_date')}
-                                      </Text>
-                                    </View>
-                                    <View style={styles.resalePriceTag}>
-                                      <Text style={styles.resalePrice}>{listing.price}€</Text>
-                                    </View>
-                                 </TouchableOpacity>
-                                 <View style={styles.resaleActions}>
-                                    <TouchableOpacity 
-                                      style={styles.cancelButton}
-                                      onPress={() => handleCancelResale(listing.id, listing.ticket_id)}
-                                      disabled={isCancelling}
-                                    >
-                                       <Text style={styles.cancelButtonText}>{t('profile.resale.withdraw')}</Text>
-                                    </TouchableOpacity>
-                                 </View>
-                              </GlassView>
-                           </View>
-                        ))
-                      ) : (
-                        <View style={styles.emptyResaleState}>
-                          <GlassView intensity={14} style={[styles.emptyResaleCard, styles.premiumCard]}>
-                            <View style={styles.emptyResaleIcon}>
-                              <Tag size={28} color="#8E8E93" />
-                            </View>
-                            <Text style={styles.emptyResaleText}>{t('profile.resale.empty_active')}</Text>
-                          </GlassView>
-                        </View>
-                      )}
-                    </View>
 
-                    {/* Sold Listings */}
-                    <View>
-                      <View style={[styles.premiumHeaderRow, { marginTop: 0 }]}>
-                        <View style={styles.premiumIconWrap}>
-                          <LinearGradient
-                            colors={['rgba(124,58,237,0.85)', 'rgba(6,182,212,0.55)', 'rgba(255,255,255,0.10)']}
-                            style={styles.premiumIconRing}
-                          >
-                            <View style={styles.premiumIconInner}>
-                              <CheckCircle2 size={16} color="white" />
-                            </View>
-                          </LinearGradient>
-                        </View>
-                        <View style={{ flex: 1 }}>
-                          <Text style={styles.premiumTitle}>{t('profile.resale.sold_title')}</Text>
-                          <Text style={styles.premiumSubtitle}>{t('profile.resale.sold_subtitle')}</Text>
-                        </View>
-                      </View>
-                      {soldListings.length > 0 ? (
-                        soldListings.map((listing) => (
-                           <View key={listing.id} style={styles.resaleItem}>
-                              <GlassView intensity={14} style={[styles.resaleCard, styles.premiumCard, { borderColor: 'rgba(48, 209, 88, 0.3)' }]}>
-                                 <TouchableOpacity
-                                   activeOpacity={0.85}
-                                   disabled={!listing.tickets?.events?.id}
-                                   onPress={() => {
-                                     const eventId = listing.tickets?.events?.id;
-                                     if (!eventId) return;
-                                     router.push(`/(tabs)/event/${eventId}`);
-                                   }}
-                                   style={styles.resaleHeader}
-                                 >
-                                    <View>
-                                      <Text style={styles.resaleEventTitle}>{listing.tickets?.events?.title || t('home.unknown_event')}</Text>
-                                      <Text style={styles.resaleDate}>
-                                        {listing.tickets?.events?.event_date ? new Date(listing.tickets.events.event_date).toLocaleDateString(localeTag, { year: 'numeric', month: 'short', day: 'numeric' }) : t('profile.unknown_date')}
-                                      </Text>
-                                    </View>
-                                    <View style={[styles.resalePriceTag, { backgroundColor: '#30D158' }]}>
-                                      <Text style={[styles.resalePrice, { color: '#FFF' }]}>{listing.price}€</Text>
-                                    </View>
-                                 </TouchableOpacity>
-                                 <View style={[styles.resaleActions, { borderTopColor: 'rgba(48, 209, 88, 0.1)', flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: 8 }]}>
-                                    <CheckCircle2 size={16} color="#30D158" />
-                                    <Text style={{ color: '#30D158', fontWeight: '600', fontSize: 13 }}>{t('profile.resale.sold_badge')}</Text>
+                   {/* ── Earnings balance card ── */}
+                   <GlassView intensity={18} style={{ borderRadius: 16, overflow: 'hidden', borderWidth: 1, borderColor: 'rgba(48,209,88,0.25)' }}>
+                     <LinearGradient
+                       colors={['rgba(48,209,88,0.12)', 'rgba(6,182,212,0.06)', 'transparent']}
+                       style={{ padding: 20, flexDirection: 'row', alignItems: 'center', gap: 14 }}
+                     >
+                       <View style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: 'rgba(48,209,88,0.15)', alignItems: 'center', justifyContent: 'center' }}>
+                         <Wallet size={22} color="#30D158" />
+                       </View>
+                       <View style={{ flex: 1 }}>
+                         <Text style={{ color: 'rgba(255,255,255,0.55)', fontSize: 12, fontWeight: '500', marginBottom: 2 }}>Ganancias de reventa</Text>
+                         <Text style={{ color: '#30D158', fontSize: 26, fontWeight: '700' }}>{balanceReal.toFixed(2)} €</Text>
+                         <Text style={{ color: 'rgba(255,255,255,0.4)', fontSize: 11, marginTop: 2 }}>Disponibles en tu wallet</Text>
+                       </View>
+                     </LinearGradient>
+                   </GlassView>
+
+                   {/* ── Active Listings ── */}
+                   <View>
+                     <View style={[styles.premiumHeaderRow, { marginTop: 0 }]}>
+                       <View style={styles.premiumIconWrap}>
+                         <LinearGradient colors={['rgba(124,58,237,0.85)', 'rgba(6,182,212,0.55)', 'rgba(255,255,255,0.10)']} style={styles.premiumIconRing}>
+                           <View style={styles.premiumIconInner}><Tag size={16} color="white" /></View>
+                         </LinearGradient>
+                       </View>
+                       <View style={{ flex: 1 }}>
+                         <Text style={styles.premiumTitle}>{t('profile.resale.active_title')}</Text>
+                         <Text style={styles.premiumSubtitle}>{t('profile.resale.active_subtitle')}</Text>
+                       </View>
+                     </View>
+                     {activeListings.length > 0 ? (
+                       activeListings.map((listing) => (
+                         <View key={listing.id} style={styles.resaleItem}>
+                           <GlassView intensity={14} style={[styles.resaleCard, styles.premiumCard]}>
+                             <TouchableOpacity
+                               activeOpacity={0.85}
+                               disabled={!listing.tickets?.events?.id}
+                               onPress={() => { const eid = listing.tickets?.events?.id; if (eid) router.push(`/(tabs)/event/${eid}`); }}
+                               style={styles.resaleHeader}
+                             >
+                               <View style={{ flex: 1 }}>
+                                 <Text style={styles.resaleEventTitle}>{listing.tickets?.events?.title || t('home.unknown_event')}</Text>
+                                 <Text style={styles.resaleDate}>
+                                   {listing.tickets?.events?.event_date ? new Date(listing.tickets.events.event_date).toLocaleDateString(localeTag, { year: 'numeric', month: 'short', day: 'numeric' }) : t('profile.unknown_date')}
+                                 </Text>
+                               </View>
+                               <View style={styles.resalePriceTag}><Text style={styles.resalePrice}>{listing.price}€</Text></View>
+                             </TouchableOpacity>
+                             <View style={styles.resaleActions}>
+                               <TouchableOpacity style={styles.cancelButton} onPress={() => handleCancelResale(listing.id, listing.ticket_id)} disabled={isCancelling}>
+                                 <Text style={styles.cancelButtonText}>{t('profile.resale.withdraw')}</Text>
+                               </TouchableOpacity>
+                             </View>
+                           </GlassView>
+                         </View>
+                       ))
+                     ) : (
+                       <View style={styles.emptyResaleState}>
+                         <GlassView intensity={14} style={[styles.emptyResaleCard, styles.premiumCard]}>
+                           <View style={styles.emptyResaleIcon}><Tag size={28} color="#8E8E93" /></View>
+                           <Text style={styles.emptyResaleText}>{t('profile.resale.empty_active')}</Text>
+                         </GlassView>
+                       </View>
+                     )}
+                   </View>
+
+                   {/* ── Transaction History ── */}
+                   <View>
+                     <View style={[styles.premiumHeaderRow, { marginTop: 0 }]}>
+                       <View style={styles.premiumIconWrap}>
+                         <LinearGradient colors={['rgba(124,58,237,0.85)', 'rgba(6,182,212,0.55)', 'rgba(255,255,255,0.10)']} style={styles.premiumIconRing}>
+                           <View style={styles.premiumIconInner}><TrendingUp size={16} color="white" /></View>
+                         </LinearGradient>
+                       </View>
+                       <View style={{ flex: 1 }}>
+                         <Text style={styles.premiumTitle}>Historial de transacciones</Text>
+                         <Text style={styles.premiumSubtitle}>Tus compras y ventas en reventa</Text>
+                       </View>
+                     </View>
+                     {resaleTransactions.length > 0 ? (
+                       resaleTransactions.map((tx) => {
+                         const isSeller = tx.seller_id === user?.id;
+                         const eventTitle = tx.tickets?.events?.title || t('home.unknown_event');
+                         const eventDate = tx.tickets?.events?.event_date
+                           ? new Date(tx.tickets.events.event_date).toLocaleDateString(localeTag, { year: 'numeric', month: 'short', day: 'numeric' })
+                           : t('profile.unknown_date');
+                         const txDate = new Date(tx.created_at).toLocaleDateString(localeTag, { day: 'numeric', month: 'short', year: 'numeric' });
+                         const amount = isSeller ? (tx.seller_amount ?? tx.price) : tx.price;
+                         return (
+                           <View key={tx.id} style={styles.resaleItem}>
+                             <GlassView intensity={14} style={[styles.resaleCard, styles.premiumCard, { borderColor: isSeller ? 'rgba(48,209,88,0.2)' : 'rgba(255,159,64,0.2)' }]}>
+                               <View style={[styles.resaleHeader, { paddingBottom: 10 }]}>
+                                 <View style={{ flex: 1 }}>
+                                   <Text style={styles.resaleEventTitle}>{eventTitle}</Text>
+                                   <Text style={styles.resaleDate}>{eventDate}</Text>
                                  </View>
-                              </GlassView>
+                                 <View style={{ alignItems: 'flex-end', gap: 4 }}>
+                                   <Text style={{ color: isSeller ? '#30D158' : '#FF9F40', fontSize: 16, fontWeight: '700' }}>
+                                     {isSeller ? '+' : '-'}{Number(amount).toFixed(2)}€
+                                   </Text>
+                                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                                     {isSeller ? <TrendingUp size={11} color="#30D158" /> : <Tag size={11} color="#FF9F40" />}
+                                     <Text style={{ color: isSeller ? '#30D158' : '#FF9F40', fontSize: 11, fontWeight: '600' }}>
+                                       {isSeller ? 'Vendida' : 'Comprada'}
+                                     </Text>
+                                   </View>
+                                 </View>
+                               </View>
+                               <Text style={{ color: 'rgba(255,255,255,0.35)', fontSize: 11, paddingHorizontal: 14, paddingBottom: 12 }}>{txDate}</Text>
+                             </GlassView>
                            </View>
-                        ))
-                      ) : (
-                        <View style={styles.emptyResaleState}>
-                          <GlassView intensity={14} style={[styles.emptyResaleCard, styles.premiumCard]}>
-                            <View style={styles.emptyResaleIcon}>
-                              <Tag size={28} color="#8E8E93" />
-                            </View>
-                            <Text style={styles.emptyResaleText}>{t('profile.resale.empty_sold')}</Text>
-                          </GlassView>
-                        </View>
-                      )}
-                    </View>
+                         );
+                       })
+                     ) : (
+                       <View style={styles.emptyResaleState}>
+                         <GlassView intensity={14} style={[styles.emptyResaleCard, styles.premiumCard]}>
+                           <View style={styles.emptyResaleIcon}><TrendingUp size={28} color="#8E8E93" /></View>
+                           <Text style={styles.emptyResaleText}>Aún no tienes transacciones de reventa</Text>
+                         </GlassView>
+                       </View>
+                     )}
+                   </View>
+
                  </View>
                )}
             </View>
@@ -1881,15 +2062,247 @@ export default function ProfileScreen() {
         </View>
       </ScrollView>
 
-      <Modal visible={profileEditOpen} transparent animationType="fade" onRequestClose={closeProfileEdit}>
-        <View style={styles.modalBackdrop}>
-          <KeyboardAvoidingView
-            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-            style={{ width: '100%', maxWidth: 560, alignSelf: 'center' }}
-          >
+
+      {/* ── Support Modal ── */}
+      <Modal visible={supportOpen} transparent animationType="slide" statusBarTranslucent onRequestClose={() => setSupportOpen(false)}>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1, justifyContent: 'flex-end' }}>
+          <TouchableOpacity style={StyleSheet.absoluteFillObject} activeOpacity={1} onPress={() => setSupportOpen(false)} />
+          <View style={supportStyles.sheet}>
+            <LinearGradient colors={['rgba(5,30,60,0.99)', 'rgba(3,3,14,0.99)']} style={StyleSheet.absoluteFillObject} />
+
+            {/* Handle */}
+            <View style={supportStyles.handle} />
+
+            {/* Header */}
+            <View style={supportStyles.header}>
+              <View style={supportStyles.headerIcon}>
+                <MessageCircle size={20} color="#0EA5E9" />
+              </View>
+              <Text style={supportStyles.headerTitle}>Contactar con soporte</Text>
+              <TouchableOpacity onPress={() => setSupportOpen(false)} style={supportStyles.closeBtn} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
+                <X size={20} color="#A1A1AA" />
+              </TouchableOpacity>
+            </View>
+
+            {/* Body */}
+            <ScrollView
+              style={supportStyles.body}
+              contentContainerStyle={{ paddingBottom: 24 }}
+              keyboardShouldPersistTaps="handled"
+              showsVerticalScrollIndicator={false}
+            >
+              <Text style={supportStyles.label}>Categoría</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 20 }}>
+                {SUPPORT_CATEGORIES.map((cat) => (
+                  <TouchableOpacity
+                    key={cat}
+                    activeOpacity={0.75}
+                    onPress={() => setSupportCategory(cat)}
+                    style={[supportStyles.chip, supportCategory === cat && supportStyles.chipActive]}
+                  >
+                    <Text style={[supportStyles.chipTxt, supportCategory === cat && supportStyles.chipTxtActive]}>{cat}</Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+
+              <Text style={supportStyles.label}>Mensaje</Text>
+              <TextInput
+                value={supportMessage}
+                onChangeText={setSupportMessage}
+                placeholder="Describe tu problema o pregunta con el mayor detalle posible..."
+                placeholderTextColor="rgba(255,255,255,0.35)"
+                multiline
+                numberOfLines={6}
+                textAlignVertical="top"
+                style={supportStyles.textarea}
+              />
+
+              <Text style={supportStyles.hint}>
+                Tu mensaje llegará a {SUPPORT_EMAIL} junto con tu nombre, email e ID para que podamos atenderte rápido.
+              </Text>
+
+              <TouchableOpacity
+                activeOpacity={0.8}
+                onPress={handleSendSupport}
+                disabled={supportSending || !supportMessage.trim()}
+                style={[supportStyles.sendBtn, (supportSending || !supportMessage.trim()) && { opacity: 0.4 }]}
+              >
+                <MessageCircle size={16} color="#FFF" />
+                <Text style={supportStyles.sendTxt}>{supportSending ? 'Abriendo correo...' : 'Enviar mensaje'}</Text>
+              </TouchableOpacity>
+            </ScrollView>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
+
+      {/* ── Change Password Modal ── */}
+      <Modal visible={changePwdOpen} transparent animationType="slide" onRequestClose={() => setChangePwdOpen(false)}>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
+          <View style={pwdStyles.backdrop}>
+            <TouchableOpacity style={StyleSheet.absoluteFillObject} activeOpacity={1} onPress={() => setChangePwdOpen(false)} />
+            <View style={pwdStyles.sheet}>
+              <LinearGradient colors={['rgba(30,20,70,0.99)', 'rgba(5,5,16,0.99)']} style={StyleSheet.absoluteFillObject} />
+
+              {/* Handle */}
+              <View style={pwdStyles.handle} />
+
+              {/* Header */}
+              <View style={pwdStyles.header}>
+                <View style={pwdStyles.headerIcon}>
+                  <ShieldCheck size={20} color="#F59E0B" />
+                </View>
+                <Text style={pwdStyles.headerTitle}>
+                  {pwdStep === 'done' ? '¡Contraseña actualizada!' : 'Cambiar contraseña'}
+                </Text>
+                <TouchableOpacity onPress={() => setChangePwdOpen(false)} style={pwdStyles.closeBtn} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
+                  <X size={20} color="#A1A1AA" />
+                </TouchableOpacity>
+              </View>
+
+              {pwdStep === 'done' ? (
+                /* ── Success ── */
+                <View style={pwdStyles.doneWrap}>
+                  <LinearGradient colors={['#22c55e', '#16a34a']} style={pwdStyles.doneIcon}>
+                    <ShieldCheck size={36} color="white" />
+                  </LinearGradient>
+                  <Text style={pwdStyles.doneTitle}>Contraseña cambiada</Text>
+                  <Text style={pwdStyles.doneBody}>Tu contraseña se ha actualizado correctamente. La próxima vez que inicies sesión deberás usar la nueva.</Text>
+                  <TouchableOpacity onPress={() => setChangePwdOpen(false)} style={pwdStyles.doneBtn} activeOpacity={0.85}>
+                    <LinearGradient colors={['#22c55e', '#16a34a']} style={pwdStyles.doneBtnGrad}>
+                      <Text style={pwdStyles.doneBtnTxt}>Entendido</Text>
+                    </LinearGradient>
+                  </TouchableOpacity>
+                </View>
+              ) : (
+                <ScrollView contentContainerStyle={pwdStyles.body} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+
+                  {pwdStep === 'verify' ? (
+                    /* ── Step 1: verify current password ── */
+                    <>
+                      <Text style={pwdStyles.stepLabel}>PASO 1 DE 2</Text>
+                      <Text style={pwdStyles.stepTitle}>Verifica tu identidad</Text>
+                      <Text style={pwdStyles.stepDesc}>Por seguridad, introduce tu contraseña actual antes de cambiarla.</Text>
+
+                      <Text style={pwdStyles.fieldLabel}>Contraseña actual</Text>
+                      <View style={pwdStyles.inputWrap}>
+                        <TextInput
+                          style={pwdStyles.input}
+                          placeholder="Tu contraseña actual"
+                          placeholderTextColor="rgba(161,161,170,0.5)"
+                          secureTextEntry={!pwdShowCurrent}
+                          value={pwdCurrent}
+                          onChangeText={t => { setPwdCurrent(t); setPwdError(''); }}
+                          autoCapitalize="none"
+                          autoCorrect={false}
+                        />
+                        <TouchableOpacity onPress={() => setPwdShowCurrent(v => !v)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                          {pwdShowCurrent ? <EyeOff size={18} color="#A1A1AA" /> : <Eye size={18} color="#A1A1AA" />}
+                        </TouchableOpacity>
+                      </View>
+
+                      {!!pwdError && <View style={pwdStyles.errorBox}><Text style={pwdStyles.errorTxt}>{pwdError}</Text></View>}
+
+                      <TouchableOpacity
+                        onPress={handleVerifyPassword}
+                        style={[pwdStyles.primaryBtn, pwdLoading && { opacity: 0.6 }]}
+                        disabled={pwdLoading}
+                        activeOpacity={0.85}
+                      >
+                        <LinearGradient colors={['#F59E0B', '#D97706']} style={pwdStyles.primaryBtnGrad} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}>
+                          {pwdLoading
+                            ? <DiscoLoader size={22} />
+                            : <Text style={pwdStyles.primaryBtnTxt}>Verificar identidad</Text>}
+                        </LinearGradient>
+                      </TouchableOpacity>
+                    </>
+                  ) : (
+                    /* ── Step 2: enter new password ── */
+                    <>
+                      <Text style={pwdStyles.stepLabel}>PASO 2 DE 2</Text>
+                      <Text style={pwdStyles.stepTitle}>Nueva contraseña</Text>
+                      <Text style={pwdStyles.stepDesc}>Elige una contraseña segura: mínimo 8 caracteres, una mayúscula y un número.</Text>
+
+                      {/* Requirements */}
+                      <View style={pwdStyles.reqBox}>
+                        {[
+                          { ok: pwdNew.length >= 8,          label: 'Mínimo 8 caracteres' },
+                          { ok: /[A-Z]/.test(pwdNew),        label: 'Una letra mayúscula' },
+                          { ok: /[0-9]/.test(pwdNew),        label: 'Un número' },
+                          { ok: pwdNew === pwdConfirm && pwdNew.length > 0, label: 'Las contraseñas coinciden' },
+                        ].map(r => (
+                          <View key={r.label} style={pwdStyles.reqRow}>
+                            <Text style={[pwdStyles.reqDot, r.ok && pwdStyles.reqDotOk]}>{r.ok ? '✓' : '○'}</Text>
+                            <Text style={[pwdStyles.reqTxt, r.ok && pwdStyles.reqTxtOk]}>{r.label}</Text>
+                          </View>
+                        ))}
+                      </View>
+
+                      <Text style={pwdStyles.fieldLabel}>Nueva contraseña</Text>
+                      <View style={pwdStyles.inputWrap}>
+                        <TextInput
+                          style={pwdStyles.input}
+                          placeholder="Nueva contraseña"
+                          placeholderTextColor="rgba(161,161,170,0.5)"
+                          secureTextEntry={!pwdShowNew}
+                          value={pwdNew}
+                          onChangeText={t => { setPwdNew(t); setPwdError(''); }}
+                          autoCapitalize="none"
+                          autoCorrect={false}
+                        />
+                        <TouchableOpacity onPress={() => setPwdShowNew(v => !v)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                          {pwdShowNew ? <EyeOff size={18} color="#A1A1AA" /> : <Eye size={18} color="#A1A1AA" />}
+                        </TouchableOpacity>
+                      </View>
+
+                      <Text style={pwdStyles.fieldLabel}>Confirmar contraseña</Text>
+                      <View style={pwdStyles.inputWrap}>
+                        <TextInput
+                          style={pwdStyles.input}
+                          placeholder="Repite la nueva contraseña"
+                          placeholderTextColor="rgba(161,161,170,0.5)"
+                          secureTextEntry={!pwdShowConfirm}
+                          value={pwdConfirm}
+                          onChangeText={t => { setPwdConfirm(t); setPwdError(''); }}
+                          autoCapitalize="none"
+                          autoCorrect={false}
+                        />
+                        <TouchableOpacity onPress={() => setPwdShowConfirm(v => !v)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                          {pwdShowConfirm ? <EyeOff size={18} color="#A1A1AA" /> : <Eye size={18} color="#A1A1AA" />}
+                        </TouchableOpacity>
+                      </View>
+
+                      {!!pwdError && <View style={pwdStyles.errorBox}><Text style={pwdStyles.errorTxt}>{pwdError}</Text></View>}
+
+                      <TouchableOpacity
+                        onPress={handleChangePassword}
+                        style={[pwdStyles.primaryBtn, pwdLoading && { opacity: 0.6 }]}
+                        disabled={pwdLoading}
+                        activeOpacity={0.85}
+                      >
+                        <LinearGradient colors={['#7C3AED', '#5B21B6']} style={pwdStyles.primaryBtnGrad} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}>
+                          {pwdLoading
+                            ? <DiscoLoader size={22} />
+                            : <Text style={pwdStyles.primaryBtnTxt}>Guardar nueva contraseña</Text>}
+                        </LinearGradient>
+                      </TouchableOpacity>
+                    </>
+                  )}
+                </ScrollView>
+              )}
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
+
+      <Modal visible={profileEditOpen} transparent animationType="slide" onRequestClose={closeProfileEdit}>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={{ flex: 1 }}
+        >
+          <View style={styles.modalBackdrop}>
             <GlassView
               intensity={14}
-              style={[styles.modalCard, styles.premiumCard, { maxHeight: profileEditModalHeight, paddingBottom: insets.bottom + 12 }]}
+              style={[styles.modalCard, styles.premiumCard, { height: profileEditModalHeight, paddingBottom: insets.bottom + 12 }]}
               contentContainerStyle={{ flex: 1 }}
             >
               <View style={styles.modalHeaderRow}>
@@ -1980,16 +2393,30 @@ export default function ProfileScreen() {
                         {profileEditTouched.gender && profileEditErrors.gender ? <Text style={styles.modalErrorText}>{profileEditErrors.gender}</Text> : null}
                       </View>
                       <View style={[styles.modalField, { flex: 1 }]}>
-                        <Text style={styles.modalLabel}>{t('profile.edit.fields.age', { defaultValue: 'Edad' })}</Text>
-                        <TextInput
-                          value={profileDraft.age}
-                          onChangeText={(v) => setProfileField('age', v)}
-                          placeholder={t('profile.edit.placeholders.age', { defaultValue: 'Opcional' })}
-                          placeholderTextColor="rgba(255,255,255,0.4)"
-                          keyboardType="number-pad"
-                          style={[styles.modalInput, profileEditTouched.age && profileEditErrors.age ? styles.modalInputError : null]}
-                        />
-                        {profileEditTouched.age && profileEditErrors.age ? <Text style={styles.modalErrorText}>{profileEditErrors.age}</Text> : null}
+                        <Text style={styles.modalLabel}>Fecha de nacimiento</Text>
+                        <TouchableOpacity
+                          activeOpacity={0.7}
+                          onPress={() => setShowDatePicker(true)}
+                          style={[styles.modalInput, { justifyContent: 'center', height: 48 }]}
+                        >
+                          <Text style={{ color: profileDraft.birthdate ? 'white' : 'rgba(255,255,255,0.4)', fontSize: 15, fontWeight: '600' }}>
+                            {profileDraft.birthdate
+                              ? new Date(profileDraft.birthdate + 'T12:00:00').toLocaleDateString(localeTag, { day: '2-digit', month: 'long', year: 'numeric' })
+                              : 'Seleccionar fecha'}
+                          </Text>
+                        </TouchableOpacity>
+                        {profileDraft.birthdate ? (
+                          <Text style={{ color: 'rgba(255,255,255,0.45)', fontSize: 12, marginTop: 4 }}>
+                            {(() => {
+                              const bd = new Date(profileDraft.birthdate + 'T12:00:00');
+                              const today = new Date();
+                              let y = today.getFullYear() - bd.getFullYear();
+                              const m = today.getMonth() - bd.getMonth();
+                              if (m < 0 || (m === 0 && today.getDate() < bd.getDate())) y--;
+                              return `${y} años`;
+                            })()}
+                          </Text>
+                        ) : null}
                       </View>
                     </View>
 
@@ -2205,12 +2632,71 @@ export default function ProfileScreen() {
                 </>
               )}
             </GlassView>
-          </KeyboardAvoidingView>
-        </View>
+          </View>
+        </KeyboardAvoidingView>
+
+        {/* ── Fecha de nacimiento: Android native dialog ── */}
+        {showDatePicker && Platform.OS === 'android' && (
+          <DateTimePicker
+            value={profileDraft.birthdate ? new Date(profileDraft.birthdate + 'T12:00:00') : new Date(new Date().setFullYear(new Date().getFullYear() - 18))}
+            mode="date"
+            display="default"
+            maximumDate={new Date(new Date().setFullYear(new Date().getFullYear() - 16))}
+            minimumDate={new Date(new Date().setFullYear(new Date().getFullYear() - 100))}
+            onChange={(_, date) => {
+              setShowDatePicker(false);
+              if (date) {
+                const y = date.getFullYear();
+                const mo = String(date.getMonth() + 1).padStart(2, '0');
+                const d = String(date.getDate()).padStart(2, '0');
+                setProfileField('birthdate', `${y}-${mo}-${d}`);
+              }
+            }}
+          />
+        )}
+
+        {/* ── Fecha de nacimiento: iOS bottom sheet ── */}
+        {Platform.OS === 'ios' && showDatePicker && (
+          <Modal visible transparent animationType="slide" statusBarTranslucent onRequestClose={() => setShowDatePicker(false)}>
+            <Pressable style={dobStyles.backdrop} onPress={() => setShowDatePicker(false)}>
+              <Pressable style={dobStyles.sheet} onPress={e => e.stopPropagation()}>
+                <LinearGradient colors={['#1e1440', '#05050F']} style={StyleSheet.absoluteFillObject} />
+                <View style={dobStyles.sheetHeader}>
+                  <Text style={dobStyles.sheetTitle}>Fecha de nacimiento</Text>
+                  <TouchableOpacity onPress={() => setShowDatePicker(false)} style={dobStyles.doneBtn}>
+                    <Text style={dobStyles.doneTxt}>Listo</Text>
+                  </TouchableOpacity>
+                </View>
+                <DateTimePicker
+                  value={profileDraft.birthdate ? new Date(profileDraft.birthdate + 'T12:00:00') : new Date(new Date().setFullYear(new Date().getFullYear() - 18))}
+                  mode="date"
+                  display="spinner"
+                  textColor="white"
+                  themeVariant="dark"
+                  maximumDate={new Date(new Date().setFullYear(new Date().getFullYear() - 16))}
+                  minimumDate={new Date(new Date().setFullYear(new Date().getFullYear() - 100))}
+                  style={dobStyles.picker}
+                  onChange={(_, date) => {
+                    if (date) {
+                      const y = date.getFullYear();
+                      const mo = String(date.getMonth() + 1).padStart(2, '0');
+                      const d = String(date.getDate()).padStart(2, '0');
+                      setProfileField('birthdate', `${y}-${mo}-${d}`);
+                    }
+                  }}
+                />
+              </Pressable>
+            </Pressable>
+          </Modal>
+        )}
       </Modal>
     </View>
   );
 }
+
+// ── Support constants (module-level) ──────────────────────────────────────────
+const SUPPORT_CATEGORIES = ['Problema técnico', 'Pago / tickets', 'Cuenta', 'Evento', 'Otro'];
+const SUPPORT_EMAIL = 'soporte@weareeclipseoficial.com';
 
 const styles = StyleSheet.create({
   container: {
@@ -2443,7 +2929,6 @@ const styles = StyleSheet.create({
     padding: 16,
   },
   modalCard: {
-    padding: 16,
     borderRadius: 24,
     overflow: 'hidden',
     width: '100%',
@@ -3037,4 +3522,209 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
   },
+});
+
+// ── Support modal styles ──────────────────────────────────────────────────────
+const supportStyles = StyleSheet.create({
+  sheet: {
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    overflow: 'hidden',
+    maxHeight: '88%',
+  },
+  handle: {
+    width: 40, height: 4, borderRadius: 2,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    alignSelf: 'center', marginTop: 12, marginBottom: 4,
+  },
+  header: {
+    flexDirection: 'row', alignItems: 'center', gap: 10,
+    paddingHorizontal: 20, paddingVertical: 16,
+    borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.07)',
+  },
+  headerIcon: {
+    width: 36, height: 36, borderRadius: 10,
+    backgroundColor: 'rgba(14,165,233,0.18)',
+    alignItems: 'center', justifyContent: 'center',
+  },
+  headerTitle: { flex: 1, color: 'white', fontSize: 17, fontWeight: '800' },
+  closeBtn: {
+    width: 32, height: 32, borderRadius: 16,
+    backgroundColor: 'rgba(255,255,255,0.07)',
+    alignItems: 'center', justifyContent: 'center',
+  },
+  body: {
+    paddingHorizontal: 20,
+    paddingTop: 20,
+  },
+  label: {
+    color: 'rgba(255,255,255,0.55)',
+    fontSize: 12,
+    fontWeight: '600',
+    letterSpacing: 0.6,
+    textTransform: 'uppercase',
+    marginBottom: 8,
+  },
+  chip: {
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.18)',
+    marginRight: 8,
+    backgroundColor: 'rgba(255,255,255,0.05)',
+  },
+  chipActive: {
+    borderColor: '#0EA5E9',
+    backgroundColor: 'rgba(14,165,233,0.18)',
+  },
+  chipTxt: {
+    color: 'rgba(255,255,255,0.55)',
+    fontSize: 13,
+    fontWeight: '500',
+  },
+  chipTxtActive: {
+    color: '#0EA5E9',
+    fontWeight: '700',
+  },
+  textarea: {
+    backgroundColor: 'rgba(255,255,255,0.06)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.14)',
+    borderRadius: 12,
+    padding: 14,
+    color: '#fff',
+    fontSize: 15,
+    minHeight: 130,
+    marginBottom: 12,
+  },
+  hint: {
+    color: 'rgba(255,255,255,0.35)',
+    fontSize: 12,
+    lineHeight: 17,
+    marginBottom: 20,
+  },
+  sendBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: '#0EA5E9',
+    borderRadius: 14,
+    paddingVertical: 14,
+  },
+  sendTxt: {
+    color: '#fff',
+    fontSize: 15,
+    fontWeight: '700',
+  },
+});
+
+// ── Birthdate picker modal styles ─────────────────────────────────────────────
+const dobStyles = StyleSheet.create({
+  backdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.7)',
+    justifyContent: 'flex-end',
+  },
+  sheet: {
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    overflow: 'hidden',
+    paddingBottom: 32,
+  },
+  sheetHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingTop: 18,
+    paddingBottom: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255,255,255,0.08)',
+  },
+  sheetTitle: { color: 'white', fontSize: 16, fontWeight: '700' },
+  doneBtn: { paddingVertical: 6, paddingHorizontal: 4 },
+  doneTxt: { color: '#7C3AED', fontSize: 16, fontWeight: '800' },
+  picker: { width: '100%', height: 220 },
+});
+
+// ── Change-password modal styles ──────────────────────────────────────────────
+const pwdStyles = StyleSheet.create({
+  backdrop: {
+    flex: 1,
+    justifyContent: 'flex-end',
+    backgroundColor: 'rgba(0,0,0,0.6)',
+  },
+  sheet: {
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    overflow: 'hidden',
+    maxHeight: '92%',
+  },
+  handle: {
+    width: 40, height: 4, borderRadius: 2,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    alignSelf: 'center', marginTop: 12, marginBottom: 4,
+  },
+  header: {
+    flexDirection: 'row', alignItems: 'center', gap: 10,
+    paddingHorizontal: 20, paddingVertical: 16,
+    borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.07)',
+  },
+  headerIcon: {
+    width: 36, height: 36, borderRadius: 10,
+    backgroundColor: 'rgba(245,158,11,0.15)',
+    alignItems: 'center', justifyContent: 'center',
+  },
+  headerTitle: { flex: 1, color: 'white', fontSize: 17, fontWeight: '800' },
+  closeBtn: {
+    width: 32, height: 32, borderRadius: 16,
+    backgroundColor: 'rgba(255,255,255,0.07)',
+    alignItems: 'center', justifyContent: 'center',
+  },
+  body: { padding: 20, paddingBottom: 36, gap: 4 },
+  stepLabel: {
+    color: '#F59E0B', fontSize: 11, fontWeight: '800', letterSpacing: 1.2,
+    marginBottom: 4,
+  },
+  stepTitle: { color: 'white', fontSize: 20, fontWeight: '900', marginBottom: 6 },
+  stepDesc: { color: 'rgba(255,255,255,0.55)', fontSize: 14, lineHeight: 20, marginBottom: 20 },
+  fieldLabel: { color: 'rgba(255,255,255,0.6)', fontSize: 12, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 8, marginTop: 12 },
+  inputWrap: {
+    flexDirection: 'row', alignItems: 'center',
+    backgroundColor: 'rgba(255,255,255,0.07)',
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.12)',
+    borderRadius: 14, paddingHorizontal: 16, paddingVertical: 14,
+    gap: 10,
+  },
+  input: { flex: 1, color: 'white', fontSize: 16, padding: 0 },
+  reqBox: {
+    backgroundColor: 'rgba(255,255,255,0.04)',
+    borderRadius: 14, borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)',
+    padding: 14, gap: 8, marginBottom: 4,
+  },
+  reqRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  reqDot: { color: 'rgba(255,255,255,0.3)', fontSize: 14, fontWeight: '700', width: 18 },
+  reqDotOk: { color: '#22c55e' },
+  reqTxt: { color: 'rgba(255,255,255,0.45)', fontSize: 13 },
+  reqTxtOk: { color: 'rgba(255,255,255,0.8)' },
+  errorBox: {
+    marginTop: 10,
+    backgroundColor: 'rgba(239,68,68,0.12)',
+    borderRadius: 12, borderWidth: 1, borderColor: 'rgba(239,68,68,0.25)',
+    padding: 12,
+  },
+  errorTxt: { color: '#EF4444', fontSize: 13, fontWeight: '600' },
+  primaryBtn: { borderRadius: 16, overflow: 'hidden', marginTop: 20 },
+  primaryBtnGrad: { paddingVertical: 16, alignItems: 'center', justifyContent: 'center', minHeight: 52 },
+  primaryBtnTxt: { color: 'white', fontSize: 16, fontWeight: '800' },
+  // Done screen
+  doneWrap: { alignItems: 'center', padding: 32, gap: 16 },
+  doneIcon: { width: 80, height: 80, borderRadius: 26, alignItems: 'center', justifyContent: 'center' },
+  doneTitle: { color: 'white', fontSize: 22, fontWeight: '900', textAlign: 'center' },
+  doneBody: { color: 'rgba(255,255,255,0.55)', fontSize: 14, textAlign: 'center', lineHeight: 21 },
+  doneBtn: { borderRadius: 16, overflow: 'hidden', width: '100%', marginTop: 8 },
+  doneBtnGrad: { paddingVertical: 16, alignItems: 'center' },
+  doneBtnTxt: { color: 'white', fontSize: 16, fontWeight: '800' },
 });

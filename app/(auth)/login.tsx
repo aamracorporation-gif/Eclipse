@@ -25,12 +25,16 @@ async function fetchWithTimeout(input: RequestInfo | URL, init: RequestInit, ms:
   }
 }
 
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
 export default function LoginScreen() {
   const [email, setEmail] = useState('');
+  const [emailError, setEmailError] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
-  const { signIn, resetPassword } = useAuth();
+  const [resendingEmail, setResendingEmail] = useState(false);
+  const { signIn, resetPassword, resendVerificationEmail } = useAuth();
   const { t } = useTranslation();
   const { show: showDialog } = useAppDialog();
   const router = useRouter();
@@ -41,6 +45,49 @@ export default function LoginScreen() {
   useEffect(() => {
     // Optional: Add any initialization logic here if needed
   }, []);
+
+  const handleResendVerification = async () => {
+    const cleanEmail = email.trim();
+    if (!cleanEmail) {
+      showDialog({ title: t('auth.reset_password.email_required_title'), message: 'Introduce tu correo para poder reenviar la verificación.' });
+      return;
+    }
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(cleanEmail)) {
+      showDialog({ title: t('common.error'), message: 'Introduce un email válido.' });
+      return;
+    }
+    try {
+      setResendingEmail(true);
+      const { error } = await resendVerificationEmail(cleanEmail);
+      if (error) {
+        const msg = String(error?.message || error || '');
+        const lower = msg.toLowerCase();
+        if (lower.includes('rate limit')) {
+          showDialog({
+            title: 'Límite alcanzado',
+            message: 'Has alcanzado el límite de reenvíos. Espera unos minutos y vuelve a intentarlo.',
+          });
+        } else if (lower.includes('already') || lower.includes('confirmed')) {
+          showDialog({
+            title: 'Cuenta ya confirmada',
+            message: 'Esta cuenta ya está verificada. Inicia sesión con tu email y contraseña.',
+          });
+        } else {
+          showDialog({ title: t('common.error'), message: getErrorMessage(error) });
+        }
+      } else {
+        showDialog({
+          title: 'Correo reenviado',
+          message: 'Te hemos vuelto a enviar el enlace de confirmación. Revisa tu correo (y la carpeta de Spam si no aparece).',
+        });
+      }
+    } catch {
+      showDialog({ title: t('common.error'), message: 'No se pudo reenviar el email. Inténtalo más tarde.' });
+    } finally {
+      setResendingEmail(false);
+    }
+  };
 
   const handleResetPassword = async () => {
     if (!email) {
@@ -88,14 +135,21 @@ export default function LoginScreen() {
     const cleanEmail = email.trim();
     const cleanPassword = password;
 
-    if (!cleanEmail || !cleanPassword) {
+    if (!cleanEmail) {
+      setEmailError('El email es obligatorio.');
       showDialog({ title: t('auth.login_screen.missing_fields_title'), message: t('auth.login_screen.missing_fields_body') });
       return;
     }
 
-    const loginEmailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!loginEmailRegex.test(cleanEmail)) {
-      showDialog({ title: t('common.error'), message: 'Introduce un email válido.' });
+    if (!EMAIL_REGEX.test(cleanEmail)) {
+      setEmailError('Introduce un email válido.');
+      return;
+    }
+
+    setEmailError('');
+
+    if (!cleanPassword) {
+      showDialog({ title: t('auth.login_screen.missing_fields_title'), message: t('auth.login_screen.missing_fields_body') });
       return;
     }
 
@@ -137,7 +191,18 @@ export default function LoginScreen() {
         if (error.message?.includes('Email not confirmed')) {
           showDialog({
             title: t('auth.login_screen.email_not_confirmed_title'),
-            message: t('auth.login_screen.email_not_confirmed_body'),
+            message: t('auth.login_screen.email_not_confirmed_body') + '\n\nPuedes reenviar el correo de confirmación ahora mismo. Revisa también la carpeta de Spam si no lo encuentras.',
+            actions: [
+              { label: 'Aceptar', onPress: () => {}, variant: 'outline' as any },
+              {
+                label: resendingEmail ? 'Enviando…' : 'Reenviar correo',
+                onPress: () => {
+                  if (resendingEmail) return;
+                  void handleResendVerification();
+                },
+                variant: 'primary' as any,
+              },
+            ],
           });
         } else if (error.message?.includes('Invalid login credentials')) {
            showDialog({ title: t('auth.login_screen.invalid_credentials_title'), message: t('auth.login_screen.invalid_credentials_body') });
@@ -218,7 +283,12 @@ export default function LoginScreen() {
               <ThemedInput
                 placeholder={t('auth.email')}
                 value={email}
-                onChangeText={setEmail}
+                onChangeText={(v) => { setEmail(v); if (emailError) setEmailError(''); }}
+                onBlur={() => {
+                  const v = email.trim();
+                  if (v && !EMAIL_REGEX.test(v)) setEmailError('Introduce un email válido.');
+                  else setEmailError('');
+                }}
                 keyboardType="email-address"
                 autoCapitalize="none"
                 autoComplete="email"
@@ -226,6 +296,7 @@ export default function LoginScreen() {
                 onSubmitEditing={() => passwordInputRef.current?.focus()}
                 blurOnSubmit={false}
                 icon={Mail}
+                error={emailError || undefined}
               />
 
               <ThemedInput

@@ -11,7 +11,7 @@ import { useAuth } from '@/lib/AuthContext';
 import { supabase } from '@/lib/supabase';
 import { useI18n } from '@/lib/I18nContext';
 import { invokeEdgeFunction } from '@/lib/edgeFunctions';
-import { ShieldCheck, User, Pencil, ChevronRight, X, Lock, SlidersHorizontal } from '@/lib/icons';
+import { ShieldCheck, User, Pencil, ChevronRight, X, Lock, SlidersHorizontal, MessageCircle } from '@/lib/icons';
 import { isSafeAddressText, isSafeOrgText, isValidIbanES, isValidPersonName, normalizeWhitespace, normalizeWhitespaceForInput } from '@/lib/validators';
 
 type ProfileData = {
@@ -484,6 +484,38 @@ export default function OrganizerProfileTab() {
     return s.length ? s : t('profile.not_specified', { defaultValue: 'No especificado' });
   };
 
+  // ── Support ───────────────────────────────────────────────────────────────
+  const [supportOpen, setSupportOpen] = useState(false);
+  const [supportCategory, setSupportCategory] = useState('Problema técnico');
+  const [supportMessage, setSupportMessage] = useState('');
+  const [supportSending, setSupportSending] = useState(false);
+
+  const handleSendSupport = async () => {
+    if (!supportMessage.trim()) {
+      Alert.alert('Mensaje vacío', 'Escribe tu mensaje antes de enviar.');
+      return;
+    }
+    setSupportSending(true);
+    try {
+      const userName = profile?.full_name || profile?.club_name || user?.user_metadata?.full_name || 'Organizador';
+      const userEmail = user?.email || '';
+      const userId = user?.id || 'desconocido';
+      const { data, error } = await supabase.functions.invoke('send-support-email', {
+        body: { userName, userEmail, userId, category: supportCategory, message: supportMessage.trim() },
+      });
+      if (error) throw error;
+      if (data && !data.ok) throw new Error(JSON.stringify(data.error || data));
+      setSupportOpen(false);
+      setSupportMessage('');
+      setSupportCategory('Problema técnico');
+      Alert.alert('¡Mensaje enviado!', 'Hemos recibido tu consulta. Te responderemos lo antes posible.');
+    } catch (e: any) {
+      Alert.alert('Error al enviar', 'No se pudo enviar el mensaje. Inténtalo de nuevo o escríbenos a ' + SUPPORT_EMAIL);
+    } finally {
+      setSupportSending(false);
+    }
+  };
+
   const doSignOut = useCallback(() => {
     Alert.alert(
       t('profile.logout', { defaultValue: 'Cerrar sesión' }),
@@ -660,6 +692,14 @@ export default function OrganizerProfileTab() {
           </Card>
 
           <Card
+            title="Ayuda y Soporte"
+            subtitle="Contacta con nuestro equipo ante cualquier duda."
+            icon={<MessageCircle size={18} color="white" />}
+          >
+            <PrimaryButton label="Contactar con soporte" onPress={() => setSupportOpen(true)} />
+          </Card>
+
+          <Card
             title={t('profile.section_privacy', { defaultValue: 'Privacidad y seguridad' })}
             subtitle={t('profile.section_privacy_sub', { defaultValue: 'Información legal y control de datos.' })}
             icon={<Lock size={18} color="white" />}
@@ -678,6 +718,53 @@ export default function OrganizerProfileTab() {
           ) : null}
         </ScrollView>
       </KeyboardAvoidingView>
+
+      {/* ── Support Modal ── */}
+      <Modal visible={supportOpen} transparent animationType="slide" statusBarTranslucent onRequestClose={() => setSupportOpen(false)}>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1, justifyContent: 'flex-end' }}>
+          <Pressable style={StyleSheet.absoluteFillObject} onPress={() => setSupportOpen(false)} />
+          <View style={suppStyles.sheet}>
+            <View style={suppStyles.handle} />
+            <View style={suppStyles.header}>
+              <View style={suppStyles.headerIcon}><MessageCircle size={20} color="#0EA5E9" /></View>
+              <Text style={suppStyles.headerTitle}>Contactar con soporte</Text>
+              <Pressable onPress={() => setSupportOpen(false)} style={suppStyles.closeBtn} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
+                <X size={20} color="#A1A1AA" />
+              </Pressable>
+            </View>
+            <ScrollView style={suppStyles.body} contentContainerStyle={{ paddingBottom: 24 }} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+              <Text style={suppStyles.label}>Categoría</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 20 }}>
+                {SUPPORT_CATEGORIES.map((cat) => (
+                  <Pressable key={cat} onPress={() => setSupportCategory(cat)} style={[suppStyles.chip, supportCategory === cat && suppStyles.chipActive]}>
+                    <Text style={[suppStyles.chipTxt, supportCategory === cat && suppStyles.chipTxtActive]}>{cat}</Text>
+                  </Pressable>
+                ))}
+              </ScrollView>
+              <Text style={suppStyles.label}>Mensaje</Text>
+              <TextInput
+                value={supportMessage}
+                onChangeText={setSupportMessage}
+                placeholder="Describe tu problema o pregunta con el mayor detalle posible..."
+                placeholderTextColor="rgba(255,255,255,0.35)"
+                multiline
+                numberOfLines={6}
+                textAlignVertical="top"
+                style={suppStyles.textarea}
+              />
+              <Text style={suppStyles.hint}>Tu mensaje llegará a {SUPPORT_EMAIL} junto con tu nombre, email e ID.</Text>
+              <Pressable
+                onPress={handleSendSupport}
+                disabled={supportSending || !supportMessage.trim()}
+                style={[suppStyles.sendBtn, (supportSending || !supportMessage.trim()) && { opacity: 0.4 }]}
+              >
+                <MessageCircle size={16} color="#FFF" />
+                <Text style={suppStyles.sendTxt}>{supportSending ? 'Enviando...' : 'Enviar mensaje'}</Text>
+              </Pressable>
+            </ScrollView>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
 
       <Modal transparent visible={editOpen} animationType="slide" onRequestClose={() => setEditOpen(false)}>
         <View style={ui.modalBackdrop}>
@@ -894,6 +981,28 @@ export default function OrganizerProfileTab() {
     </View>
   );
 }
+
+const SUPPORT_CATEGORIES = ['Problema técnico', 'Pago / tickets', 'Cuenta', 'Evento', 'Otro'];
+const SUPPORT_EMAIL = 'soporte@weareeclipseoficial.com';
+
+const suppStyles = StyleSheet.create({
+  sheet: { borderTopLeftRadius: 28, borderTopRightRadius: 28, backgroundColor: '#03030E', paddingHorizontal: 20, paddingTop: 12, paddingBottom: 8, maxHeight: '85%', minHeight: 400 },
+  handle: { width: 36, height: 4, borderRadius: 2, backgroundColor: 'rgba(255,255,255,0.18)', alignSelf: 'center', marginBottom: 16 },
+  header: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 20 },
+  headerIcon: { width: 36, height: 36, borderRadius: 18, backgroundColor: 'rgba(14,165,233,0.15)', alignItems: 'center', justifyContent: 'center' },
+  headerTitle: { flex: 1, fontSize: 17, fontWeight: '700', color: '#fff' },
+  closeBtn: { padding: 4 },
+  body: { flexGrow: 1 },
+  label: { fontSize: 12, fontWeight: '600', color: 'rgba(255,255,255,0.5)', textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 10 },
+  chip: { paddingHorizontal: 14, paddingVertical: 7, borderRadius: 20, backgroundColor: 'rgba(255,255,255,0.07)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.12)', marginRight: 8 },
+  chipActive: { backgroundColor: 'rgba(14,165,233,0.18)', borderColor: '#0EA5E9' },
+  chipTxt: { fontSize: 13, color: 'rgba(255,255,255,0.55)', fontWeight: '600' },
+  chipTxtActive: { color: '#0EA5E9' },
+  textarea: { backgroundColor: 'rgba(255,255,255,0.06)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.12)', borderRadius: 12, padding: 14, color: '#fff', fontSize: 15, minHeight: 120, marginBottom: 14 },
+  hint: { fontSize: 12, color: 'rgba(255,255,255,0.35)', marginBottom: 20, lineHeight: 17 },
+  sendBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: '#0EA5E9', borderRadius: 14, paddingVertical: 14 },
+  sendTxt: { fontSize: 15, fontWeight: '700', color: '#fff' },
+});
 
 const ui = StyleSheet.create({
   screen: { flex: 1, backgroundColor: '#000' },

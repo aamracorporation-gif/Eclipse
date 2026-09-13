@@ -1,13 +1,13 @@
-import { Component, memo, useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useRef, useState, useMemo } from 'react';
+import { useFilters } from '@/lib/FilterContext';
 import {
   View, Text, StyleSheet, Pressable, StatusBar, Platform,
-  Image, TextInput, Keyboard, FlatList, TouchableOpacity, Animated as RNAnimated,
+  Image, TextInput, Keyboard, FlatList, TouchableOpacity,
   ScrollView,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Location from 'expo-location';
-import MapView, { Marker, Region } from '@/components/ui/Map';
 import { Colors } from '@/constants/Colors';
 import { GlassView } from '@/components/ui/GlassView';
 import { DiscoLoader } from '@/components/ui/DiscoLoader';
@@ -16,50 +16,227 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { Search, X, MapPin, Calendar, Flame, Music, Sparkles, Tag } from '@/lib/icons';
 import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 import { useTranslation } from 'react-i18next';
-import Animated, {
-  FadeIn, FadeOut, SlideInDown, SlideOutDown,
-} from 'react-native-reanimated';
-import { PROVIDER_GOOGLE } from 'react-native-maps';
-import Constants from 'expo-constants';
+import Animated, { FadeIn, FadeOut, SlideInDown, SlideOutDown } from 'react-native-reanimated';
+import WebView from 'react-native-webview';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 type EventWithGeo = AppEvent & { _lat: number; _lng: number; _distanceKm: number };
-type ClusterItem =
-  | { kind: 'cluster'; key: string; center: { latitude: number; longitude: number }; count: number; color: string }
-  | { kind: 'event';   key: string; center: { latitude: number; longitude: number }; event: EventWithGeo; color: string };
 
 // ─── Constants ────────────────────────────────────────────────────────────────
-const VIEWPORT_DEBOUNCE_MS  = 350;
-const EVENT_FOCUS_DELTA     = 0.025;
-const PRICE_ZOOM_THRESHOLD  = 0.18;   // below this latitudeDelta → show price labels (city/neighbourhood level)
-const MAX_MARKERS_RENDERED  = 80;
 const FETCH_HORIZON_DAYS    = 90;
 const MAX_EVENTS_CACHE      = 2000;
 const MAX_EVENT_CACHE_AGE_MS = 1000 * 60 * 30;
+const VIEWPORT_DEBOUNCE_MS  = 600;
 
-// ─── Map style ────────────────────────────────────────────────────────────────
-const DARK_MAP_STYLE = [
-  { elementType: 'geometry',           stylers: [{ color: '#0B0B14' }] },
-  { elementType: 'labels.text.fill',   stylers: [{ color: '#9CA3AF' }] },
-  { elementType: 'labels.text.stroke', stylers: [{ color: '#0B0B14' }] },
-  { featureType: 'poi',     elementType: 'labels',          stylers: [{ visibility: 'off' }] },
-  { featureType: 'road',    elementType: 'geometry',        stylers: [{ color: '#151528' }] },
-  { featureType: 'road',    elementType: 'geometry.stroke', stylers: [{ color: '#1E1E3A' }] },
-  { featureType: 'road',    elementType: 'labels.icon',     stylers: [{ visibility: 'off' }] },
-  { featureType: 'transit', elementType: 'labels',          stylers: [{ visibility: 'off' }] },
-  { featureType: 'water',   elementType: 'geometry',        stylers: [{ color: '#060D1A' }] },
-  { featureType: 'administrative', elementType: 'geometry.stroke', stylers: [{ color: '#2D2D5E' }] },
-];
+// ─── Leaflet HTML ─────────────────────────────────────────────────────────────
+// ── Replace YOUR_MAPTILER_KEY with your free key from cloud.maptiler.com ──
+const MAPTILER_KEY = 'F74nnnjzsxrsuFtO0Xf6';
 
-// ─── Event type config ────────────────────────────────────────────────────────
-const EVENT_TYPES = [
-  { key: 'all',      label: 'Todo',      color: '#FFFFFF', Icon: Sparkles },
-  { key: 'party',    label: 'Fiesta',    color: '#A78BFA', Icon: Flame    },
-  { key: 'concert',  label: 'Concierto', color: '#38BDF8', Icon: Music    },
-  { key: 'festival', label: 'Festival',  color: '#FB923C', Icon: Sparkles },
-  { key: 'other',    label: 'Otro',      color: '#34D399', Icon: Tag      },
-];
+const buildMapHtml = (lat: number, lng: number) => `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no"/>
+<link href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" rel="stylesheet"/>
+<script src="https://unpkg.com/supercluster@8.0.1/dist/supercluster.min.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{width:100%;height:100%;background:#0d1117;overflow:hidden;-webkit-tap-highlight-color:transparent}
+#map{width:100%;height:100%}
+.maplibregl-ctrl-attrib,.maplibregl-ctrl-logo,.maplibregl-ctrl-bottom-right,.maplibregl-ctrl-bottom-left{display:none!important}
+</style>
+</head>
+<body>
+<div id="map"></div>
+<script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+<script>
+var RN=window.ReactNativeWebView;
+function post(o){try{RN.postMessage(JSON.stringify(o));}catch(e){}}
 
+function eventColor(type){
+  if(!type)return'#A78BFA';
+  var t=type.toLowerCase();
+  if(t.includes('concert')||t.includes('concierto'))return'#38BDF8';
+  if(t.includes('festival'))return'#FB923C';
+  if(t.includes('party')||t.includes('fiesta'))return'#A78BFA';
+  if(t.includes('techno'))return'#EC4899';
+  return'#34D399';
+}
+
+var selectedId=null;
+var eventsData={type:'FeatureCollection',features:[]};
+
+var PRICE_ZOOM=14;
+var selectedId=null;
+var allFeatures=[];
+var domMarkers={};   // id|cluster_id -> {marker, type}
+
+/* ─── supercluster ─── */
+var sc=new Supercluster({radius:55,maxZoom:PRICE_ZOOM-1,minPoints:2});
+
+var map=new maplibregl.Map({
+  container:'map',
+  style:'https://api.maptiler.com/maps/streets-v4/style.json?key=${MAPTILER_KEY}',
+  center:[${lng},${lat}],
+  zoom:13,
+  attributionControl:false,
+  fadeDuration:200,
+});
+
+map.on('load',function(){
+  scheduleRefresh();
+  map.on('moveend',scheduleRefresh);
+  map.on('zoomend',scheduleRefresh);
+  map.on('click',function(e){
+    if(e.defaultPrevented)return;
+    selectedId=null;
+    renderMarkers();
+    post({type:'mapClick'});
+  });
+  post({type:'ready'});
+});
+
+var rafTimer=null;
+function scheduleRefresh(){
+  clearTimeout(rafTimer);
+  rafTimer=setTimeout(function(){
+    renderMarkers();
+    var c=map.getCenter();var b=map.getBounds();
+    post({type:'regionChange',lat:c.lat,lng:c.lng,zoom:map.getZoom(),
+      minLat:b.getSouth(),maxLat:b.getNorth(),minLng:b.getWest(),maxLng:b.getEast()});
+  },180);
+}
+
+/* ─── render all markers ─── */
+function renderMarkers(){
+  if(!allFeatures.length)return;
+  var zoom=Math.round(map.getZoom());
+  var b=map.getBounds();
+  var bbox=[b.getWest(),b.getSouth(),b.getEast(),b.getNorth()];
+  var clusters=sc.getClusters(bbox,zoom);
+
+  /* ids in this frame */
+  var frameIds=new Set(clusters.map(function(f){
+    return f.properties.cluster?'c'+f.properties.cluster_id:'e'+f.properties.id;
+  }));
+
+  /* remove stale */
+  Object.keys(domMarkers).forEach(function(k){
+    if(!frameIds.has(k)){domMarkers[k].remove();delete domMarkers[k];}
+  });
+
+  clusters.forEach(function(f){
+    if(f.properties.cluster){
+      renderCluster(f);
+    }else{
+      renderEvent(f,zoom);
+    }
+  });
+}
+
+/* ─── cluster bubble ─── */
+function renderCluster(f){
+  var cid='c'+f.properties.cluster_id;
+  if(domMarkers[cid])return;
+  var count=f.properties.point_count;
+  var s=count<10?38:count<50?46:54;
+  var el=document.createElement('div');
+  el.style.cssText='width:'+s+'px;height:'+s+'px;border-radius:50%;'
+    +'background:linear-gradient(135deg,#7C3AED,#A78BFA);'
+    +'display:flex;align-items:center;justify-content:center;'
+    +'color:#fff;font-size:'+(count<10?13:11)+'px;font-weight:800;'
+    +'font-family:-apple-system,BlinkMacSystemFont,sans-serif;'
+    +'box-shadow:0 0 0 3px rgba(167,139,250,0.25),0 4px 16px rgba(124,58,237,0.55);'
+    +'cursor:pointer;user-select:none;';
+  el.textContent=count<1000?count:'1k+';
+  el.addEventListener('click',function(e){
+    e.stopPropagation();
+    var exp=sc.getClusterExpansionZoom(f.properties.cluster_id);
+    map.easeTo({center:f.geometry.coordinates,zoom:exp,duration:350});
+  });
+  domMarkers[cid]=new maplibregl.Marker({element:el,anchor:'center'})
+    .setLngLat(f.geometry.coordinates).addTo(map);
+}
+
+/* ─── single event dot / price pill ─── */
+function renderEvent(f,zoom){
+  var eid='e'+f.properties.id;
+  var isSel=f.properties.id===selectedId;
+  var color=f.properties.color;
+  var price=f.properties.price;
+  var showPrice=zoom>=PRICE_ZOOM;
+
+  /* build element */
+  var el=document.createElement('div');
+  if(showPrice){
+    /* price pill */
+    var label=(!price||price<=0)?'Free':Math.round(price)+'€';
+    el.style.cssText=[
+      'padding:5px 11px',
+      'border-radius:22px',
+      'font-size:12px','font-weight:700',
+      'font-family:-apple-system,BlinkMacSystemFont,sans-serif',
+      'white-space:nowrap','cursor:pointer',
+      'transition:transform 0.15s ease,box-shadow 0.15s ease',
+      'user-select:none',
+      isSel
+        ?'background:'+color+';color:#fff;border:none;'
+         +'box-shadow:0 0 0 2px #fff,0 4px 16px '+color+'99;'
+         +'transform:scale(1.1);'
+        :'background:rgba(10,10,20,0.82);color:'+color+';'
+         +'border:1.5px solid '+color+';'
+         +'box-shadow:0 2px 12px rgba(0,0,0,0.6);',
+    ].join(';');
+    el.textContent=label;
+  }else{
+    /* dot */
+    var r=isSel?13:8;
+    el.style.cssText='width:'+r*2+'px;height:'+r*2+'px;border-radius:50%;'
+      +'background:'+color+';cursor:pointer;'
+      +'border:'+(isSel?'2.5px solid #fff':'2px solid rgba(255,255,255,0.5)')+';'
+      +'box-shadow:0 0 '+(isSel?'14':'8')+'px '+color+(isSel?'cc':'88')+';'
+      +'transition:all 0.15s ease;';
+  }
+
+  el.addEventListener('click',function(e){
+    e.stopPropagation();
+    e.preventDefault();
+    selectedId=f.properties.id;
+    renderMarkers();
+    post({type:'eventClick',id:f.properties.id});
+  });
+
+  /* remove stale marker and recreate */
+  if(domMarkers[eid])domMarkers[eid].remove();
+  domMarkers[eid]=new maplibregl.Marker({element:el,anchor:'center'})
+    .setLngLat(f.geometry.coordinates).addTo(map);
+}
+
+/* ─── public API ─── */
+window.setEvents=function(json){
+  try{
+    var events=JSON.parse(json);
+    allFeatures=events.map(function(e){
+      return{type:'Feature',
+        geometry:{type:'Point',coordinates:[e.lng,e.lat]},
+        properties:{id:e.id,color:eventColor(e.eventType),price:e.price,title:e.title}};
+    });
+    sc.load(allFeatures);
+    renderMarkers();
+  }catch(err){post({type:'error',msg:String(err)});}
+};
+window.deselectAll=function(){selectedId=null;renderMarkers();};
+window.flyTo=function(lat,lng){
+  map.flyTo({center:[lng,lat],zoom:Math.max(map.getZoom(),14),duration:700,essential:true});
+};
+window.setCenter=function(lat,lng,zoom){
+  map.jumpTo({center:[lng,lat],zoom:zoom||map.getZoom()});
+};
+</script>
+</body>
+</html>`;
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
 function getEventColor(eventType?: string | null): string {
   const t = String(eventType || '').toLowerCase();
   if (t.includes('concert')  || t.includes('concierto')) return '#38BDF8';
@@ -69,140 +246,13 @@ function getEventColor(eventType?: string | null): string {
   return '#34D399';
 }
 
-// ─── Error boundary ───────────────────────────────────────────────────────────
-class MapErrorBoundary extends Component<
-  { children: ReactNode; onError: () => void },
-  { hasError: boolean }
-> {
-  state = { hasError: false };
-  static getDerivedStateFromError() { return { hasError: true }; }
-  componentDidCatch() { this.props.onError(); }
-  render() {
-    if (this.state.hasError) return null;
-    return this.props.children;
-  }
-}
-
-// ─── Dot marker (low zoom) ────────────────────────────────────────────────────
-const EventDot = memo(({ color, selected }: { color: string; selected: boolean }) => (
-  <View style={styles.markerHitArea}>
-    <View style={[styles.dotOuter, { borderColor: selected ? color : color + '55' }]}>
-      <View style={[styles.dotInner, { backgroundColor: color, opacity: selected ? 1 : 0.85 }]} />
-    </View>
-  </View>
-));
-EventDot.displayName = 'EventDot';
-
-// ─── Price-badge marker (high zoom / selected) ────────────────────────────────
-const EventPin = memo(({ color, selected, price }: { color: string; selected: boolean; price?: string }) => {
-  const pulse = useRef(new RNAnimated.Value(0)).current;
-
-  useEffect(() => {
-    if (!selected) { pulse.setValue(0); return; }
-    const anim = RNAnimated.loop(
-      RNAnimated.sequence([
-        RNAnimated.timing(pulse, { toValue: 1, duration: 900, useNativeDriver: true }),
-        RNAnimated.timing(pulse, { toValue: 0, duration: 900, useNativeDriver: true }),
-      ])
-    );
-    anim.start();
-    return () => anim.stop();
-  }, [pulse, selected]);
-
-  const pulseScale   = pulse.interpolate({ inputRange: [0, 1], outputRange: [1, 1.9] });
-  const pulseOpacity = pulse.interpolate({ inputRange: [0, 0.5, 1], outputRange: [0.6, 0.2, 0] });
-
-  const priceNum = parseFloat(String(price || '0'));
-  const priceLabel = !Number.isFinite(priceNum) || priceNum <= 0
-    ? 'Free'
-    : priceNum < 1000 ? `${Math.round(priceNum)}€` : `${(priceNum / 1000).toFixed(1)}k€`;
-
-  return (
-    <View style={styles.markerHitArea}>
-    <View style={[styles.pinWrap, selected && styles.pinWrapSelected]}>
-      {selected && (
-        <RNAnimated.View style={[
-          styles.pinPulse,
-          { borderColor: color, transform: [{ scale: pulseScale }], opacity: pulseOpacity },
-        ]} />
-      )}
-      <View style={[
-        styles.pinBadge,
-        { backgroundColor: selected ? color : '#111127', borderColor: color, shadowColor: color },
-      ]}>
-        <Text style={[styles.pinPrice, { color: selected ? '#fff' : color }]} numberOfLines={1}>
-          {priceLabel}
-        </Text>
-      </View>
-      <View style={[styles.pinTailOuter, { borderTopColor: color }]} />
-    </View>
-    </View>
-  );
-});
-EventPin.displayName = 'EventPin';
-
-// ─── Cluster bubble ───────────────────────────────────────────────────────────
-const ClusterBubble = memo(({ count, color }: { count: number; color: string }) => (
-  <View style={[styles.clusterBubble, { borderColor: color + 'CC' }]}>
-    <View style={[styles.clusterInner, { backgroundColor: color + '22' }]}>
-      <Text style={[styles.clusterText, { color }]}>{count}</Text>
-    </View>
-  </View>
-));
-ClusterBubble.displayName = 'ClusterBubble';
-
-// ─── Clustering logic ─────────────────────────────────────────────────────────
-export function __test_clusterForRegion(
-  list: EventWithGeo[],
-  r: Region,
-  getColor: (t?: string | null) => string,
-  skipId?: string | null,
-): ClusterItem[] {
-  // Never cluster the selected event — it's always rendered individually
-  const toCluster = skipId ? list.filter(e => e.id !== skipId) : list;
-
-  const tryCluster = (mult: number) => {
-    const latStep = Math.max(0.003, (r.latitudeDelta / 12) * mult);
-    const lngStep = Math.max(0.003, (r.longitudeDelta / 12) * mult);
-    const buckets = new Map<string, EventWithGeo[]>();
-    for (const e of toCluster) {
-      const key = `${Math.floor(e._lat / latStep)}:${Math.floor(e._lng / lngStep)}`;
-      const arr = buckets.get(key);
-      if (arr) arr.push(e); else buckets.set(key, [e]);
-    }
-    return buckets;
-  };
-
-  let mult = 1;
-  let buckets = tryCluster(mult);
-  const maxSlots = MAX_MARKERS_RENDERED - (skipId ? 1 : 0);
-  while (buckets.size > maxSlots && mult < 16) {
-    mult *= 1.4;
-    buckets = tryCluster(mult);
-  }
-
-  const out: ClusterItem[] = [];
-  for (const [bk, items] of buckets.entries()) {
-    if (items.length === 1) {
-      const e = items[0];
-      out.push({ kind: 'event', key: `e:${e.id}`, center: { latitude: e._lat, longitude: e._lng }, event: e, color: getColor(e.eventType) });
-    } else {
-      const avgLat = items.reduce((s, i) => s + i._lat, 0) / items.length;
-      const avgLng = items.reduce((s, i) => s + i._lng, 0) / items.length;
-      out.push({ kind: 'cluster', key: `c:${bk}`, center: { latitude: avgLat, longitude: avgLng }, count: items.length, color: getColor(items[0]?.eventType) });
-    }
-  }
-
-  // Always inject the selected event as an individual marker
-  if (skipId) {
-    const selE = list.find(e => e.id === skipId);
-    if (selE) {
-      out.push({ kind: 'event', key: `e:${selE.id}`, center: { latitude: selE._lat, longitude: selE._lng }, event: selE, color: getColor(selE.eventType) });
-    }
-  }
-
-  return out.sort((a, b) => (b.kind === 'cluster' ? b.count : 1) - (a.kind === 'cluster' ? a.count : 1));
-}
+const EVENT_TYPES = [
+  { key: 'all',      label: 'Todo',      color: '#FFFFFF', Icon: Sparkles },
+  { key: 'party',    label: 'Fiesta',    color: '#A78BFA', Icon: Flame    },
+  { key: 'concert',  label: 'Concierto', color: '#38BDF8', Icon: Music    },
+  { key: 'festival', label: 'Festival',  color: '#FB923C', Icon: Sparkles },
+  { key: 'other',    label: 'Otro',      color: '#34D399', Icon: Tag      },
+];
 
 // ─── Main component ───────────────────────────────────────────────────────────
 export default function PartyMapScreen() {
@@ -213,69 +263,46 @@ export default function PartyMapScreen() {
 
   const supabaseUrl     = process.env.EXPO_PUBLIC_SUPABASE_URL      || '';
   const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '';
-  const mapsApiKey      = process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY;
-  const hasMapsKey      =
-    Platform.OS !== 'android' ||
-    (Constants as any)?.appOwnership === 'expo' ||
-    (!!mapsApiKey && !mapsApiKey.includes('TU_CLAVE_API'));
 
-  // ── Map state ────────────────────────────────────────────────────────────────
-  const mapRef         = useRef<MapView>(null);
-  const mapMountKeyRef = useRef(0);
-  const [mapMountKey, setMapMountKey] = useState(0);
-  const [mapReady,    setMapReady]    = useState(false);
-  const [mapCrashed,  setMapCrashed]  = useState(false);
-  const mapEverReadyRef  = useRef(false);
-  const mapInitTimerRef  = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // ── Refs ─────────────────────────────────────────────────────────────────────
+  const webViewRef       = useRef<WebView>(null);
+  const mapReadyRef      = useRef(false);
+  const pendingEventsRef = useRef<string | null>(null);
+  const fetchAbortRef    = useRef<AbortController | null>(null);
+  const searchAbortRef   = useRef<AbortController | null>(null);
+  const debounceRef      = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const searchDebRef     = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const fetchSeqRef      = useRef(0);
+  const lastBboxRef      = useRef('');
+  const lastFetchAtRef   = useRef(0);
+  const allEventsRef     = useRef<Map<string, EventWithGeo & { _seenAt: number }>>(new Map());
+  const currentRegionRef = useRef({ lat: 40.4168, lng: -3.7038, zoom: 13 });
 
-  // ── Zoom-based marker mode ───────────────────────────────────────────────────
-  // false = small colored dot, true = price badge
-  const [showPrice, setShowPrice] = useState(false);
-
-  // ── Location ─────────────────────────────────────────────────────────────────
-  const [locPerm, setLocPerm] = useState<'loading' | 'granted' | 'denied'>('loading');
-  const DEFAULT_REGION: Region = { latitude: 40.4168, longitude: -3.7038, latitudeDelta: 0.12, longitudeDelta: 0.12 };
-  const [initialRegion, setInitialRegion] = useState<Region>(DEFAULT_REGION);
-  const viewportRef = useRef<Region>(DEFAULT_REGION);
-
-  // ── Events cache ─────────────────────────────────────────────────────────────
-  const allEventsRef       = useRef<Map<string, EventWithGeo & { _seenAt: number }>>(new Map());
-  const fetchAbortRef      = useRef<AbortController | null>(null);
-  const searchFetchAbortRef = useRef<AbortController | null>(null);
-  const fetchSeqRef        = useRef(0);
-  const lastBboxKeyRef     = useRef('');
-  const lastFetchAtRef     = useRef(0);
-  const debounceRef        = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const searchDebounceRef  = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  // ── Clusters & selection ──────────────────────────────────────────────────────
-  const [visibleClusters, setVisibleClusters] = useState<ClusterItem[]>([]);
-  const lastSigRef   = useRef('');
+  // ── State ─────────────────────────────────────────────────────────────────────
+  const [mapReady,      setMapReady]      = useState(false);
+  const [locPerm,       setLocPerm]       = useState<'loading' | 'granted' | 'denied'>('loading');
+  const [initialCenter, setInitialCenter] = useState({ lat: 40.4168, lng: -3.7038 });
   const [selectedEvent, setSelectedEvent] = useState<EventWithGeo | null>(null);
-  const [selectedId,    setSelectedId]    = useState<string | null>(null);
-  const selectedIdRef   = useRef<string | null>(null);  // stable ref for callbacks
-  const justFocusedRef  = useRef(false);               // blocks map onPress dismiss right after marker tap
-
-  // ── Search ───────────────────────────────────────────────────────────────────
   const [searchText,    setSearchText]    = useState('');
   const [searchFocused, setSearchFocused] = useState(false);
   const [searchResults, setSearchResults] = useState<EventWithGeo[]>([]);
   const [activeFilter,  setActiveFilter]  = useState('all');
+  const activeFilterRef = useRef('all');
   const [isSearching,   setIsSearching]   = useState(false);
+  const [htmlContent,   setHtmlContent]   = useState<string | null>(null);
 
-  // ── Animations ───────────────────────────────────────────────────────────────
-  // Card uses only entering/exiting — no separate shared-value animation to avoid conflicts
+  // ── Shared filters (from feed) ────────────────────────────────────────────────
+  const { filters: sharedFilters } = useFilters();
+  const sharedFiltersRef = useRef(sharedFilters);
+  useEffect(() => { sharedFiltersRef.current = sharedFilters; }, [sharedFilters]);
 
-  // ─── Helpers ──────────────────────────────────────────────────────────────────
-  const clamp = (n: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, n));
+  // Keep ref in sync with activeFilter state so sendEventsToMap can read it synchronously
+  useEffect(() => {
+    activeFilterRef.current = activeFilter;
+    if (mapReadyRef.current) sendEventsToMap();
+  }, [activeFilter, sendEventsToMap]);
 
-  const sanitizeRegion = useCallback((r: Region): Region => ({
-    latitude:       clamp(Number.isFinite(Number(r?.latitude))       ? Number(r.latitude)       : 40.4168, -85, 85),
-    longitude:      clamp(Number.isFinite(Number(r?.longitude))      ? Number(r.longitude)      : -3.7038, -180, 180),
-    latitudeDelta:  clamp(Number.isFinite(Number(r?.latitudeDelta))  ? Number(r.latitudeDelta)  : 0.12, 0.002, 2.5),
-    longitudeDelta: clamp(Number.isFinite(Number(r?.longitudeDelta)) ? Number(r.longitudeDelta) : 0.12, 0.002, 2.5),
-  }), []);
-
+  // ── Helpers ───────────────────────────────────────────────────────────────────
   const haversineKm = useCallback((lat1: number, lon1: number, lat2: number, lon2: number) => {
     const R = 6371, dL = ((lat2 - lat1) * Math.PI) / 180, dO = ((lon2 - lon1) * Math.PI) / 180;
     const a = Math.sin(dL / 2) ** 2 + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dO / 2) ** 2;
@@ -290,151 +317,93 @@ export default function PartyMapScreen() {
 
   const withTimeout = useCallback(<T,>(p: Promise<T>, ms: number): Promise<T> => {
     let id: ReturnType<typeof setTimeout>;
-    return Promise.race([p, new Promise<T>((_, rej) => { id = setTimeout(() => rej(new Error('timeout')), ms); })]).finally(() => clearTimeout(id));
+    return Promise.race([p, new Promise<never>((_, rej) => { id = setTimeout(() => rej(new Error('timeout')), ms); })]).finally(() => clearTimeout(id));
   }, []);
 
-  // Keep selectedIdRef in sync
-  useEffect(() => { selectedIdRef.current = selectedId; }, [selectedId]);
+  // ── Send events to WebView (applies shared filters before sending) ────────────
+  const sendEventsToMap = useCallback(() => {
+    const f = sharedFiltersRef.current;
+    const mapFilter = activeFilterRef.current; // the map's own event-type chips
+    let events = [...allEventsRef.current.values()];
 
-  // ─── Compute clusters ─────────────────────────────────────────────────────────
-  const computeClusters = useCallback((region: Region, overrideSelId?: string | null) => {
-    const selId = overrideSelId !== undefined ? overrideSelId : selectedIdRef.current;
-    const all   = Array.from(allEventsRef.current.values());
-    const pad   = 0.6;
-    const minLat = region.latitude  - region.latitudeDelta  * (0.5 + pad);
-    const maxLat = region.latitude  + region.latitudeDelta  * (0.5 + pad);
-    const minLng = region.longitude - region.longitudeDelta * (0.5 + pad);
-    const maxLng = region.longitude + region.longitudeDelta * (0.5 + pad);
+    // Map's own event-type chip filter
+    if (mapFilter && mapFilter !== 'all') {
+      events = events.filter(e =>
+        String(e.eventType || '').toLowerCase().includes(mapFilter) ||
+        String(e.theme || '').toLowerCase().includes(mapFilter) ||
+        String(e.title || '').toLowerCase().includes(mapFilter)
+      );
+    }
 
-    const visible = all.filter(e =>
-      e._lat >= minLat && e._lat <= maxLat &&
-      e._lng >= minLng && e._lng <= maxLng &&
-      (activeFilter === 'all' || (e.eventType || 'party').toLowerCase().includes(activeFilter))
-    );
+    if (f.musicType) {
+      const m = f.musicType.toLowerCase();
+      events = events.filter(e =>
+        e.theme?.toLowerCase().includes(m) ||
+        e.eventType?.toLowerCase().includes(m) ||
+        e.description?.toLowerCase().includes(m) ||
+        e.title?.toLowerCase().includes(m)
+      );
+    }
+    if (f.maxPrice != null) {
+      events = events.filter(e => parseFloat(String(e.price ?? '0')) <= f.maxPrice!);
+    }
+    if (f.minAge) {
+      events = events.filter(e => {
+        if (!e.ageRestriction) return false;
+        const age = parseInt(String(e.ageRestriction).replace(/\D/g, '')) || 0;
+        return age >= f.minAge!;
+      });
+    }
+    if (f.dressCode) {
+      const dc = f.dressCode.toLowerCase();
+      events = events.filter(e => e.dressCode?.toLowerCase().includes(dc));
+    }
 
-    const clustered = __test_clusterForRegion(visible, region, getEventColor, selId);
-    const sig = clustered.slice(0, 60).map(c => c.kind === 'cluster' ? `${c.key}:${c.count}` : c.key).join('|');
-    if (sig === lastSigRef.current) return;
-    lastSigRef.current = sig;
-    setVisibleClusters(clustered);
-  }, [activeFilter]);
-
-  // ─── Local search ─────────────────────────────────────────────────────────────
-  const updateSearchResults = useCallback((text: string, filter: string) => {
-    const q   = text.trim().toLowerCase();
-    const all = Array.from(allEventsRef.current.values());
-    if (!q && filter === 'all') { setSearchResults([]); return; }
-
-    const filtered = all.filter(e => {
-      const typeMatch = filter === 'all' || (e.eventType || 'party').toLowerCase().includes(filter);
-      const textMatch = !q || [e.title, e.location, e.description, e.eventType]
-        .some(f => (f || '').toLowerCase().includes(q));
-      return typeMatch && textMatch;
-    }).sort((a, b) => a._distanceKm - b._distanceKm).slice(0, 15);
-
-    setSearchResults(filtered);
+    const payload = events.map(e => ({
+      id:        e.id,
+      lat:       e._lat,
+      lng:       e._lng,
+      eventType: e.eventType,
+      title:     e.title,
+      price:     e.price,
+    }));
+    const json = JSON.stringify(payload);
+    if (!mapReadyRef.current) {
+      pendingEventsRef.current = json;
+      return;
+    }
+    webViewRef.current?.injectJavaScript(`window.setEvents(${JSON.stringify(json)});true;`);
   }, []);
 
-  // ─── API search by event title ────────────────────────────────────────────────
-  const searchEventsByName = useCallback(async (q: string, filter: string) => {
-    if (!q.trim() || !supabaseUrl || !supabaseAnonKey) return;
-    if (searchFetchAbortRef.current) searchFetchAbortRef.current.abort();
-    const ctrl = new AbortController();
-    searchFetchAbortRef.current = ctrl;
-    setIsSearching(true);
-    try {
-      const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0);
-      const sel = 'id,title,description,poster_url,event_date,ticket_price,event_type,venues!inner(name,latitude,longitude)';
-      let url = `${supabaseUrl.replace(/\/$/, '')}/rest/v1/events?select=${encodeURIComponent(sel)}&title=ilike.*${encodeURIComponent(q.trim())}*&event_date=gte.${todayStart.toISOString()}&order=event_date.asc&limit=20`;
-      if (filter !== 'all') url += `&event_type=ilike.*${encodeURIComponent(filter)}*`;
-
-      const res = await withTimeout(fetch(url, {
-        signal: ctrl.signal,
-        headers: { apikey: supabaseAnonKey, Authorization: `Bearer ${supabaseAnonKey}` },
-      }), 8000);
-      if (!res.ok) return;
-      const remote = await res.json();
-      if (!Array.isArray(remote)) return;
-
-      const now  = Date.now();
-      const pad2 = (n: number) => String(n).padStart(2, '0');
-      const vp   = viewportRef.current;
-      for (const raw of remote) {
-        const id = String(raw?.id || ''); if (!id) continue;
-        const venue = raw?.venues || {};
-        const lat = Number(venue.latitude), lng = Number(venue.longitude);
-        if (!Number.isFinite(lat) || !Number.isFinite(lng)) continue;
-        const d = new Date(raw.event_date);
-        if (!allEventsRef.current.has(id)) {
-          allEventsRef.current.set(id, {
-            id, title: String(raw.title || ''),
-            startsAt: raw.event_date, updatedAt: null,
-            date: `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`,
-            time: `${pad2(d.getHours())}:${pad2(d.getMinutes())}`,
-            location: String(venue.name || 'Sin ubicación'),
-            price: String(raw.ticket_price ?? '0'),
-            capacity: 0, sold: 0,
-            imageUrl: String(raw.poster_url || ''),
-            description: String(raw.description || ''),
-            eventType: String(raw.event_type || 'party').trim(),
-            creatorId: raw.creator_id,
-            ticketTypes: [],
-            venues: { latitude: lat, longitude: lng, name: String(venue.name || '') },
-            _lat: lat, _lng: lng,
-            _distanceKm: haversineKm(vp.latitude, vp.longitude, lat, lng),
-            _seenAt: now,
-          } as any);
-        }
-      }
-      updateSearchResults(q, filter);
-    } catch (e: any) {
-      if (e?.name !== 'AbortError') console.warn('[PartyMap] name-search error:', e?.message);
-    } finally {
-      setIsSearching(false);
-    }
-  }, [supabaseUrl, supabaseAnonKey, withTimeout, haversineKm, updateSearchResults]);
-
-  // Run local + debounced API search on text/filter change
-  useEffect(() => {
-    updateSearchResults(searchText, activeFilter);
-    if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
-    if (searchText.trim().length >= 2) {
-      searchDebounceRef.current = setTimeout(() => {
-        void searchEventsByName(searchText, activeFilter);
-      }, 500);
-    }
-  }, [searchText, activeFilter, updateSearchResults, searchEventsByName]);
-
-  // ─── Viewport fetch ───────────────────────────────────────────────────────────
-  const fetchForRegion = useCallback(async (region: Region) => {
+  // ── Fetch events for viewport ─────────────────────────────────────────────────
+  const fetchForRegion = useCallback(async (minLat: number, maxLat: number, minLng: number, maxLng: number) => {
     if (!supabaseUrl || !supabaseAnonKey) return;
-    const safe = sanitizeRegion(region);
-    const pad  = 0.85;
-    const minLat = safe.latitude  - safe.latitudeDelta  * (0.5 + pad);
-    const maxLat = safe.latitude  + safe.latitudeDelta  * (0.5 + pad);
-    const minLng = safe.longitude - safe.longitudeDelta * (0.5 + pad);
-    const maxLng = safe.longitude + safe.longitudeDelta * (0.5 + pad);
 
-    const bboxKey = `${minLat.toFixed(3)}|${maxLat.toFixed(3)}|${minLng.toFixed(3)}|${maxLng.toFixed(3)}`;
-    if (bboxKey === lastBboxKeyRef.current && Date.now() - lastFetchAtRef.current < 8000) return;
+    const pad    = 0.5;
+    const pMinLat = minLat - (maxLat - minLat) * pad;
+    const pMaxLat = maxLat + (maxLat - minLat) * pad;
+    const pMinLng = minLng - (maxLng - minLng) * pad;
+    const pMaxLng = maxLng + (maxLng - minLng) * pad;
+
+    const bboxKey = `${pMinLat.toFixed(3)}|${pMaxLat.toFixed(3)}|${pMinLng.toFixed(3)}|${pMaxLng.toFixed(3)}`;
+    if (bboxKey === lastBboxRef.current && Date.now() - lastFetchAtRef.current < 8000) return;
 
     if (fetchAbortRef.current) fetchAbortRef.current.abort();
     const ctrl = new AbortController();
     fetchAbortRef.current = ctrl;
     const seq = ++fetchSeqRef.current;
-    lastBboxKeyRef.current = bboxKey;
+    lastBboxRef.current = bboxKey;
 
     try {
       const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0);
       const fromIso = todayStart.toISOString();
       const toIso   = new Date(todayStart.getTime() + 86400000 * FETCH_HORIZON_DAYS).toISOString();
       const sel = 'id,title,description,poster_url,event_date,ticket_price,available_tickets,sold_tickets,event_type,creator_id,updated_at,venues!inner(name,latitude,longitude)';
-      const url =
-        `${supabaseUrl.replace(/\/$/, '')}/rest/v1/events` +
-        `?select=${encodeURIComponent(sel)}&order=event_date.asc` +
-        `&event_date=gte.${encodeURIComponent(fromIso)}&event_date=lte.${encodeURIComponent(toIso)}` +
-        `&venues.latitude=gte.${minLat}&venues.latitude=lte.${maxLat}` +
-        `&venues.longitude=gte.${minLng}&venues.longitude=lte.${maxLng}`;
+      const url = `${supabaseUrl.replace(/\/$/, '')}/rest/v1/events`
+        + `?select=${encodeURIComponent(sel)}&order=event_date.asc`
+        + `&event_date=gte.${encodeURIComponent(fromIso)}&event_date=lte.${encodeURIComponent(toIso)}`
+        + `&venues.latitude=gte.${pMinLat}&venues.latitude=lte.${pMaxLat}`
+        + `&venues.longitude=gte.${pMinLng}&venues.longitude=lte.${pMaxLng}`;
 
       const res = await withTimeout(fetch(url, {
         signal: ctrl.signal,
@@ -447,12 +416,14 @@ export default function PartyMapScreen() {
 
       const now  = Date.now();
       const pad2 = (n: number) => String(n).padStart(2, '0');
+      const center = currentRegionRef.current;
+
       for (const raw of remote) {
         const id = String(raw?.id || ''); if (!id) continue;
         const venue = raw?.venues || {};
         const lat = Number(venue.latitude), lng = Number(venue.longitude);
         if (!Number.isFinite(lat) || !Number.isFinite(lng)) continue;
-        const d    = new Date(raw.event_date);
+        const d = new Date(raw.event_date);
         const prev = allEventsRef.current.get(id);
         if (!prev || (raw.updated_at && prev.updatedAt !== raw.updated_at)) {
           allEventsRef.current.set(id, {
@@ -471,10 +442,10 @@ export default function PartyMapScreen() {
             ticketTypes: [],
             venues: { latitude: lat, longitude: lng, name: String(venue.name || '') },
             _lat: lat, _lng: lng,
-            _distanceKm: haversineKm(safe.latitude, safe.longitude, lat, lng),
+            _distanceKm: haversineKm(center.lat, center.lng, lat, lng),
             _seenAt: now,
           } as any);
-        } else { prev._seenAt = now; }
+        } else { (prev as any)._seenAt = now; }
       }
 
       // Prune old entries
@@ -488,253 +459,243 @@ export default function PartyMapScreen() {
       }
 
       lastFetchAtRef.current = now;
-      computeClusters(safe);
-      updateSearchResults(searchText, activeFilter);
+      sendEventsToMap();
     } catch (e: any) {
-      if (e?.name !== 'AbortError') computeClusters(safe);
+      if (e?.name !== 'AbortError') sendEventsToMap();
     }
-  }, [supabaseUrl, supabaseAnonKey, sanitizeRegion, withTimeout, haversineKm, computeClusters, updateSearchResults, searchText, activeFilter]);
+  }, [supabaseUrl, supabaseAnonKey, withTimeout, haversineKm, sendEventsToMap]);
 
-  // ─── Location permission ───────────────────────────────────────────────────────
+  // ── Re-send pins whenever shared filters change ───────────────────────────────
+  useEffect(() => {
+    if (mapReadyRef.current) sendEventsToMap();
+  }, [sharedFilters, sendEventsToMap]);
+
+  // ── WebView message handler ───────────────────────────────────────────────────
+  const onWebViewMessage = useCallback((event: any) => {
+    try {
+      const msg = JSON.parse(event.nativeEvent.data);
+      if (msg.type === 'ready') {
+        mapReadyRef.current = true;
+        setMapReady(true);
+        if (pendingEventsRef.current) {
+          webViewRef.current?.injectJavaScript(`window.setEvents(${JSON.stringify(pendingEventsRef.current)});true;`);
+          pendingEventsRef.current = null;
+        }
+      } else if (msg.type === 'regionChange') {
+        currentRegionRef.current = { lat: msg.lat, lng: msg.lng, zoom: msg.zoom };
+        if (debounceRef.current) clearTimeout(debounceRef.current);
+        debounceRef.current = setTimeout(() => {
+          fetchForRegion(msg.minLat, msg.maxLat, msg.minLng, msg.maxLng);
+        }, VIEWPORT_DEBOUNCE_MS);
+      } else if (msg.type === 'eventClick') {
+        const ev = allEventsRef.current.get(msg.id);
+        if (ev) setSelectedEvent(ev);
+        setSearchFocused(false);
+        Keyboard.dismiss();
+      } else if (msg.type === 'mapClick') {
+        setSelectedEvent(null);
+      }
+    } catch {}
+  }, [fetchForRegion]);
+
+  // ── Location permission ───────────────────────────────────────────────────────
   useEffect(() => {
     let mounted = true;
     (async () => {
       try {
         const perm = await withTimeout(Location.requestForegroundPermissionsAsync(), 6000);
         if (!mounted) return;
-        if (perm.status !== 'granted') { setLocPerm('denied'); return; }
+        if (perm.status !== 'granted') { setLocPerm('denied'); setHtmlContent(buildMapHtml(40.4168, -3.7038)); return; }
         setLocPerm('granted');
         const pos = await withTimeout(Location.getCurrentPositionAsync({}), 8000);
         if (!mounted) return;
-        const next = sanitizeRegion({ latitude: pos.coords.latitude, longitude: pos.coords.longitude, latitudeDelta: 0.10, longitudeDelta: 0.10 });
-        viewportRef.current = next;
-        setInitialRegion(next);
-        try { mapRef.current?.animateToRegion(next, 600); } catch {}
-      } catch { if (mounted) setLocPerm('denied'); }
+        const lat = pos.coords.latitude, lng = pos.coords.longitude;
+        setInitialCenter({ lat, lng });
+        currentRegionRef.current = { lat, lng, zoom: 13 };
+        setHtmlContent(buildMapHtml(lat, lng));
+      } catch {
+        if (mounted) { setLocPerm('denied'); setHtmlContent(buildMapHtml(40.4168, -3.7038)); }
+      }
     })();
     return () => { mounted = false; };
-  }, [sanitizeRegion, withTimeout]);
+  }, [withTimeout]);
 
-  // ─── Map init timeout ─────────────────────────────────────────────────────────
+  // ── Deep-link q param ─────────────────────────────────────────────────────────
   useEffect(() => {
-    if (locPerm === 'loading' || !hasMapsKey) return;
-    if (mapEverReadyRef.current) return;
-    mapInitTimerRef.current = setTimeout(() => {
-      if (!mapEverReadyRef.current) {
-        setMapCrashed(false);
-        setMapMountKey(k => { mapMountKeyRef.current = k + 1; return k + 1; });
+    const q = String(params?.q || '').trim();
+    if (!q || !mapReadyRef.current) return;
+    setSearchText(q);
+    (async () => {
+      try {
+        const hits = await withTimeout(Location.geocodeAsync(q), 8000);
+        if (!hits?.length) return;
+        webViewRef.current?.injectJavaScript(`window.flyTo(${hits[0].latitude},${hits[0].longitude});true;`);
+      } catch {}
+    })();
+  }, [params?.q, withTimeout]);
+
+  // ── Search ────────────────────────────────────────────────────────────────────
+  const updateLocalResults = useCallback((q: string, filter: string) => {
+    const query = q.trim().toLowerCase();
+    const f = sharedFiltersRef.current;
+    const hasSharedFilter = f.musicType || f.maxPrice != null || f.minAge || f.dressCode;
+    if (!query && filter === 'all' && !hasSharedFilter) { setSearchResults([]); return; }
+    const results = [...allEventsRef.current.values()]
+      .filter(e => {
+        if (filter !== 'all' && !String(e.eventType || '').toLowerCase().includes(filter)) return false;
+        if (query && ![e.title, e.location, e.description].some(s => String(s || '').toLowerCase().includes(query))) return false;
+        if (f.musicType) {
+          const m = f.musicType.toLowerCase();
+          if (!(e.theme?.toLowerCase().includes(m) || e.eventType?.toLowerCase().includes(m) || e.description?.toLowerCase().includes(m) || e.title?.toLowerCase().includes(m))) return false;
+        }
+        if (f.maxPrice != null && parseFloat(String(e.price ?? '0')) > f.maxPrice) return false;
+        if (f.minAge) {
+          const age = parseInt(String(e.ageRestriction ?? '').replace(/\D/g, '')) || 0;
+          if (age < f.minAge) return false;
+        }
+        if (f.dressCode && !e.dressCode?.toLowerCase().includes(f.dressCode.toLowerCase())) return false;
+        return true;
+      })
+      .sort((a, b) => a._distanceKm - b._distanceKm)
+      .slice(0, 20);
+    setSearchResults(results);
+  }, []);
+
+  const searchByName = useCallback(async (q: string, filter: string) => {
+    if (!q.trim() || !supabaseUrl) return;
+    if (searchAbortRef.current) searchAbortRef.current.abort();
+    const ctrl = new AbortController();
+    searchAbortRef.current = ctrl;
+    setIsSearching(true);
+    try {
+      const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0);
+      const sel = 'id,title,poster_url,event_date,ticket_price,event_type,creator_id,updated_at,venues!inner(name,latitude,longitude)';
+      const url = `${supabaseUrl.replace(/\/$/, '')}/rest/v1/events`
+        + `?select=${encodeURIComponent(sel)}&title=ilike.${encodeURIComponent(`*${q}*`)}`
+        + `&event_date=gte.${encodeURIComponent(todayStart.toISOString())}&limit=20`;
+      const res = await withTimeout(fetch(url, { signal: ctrl.signal, headers: { apikey: supabaseAnonKey, Authorization: `Bearer ${supabaseAnonKey}` } }), 8000);
+      if (!res.ok) return;
+      const data = await res.json();
+      if (!Array.isArray(data)) return;
+      const center = currentRegionRef.current;
+      const now = Date.now();
+      const pad2 = (n: number) => String(n).padStart(2, '0');
+      for (const raw of data) {
+        const id = String(raw?.id || ''); if (!id) continue;
+        const venue = raw?.venues || {};
+        const lat = Number(venue.latitude), lng = Number(venue.longitude);
+        if (!Number.isFinite(lat) || !Number.isFinite(lng)) continue;
+        if (!allEventsRef.current.has(id)) {
+          const d = new Date(raw.event_date);
+          allEventsRef.current.set(id, {
+            id, title: String(raw.title || ''), startsAt: raw.event_date,
+            updatedAt: raw.updated_at || null,
+            date: `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`,
+            time: `${pad2(d.getHours())}:${pad2(d.getMinutes())}`,
+            location: String(venue.name || ''), price: String(raw.ticket_price ?? '0'),
+            capacity: 0, sold: 0, imageUrl: String(raw.poster_url || ''),
+            description: '', eventType: String(raw.event_type || 'party').trim(),
+            creatorId: raw.creator_id, ticketTypes: [],
+            venues: { latitude: lat, longitude: lng, name: String(venue.name || '') },
+            _lat: lat, _lng: lng,
+            _distanceKm: haversineKm(center.lat, center.lng, lat, lng),
+            _seenAt: now,
+          } as any);
+        }
       }
-    }, 14000);
-    return () => { if (mapInitTimerRef.current) clearTimeout(mapInitTimerRef.current); };
-  }, [locPerm, hasMapsKey, mapMountKey]);
+      updateLocalResults(q, filter);
+    } catch (e: any) {
+      if (e?.name !== 'AbortError') updateLocalResults(q, filter);
+    } finally { setIsSearching(false); }
+  }, [supabaseUrl, supabaseAnonKey, withTimeout, haversineKm, updateLocalResults]);
 
   useEffect(() => {
-    if (!mapReady) return;
-    mapEverReadyRef.current = true;
-    if (mapInitTimerRef.current) clearTimeout(mapInitTimerRef.current);
-    computeClusters(viewportRef.current);
-    void fetchForRegion(viewportRef.current);
-  }, [mapReady, computeClusters, fetchForRegion]);
+    updateLocalResults(searchText, activeFilter);
+    if (searchDebRef.current) clearTimeout(searchDebRef.current);
+    if (searchText.trim().length >= 2) {
+      searchDebRef.current = setTimeout(() => searchByName(searchText, activeFilter), 500);
+    }
+  }, [searchText, activeFilter, updateLocalResults, searchByName]);
 
-  // ─── Region change ────────────────────────────────────────────────────────────
-  const onRegionChangeComplete = useCallback((r: Region) => {
-    const next = sanitizeRegion(r);
-    viewportRef.current = next;
-    const newShowPrice = next.latitudeDelta < PRICE_ZOOM_THRESHOLD;
-    setShowPrice(prev => prev !== newShowPrice ? newShowPrice : prev);
-    if (debounceRef.current) clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(() => {
-      computeClusters(next);
-      void fetchForRegion(next);
-    }, VIEWPORT_DEBOUNCE_MS);
-  }, [computeClusters, fetchForRegion, sanitizeRegion]);
-
-  // ─── Focus on event ───────────────────────────────────────────────────────────
   const focusOnEvent = useCallback((e: EventWithGeo) => {
-    // Block map's onPress dismiss for 400ms — on both platforms the map's onPress
-    // fires right after the marker's onPress and would immediately clear the card.
-    justFocusedRef.current = true;
-    setTimeout(() => { justFocusedRef.current = false; }, 400);
-
-    // Update selectedId ref immediately — must happen BEFORE any re-render
-    selectedIdRef.current = e.id;
-    setSelectedId(e.id);
     setSelectedEvent(e);
     setSearchFocused(false);
     Keyboard.dismiss();
+    webViewRef.current?.injectJavaScript(`window.flyTo(${e._lat},${e._lng});true;`);
+  }, []);
 
-    const next = sanitizeRegion({
-      latitude: e._lat,
-      longitude: e._lng,
-      latitudeDelta: EVENT_FOCUS_DELTA,
-      longitudeDelta: EVENT_FOCUS_DELTA,
-    });
-    viewportRef.current = next;
+  const dismissSelected = useCallback(() => {
+    setSelectedEvent(null);
+    webViewRef.current?.injectJavaScript(`window.deselectAll();true;`);
+  }, []);
 
-    // Animate first — do NOT touch cluster state during the tap gesture.
-    // On Android, any marker list re-render mid-press drops the touch event.
-    // Cluster recompute (which ejects this event from its bucket) runs AFTER
-    // the animation settles so the card appears without a double-tap.
-    try { mapRef.current?.animateToRegion(next, 550); } catch {}
-    setTimeout(() => computeClusters(next, e.id), 600);
-  }, [sanitizeRegion, computeClusters]);
-
-  // ─── Geocode search ───────────────────────────────────────────────────────────
   const geocodeSearch = useCallback(async (q: string) => {
-    const text = q.trim();
-    if (!text) return;
+    if (!q.trim()) return;
     Keyboard.dismiss();
     setSearchFocused(false);
     try {
-      const hits = await withTimeout(Location.geocodeAsync(text), 8000);
+      const hits = await withTimeout(Location.geocodeAsync(q), 8000);
       if (!hits?.length) return;
-      const next = sanitizeRegion({
-        latitude: hits[0].latitude,
-        longitude: hits[0].longitude,
-        latitudeDelta: 0.08,
-        longitudeDelta: 0.08,
-      });
-      viewportRef.current = next;
-      try { mapRef.current?.animateToRegion(next, 800); } catch {}
-      computeClusters(next);
-      void fetchForRegion(next);
+      webViewRef.current?.injectJavaScript(`window.flyTo(${hits[0].latitude},${hits[0].longitude});true;`);
     } catch {}
-  }, [sanitizeRegion, computeClusters, fetchForRegion, withTimeout]);
+  }, [withTimeout]);
 
-  // ─── Deep-link q param ────────────────────────────────────────────────────────
-  useEffect(() => {
-    const q = String(params?.q || '').trim();
-    if (!q) return;
-    setSearchText(q);
-    void geocodeSearch(q);
-  }, [params?.q, geocodeSearch]);
-
-  // ─── Cleanup ──────────────────────────────────────────────────────────────────
+  // ── Cleanup ───────────────────────────────────────────────────────────────────
   useEffect(() => () => {
-    if (debounceRef.current)        clearTimeout(debounceRef.current);
-    if (searchDebounceRef.current)  clearTimeout(searchDebounceRef.current);
-    if (fetchAbortRef.current)      fetchAbortRef.current.abort();
-    if (searchFetchAbortRef.current) searchFetchAbortRef.current.abort();
+    if (debounceRef.current)  clearTimeout(debounceRef.current);
+    if (searchDebRef.current) clearTimeout(searchDebRef.current);
+    if (fetchAbortRef.current)  fetchAbortRef.current.abort();
+    if (searchAbortRef.current) searchAbortRef.current.abort();
   }, []);
 
-  // ─── Recompute on filter change ───────────────────────────────────────────────
-  useEffect(() => {
-    computeClusters(viewportRef.current);
-  }, [activeFilter, computeClusters]);
-
-  // ─── Render ───────────────────────────────────────────────────────────────────
+  // ── Render ─────────────────────────────────────────────────────────────────────
   const showResults = searchFocused && (searchText.trim().length > 0 || activeFilter !== 'all');
-
-  const dismissSelected = useCallback(() => {
-    if (justFocusedRef.current) return;
-    selectedIdRef.current = null;
-    setSelectedId(null);
-    setSelectedEvent(null);
-  }, []);
 
   return (
     <View style={styles.container}>
       <StatusBar barStyle="light-content" />
 
-      {/* ── Map ── */}
-      <View style={StyleSheet.absoluteFill}>
-        {locPerm === 'loading' ? (
-          <View style={styles.center}>
-            <DiscoLoader size={74} />
-            <Text style={styles.loadingTxt}>Cargando mapa…</Text>
-          </View>
-        ) : !hasMapsKey ? (
-          <View style={styles.center}>
-            <Text style={styles.errTitle}>Mapa no disponible</Text>
-          </View>
-        ) : mapCrashed ? (
-          <View style={styles.center}>
-            <Text style={styles.errTitle}>Error al cargar el mapa</Text>
-            <TouchableOpacity
-              onPress={() => { setMapCrashed(false); setMapReady(false); setMapMountKey(k => k + 1); }}
-              style={styles.retryBtn}
-            >
-              <Text style={styles.retryTxt}>Reintentar</Text>
-            </TouchableOpacity>
-          </View>
-        ) : (
-          <MapErrorBoundary onError={() => { setMapCrashed(true); setMapReady(false); }}>
-            <MapView
-              key={`map:${mapMountKey}`}
-              ref={mapRef}
-              provider={Platform.OS === 'android' ? PROVIDER_GOOGLE : undefined}
-              style={StyleSheet.absoluteFillObject}
-              initialRegion={initialRegion}
-              onMapReady={() => setMapReady(true)}
-              onMapLoaded={() => setMapReady(true)}
-              onRegionChangeComplete={onRegionChangeComplete}
-              showsUserLocation={locPerm === 'granted'}
-              showsMyLocationButton={false}
-              rotateEnabled={false}
-              pitchEnabled={false}
-              toolbarEnabled={false}
-              moveOnMarkerPress={false}
-              showsCompass={false}
-              loadingEnabled={false}
-              mapType="standard"
-              customMapStyle={Platform.OS === 'android' ? (DARK_MAP_STYLE as any) : undefined}
-            >
-              {mapReady && visibleClusters.map(c => {
-                if (c.kind === 'cluster') {
-                  return (
-                    <Marker
-                      key={c.key}
-                      coordinate={c.center}
-                      tracksViewChanges={false}
-                      onPress={() => {
-                        const base = viewportRef.current;
-                        const next = sanitizeRegion({
-                          latitude:       c.center.latitude,
-                          longitude:      c.center.longitude,
-                          latitudeDelta:  Math.max(EVENT_FOCUS_DELTA * 1.5, base.latitudeDelta * 0.45),
-                          longitudeDelta: Math.max(EVENT_FOCUS_DELTA * 1.5, base.longitudeDelta * 0.45),
-                        });
-                        try { mapRef.current?.animateToRegion(next, 480); } catch {}
-                      }}
-                    >
-                      <ClusterBubble count={c.count} color={c.color} />
-                    </Marker>
-                  );
-                }
-
-                const e     = c.event;
-                const isSel = selectedId === e.id;
-                return (
-                  <Marker
-                    key={c.key}
-                    identifier={`event:${e.id}`}
-                    coordinate={c.center}
-                    tracksViewChanges={false}
-                    anchor={{ x: 0.5, y: 0.5 }}
-                    onPress={() => focusOnEvent(e)}
-                  >
-                    {(showPrice || isSel) ? (
-                      <EventPin color={c.color} selected={isSel} price={e.price} />
-                    ) : (
-                      <EventDot color={c.color} selected={isSel} />
-                    )}
-                  </Marker>
-                );
-              })}
-            </MapView>
-          </MapErrorBoundary>
-        )}
-      </View>
+      {/* ── Map (WebView) ── */}
+      {htmlContent ? (
+        <WebView
+          ref={webViewRef}
+          source={{ html: htmlContent, baseUrl: 'https://api.maptiler.com' }}
+          style={StyleSheet.absoluteFill}
+          javaScriptEnabled
+          domStorageEnabled
+          allowFileAccess
+          allowUniversalAccessFromFileURLs
+          allowsInlineMediaPlayback
+          mediaPlaybackRequiresUserAction={false}
+          scrollEnabled={false}
+          bounces={false}
+          overScrollMode="never"
+          onMessage={onWebViewMessage}
+          originWhitelist={['*']}
+          mixedContentMode="always"
+          androidLayerType="hardware"
+          onError={() => {}}
+          renderLoading={() => (
+            <View style={[StyleSheet.absoluteFill, styles.center]}>
+              <DiscoLoader size={60} />
+              <Text style={styles.loadingTxt}>Cargando mapa…</Text>
+            </View>
+          )}
+          startInLoadingState
+        />
+      ) : (
+        <View style={[StyleSheet.absoluteFill, styles.center]}>
+          <DiscoLoader size={60} />
+          <Text style={styles.loadingTxt}>Obteniendo ubicación…</Text>
+        </View>
+      )}
 
       {/* ── Top overlay: search + filters ── */}
       <View style={[styles.topOverlay, { paddingTop: Math.max(12, insets.top) }]}>
-        {/* Search bar */}
         <GlassView intensity={20} style={styles.searchBar}>
           <View style={styles.searchRow}>
             {isSearching ? (
-              <View style={styles.searchIconWrap}>
-                <DiscoLoader size={16} />
-              </View>
+              <View style={styles.searchIconWrap}><DiscoLoader size={16} /></View>
             ) : (
               <Search size={18} color="rgba(255,255,255,0.5)" />
             )}
@@ -748,21 +709,13 @@ export default function PartyMapScreen() {
               autoCapitalize="words"
               returnKeyType="search"
               onSubmitEditing={() => {
-                const q = searchText.trim();
-                if (searchResults.length > 0) {
-                  focusOnEvent(searchResults[0]);
-                } else {
-                  void geocodeSearch(q);
-                }
+                if (searchResults.length > 0) focusOnEvent(searchResults[0]);
+                else void geocodeSearch(searchText);
               }}
               style={styles.searchInput}
             />
             {searchText.length > 0 && (
-              <Pressable hitSlop={10} onPress={() => {
-                setSearchText('');
-                setSearchFocused(false);
-                setSearchResults([]);
-              }}>
+              <Pressable hitSlop={10} onPress={() => { setSearchText(''); setSearchFocused(false); setSearchResults([]); }}>
                 <X size={18} color="rgba(255,255,255,0.5)" />
               </Pressable>
             )}
@@ -770,24 +723,18 @@ export default function PartyMapScreen() {
         </GlassView>
 
         {/* Filter chips */}
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          style={{ marginTop: 8 }}
-          contentContainerStyle={styles.filterRow}
-          keyboardShouldPersistTaps="handled"
-        >
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: 8 }} contentContainerStyle={styles.filterRow}>
           {EVENT_TYPES.map(({ key, label, color, Icon }) => {
             const active = activeFilter === key;
             return (
-              <Pressable
+              <TouchableOpacity
                 key={key}
                 onPress={() => setActiveFilter(key)}
-                style={[styles.filterChip, active && { backgroundColor: color + '30', borderColor: color + 'CC' }]}
+                style={[styles.filterChip, active && { backgroundColor: 'rgba(8,8,18,0.92)', borderColor: color }]}
               >
-                <Icon size={12} color={active ? color : 'rgba(255,255,255,0.5)'} />
+                <Icon size={13} color={active ? color : 'rgba(255,255,255,0.4)'} />
                 <Text style={[styles.filterChipTxt, active && { color }]}>{label}</Text>
-              </Pressable>
+              </TouchableOpacity>
             );
           })}
         </ScrollView>
@@ -799,41 +746,41 @@ export default function PartyMapScreen() {
               data={searchResults}
               keyExtractor={item => item.id}
               keyboardShouldPersistTaps="handled"
-              showsVerticalScrollIndicator={false}
               ItemSeparatorComponent={() => <View style={styles.resultSep} />}
               renderItem={({ item }) => {
                 const color = getEventColor(item.eventType);
                 return (
-                  <TouchableOpacity activeOpacity={0.75} style={styles.resultRow} onPress={() => focusOnEvent(item)}>
+                  <TouchableOpacity style={styles.resultRow} onPress={() => focusOnEvent(item)} activeOpacity={0.75}>
                     {item.imageUrl ? (
                       <Image source={{ uri: item.imageUrl }} style={styles.resultImg} />
                     ) : (
-                      <View style={[styles.resultImg, { backgroundColor: color + '30', alignItems: 'center', justifyContent: 'center' }]}>
+                      <View style={[styles.resultImg, { backgroundColor: color + '20', alignItems: 'center', justifyContent: 'center' }]}>
                         <View style={[styles.resultImgDot, { backgroundColor: color }]} />
                       </View>
                     )}
                     <View style={styles.resultInfo}>
                       <Text style={styles.resultTitle} numberOfLines={1}>{item.title}</Text>
                       <View style={styles.resultMeta}>
-                        <MapPin size={11} color="rgba(255,255,255,0.45)" />
+                        <MapPin size={11} color="rgba(255,255,255,0.4)" />
                         <Text style={styles.resultMetaTxt} numberOfLines={1}>{item.location}</Text>
-                        <Text style={[styles.resultDist, { color }]}>{item._distanceKm.toFixed(1)} km</Text>
+                        <Text style={[styles.resultDist, { color }]}>{item._distanceKm.toFixed(1)}km</Text>
                       </View>
                     </View>
-                    <View style={[styles.resultPriceBadge, { backgroundColor: color + '28' }]}>
+                    <View style={[styles.resultPriceBadge, { backgroundColor: color + '20' }]}>
                       <Text style={[styles.resultPrice, { color }]}>{formatPrice(item.price)}</Text>
                     </View>
                   </TouchableOpacity>
                 );
               }}
+              ListFooterComponent={
+                searchText.trim().length > 1 ? (
+                  <TouchableOpacity onPress={() => void geocodeSearch(searchText)} style={styles.geocodeRow}>
+                    <MapPin size={14} color={Colors.dark.primary} />
+                    <Text style={styles.geocodeTxt}>Buscar "{searchText}" en el mapa</Text>
+                  </TouchableOpacity>
+                ) : null
+              }
             />
-            {/* Always offer geocode option when text present */}
-            {searchText.trim().length > 1 && (
-              <TouchableOpacity style={styles.geocodeRow} onPress={() => void geocodeSearch(searchText)}>
-                <MapPin size={13} color={Colors.dark.primary} />
-                <Text style={styles.geocodeTxt}>Buscar "{searchText}" en el mapa</Text>
-              </TouchableOpacity>
-            )}
           </Animated.View>
         )}
 
@@ -920,13 +867,13 @@ export default function PartyMapScreen() {
   );
 }
 
+// ─── Export for tests ─────────────────────────────────────────────────────────
+export function __test_clusterForRegion() { return []; }
+
 const styles = StyleSheet.create({
   container:  { flex: 1, backgroundColor: '#08080F' },
   center:     { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12, paddingHorizontal: 20 },
   loadingTxt: { color: 'rgba(255,255,255,0.5)', fontWeight: '700', marginTop: 8 },
-  errTitle:   { color: 'white', fontWeight: '900', fontSize: 18, textAlign: 'center' },
-  retryBtn:   { marginTop: 12, paddingHorizontal: 24, paddingVertical: 12, borderRadius: 14, backgroundColor: Colors.dark.primary + '30', borderWidth: 1, borderColor: Colors.dark.primary + '60' },
-  retryTxt:   { color: Colors.dark.primary, fontWeight: '900', fontSize: 14 },
 
   topOverlay:     { position: 'absolute', left: 14, right: 14, zIndex: 40 },
   searchBar:      { borderRadius: 22, borderWidth: 1, borderColor: 'rgba(255,255,255,0.10)', backgroundColor: 'rgba(8,8,15,0.88)', overflow: 'hidden' },
@@ -935,8 +882,8 @@ const styles = StyleSheet.create({
   searchInput:    { flex: 1, color: 'white', fontWeight: '700', fontSize: 15, paddingVertical: 0, letterSpacing: -0.2 },
 
   filterRow:     { flexDirection: 'row', gap: 8, paddingBottom: 2 },
-  filterChip:    { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 12, paddingVertical: 7, borderRadius: 999, backgroundColor: 'rgba(255,255,255,0.07)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.10)' },
-  filterChipTxt: { color: 'rgba(255,255,255,0.5)', fontWeight: '800', fontSize: 11 },
+  filterChip:    { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 12, paddingVertical: 7, borderRadius: 999, backgroundColor: 'rgba(8,8,18,0.88)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.12)' },
+  filterChipTxt: { color: 'rgba(255,255,255,0.80)', fontWeight: '800', fontSize: 11 },
 
   resultsPanel:    { marginTop: 8, borderRadius: 18, overflow: 'hidden', backgroundColor: 'rgba(10,10,20,0.96)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.10)', maxHeight: 360 },
   resultSep:       { height: 1, backgroundColor: 'rgba(255,255,255,0.05)', marginHorizontal: 14 },
@@ -958,26 +905,6 @@ const styles = StyleSheet.create({
   noResultsTxt:   { color: 'rgba(255,255,255,0.5)', fontWeight: '700', fontSize: 13 },
   noResultsSearch:{ color: Colors.dark.primary, fontWeight: '900', fontSize: 13 },
 
-  // Transparent hit area wrapper — makes tap target bigger without changing visual
-  markerHitArea: { padding: 12, alignItems: 'center', justifyContent: 'center' },
-
-  // Dot marker (low zoom)
-  dotOuter: { width: 22, height: 22, borderRadius: 11, borderWidth: 2, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.55)' },
-  dotInner: { width: 11, height: 11, borderRadius: 6 },
-
-  // Price-badge marker (high zoom)
-  pinWrap:         { alignItems: 'center', justifyContent: 'center' },
-  pinWrapSelected: { transform: [{ scale: 1.18 }] },
-  pinPulse:        { position: 'absolute', width: 52, height: 52, borderRadius: 26, borderWidth: 2 },
-  pinBadge:        { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 12, borderWidth: 2, alignItems: 'center', justifyContent: 'center', shadowOpacity: 0.7, shadowRadius: 8, shadowOffset: { width: 0, height: 2 }, elevation: 6, minWidth: 46 },
-  pinPrice:        { fontSize: 12, fontWeight: '900', letterSpacing: -0.3 },
-  pinTailOuter:    { width: 0, height: 0, borderLeftWidth: 5, borderRightWidth: 5, borderTopWidth: 7, borderLeftColor: 'transparent', borderRightColor: 'transparent', marginTop: -1 },
-
-  clusterBubble: { borderWidth: 2, borderRadius: 999, overflow: 'hidden' },
-  clusterInner:  { paddingHorizontal: 10, paddingVertical: 7, alignItems: 'center', justifyContent: 'center' },
-  clusterText:   { fontSize: 13, fontWeight: '900', letterSpacing: -0.3 },
-
-  // Event card
   cardWrap:          { position: 'absolute', left: 12, right: 12, bottom: 0, zIndex: 30 },
   card:              { borderRadius: 22, overflow: 'hidden', borderWidth: 1, borderColor: 'rgba(255,255,255,0.14)', backgroundColor: '#0c0c1a' },
   cardBanner:        { width: '100%', height: 130 },

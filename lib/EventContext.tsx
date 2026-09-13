@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect, useRef, useCallback } from 'react';
+import { createContext, useContext, useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { supabase, Event } from '@/lib/supabase';
 import i18n from '@/lib/i18n';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -19,6 +19,7 @@ export type AppEvent = {
   id: string;
   title: string;
   startsAt?: string;
+  endDatetime?: string;
   updatedAt?: string;
   date: string; // YYYY-MM-DD
   time: string;
@@ -79,6 +80,7 @@ export function __test_shouldApplyRemoteEvents(prevCount: number, remoteCount: n
 
 export function EventProvider({ children }: { children: React.ReactNode }) {
   const [events, setEvents] = useState<AppEvent[]>(INITIAL_EVENTS);
+  const [nowMs, setNowMs] = useState(() => Date.now());
   const refreshTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const fetchInFlightRef = useRef(false);
   const fetchQueuedRef = useRef(false);
@@ -170,6 +172,25 @@ export function EventProvider({ children }: { children: React.ReactNode }) {
     eventsCountRef.current = events.length;
   }, [events.length]);
 
+  // Tick every 60s so expired events disappear client-side without waiting for a server purge.
+  useEffect(() => {
+    const id = setInterval(() => setNowMs(Date.now()), 60_000);
+    return () => clearInterval(id);
+  }, []);
+
+  const visibleEvents = useMemo(
+    () =>
+      events.filter((e) => {
+        const endMs = e.endDatetime
+          ? new Date(e.endDatetime).getTime()
+          : e.startsAt
+          ? new Date(e.startsAt).getTime() + 5 * 60 * 60 * 1000
+          : null;
+        return endMs === null || endMs > nowMs;
+      }),
+    [events, nowMs]
+  );
+
   useEffect(() => {
     AsyncStorage.multiGet([cacheKey, cacheTsKey])
       .then((pairs) => {
@@ -253,6 +274,7 @@ export function EventProvider({ children }: { children: React.ReactNode }) {
             id: e.id,
             title: e.title,
             startsAt: e.event_date,
+            endDatetime: e.end_datetime ?? undefined,
             updatedAt: e.updated_at || null,
             date: localDate,
             time: isMadridTimezone
@@ -445,6 +467,7 @@ export function EventProvider({ children }: { children: React.ReactNode }) {
           poster_url: newEvent.imageUrl,
           venue_plan_url: newEvent.venuePlanUrl,
           event_date: eventDate.toISOString(),
+          end_datetime: (newEvent as any).endDatetime ?? null,
           ticket_price: parseFloat(newEvent.price), // Using the display price (min price)
           available_tickets: newEvent.capacity,
           sold_tickets: 0,
@@ -524,6 +547,7 @@ export function EventProvider({ children }: { children: React.ReactNode }) {
       if (updates.theme !== undefined) dbUpdates.theme = updates.theme;
       if (updates.eventType !== undefined) dbUpdates.event_type = updates.eventType;
       if (updates.allowResale !== undefined) dbUpdates.allow_resale = updates.allowResale;
+      if ((updates as any).endDatetime !== undefined) dbUpdates.end_datetime = (updates as any).endDatetime;
 
       const doUpdate = async (useUpdatedAt: boolean) => {
         let q = supabase.from('events').update(dbUpdates).eq('id', id);
@@ -619,12 +643,32 @@ export function EventProvider({ children }: { children: React.ReactNode }) {
           const rowId = String((row as any).id || '');
           const sold = Number((row as any).sold || 0);
           if (!keepIds.has(rowId) && sold <= 0) {
-            const del = await supabase
+            // Try hard DELETE first (sold=0 means no tickets issued, safe to remove).
+            // Falls back to soft-delete in case of FK constraints or other DB restrictions.
+            const hardDel = await supabase
+              .from('event_ticket_types')
+              .delete()
+              .eq('id', rowId)
+              .eq('event_id', id)
+              .select('id')
+              .maybeSingle();
+            if (hardDel.error) {
+              // Hard delete failed (FK constraint or RLS) — soft-delete instead
+              const softDel = await supabase
+                .from('event_ticket_types')
+                .update({ is_active: false, deleted_at: new Date().toISOString() })
+                .eq('id', rowId)
+                .eq('event_id', id);
+              if (softDel.error) throw softDel.error;
+            }
+          } else if (!keepIds.has(rowId) && sold > 0) {
+            // Has sold tickets — can't delete, just mark inactive so it's hidden
+            const softDel = await supabase
               .from('event_ticket_types')
               .update({ is_active: false, deleted_at: new Date().toISOString() })
               .eq('id', rowId)
               .eq('event_id', id);
-            if (del.error) throw del.error;
+            if (softDel.error) throw softDel.error;
           }
         }
 
@@ -646,16 +690,25 @@ export function EventProvider({ children }: { children: React.ReactNode }) {
           seen.add(key);
 
           if (isUuid(ticketId)) {
-            const upsert = await supabase
+            // Explicit UPDATE — avoids the PostgreSQL RLS conflict-detection bug where
+            // upsert inserts a duplicate when the existing row is hidden by RLS policies.
+            const upd = await supabase
               .from('event_ticket_types')
-              .upsert(
-                { id: ticketId, event_id: id, name, price, quantity: qty, is_active: true, deleted_at: null },
-                { onConflict: 'id' }
-              )
+              .update({ name, price, quantity: qty, is_active: true, deleted_at: null })
+              .eq('id', ticketId)
+              .eq('event_id', id)
               .select('id')
               .maybeSingle();
-            if (upsert.error) throw upsert.error;
-            if (!upsert.data?.id) throw new Error('No se pudo guardar un tipo de entrada (permisos/RLS).');
+            if (upd.error) throw upd.error;
+            if (!upd.data?.id) {
+              // Row not found or RLS blocked update — fall back to insert
+              const ins2 = await supabase
+                .from('event_ticket_types')
+                .insert({ event_id: id, name, price, quantity: qty, sold: 0, is_active: true })
+                .select('id')
+                .maybeSingle();
+              if (ins2.error) throw ins2.error;
+            }
           } else {
             const ins = await supabase
               .from('event_ticket_types')
@@ -733,7 +786,7 @@ export function EventProvider({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <EventContext.Provider value={{ events, addEvent, updateEvent, deleteEvent, getEventById, refreshEvents: fetchEvents }}>
+    <EventContext.Provider value={{ events: visibleEvents, addEvent, updateEvent, deleteEvent, getEventById, refreshEvents: fetchEvents }}>
       {children}
     </EventContext.Provider>
   );

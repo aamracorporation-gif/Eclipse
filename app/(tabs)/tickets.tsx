@@ -1,4 +1,4 @@
-﻿﻿import { View, Text, StyleSheet, FlatList, Image, TouchableOpacity, RefreshControl, Platform, Modal, KeyboardAvoidingView, Animated, Easing } from 'react-native';
+﻿﻿import { View, Text, StyleSheet, FlatList, Image, TouchableOpacity, RefreshControl, Platform, Modal, KeyboardAvoidingView, Animated, Easing, Alert } from 'react-native';
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { router } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
@@ -170,14 +170,16 @@ export default function TicketsScreen() {
       // 2. Fetch resale listings manually for these tickets
       let processedTickets = ticketsData || [];
 
-      // Filter out tickets for events that ended more than 24 hours ago
-      const now = new Date();
-      const cutoffTime = now.getTime() - (24 * 60 * 60 * 1000); // 24 hours ago
-
+      // Filter out tickets for events that have already ended.
+      const now = Date.now();
       processedTickets = processedTickets.filter((t: any) => {
-        if (!t.events || !t.events.event_date) return true; // Keep if no date (fallback)
-        const eventDate = new Date(t.events.event_date);
-        return eventDate.getTime() > cutoffTime;
+        if (!t.events) return true;
+        const endMs = t.events.end_datetime
+          ? new Date(t.events.end_datetime).getTime()
+          : t.events.event_date
+          ? new Date(t.events.event_date).getTime() + 5 * 60 * 60 * 1000
+          : null;
+        return endMs === null || endMs > now;
       });
       
       if (processedTickets.length > 0) {
@@ -287,6 +289,11 @@ export default function TicketsScreen() {
       return;
     }
 
+    if (ticket.wallet_added) {
+      showDialog({ title: 'Reventa no disponible', message: 'Esta entrada ya fue añadida a tu cartera digital. Las entradas añadidas a la cartera no se pueden revender.' });
+      return;
+    }
+
     if (ticket.scanned_at || ticket.validation_status === 'used' || ticket.status === 'used') {
       showDialog({ title: t('tickets.action_not_allowed_title'), message: t('tickets.used_ticket_cannot_resell') });
       return;
@@ -357,6 +364,24 @@ export default function TicketsScreen() {
   const handleAddToWallet = async (ticket: ExtendedTicket) => {
     if (addingToWallet) return;
     
+    // Warn user that adding to wallet blocks resale
+    const allowResale = (ticket as any)?.events?.allow_resale ?? true;
+    const originalPrice = typeof (ticket as any).total_price === 'string' ? Number((ticket as any).total_price) : ((ticket as any).total_price ?? 0);
+    const canResell = allowResale && originalPrice > 0;
+    if (canResell) {
+      const confirmed = await new Promise<boolean>((resolve) => {
+        Alert.alert(
+          '¿Añadir a la cartera?',
+          'Si añades esta entrada a tu cartera digital no podrás ponerla en reventa. Esta acción no se puede deshacer.',
+          [
+            { text: 'Cancelar', style: 'cancel', onPress: () => resolve(false) },
+            { text: 'Añadir igualmente', onPress: () => resolve(true) },
+          ]
+        );
+      });
+      if (!confirmed) return;
+    }
+
     setAddingToWallet(ticket.id);
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
 
@@ -653,6 +678,7 @@ export default function TicketsScreen() {
               <div class="qr-container">
                 <img src="https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${qrValue}" style="width: 200px; height: 200px;" />
               </div>
+              ${(ticket as any).short_code ? `<div style="margin-top:12px;font-size:11px;color:#999;text-transform:uppercase;letter-spacing:0.5px;">Código de entrada</div><div style="font-size:22px;font-weight:bold;color:#000;letter-spacing:4px;margin-top:2px;">${(ticket as any).short_code}</div>` : ''}
               <div class="qr-help">${t('tickets_pdf.present_code')}</div>
             </div>
         </body>
@@ -742,7 +768,7 @@ export default function TicketsScreen() {
     const time = eventDate ? eventDate.toLocaleTimeString(localeTag, { hour: '2-digit', minute: '2-digit' }) : '—';
     const eventYear = eventDate ? eventDate.getFullYear() : new Date().getFullYear();
     const ticketShort = item.id.slice(0, 4).toUpperCase();
-    const sectionLabel = ticketTypeName || tierConfig.label.replace(/^[^\s]+\s/, '');
+    const sectionLabel = (ticketTypeName || tierConfig.label.replace(/^[^\s]+\s/, '')).replace(/^Premium · /, '');
     const rowLabel = '—';
     const seatLabel = `${(item as any).quantity ?? 1}P`;
     const ticketCode = `ECL-${eventYear}-${ticketShort}-${visualTier.toUpperCase()}`;
@@ -870,16 +896,18 @@ export default function TicketsScreen() {
             <View style={styles.tcFields}>
               <View style={styles.tcField}>
                 <Text style={[styles.tcFieldLabel, { color: tierConfig.accent }]}>TIPO DE ENTRADA</Text>
-                <Text style={styles.tcFieldValue} numberOfLines={1}>{sectionLabel || 'GENERAL'}</Text>
+                <Text style={styles.tcFieldValue}>{sectionLabel || 'GENERAL'}</Text>
               </View>
               <View style={styles.tcField}>
                 <Text style={[styles.tcFieldLabel, { color: tierConfig.accent }]}>CANTIDAD</Text>
                 <Text style={styles.tcFieldValue}>{seatLabel}</Text>
               </View>
-              <View style={styles.tcField}>
-                <Text style={[styles.tcFieldLabel, { color: tierConfig.accent }]}>CÓDIGO</Text>
-                <Text style={[styles.tcFieldMono, { color: 'rgba(255,255,255,0.70)' }]}>{ticketCode}</Text>
-              </View>
+              {(item as any).short_code ? (
+                <View style={styles.tcField}>
+                  <Text style={[styles.tcFieldLabel, { color: tierConfig.accent }]}>CÓDIGO</Text>
+                  <Text style={[styles.tcFieldMono, { color: 'rgba(255,255,255,0.70)' }]}>{(item as any).short_code}</Text>
+                </View>
+              ) : null}
             </View>
 
             {/* Divider */}
@@ -908,42 +936,61 @@ export default function TicketsScreen() {
           </View>
 
           {/* ══ ACTION ROW ════════════════════════════════════════════ */}
+          {/* Avisos de restricciones */}
+          {(item.wallet_added || (item as any)?.events?.allow_resale === false) && !isUsed && !isResale && (
+            <View style={{ paddingHorizontal: 12, paddingTop: 8, gap: 4 }}>
+              {item.wallet_added && (
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: 'rgba(255,255,255,0.04)', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 5, borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)' }}>
+                  <Text style={{ fontSize: 10, color: 'rgba(255,255,255,0.38)', fontWeight: '600', letterSpacing: 0.2 }}>🔒 Añadida a cartera — reventa no disponible</Text>
+                </View>
+              )}
+              {(item as any)?.events?.allow_resale === false && !item.wallet_added && (
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: 'rgba(255,255,255,0.04)', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 5, borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)' }}>
+                  <Text style={{ fontSize: 10, color: 'rgba(255,255,255,0.38)', fontWeight: '600', letterSpacing: 0.2 }}>🔒 El organizador ha prohibido la reventa</Text>
+                </View>
+              )}
+            </View>
+          )}
+
           <View style={[styles.tcActions, { borderTopColor: `${tierConfig.accent}20`, backgroundColor: '#050510' }]}>
             <TouchableOpacity style={[styles.tcActionBtn, isResale && styles.tcActionBtnDim]} onPress={() => handleDownloadPDF(item)} disabled={isResale}>
-              <Download size={14} color={isResale ? '#374151' : '#6b7280'} />
+              <Download size={13} color={isResale ? '#374151' : '#6b7280'} />
               <Text style={[styles.tcActionBtnTxt, isResale && { color: '#374151' }]}>{t('tickets.download')}</Text>
             </TouchableOpacity>
 
             {!isUsed && !isResale && (
               <TouchableOpacity
                 style={[styles.tcActionBtn, item.wallet_added && { borderColor: `${Colors.dark.success}60`, backgroundColor: `${Colors.dark.success}0D` }]}
-                onPress={() => !item.wallet_added && handleAddToWallet(item)}
+                onPress={() => !item.wallet_added && void handleAddToWallet(item)}
                 disabled={!!item.wallet_added || addingToWallet === item.id}
               >
-                <CreditCard size={14} color={item.wallet_added ? Colors.dark.success : '#6b7280'} />
+                <CreditCard size={13} color={item.wallet_added ? Colors.dark.success : '#6b7280'} />
                 <Text style={[styles.tcActionBtnTxt, item.wallet_added && { color: Colors.dark.success }]} numberOfLines={1}>
-                  {item.wallet_added ? '✓ OK' : addingToWallet === item.id ? '...' : t('tickets.add_to_wallet')}
+                  {item.wallet_added ? '✓ Cartera' : addingToWallet === item.id ? '...' : t('tickets.add_to_wallet')}
                 </Text>
               </TouchableOpacity>
             )}
 
-            {!isResale ? (
-              <TouchableOpacity
-                style={[styles.tcActionBtn, { borderColor: isUsed ? '#1f2937' : `${tierConfig.accent}45`, backgroundColor: isUsed ? 'transparent' : `${tierConfig.accent}0F` }, isUsed && styles.tcActionBtnDim]}
-                onPress={() => !isUsed && void handleSellPress(item)}
-                disabled={!!isUsed}
-              >
-                <DollarSign size={14} color={isUsed ? '#374151' : tierConfig.accent} />
-                <Text style={[styles.tcActionBtnTxt, { color: isUsed ? '#374151' : tierConfig.accent }]}>
-                  {isUsed ? t('tickets.used') : t('tickets.sell')}
-                </Text>
-              </TouchableOpacity>
-            ) : (
+            {(() => {
+              const resaleBlocked = isUsed || !!item.wallet_added || (item as any)?.events?.allow_resale === false;
+              return !isResale ? (
+                <TouchableOpacity
+                  style={[styles.tcActionBtn, { borderColor: resaleBlocked ? '#1f2937' : `${tierConfig.accent}45`, backgroundColor: resaleBlocked ? 'transparent' : `${tierConfig.accent}0F` }, resaleBlocked && styles.tcActionBtnDim]}
+                  onPress={() => !resaleBlocked && void handleSellPress(item)}
+                  disabled={resaleBlocked}
+                >
+                  <DollarSign size={13} color={resaleBlocked ? '#374151' : tierConfig.accent} />
+                  <Text style={[styles.tcActionBtnTxt, { color: resaleBlocked ? '#374151' : tierConfig.accent }]}>
+                    {isUsed ? t('tickets.used') : t('tickets.sell')}
+                  </Text>
+                </TouchableOpacity>
+              ) : (
               <TouchableOpacity style={[styles.tcActionBtn, { borderColor: 'rgba(239,68,68,0.35)', backgroundColor: 'rgba(239,68,68,0.07)' }]} onPress={() => handleCancelResale(item)}>
-                <X size={14} color="#ef4444" />
+                <X size={13} color="#ef4444" />
                 <Text style={[styles.tcActionBtnTxt, { color: '#ef4444' }]}>{t('common.cancel')}</Text>
               </TouchableOpacity>
-            )}
+              );
+            })()}
           </View>
 
         </View>
@@ -1425,20 +1472,22 @@ const styles = StyleSheet.create({
   // Actions
   tcActions: {
     flexDirection: 'row',
-    paddingHorizontal: 12,
-    paddingVertical: 11,
-    gap: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 9,
+    gap: 6,
     borderTopWidth: 1,
   },
   tcActionBtn: {
     flex: 1,
-    height: 40,
+    height: 38,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 5,
+    gap: 3,
     borderRadius: 10,
     borderWidth: 1,
+    paddingHorizontal: 4,
+    minWidth: 0,
     borderColor: 'rgba(255,255,255,0.08)',
     backgroundColor: 'rgba(255,255,255,0.04)',
   },
@@ -1446,10 +1495,11 @@ const styles = StyleSheet.create({
     opacity: 0.38,
   },
   tcActionBtnTxt: {
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '600',
     color: '#6b7280',
-    letterSpacing: 0.2,
+    letterSpacing: 0,
+    flexShrink: 1,
   },
 
   // ── Legacy placeholders (kept to avoid ref errors) ────────

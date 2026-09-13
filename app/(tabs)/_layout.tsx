@@ -89,6 +89,12 @@ export default function TabLayout() {
           href: null,
         }}
       />
+      <Tabs.Screen
+        name="join-worker"
+        options={{
+          href: null,
+        }}
+      />
     </Tabs>
   );
 }

@@ -812,6 +812,14 @@ export default function CreatorDashboard() {
                 </View>
                 <View style={styles.gridRow}>
                   <ActionCard
+                    title="Gestionar tickets"
+                    description="Invalida o elimina entradas de cualquier evento"
+                    icon={Ticket}
+                    color="#f472b6"
+                    onPress={() => router.push('/(creator)/admin-tickets')}
+                    style={{ flex: 1 }}
+                  />
+                  <ActionCard
                     title={t('creator.admin.actions.cleanup_title')}
                     description={cleaningSystem ? t('creator.admin.actions.cleanup_running') : t('creator.admin.actions.cleanup_desc')}
                     icon={Trash2}
@@ -821,6 +829,16 @@ export default function CreatorDashboard() {
                   />
                 </View>
               </View>
+
+              {/* Admin logout */}
+              <TouchableOpacity
+                style={styles.adminLogoutBtn}
+                onPress={handleLogout}
+                activeOpacity={0.75}
+              >
+                <LogOut size={16} color="rgba(255,255,255,0.45)" />
+                <Text style={styles.adminLogoutText}>Cerrar sesión</Text>
+              </TouchableOpacity>
             </>
           ) : (
             <>
@@ -1101,6 +1119,39 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#fff',
     letterSpacing: -1,
+  },
+  adminLogoutBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    marginTop: 20,
+    marginBottom: 8,
+    paddingVertical: 12,
+  },
+  adminLogoutText: {
+    color: 'rgba(255,255,255,0.4)',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  historialBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    backgroundColor: 'rgba(255,255,255,0.06)',
+    borderRadius: 14,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(167,139,250,0.15)',
+    marginTop: 4,
+    marginBottom: 8,
+  },
+  historialBtnText: {
+    flex: 1,
+    color: '#fff',
+    fontSize: 15,
+    fontWeight: '600',
   },
   metricsContainer: {
     marginBottom: 24,

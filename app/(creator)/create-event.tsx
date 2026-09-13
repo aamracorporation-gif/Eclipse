@@ -23,7 +23,7 @@ import { Colors } from '@/constants/Colors';
 import { GlassView } from '@/components/ui/GlassView';
 import { ThemedButton } from '@/components/ui/ThemedButton';
 import { ThemedInput } from '@/components/ui/ThemedInput';
-import MapView, { Marker, Region } from '@/components/ui/Map';
+import WebView from 'react-native-webview';
 import {
   buildTicketName,
   createEmptyTicketDraft,
@@ -70,15 +70,84 @@ type EventDraft = {
   eventType: string;
   allowResale: boolean;
   dateTime: Date | null;
+  endDateTime: Date | null;
   coordinates: { latitude: number; longitude: number } | null;
 };
 
-const DEFAULT_REGION: Region = {
-  latitude: 40.4168,
-  longitude: -3.7038,
-  latitudeDelta: 0.08,
-  longitudeDelta: 0.08,
+const MAPTILER_KEY = 'F74nnnjzsxrsuFtO0Xf6';
+
+function buildLocationPickerHtml(
+  centerLat: number,
+  centerLng: number,
+  pin: { latitude: number; longitude: number } | null,
+): string {
+  const pinJs = pin
+    ? `setPickerPin(${pin.latitude},${pin.longitude},false);`
+    : '';
+  return `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no"/>
+<link href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" rel="stylesheet"/>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{width:100%;height:100%;background:#0d1117;overflow:hidden;-webkit-tap-highlight-color:transparent}
+#map{width:100%;height:100%;cursor:crosshair}
+.maplibregl-ctrl-attrib,.maplibregl-ctrl-logo,.maplibregl-ctrl-bottom-right,.maplibregl-ctrl-bottom-left{display:none!important}
+#pin{position:absolute;display:none;transform:translate(-50%,-100%);pointer-events:none;z-index:10}
+#pin svg{filter:drop-shadow(0 2px 4px rgba(0,0,0,0.5))}
+</style>
+</head>
+<body>
+<div id="map"></div>
+<div id="pin">
+  <svg width="32" height="42" viewBox="0 0 32 42" xmlns="http://www.w3.org/2000/svg">
+    <path d="M16 0C7.163 0 0 7.163 0 16c0 10.667 16 26 16 26S32 26.667 32 16C32 7.163 24.837 0 16 0z" fill="#A78BFA"/>
+    <circle cx="16" cy="16" r="7" fill="white"/>
+  </svg>
+</div>
+<script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+<script>
+var RN=window.ReactNativeWebView;
+function post(o){try{RN.postMessage(JSON.stringify(o));}catch(e){}}
+
+var pinEl=document.getElementById('pin');
+var pinMarker=null;
+
+var map=new maplibregl.Map({
+  container:'map',
+  style:'https://api.maptiler.com/maps/streets-v4/style.json?key=${MAPTILER_KEY}',
+  center:[${centerLng},${centerLat}],
+  zoom:14,
+  attributionControl:false,
+  fadeDuration:200,
+});
+
+window.setPickerPin=function(lat,lng,fly){
+  if(pinMarker){pinMarker.remove();}
+  var el=document.createElement('div');
+  el.style.cssText='width:32px;height:42px;cursor:default;';
+  el.innerHTML=pinEl.innerHTML;
+  pinMarker=new maplibregl.Marker({element:el,anchor:'bottom'})
+    .setLngLat([lng,lat]).addTo(map);
+  if(fly){map.flyTo({center:[lng,lat],zoom:15,duration:600});}
 };
+
+map.on('click',function(e){
+  var lat=e.lngLat.lat,lng=e.lngLat.lng;
+  window.setPickerPin(lat,lng,false);
+  post({type:'pinDrop',lat:lat,lng:lng});
+});
+
+map.on('load',function(){
+  ${pinJs}
+  post({type:'ready'});
+});
+</script>
+</body>
+</html>`;
+}
 
 function pad2(n: number) {
   return String(n).padStart(2, '0');
@@ -126,6 +195,7 @@ export default function CreateEventScreen() {
     eventType: 'party',
     allowResale: true,
     dateTime: null,
+    endDateTime: null,
     coordinates: null,
   });
 
@@ -139,10 +209,24 @@ export default function CreateEventScreen() {
   const [iosDateTimeDraft, setIosDateTimeDraft] = useState<Date>(() => nextRoundedDateTime(new Date()));
   const iosDateTimeDraftRef = useRef<Date>(iosDateTimeDraft);
 
+  const [showIosEndDateTime, setShowIosEndDateTime] = useState(false);
+  const [iosEndDateTimeDraft, setIosEndDateTimeDraft] = useState<Date>(() => nextRoundedDateTime(new Date()));
+  const iosEndDateTimeDraftRef = useRef<Date>(iosEndDateTimeDraft);
+
   const [showMapModal, setShowMapModal] = useState(false);
-  const [mapRegion, setMapRegion] = useState<Region>(DEFAULT_REGION);
   const [mapSelection, setMapSelection] = useState<{ latitude: number; longitude: number } | null>(null);
+  const [mapPickerHtml, setMapPickerHtml] = useState<string | null>(null);
+  const mapWebViewRef = useRef<WebView>(null);
   const [isResolvingAddress, setIsResolvingAddress] = useState(false);
+
+  const [locationQuery, setLocationQuery] = useState('');
+  const [locationSuggestions, setLocationSuggestions] = useState<Array<{ id: string; name: string; lat: number; lng: number }>>([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const geocodeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const [mapSearchQuery, setMapSearchQuery] = useState('');
+  const [mapSearchSuggestions, setMapSearchSuggestions] = useState<Array<{ id: string; name: string; lat: number; lng: number }>>([]);
+  const mapGeoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
 
   // Load event data directly from Supabase when editing
@@ -157,6 +241,7 @@ export default function CreateEventScreen() {
           .single();
         if (error || !data) { console.log('[edit] error', error); return; }
         const rawDate = data.event_date ? new Date(data.event_date) : null;
+        const rawEnd = data.end_datetime ? new Date(data.end_datetime) : null;
         setDraft({
           title: data.title ?? '',
           description: data.description ?? '',
@@ -169,10 +254,12 @@ export default function CreateEventScreen() {
           eventType: data.event_type ?? 'party',
           allowResale: data.allow_resale ?? true,
           dateTime: rawDate,
+          endDateTime: rawEnd,
           coordinates: data.venues
             ? { latitude: data.venues.latitude, longitude: data.venues.longitude }
             : null,
         });
+        if (data.venues?.name) setLocationQuery(data.venues.name);
         if (Array.isArray(data.event_ticket_types) && data.event_ticket_types.length > 0) {
           const validCats = ['general', 'vip', 'early', 'backstage'];
           const active = data.event_ticket_types.filter((t) => !t.deleted_at && (t.is_active ?? true));
@@ -236,6 +323,11 @@ export default function CreateEventScreen() {
     return `${draft.dateTime.toLocaleDateString()} • ${toHM(draft.dateTime)}`;
   }, [draft.dateTime]);
 
+  const uiEndDateTimeText = useMemo(() => {
+    if (!draft.endDateTime) return 'Seleccionar fecha y hora de fin';
+    return `${draft.endDateTime.toLocaleDateString()} • ${toHM(draft.endDateTime)}`;
+  }, [draft.endDateTime]);
+
   const newTicketErrors = useMemo(() => getTicketDraftErrors(newTicket), [newTicket]);
 
   const errors = useMemo(() => {
@@ -261,6 +353,12 @@ export default function CreateEventScreen() {
       if (draft.dateTime.getTime() > maxFutureDate.getTime()) {
         e.dateTime = 'La fecha no puede ser más de 5 años en el futuro';
       }
+    }
+
+    if (!draft.endDateTime || !Number.isFinite(draft.endDateTime.getTime())) {
+      e.endDateTime = 'Selecciona la fecha y hora de finalización.';
+    } else if (draft.dateTime && draft.endDateTime.getTime() <= draft.dateTime.getTime()) {
+      e.endDateTime = 'Debe ser posterior a la fecha de inicio.';
     }
 
     if (!draft.coordinates) e.coordinates = 'Marca la ubicación exacta del evento.';
@@ -342,59 +440,103 @@ export default function CreateEventScreen() {
 
   const openMapPicker = useCallback(async () => {
     Keyboard.dismiss();
-    let nextRegion = mapRegion;
-    let nextSelection = draft.coordinates;
+    let centerLat = 37.3891;
+    let centerLng = -5.9845;
 
     try {
       const permission = await Location.requestForegroundPermissionsAsync();
       if (permission.status === 'granted') {
         const current = await Location.getCurrentPositionAsync({});
-        nextRegion = {
-          latitude: current.coords.latitude,
-          longitude: current.coords.longitude,
-          latitudeDelta: 0.02,
-          longitudeDelta: 0.02,
-        };
-        if (!nextSelection) {
-          nextSelection = {
-            latitude: current.coords.latitude,
-            longitude: current.coords.longitude,
-          };
-        }
+        centerLat = current.coords.latitude;
+        centerLng = current.coords.longitude;
       }
     } catch {}
 
     if (draft.coordinates) {
-      nextRegion = {
-        latitude: draft.coordinates.latitude,
-        longitude: draft.coordinates.longitude,
-        latitudeDelta: 0.02,
-        longitudeDelta: 0.02,
-      };
-      nextSelection = draft.coordinates;
+      centerLat = draft.coordinates.latitude;
+      centerLng = draft.coordinates.longitude;
+      setMapSelection(draft.coordinates);
+    } else {
+      setMapSelection(null);
     }
 
-    setMapRegion(nextRegion);
-    setMapSelection(nextSelection);
+    setMapPickerHtml(buildLocationPickerHtml(
+      centerLat, centerLng,
+      draft.coordinates ?? null,
+    ));
     setShowMapModal(true);
-  }, [draft.coordinates, mapRegion]);
+  }, [draft.coordinates]);
+
+  const searchGeocode = useCallback(async (q: string): Promise<Array<{ id: string; name: string; lat: number; lng: number }>> => {
+    if (q.trim().length < 3) return [];
+    try {
+      const res = await fetch(`https://api.maptiler.com/geocoding/${encodeURIComponent(q.trim())}.json?key=F74nnnjzsxrsuFtO0Xf6&language=es&limit=5`);
+      const json = await res.json() as { features?: any[] };
+      return (json.features ?? []).map((f: any) => ({
+        id: String(f.id),
+        name: String(f.place_name ?? f.text ?? ''),
+        lat: f.center[1] as number,
+        lng: f.center[0] as number,
+      }));
+    } catch { return []; }
+  }, []);
+
+  const onLocationQueryChange = useCallback((text: string) => {
+    setLocationQuery(text);
+    setShowSuggestions(true);
+    if (geocodeTimerRef.current) clearTimeout(geocodeTimerRef.current);
+    if (text.trim().length < 3) { setLocationSuggestions([]); return; }
+    geocodeTimerRef.current = setTimeout(() => {
+      void searchGeocode(text).then(setLocationSuggestions);
+    }, 400);
+  }, [searchGeocode]);
+
+  const selectLocationSuggestion = useCallback((s: { id: string; name: string; lat: number; lng: number }) => {
+    setLocationQuery(s.name);
+    updateDraft('location', s.name);
+    updateDraft('coordinates', { latitude: s.lat, longitude: s.lng });
+    setLocationSuggestions([]);
+    setShowSuggestions(false);
+    Keyboard.dismiss();
+  }, [updateDraft]);
+
+  const onMapSearchChange = useCallback((text: string) => {
+    setMapSearchQuery(text);
+    if (mapGeoTimerRef.current) clearTimeout(mapGeoTimerRef.current);
+    if (text.trim().length < 3) { setMapSearchSuggestions([]); return; }
+    mapGeoTimerRef.current = setTimeout(() => {
+      void searchGeocode(text).then(setMapSearchSuggestions);
+    }, 400);
+  }, [searchGeocode]);
+
+  const selectMapSuggestion = useCallback((s: { id: string; name: string; lat: number; lng: number }) => {
+    setMapSearchQuery(s.name);
+    setMapSearchSuggestions([]);
+    setMapSelection({ latitude: s.lat, longitude: s.lng });
+    mapWebViewRef.current?.injectJavaScript(
+      `window.setPickerPin(${s.lat},${s.lng},true);true;`
+    );
+    Keyboard.dismiss();
+  }, []);
 
   const reverseGeocodeSelection = useCallback(async (coords: { latitude: number; longitude: number }) => {
     try {
       setIsResolvingAddress(true);
-      // Clear old address immediately so user sees the update
       updateDraft('location', '');
       const places = await Location.reverseGeocodeAsync(coords);
       const place = places?.[0];
-      // Build address: prefer street+number+city, fallback to district+city, fallback to coords
       const parts = [
         place?.street && place?.streetNumber ? `${place.street} ${place.streetNumber}` : place?.street,
         place?.district || place?.subregion,
         place?.city,
       ].filter(Boolean) as string[];
-      updateDraft('location', parts.length ? parts.join(', ') : `${coords.latitude.toFixed(5)}, ${coords.longitude.toFixed(5)}`);
+      const addr = parts.length ? parts.join(', ') : `${coords.latitude.toFixed(5)}, ${coords.longitude.toFixed(5)}`;
+      updateDraft('location', addr);
+      setLocationQuery(addr);
     } catch {
-      updateDraft('location', `${coords.latitude.toFixed(5)}, ${coords.longitude.toFixed(5)}`);
+      const fallback = `${coords.latitude.toFixed(5)}, ${coords.longitude.toFixed(5)}`;
+      updateDraft('location', fallback);
+      setLocationQuery(fallback);
     } finally {
       setIsResolvingAddress(false);
     }
@@ -410,6 +552,15 @@ export default function CreateEventScreen() {
     await reverseGeocodeSelection(mapSelection);
     setShowMapModal(false);
   }, [mapSelection, reverseGeocodeSelection, updateDraft]);
+
+  const onMapWebViewMessage = useCallback((event: any) => {
+    try {
+      const msg = JSON.parse(event.nativeEvent.data);
+      if (msg.type === 'pinDrop') {
+        setMapSelection({ latitude: msg.lat, longitude: msg.lng });
+      }
+    } catch {}
+  }, []);
 
   const openDateTimePicker = useCallback(() => {
     Keyboard.dismiss();
@@ -463,6 +614,57 @@ export default function CreateEventScreen() {
     updateDraft('dateTime', next.getTime() < minDateTime.getTime() ? new Date(minDateTime) : new Date(next));
     setShowIosDateTime(false);
   }, [minDateTime, updateDraft]);
+
+  const openEndDateTimePicker = useCallback(() => {
+    Keyboard.dismiss();
+    const startBase = draft.dateTime && Number.isFinite(draft.dateTime.getTime()) ? new Date(draft.dateTime) : new Date(minDateTime);
+    const base = draft.endDateTime && Number.isFinite(draft.endDateTime.getTime())
+      ? new Date(draft.endDateTime)
+      : new Date(startBase.getTime() + 4 * 60 * 60 * 1000); // default +4h from start
+
+    if (Platform.OS === 'android') {
+      DateTimePickerAndroid.open({
+        value: base,
+        mode: 'date',
+        minimumDate: draft.dateTime ?? minDateTime,
+        onChange: (event, selectedDate) => {
+          if (event.type !== 'set' || !selectedDate) return;
+          const next = new Date(base);
+          next.setFullYear(selectedDate.getFullYear(), selectedDate.getMonth(), selectedDate.getDate());
+          DateTimePickerAndroid.open({
+            value: next,
+            mode: 'time',
+            is24Hour: true,
+            onChange: (timeEvent, selectedTime) => {
+              if (timeEvent.type !== 'set' || !selectedTime) return;
+              next.setHours(selectedTime.getHours(), selectedTime.getMinutes(), 0, 0);
+              updateDraft('endDateTime', new Date(next));
+            },
+          });
+        },
+      });
+      return;
+    }
+    if (Platform.OS === 'ios') {
+      setIosEndDateTimeDraft(base);
+      iosEndDateTimeDraftRef.current = base;
+      setShowIosEndDateTime(true);
+    }
+  }, [draft.dateTime, draft.endDateTime, minDateTime, updateDraft]);
+
+  const onIosEndDateTimeChange = useCallback((event: any, selectedDate?: Date) => {
+    if (event?.type && event.type !== 'set') return;
+    if (!selectedDate || !Number.isFinite(selectedDate.getTime())) return;
+    iosEndDateTimeDraftRef.current = new Date(selectedDate);
+    setIosEndDateTimeDraft(new Date(selectedDate));
+  }, []);
+
+  const confirmIosEndDateTime = useCallback(() => {
+    const next = iosEndDateTimeDraftRef.current;
+    if (!next || !Number.isFinite(next.getTime())) { setShowIosEndDateTime(false); return; }
+    updateDraft('endDateTime', new Date(next));
+    setShowIosEndDateTime(false);
+  }, [updateDraft]);
 
   const addTicketType = useCallback(() => {
     const ticketErrors = getTicketDraftErrors(newTicket);
@@ -522,9 +724,12 @@ export default function CreateEventScreen() {
         uploadedPlan = uploaded;
       }
 
+      const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
       const mappedTicketTypes = ticketTypes.map((ticket) => ({
         id: ticket.id,
-        name: buildTicketName(ticket),
+        // Existing tickets (UUID id) already have the formatted name stored in the DB.
+        // Only new tickets (temp id) need buildTicketName to generate one.
+        name: uuidRe.test(String(ticket.id)) ? ticket.name : buildTicketName(ticket),
         price: parsePositiveNumber(ticket.price) || 0,
         quantity: parsePositiveInt(ticket.quantity) || 0,
         sold: 0,
@@ -545,6 +750,7 @@ export default function CreateEventScreen() {
         allowResale: draft.allowResale,
         date: toYMD(draft.dateTime),
         time: toHM(draft.dateTime),
+        endDatetime: draft.endDateTime ? draft.endDateTime.toISOString() : null,
         price: String(metrics.minPrice ?? 0),
         capacity: metrics.capacity,
         ticketTypes: mappedTicketTypes,
@@ -586,7 +792,7 @@ export default function CreateEventScreen() {
           </View>
         </View>
 
-        <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="always">
+        <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
           <GlassView intensity={14} style={[styles.card, styles.cardBorder]}>
             <Text style={styles.sectionTitle}>Información básica</Text>
             <ThemedInput
@@ -628,7 +834,7 @@ export default function CreateEventScreen() {
             <TouchableOpacity onPress={openDateTimePicker} activeOpacity={0.85}>
               <View pointerEvents="none">
                 <ThemedInput
-                  label="Fecha y hora"
+                  label="Inicio del evento *"
                   value={uiDateTimeText}
                   editable={false}
                   error={getError('dateTime')}
@@ -637,13 +843,28 @@ export default function CreateEventScreen() {
                 />
               </View>
             </TouchableOpacity>
+            <TouchableOpacity onPress={openEndDateTimePicker} activeOpacity={0.85} style={{ marginTop: 12 }}>
+              <View pointerEvents="none">
+                <ThemedInput
+                  label="Fin del evento *"
+                  value={uiEndDateTimeText}
+                  editable={false}
+                  error={getError('endDateTime')}
+                  icon={<Calendar size={20} color={Colors.dark.textSecondary} />}
+                  rightIcon={<Clock size={18} color={Colors.dark.textSecondary} />}
+                />
+              </View>
+            </TouchableOpacity>
+            <Text style={{ color: 'rgba(255,255,255,0.4)', fontSize: 12, marginTop: 8, lineHeight: 16 }}>
+              Al finalizar el evento se eliminarán automáticamente las entradas y ofertas de reventa.
+            </Text>
           </GlassView>
 
           <GlassView intensity={14} style={[styles.card, styles.cardBorder]}>
             <View style={styles.sectionHeaderRow}>
               <Text style={styles.sectionTitle}>Ubicación</Text>
               <ThemedButton
-                title="Abrir mapa"
+                title="Ver mapa"
                 onPress={openMapPicker}
                 variant="outline"
                 style={styles.smallButton}
@@ -651,18 +872,34 @@ export default function CreateEventScreen() {
                 icon={<MapPin size={16} color={Colors.dark.primary} />}
               />
             </View>
-            <TouchableOpacity onPress={openMapPicker} activeOpacity={0.85}>
-              <View pointerEvents="none">
-                <ThemedInput
-                  label="Lugar"
-                  placeholder="Selecciona el lugar en el mapa"
-                  value={draft.location}
-                  editable={false}
-                  error={getError('location') || getError('coordinates')}
-                  icon={<MapPin size={20} color={Colors.dark.textSecondary} />}
-                />
-              </View>
-            </TouchableOpacity>
+            <View>
+              <ThemedInput
+                label="Lugar"
+                placeholder="Escribe la dirección o busca en el mapa"
+                value={locationQuery}
+                onChangeText={onLocationQueryChange}
+                onFocus={() => locationQuery.trim().length >= 3 && setShowSuggestions(true)}
+                onBlur={() => setTimeout(() => setShowSuggestions(false), 200)}
+                error={getError('location') || getError('coordinates')}
+                icon={<MapPin size={20} color={Colors.dark.textSecondary} />}
+                returnKeyType="search"
+                onSubmitEditing={() => { setShowSuggestions(false); Keyboard.dismiss(); }}
+              />
+              {showSuggestions && locationSuggestions.length > 0 && (
+                <View style={styles.suggestionsBox}>
+                  {locationSuggestions.map((s, i) => (
+                    <TouchableOpacity
+                      key={s.id}
+                      onPress={() => selectLocationSuggestion(s)}
+                      style={[styles.suggestionItem, i < locationSuggestions.length - 1 && styles.suggestionItemBorder]}
+                    >
+                      <MapPin size={14} color={Colors.dark.primary} style={{ marginTop: 1 }} />
+                      <Text style={styles.suggestionText} numberOfLines={2}>{s.name}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              )}
+            </View>
             {draft.coordinates && !isResolvingAddress ? (
               <View style={styles.locationPreview}>
                 <Navigation size={13} color={Colors.dark.primary} />
@@ -1041,8 +1278,34 @@ export default function CreateEventScreen() {
           </Modal>
         ) : null}
 
+        {Platform.OS === 'ios' ? (
+          <Modal visible={showIosEndDateTime} transparent animationType="slide" onRequestClose={() => setShowIosEndDateTime(false)}>
+            <View style={styles.modalOverlay}>
+              <View style={styles.modalCard}>
+                <View style={styles.modalHeaderRow}>
+                  <TouchableOpacity onPress={() => setShowIosEndDateTime(false)}>
+                    <Text style={styles.modalActionText}>Cancelar</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity onPress={confirmIosEndDateTime}>
+                    <Text style={styles.modalActionText}>Confirmar</Text>
+                  </TouchableOpacity>
+                </View>
+                <DateTimePicker
+                  value={iosEndDateTimeDraft}
+                  mode="datetime"
+                  display="spinner"
+                  onChange={onIosEndDateTimeChange}
+                  minimumDate={draft.dateTime ?? minDateTime}
+                  themeVariant="dark"
+                  textColor={Colors.dark.text as any}
+                />
+              </View>
+            </View>
+          </Modal>
+        ) : null}
+
         <Modal visible={showMapModal} animationType="slide" onRequestClose={() => setShowMapModal(false)}>
-          <SafeAreaView style={styles.mapModalScreen}>
+          <View style={[styles.mapModalScreen, { paddingTop: insets.top }]}>
             <View style={styles.mapModalHeader}>
               <TouchableOpacity onPress={() => setShowMapModal(false)} style={styles.mapHeaderIconBtn}>
                 <X size={22} color="white" />
@@ -1053,18 +1316,52 @@ export default function CreateEventScreen() {
               </TouchableOpacity>
             </View>
 
-            <MapView
-              style={{ flex: 1 }}
-              region={mapRegion}
-              onRegionChangeComplete={setMapRegion}
-              showsUserLocation
-              onPress={(event) => {
-                const { latitude, longitude } = event.nativeEvent.coordinate;
-                setMapSelection({ latitude, longitude });
-              }}
-            >
-              {mapSelection ? <Marker coordinate={mapSelection} /> : null}
-            </MapView>
+            {/* Search bar inside map modal */}
+            <View style={styles.mapSearchContainer}>
+              <ThemedInput
+                label=""
+                placeholder="Buscar dirección…"
+                value={mapSearchQuery}
+                onChangeText={onMapSearchChange}
+                icon={<MapPin size={18} color={Colors.dark.textSecondary} />}
+                returnKeyType="search"
+                onSubmitEditing={() => { setMapSearchSuggestions([]); Keyboard.dismiss(); }}
+                containerStyle={{ marginBottom: 0 }}
+              />
+              {mapSearchSuggestions.length > 0 && (
+                <View style={[styles.suggestionsBox, { position: 'absolute', top: 52, left: 0, right: 0, zIndex: 100 }]}>
+                  {mapSearchSuggestions.map((s, i) => (
+                    <TouchableOpacity
+                      key={s.id}
+                      onPress={() => selectMapSuggestion(s)}
+                      style={[styles.suggestionItem, i < mapSearchSuggestions.length - 1 && styles.suggestionItemBorder]}
+                    >
+                      <MapPin size={14} color={Colors.dark.primary} style={{ marginTop: 1 }} />
+                      <Text style={styles.suggestionText} numberOfLines={2}>{s.name}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              )}
+            </View>
+
+            {mapPickerHtml ? (
+              <WebView
+                ref={mapWebViewRef}
+                source={{ html: mapPickerHtml, baseUrl: 'https://api.maptiler.com' }}
+                style={{ flex: 1 }}
+                javaScriptEnabled
+                domStorageEnabled
+                allowUniversalAccessFromFileURLs
+                allowsInlineMediaPlayback
+                scrollEnabled={false}
+                bounces={false}
+                overScrollMode="never"
+                onMessage={onMapWebViewMessage}
+                originWhitelist={['*']}
+                mixedContentMode="always"
+                androidLayerType="hardware"
+              />
+            ) : null}
 
             <View style={[styles.mapBottomCard, { bottom: Math.max(16, insets.bottom + 8) }]}>
               <Text style={styles.mapBottomTitle}>Pulsa en el mapa para marcar el recinto</Text>
@@ -1082,7 +1379,7 @@ export default function CreateEventScreen() {
                 />
               </View>
             </View>
-          </SafeAreaView>
+          </View>
         </Modal>
       </SafeAreaView>
     </View>
@@ -1257,6 +1554,37 @@ const styles = StyleSheet.create({
   mapBottomTitle: { color: 'white', fontWeight: '900', marginBottom: 6 },
   mapBottomText: { color: Colors.dark.textSecondary, marginBottom: 12 },
   mapBottomActions: { marginTop: 2 },
+  suggestionsBox: {
+    backgroundColor: '#13132a',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.12)',
+    overflow: 'hidden',
+    marginTop: 4,
+  },
+  suggestionItem: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  suggestionItemBorder: {
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255,255,255,0.07)',
+  },
+  suggestionText: {
+    flex: 1,
+    color: Colors.dark.text,
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  mapSearchContainer: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    backgroundColor: '#111126',
+    zIndex: 10,
+  },
 });
 
 

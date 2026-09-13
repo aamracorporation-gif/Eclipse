@@ -1,8 +1,8 @@
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
-import { useState, useEffect, useCallback } from 'react';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, RefreshControl } from 'react-native';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { supabase } from '@/lib/supabase';
-import { ChevronLeft, ScanLine, ShoppingBag, BarChart2, Calendar, Ticket, Mail } from '@/lib/icons';
+import { ChevronLeft, ScanLine, ShoppingBag, BarChart2, Calendar, Ticket, Mail, RefreshCw } from '@/lib/icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Colors } from '@/constants/Colors';
 import { GlassView } from '@/components/ui/GlassView';
@@ -11,16 +11,16 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 interface ScanEntry {
   id: string;
-  created_at: string;
+  scanned_at: string;
   events: { title: string } | null;
 }
 
 interface SaleEntry {
   id: string;
-  created_at: string;
+  purchase_date: string;
   total_price: number;
   events: { title: string } | null;
-  ticket_type_name: string | null;
+  ticket_type: string | null;
 }
 
 export default function WorkerStatsScreen() {
@@ -30,7 +30,9 @@ export default function WorkerStatsScreen() {
   const [scans, setScans] = useState<ScanEntry[]>([]);
   const [sales, setSales] = useState<SaleEntry[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [activeTab, setActiveTab] = useState<'scans' | 'sales'>('scans');
+  const channelRef = useRef<any>(null);
 
   const safeBack = () => {
     const canGoBack = (router as any)?.canGoBack?.();
@@ -38,39 +40,79 @@ export default function WorkerStatsScreen() {
     else router.replace('/(creator)/workers');
   };
 
-  const fetchData = useCallback(async () => {
+  const fetchData = useCallback(async (silent = false) => {
     if (!id) return;
-    setLoading(true);
+    if (!silent) setLoading(true);
     try {
       const [workerRes, scansRes, salesRes] = await Promise.all([
         supabase.from('workers').select('*').eq('id', id).single(),
         supabase
           .from('tickets')
-          .select('id, created_at, events(title)')
+          .select('id, scanned_at, events(title)')
           .eq('scanned_by_worker_id', id)
-          .order('created_at', { ascending: false })
-          .limit(50),
+          .order('scanned_at', { ascending: false })
+          .limit(100),
         supabase
           .from('tickets')
-          .select('id, created_at, total_price, ticket_type_name, events(title)')
+          .select('id, purchase_date, total_price, ticket_type, events(title)')
           .eq('sold_by_worker_id', id)
-          .eq('payment_status', 'paid')
-          .order('created_at', { ascending: false })
-          .limit(50),
+          .order('purchase_date', { ascending: false })
+          .limit(100),
       ]);
+
+      if (workerRes.error) console.error('[worker-stats] worker query error:', workerRes.error);
+      if (scansRes.error)  console.error('[worker-stats] scans query error:', scansRes.error);
+      if (salesRes.error)  console.error('[worker-stats] sales query error:', salesRes.error);
 
       if (workerRes.data) setWorker(workerRes.data);
       setScans((scansRes.data as any[]) || []);
       setSales((salesRes.data as any[]) || []);
     } catch (err) {
-      console.error('Worker stats fetch error:', err);
+      console.error('[worker-stats] unexpected error:', err);
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
   }, [id]);
 
+  // Real-time subscription: re-fetch whenever a ticket changes for this worker
   useEffect(() => {
+    if (!id) return;
+
     fetchData();
+
+    channelRef.current = supabase
+      .channel(`worker-stats-${id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'tickets',
+          filter: `scanned_by_worker_id=eq.${id}`,
+        },
+        () => fetchData(true)
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'tickets',
+          filter: `sold_by_worker_id=eq.${id}`,
+        },
+        () => fetchData(true)
+      )
+      .subscribe();
+
+    return () => {
+      if (channelRef.current) supabase.removeChannel(channelRef.current);
+    };
+  }, [id, fetchData]);
+
+  const onRefresh = useCallback(() => {
+    setRefreshing(true);
+    fetchData(true);
   }, [fetchData]);
 
   const totalRevenue = sales.reduce((sum, s) => sum + Number(s.total_price || 0), 0);
@@ -93,7 +135,11 @@ export default function WorkerStatsScreen() {
           <Text style={styles.headerTitle} numberOfLines={1}>
             {loading || !worker ? 'Estadísticas' : worker.name}
           </Text>
-          <View style={{ width: 40 }} />
+          <TouchableOpacity onPress={onRefresh} style={styles.backBtn} disabled={refreshing}>
+            {refreshing
+              ? <ActivityIndicator size="small" color="white" />
+              : <RefreshCw size={18} color="white" />}
+          </TouchableOpacity>
         </View>
 
         {loading ? (
@@ -105,7 +151,18 @@ export default function WorkerStatsScreen() {
             <Text style={styles.errorText}>No se pudo cargar el trabajador.</Text>
           </View>
         ) : (
-          <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
+          <ScrollView
+            contentContainerStyle={styles.scroll}
+            showsVerticalScrollIndicator={false}
+            refreshControl={
+              <RefreshControl
+                refreshing={refreshing}
+                onRefresh={onRefresh}
+                tintColor="#7C3AED"
+                colors={['#7C3AED']}
+              />
+            }
+          >
             {/* Worker info card */}
             <GlassView intensity={14} style={styles.infoCard}>
               <View style={styles.infoRow}>
@@ -124,6 +181,12 @@ export default function WorkerStatsScreen() {
                 </View>
               </View>
             </GlassView>
+
+            {/* Live indicator */}
+            <View style={styles.liveRow}>
+              <View style={styles.liveDot} />
+              <Text style={styles.liveText}>Actualizándose en tiempo real</Text>
+            </View>
 
             {/* Stats summary row */}
             <View style={styles.statsRow}>
@@ -185,7 +248,7 @@ export default function WorkerStatsScreen() {
                       <Text style={styles.rowTitle} numberOfLines={1}>
                         {(s.events as any)?.title || 'Evento desconocido'}
                       </Text>
-                      <Text style={styles.rowDate}>{formatDate(s.created_at)}</Text>
+                      <Text style={styles.rowDate}>{formatDate(s.scanned_at)}</Text>
                     </View>
                   </GlassView>
                 ))
@@ -206,10 +269,10 @@ export default function WorkerStatsScreen() {
                       <Text style={styles.rowTitle} numberOfLines={1}>
                         {(s.events as any)?.title || 'Evento desconocido'}
                       </Text>
-                      {s.ticket_type_name && (
-                        <Text style={styles.rowSub} numberOfLines={1}>{s.ticket_type_name}</Text>
+                      {s.ticket_type && (
+                        <Text style={styles.rowSub} numberOfLines={1}>{s.ticket_type}</Text>
                       )}
-                      <Text style={styles.rowDate}>{formatDate(s.created_at)}</Text>
+                      <Text style={styles.rowDate}>{formatDate(s.purchase_date)}</Text>
                     </View>
                     <Text style={styles.rowPrice}>{Number(s.total_price || 0).toFixed(2)}€</Text>
                   </GlassView>
@@ -254,7 +317,7 @@ const styles = StyleSheet.create({
   errorText: { color: Colors.dark.textSecondary, fontSize: 15 },
   scroll: { paddingHorizontal: 20, paddingBottom: 20 },
 
-  infoCard: { borderRadius: 18, padding: 16, marginBottom: 16 },
+  infoCard: { borderRadius: 18, padding: 16, marginBottom: 12 },
   infoRow: { flexDirection: 'row', alignItems: 'center' },
   avatar: {
     width: 56,
@@ -276,6 +339,20 @@ const styles = StyleSheet.create({
   statusActive: { backgroundColor: 'rgba(74,222,128,0.2)' },
   statusPending: { backgroundColor: 'rgba(251,191,36,0.2)' },
   statusText: { color: 'white', fontSize: 11, fontWeight: '700' },
+
+  liveRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 14,
+  },
+  liveDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 4,
+    backgroundColor: '#4ade80',
+  },
+  liveText: { color: 'rgba(74,222,128,0.8)', fontSize: 11, fontWeight: '600' },
 
   statsRow: { flexDirection: 'row', gap: 10, marginBottom: 20 },
   statCard: {

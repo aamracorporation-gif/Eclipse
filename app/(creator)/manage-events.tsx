@@ -1,8 +1,8 @@
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, Image, Alert, TextInput } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
-import { ArrowLeft, Calendar, MapPin, Ticket, Edit, Trash2, BarChart2, Plus, Search, ShieldCheck } from '@/lib/icons';
-import { useRouter } from 'expo-router';
+import { ArrowLeft, Calendar, MapPin, Ticket, Edit, Trash2, BarChart2, Plus, Search, ShieldCheck, QrCode } from '@/lib/icons';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useEvents } from '@/lib/EventContext';
 import { useAuth } from '@/lib/AuthContext';
 import { Colors } from '@/constants/Colors';
@@ -19,7 +19,10 @@ export default function ManageEventsScreen() {
   const { t } = useTranslation();
 
   const [profileRole, setProfileRole] = useState<'organizer' | 'admin' | 'attendee' | null>(null);
-  const [filter, setFilter] = useState<'all' | 'upcoming' | 'past'>('upcoming');
+  const { tab } = useLocalSearchParams<{ tab?: string }>();
+  const [filter, setFilter] = useState<'all' | 'upcoming' | 'past'>(
+    tab === 'past' ? 'past' : tab === 'all' ? 'all' : 'upcoming'
+  );
   const [query, setQuery] = useState('');
   const listRef = useRef<FlatList<any> | null>(null);
   const searchRef = useRef<TextInput | null>(null);
@@ -162,39 +165,59 @@ export default function ManageEventsScreen() {
         </View>
 
         <View style={styles.actions}>
-          {!isAdmin && (
-            <TouchableOpacity 
-              style={styles.actionButton} 
+          {/* Row 1: primary actions */}
+          <View style={styles.actionsRow}>
+            {!isAdmin && (
+              <TouchableOpacity
+                style={[styles.actionBtn, styles.actionBtnPrimary]}
+                onPress={() => router.push({
+                  pathname: '/(creator)/create-event',
+                  params: { id: item.id, isEditing: 'true' },
+                })}>
+                <Edit size={15} color={Colors.dark.secondary} />
+                <Text style={[styles.actionBtnText, { color: Colors.dark.secondary }]}>{t('creator.manage_events.actions.edit')}</Text>
+              </TouchableOpacity>
+            )}
+            <TouchableOpacity
+              style={[styles.actionBtn, styles.actionBtnPrimary, { flex: isAdmin ? undefined : 1 }]}
               onPress={() => router.push({
-                pathname: '/(creator)/create-event',
-                params: {
-                  id: item.id,
-                  isEditing: 'true'
-                }
+                pathname: '/(creator)/event-stats/[id]',
+                params: { id: item.id },
               })}>
-              <Edit size={18} color={Colors.dark.secondary} />
-              <Text style={[styles.actionText, { color: Colors.dark.secondary }]}>{t('creator.manage_events.actions.edit')}</Text>
+              <BarChart2 size={15} color={Colors.dark.primary} />
+              <Text style={[styles.actionBtnText, { color: Colors.dark.primary }]}>{t('creator.manage_events.actions.stats')}</Text>
             </TouchableOpacity>
-          )}
-          
-          <TouchableOpacity 
-            style={styles.actionButton} 
-            onPress={() => router.push({
-              pathname: '/(creator)/event-stats/[id]',
-              params: { id: item.id }
-            })}>
-            <BarChart2 size={18} color={Colors.dark.primary} />
-            <Text style={[styles.actionText, { color: Colors.dark.primary }]}>{t('creator.manage_events.actions.stats')}</Text>
-          </TouchableOpacity>
+          </View>
 
-          <TouchableOpacity
-            style={styles.actionButton}
-            onPress={() => handleDelete(item.id)}
-          >
-            <Trash2 size={18} color={Colors.dark.error} />
-            <Text style={[styles.actionText, { color: Colors.dark.error }]}>{t('creator.manage_events.actions.delete')}</Text>
-          </TouchableOpacity>
+          {/* Row 2: secondary actions */}
+          <View style={styles.actionsRow}>
+            <TouchableOpacity
+              style={[styles.actionBtn, styles.actionBtnSecondary]}
+              onPress={() => router.push({
+                pathname: '/(creator)/event-discounts',
+                params: { event_id: item.id, event_title: encodeURIComponent(item.title) },
+              })}>
+              <Text style={styles.discountIcon}>%</Text>
+              <Text style={[styles.actionBtnText, { color: '#a78bfa' }]}>Descuentos</Text>
+            </TouchableOpacity>
 
+            <TouchableOpacity
+              style={[styles.actionBtn, styles.actionBtnSecondary]}
+              onPress={() => router.push({
+                pathname: '/(creator)/worker-qr',
+                params: { event_id: item.id, event_title: encodeURIComponent(item.title) },
+              })}>
+              <QrCode size={15} color="#a78bfa" />
+              <Text style={[styles.actionBtnText, { color: '#a78bfa' }]}>Workers</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.actionBtn, styles.actionBtnDanger]}
+              onPress={() => handleDelete(item.id)}>
+              <Trash2 size={15} color={Colors.dark.error} />
+              <Text style={[styles.actionBtnText, { color: Colors.dark.error }]}>{t('creator.manage_events.actions.delete')}</Text>
+            </TouchableOpacity>
+          </View>
         </View>
       </View>
     </GlassView>
@@ -554,26 +577,47 @@ const styles = StyleSheet.create({
     fontFamily: 'RussoOne_400Regular',
   },
   actions: {
+    gap: 8,
+    marginTop: 4,
+  },
+  actionsRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     gap: 8,
   },
-  actionButton: {
+  actionBtn: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    padding: 8,
-    borderRadius: 12,
-    backgroundColor: 'rgba(255,255,255,0.05)',
     gap: 6,
+    borderRadius: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 8,
   },
-  deleteButton: {
-    backgroundColor: 'rgba(239, 68, 68, 0.1)',
+  actionBtnPrimary: {
+    backgroundColor: 'rgba(255,255,255,0.07)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.10)',
   },
-  actionText: {
-    fontSize: 12,
+  actionBtnSecondary: {
+    backgroundColor: 'rgba(167,139,250,0.08)',
+    borderWidth: 1,
+    borderColor: 'rgba(167,139,250,0.18)',
+  },
+  actionBtnDanger: {
+    backgroundColor: 'rgba(239,68,68,0.08)',
+    borderWidth: 1,
+    borderColor: 'rgba(239,68,68,0.18)',
+  },
+  actionBtnText: {
+    fontSize: 11,
     fontFamily: 'RussoOne_400Regular',
+  },
+  discountIcon: {
+    color: '#a78bfa',
+    fontSize: 14,
+    fontWeight: '900',
+    lineHeight: 16,
   },
   emptyContainer: {
     padding: 32,

@@ -4,12 +4,42 @@ import { useLocalSearchParams, router } from 'expo-router';
 import * as Linking from 'expo-linking';
 import { supabase } from '@/lib/supabase';
 import { Colors } from '@/constants/Colors';
+import { invokeEdgeFunctionStrict } from '@/lib/edgeFunctions';
 
 function parseFragment(url: string) {
   const hashIndex = url.indexOf('#');
   if (hashIndex < 0) return new URLSearchParams();
   const hash = url.slice(hashIndex + 1);
   return new URLSearchParams(hash);
+}
+
+function parseQuery(url: string) {
+  const qIdx = url.indexOf('?');
+  if (qIdx < 0) return new URLSearchParams();
+  const endIdx = url.indexOf('#', qIdx);
+  const raw = endIdx > qIdx ? url.slice(qIdx + 1, endIdx) : url.slice(qIdx + 1);
+  return new URLSearchParams(raw);
+}
+
+async function recordLegalNonBlocking() {
+  try {
+    await invokeEdgeFunctionStrict('record-legal-acceptance', {});
+  } catch (e) {
+    console.warn('[auth-callback] record-legal-acceptance failed (non-blocking):', e);
+  }
+}
+
+async function routeByRole(uid: string) {
+  let role: string | null = null;
+  try {
+    const { data: profile } = await supabase.from('profiles').select('role').eq('id', uid).maybeSingle();
+    role = (profile?.role as string) ?? null;
+  } catch {}
+  if (role === 'admin' || role === 'organizer') {
+    router.replace('/(creator)/verification');
+  } else {
+    router.replace('/(tabs)');
+  }
 }
 
 export default function AuthCallbackScreen() {
@@ -24,6 +54,8 @@ export default function AuthCallbackScreen() {
       refresh_token: pick(params.refresh_token),
       error_description: pick(params.error_description),
       error: pick(params.error),
+      token_hash: pick(params.token_hash),
+      type: pick(params.type),
     };
   }, [params]);
 
@@ -38,20 +70,33 @@ export default function AuthCallbackScreen() {
 
         const initialUrl = await Linking.getInitialURL();
         const fragmentParams = initialUrl ? parseFragment(initialUrl) : new URLSearchParams();
+        const queryParams = initialUrl ? parseQuery(initialUrl) : new URLSearchParams();
 
-        const code = normalized.code || fragmentParams.get('code') || null;
-        const accessToken = normalized.access_token || fragmentParams.get('access_token') || null;
-        const refreshToken = normalized.refresh_token || fragmentParams.get('refresh_token') || null;
+        const code = normalized.code || queryParams.get('code') || fragmentParams.get('code') || null;
+        const accessToken = normalized.access_token || queryParams.get('access_token') || fragmentParams.get('access_token') || null;
+        const refreshToken = normalized.refresh_token || queryParams.get('refresh_token') || fragmentParams.get('refresh_token') || null;
+        const tokenHash = normalized.token_hash || queryParams.get('token_hash') || fragmentParams.get('token_hash') || null;
+        const otpType = normalized.type || queryParams.get('type') || fragmentParams.get('type') || null;
 
-        if (code) {
+        let sessionCreatedOk = false;
+        if (tokenHash && otpType) {
+          const { error } = await supabase.auth.verifyOtp({
+            token_hash: tokenHash,
+            type: otpType as any,
+          });
+          if (error) throw error;
+          sessionCreatedOk = true;
+        } else if (code) {
           const { error } = await supabase.auth.exchangeCodeForSession(code);
           if (error) throw error;
+          sessionCreatedOk = true;
         } else if (accessToken && refreshToken) {
           const { error } = await supabase.auth.setSession({
             access_token: accessToken,
             refresh_token: refreshToken,
           });
           if (error) throw error;
+          sessionCreatedOk = true;
         } else {
           const { data: currentSession } = await supabase.auth.getSession();
           if (!currentSession.session) {
@@ -59,18 +104,21 @@ export default function AuthCallbackScreen() {
           }
         }
 
+        // Password recovery flow — take user to reset screen, not the app.
+        if (otpType === 'recovery') {
+          if (cancelled) return;
+          router.replace('/auth/reset-password');
+          return;
+        }
+
         const { data: userData } = await supabase.auth.getUser();
         const uid = userData.user?.id;
         if (!uid) throw new Error('No se pudo recuperar la sesión del usuario.');
 
-        const { data: profile } = await supabase.from('profiles').select('role').eq('id', uid).maybeSingle();
+        void recordLegalNonBlocking();
         if (cancelled) return;
 
-        if (profile?.role === 'organizer') {
-          router.replace('/(creator)/verification');
-        } else {
-          router.replace('/(tabs)');
-        }
+        await routeByRole(uid);
       } catch (e: any) {
         if (cancelled) return;
         setErrorMsg(String(e?.message || 'No se pudo completar la verificación.'));
