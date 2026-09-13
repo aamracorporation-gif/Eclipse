@@ -171,6 +171,7 @@ CREATE OR REPLACE FUNCTION buy_resale_ticket(
 RETURNS json
 LANGUAGE plpgsql
 SECURITY DEFINER
+SET search_path = public, pg_temp
 AS $$
 DECLARE
   v_listing resale_listings%ROWTYPE;
@@ -178,6 +179,10 @@ DECLARE
   v_seller_wallet wallets%ROWTYPE;
   v_ticket_id uuid;
 BEGIN
+  IF auth.uid() IS NULL OR auth.uid() <> p_buyer_id THEN
+    RAISE EXCEPTION 'Unauthorized buyer' USING ERRCODE = '42501';
+  END IF;
+
   -- 1. Get listing info and lock row
   SELECT * INTO v_listing
   FROM resale_listings
@@ -254,10 +259,15 @@ CREATE OR REPLACE FUNCTION ensure_wallet_exists(p_user_id uuid)
 RETURNS json
 LANGUAGE plpgsql
 SECURITY DEFINER
+SET search_path = public, pg_temp
 AS $$
 DECLARE
   v_wallet_id uuid;
 BEGIN
+  IF auth.uid() IS NULL OR auth.uid() <> p_user_id THEN
+    RAISE EXCEPTION 'Unauthorized wallet access' USING ERRCODE = '42501';
+  END IF;
+
   INSERT INTO wallets (user_id, balance)
   VALUES (p_user_id, 0)
   ON CONFLICT (user_id) DO UPDATE SET updated_at = now()
