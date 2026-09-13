@@ -110,13 +110,14 @@ async function stripeGetAccount(accountId: string) {
   return data as { id: string };
 }
 
-async function stripeCreatePaymentIntent(params: Record<string, string>) {
+async function stripeCreatePaymentIntent(params: Record<string, string>, idempotencyKey: string) {
   const STRIPE_SECRET_KEY = getStripeSecretKey();
   const res = await fetch("https://api.stripe.com/v1/payment_intents", {
     method: "POST",
     headers: {
       Authorization: `Bearer ${STRIPE_SECRET_KEY}`,
       "Content-Type": "application/x-www-form-urlencoded",
+      "Idempotency-Key": idempotencyKey,
     },
     body: new URLSearchParams(params),
   });
@@ -127,6 +128,15 @@ async function stripeCreatePaymentIntent(params: Record<string, string>) {
     throw new Error(String(msg));
   }
 
+  return data as { id: string; client_secret: string; amount: number; currency: string };
+}
+
+async function stripeRetrievePaymentIntent(paymentIntentId: string) {
+  const res = await fetch(`https://api.stripe.com/v1/payment_intents/${encodeURIComponent(paymentIntentId)}`, {
+    headers: { Authorization: `Bearer ${getStripeSecretKey()}` },
+  });
+  const data = await res.json().catch(() => null);
+  if (!res.ok) throw new Error(String((data as any)?.error?.message || "Stripe error"));
   return data as { id: string; client_secret: string; amount: number; currency: string };
 }
 
@@ -213,6 +223,31 @@ Deno.serve(async (req) => {
     const kind = body?.kind;
     if (kind !== "event_ticket" && kind !== "vip_table" && kind !== "resale_ticket") {
       return jsonResponse({ ok: false, error: "Not implemented" });
+    }
+
+    const idempotencyKey = String(body?.idempotency_key || "").trim();
+    if (!/^[A-Za-z0-9_.:-]{16,200}$/.test(idempotencyKey)) {
+      return jsonResponse({ ok: false, error: "Missing or invalid idempotency_key" });
+    }
+
+    const previous = await restGet(
+      SUPABASE_URL,
+      SUPABASE_SERVICE_ROLE_KEY,
+      `payment_transactions?idempotency_key=eq.${encodeURIComponent(idempotencyKey)}&user_id=eq.${encodeURIComponent(userId)}&select=id,stripe_payment_intent_id`,
+    );
+    if (previous.ok && Array.isArray(previous.json) && previous.json.length > 0) {
+      const tx = previous.json[0];
+      const intent = await stripeRetrievePaymentIntent(String(tx.stripe_payment_intent_id));
+      return jsonResponse({
+        ok: true,
+        client_secret: intent.client_secret,
+        payment_intent_id: intent.id,
+        amount_cents: intent.amount,
+        currency: intent.currency,
+        transaction_id: String(tx.id),
+        idempotent_replay: true,
+        stripe_mode: getStripeMode(),
+      });
     }
 
     const requireOrganizerConnect = (Deno.env.get("REQUIRE_ORGANIZER_STRIPE_CONNECT") ?? "").trim().toLowerCase() === "true";
@@ -357,7 +392,8 @@ Deno.serve(async (req) => {
 
       let intent;
       try {
-        intent = await stripeCreatePaymentIntent(intentParams);
+        intentParams["metadata[idempotency_key]"] = idempotencyKey;
+        intent = await stripeCreatePaymentIntent(intentParams, idempotencyKey);
       } catch (e: any) {
         const message = String(e?.message || e || "");
         if (hasConnect && isStripeConnectPlatformError(message)) {
@@ -420,6 +456,7 @@ Deno.serve(async (req) => {
         destination_account_id: hasConnect ? String(organizerProfile?.stripe_account_id || rawStripeAccountId) : null,
         destination_amount_cents: hasConnect ? destinationAmountCents : 0,
         commission_bps: eclipseNetRateBps,
+        idempotency_key: idempotencyKey,
         metadata,
       });
 
@@ -513,7 +550,8 @@ Deno.serve(async (req) => {
         "metadata[credit_debit_cents]": "0",
       };
 
-      const intent = await stripeCreatePaymentIntent(intentParams);
+      intentParams["metadata[idempotency_key]"] = idempotencyKey;
+      const intent = await stripeCreatePaymentIntent(intentParams, idempotencyKey);
 
       const metadata = {
         event_id: eventId,
@@ -537,6 +575,7 @@ Deno.serve(async (req) => {
         destination_account_id: null,
         destination_amount_cents: 0,
         commission_bps: resaleEclipseRateBps,
+        idempotency_key: idempotencyKey,
         metadata,
       });
 
@@ -659,7 +698,8 @@ Deno.serve(async (req) => {
 
       let intent;
       try {
-        intent = await stripeCreatePaymentIntent(intentParams);
+        intentParams["metadata[idempotency_key]"] = idempotencyKey;
+        intent = await stripeCreatePaymentIntent(intentParams, idempotencyKey);
       } catch (e: any) {
         const message = String(e?.message || e || "");
         if (hasConnect && isStripeConnectPlatformError(message)) {
@@ -718,6 +758,7 @@ Deno.serve(async (req) => {
         destination_account_id: hasConnect ? rawStripeAccountId : null,
         destination_amount_cents: hasConnect ? destinationAmountCents : 0,
         commission_bps: vipEclipseRateBps,
+        idempotency_key: idempotencyKey,
         metadata,
       });
 

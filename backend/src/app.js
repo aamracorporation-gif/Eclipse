@@ -319,9 +319,6 @@ function createApp() {
 </html>`;
   }
 
-  const SUPABASE_URL_CONST = process.env.SUPABASE_URL || 'https://zurbdrfmwjqbrscairub.supabase.co';
-  const ANON_CONST = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp1cmJkcmZtd2pxYnJzY2FpcnViIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjcyODgyNTcsImV4cCI6MjA4Mjg2NDI1N30.e81tNdU21I67m9UleGKf5t4n6vy8dGdLuJIJtSPFDIQ';
-
   function deepLinkPage(deepLink, title, subtitle) {
     return `<!doctype html>
 <html lang="es"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
@@ -370,8 +367,6 @@ window.addEventListener('load', function(){
     res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
     res.setHeader('Pragma', 'no-cache');
     const tokenHash = req.query.token_hash || '';
-    const SUPABASE_URL = SUPABASE_URL_CONST;
-
     if (!tokenHash) {
       return res.status(200).send(deepLinkPage(
         'eclipse://auth/reset-password',
@@ -613,9 +608,18 @@ window.addEventListener('load', function(){
 </html>`);
   });
   app.get('/qa', (req, res) => {
+    if (process.env.QA_BOARD_ENABLED !== 'true') return res.status(404).send('Not found');
+    const expectedUser = String(process.env.QA_BOARD_USER || '');
+    const expectedPassword = String(process.env.QA_BOARD_PASSWORD || '');
+    const [scheme, encoded] = String(req.headers.authorization || '').split(' ');
+    const credentials = scheme === 'Basic' && encoded ? Buffer.from(encoded, 'base64').toString('utf8') : '';
+    if (!expectedUser || !expectedPassword || credentials !== `${expectedUser}:${expectedPassword}`) {
+      res.setHeader('WWW-Authenticate', 'Basic realm="Eclipse QA"');
+      return res.status(401).send('Authentication required');
+    }
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
-    const SB_URL  = 'https://zurbdrfmwjqbrscairub.supabase.co';
-    const SB_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp1cmJkcmZtd2pxYnJzY2FpcnViIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjcyODgyNTcsImV4cCI6MjA4Mjg2NDI1N30.e81tNdU21I67m9UleGKf5t4n6vy8dGdLuJIJtSPFDIQ';
+    const SB_URL = env.supabaseUrl;
+    const SB_ANON = env.supabaseAnonKey;
     return res.status(200).send(buildQaHtml(SB_URL, SB_ANON));
   });
 

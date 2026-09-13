@@ -16,6 +16,8 @@ export type AppDialogPayload = {
   title: string;
   message: string;
   actions?: AppDialogAction[];
+  /** @deprecated Prefer actions. Kept for compatibility with older screens. */
+  onConfirm?: () => void;
 };
 
 type AppDialogContextValue = {
@@ -33,7 +35,9 @@ export function AppDialogProvider({ children }: { children: React.ReactNode }) {
   const show = useCallback((payload: AppDialogPayload) => setDialog(payload), []);
 
   const value = useMemo(() => ({ show, hide }), [hide, show]);
-  const actions = dialog?.actions?.length ? dialog.actions : [{ label: 'OK', onPress: hide, variant: 'primary' as const }];
+  const actions = dialog?.actions?.length
+    ? dialog.actions
+    : [{ label: 'OK', onPress: dialog?.onConfirm ?? hide, variant: 'primary' as const }];
 
   return (
     <AppDialogContext.Provider value={value}>

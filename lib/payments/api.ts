@@ -412,7 +412,15 @@ export async function createPaymentIntent(req: CreatePaymentIntentRequest): Prom
     throw new Error('Payments are not supported on web.');
   }
 
-  const { data, error } = await invokeWithJwtRecovery<CreatePaymentIntentResponse>('create-payment-intent-v2', req);
+  // One key per checkout attempt. The same object is reused by the JWT retry path,
+  // so network/auth retries cannot create a second Stripe PaymentIntent.
+  const request = {
+    ...req,
+    idempotency_key:
+      req.idempotency_key ||
+      `eclipse_${Date.now()}_${Math.random().toString(36).slice(2)}_${Math.random().toString(36).slice(2)}`,
+  };
+  const { data, error } = await invokeWithJwtRecovery<CreatePaymentIntentResponse>('create-payment-intent-v2', request);
 
   if (error) {
     const msg = String(error?.message || '');

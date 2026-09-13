@@ -17,4 +17,19 @@ module.exports = defineConfig([
       'import/no-named-as-default-member': 'off',
     },
   },
+  {
+    files: ['backend/**/*.js'],
+    languageOptions: {
+      globals: {
+        __dirname: 'readonly',
+        Buffer: 'readonly',
+        process: 'readonly',
+        require: 'readonly',
+        module: 'readonly',
+      },
+    },
+    rules: {
+      'expo/no-dynamic-env-var': 'off',
+    },
+  },
 ]);

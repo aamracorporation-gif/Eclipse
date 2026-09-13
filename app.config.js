@@ -28,11 +28,19 @@ module.exports = () => {
   const host = getHttpsHost();
   const expoConfig = appJson.expo;
   const plugins = normalizePlugins(expoConfig.plugins);
+  const googleMapsApiKey = process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY;
+  const android = {
+    ...expoConfig.android,
+    ...(googleMapsApiKey
+      ? { config: { ...expoConfig.android?.config, googleMaps: { apiKey: googleMapsApiKey } } }
+      : {}),
+  };
 
   if (!host) {
     return {
       ...expoConfig,
       plugins,
+      android,
     };
   }
 
@@ -60,7 +68,7 @@ module.exports = () => {
     ...expoConfig,
     plugins,
     android: {
-      ...expoConfig.android,
+      ...android,
       intentFilters,
     },
     ios: {

@@ -1,0 +1,11 @@
+appId: com.achraf.eclipse
+name: Smoke - inicio y autenticacion
+---
+- launchApp:
+    clearState: true
+- assertVisible:
+    text: ".*(Iniciar|Login|Eclipse).*"
+- tapOn:
+    text: ".*(Iniciar sesión|Login).*"
+    optional: true
+- assertNotVisible: "Something went wrong"

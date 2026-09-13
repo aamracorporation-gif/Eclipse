@@ -42,34 +42,6 @@ serve(async (req) => {
   // Manejo de CORS
   if (req.method === "OPTIONS") return jsonResponse({ ok: true });
 
-  // Special one-time endpoint to authorize service account in Google Wallet
-  const url = new URL(req.url);
-  if (url.pathname.endsWith("/authorize-sa")) {
-    try {
-      const GOOGLE_WALLET_ISSUER_ID = Deno.env.get("GOOGLE_WALLET_ISSUER_ID")!;
-      const GOOGLE_WALLET_SERVICE_ACCOUNT_EMAIL = Deno.env.get("GOOGLE_WALLET_SERVICE_ACCOUNT_EMAIL")!;
-      const GOOGLE_WALLET_PRIVATE_KEY = Deno.env.get("GOOGLE_WALLET_PRIVATE_KEY")!.replace(/\\n/g, "\n");
-
-      const token = await getServiceAccountToken(GOOGLE_WALLET_SERVICE_ACCOUNT_EMAIL, GOOGLE_WALLET_PRIVATE_KEY);
-
-      const permResp = await fetch(
-        `https://walletobjects.googleapis.com/walletobjects/v1/permissions/${GOOGLE_WALLET_ISSUER_ID}`,
-        {
-          method: "PUT",
-          headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-          body: JSON.stringify({
-            issuerId: GOOGLE_WALLET_ISSUER_ID,
-            permissions: [{ emailAddress: GOOGLE_WALLET_SERVICE_ACCOUNT_EMAIL, role: "WRITER" }],
-          }),
-        }
-      );
-      const permData = await permResp.json();
-      return jsonResponse({ ok: permResp.ok, status: permResp.status, data: permData });
-    } catch (e) {
-      return jsonResponse({ ok: false, error: e.message }, 500);
-    }
-  }
-
   try {
     const SUPABASE_URL = Deno.env.get("SUPABASE_URL");
     const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");

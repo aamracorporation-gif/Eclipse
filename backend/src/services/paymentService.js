@@ -15,6 +15,7 @@ const {
   setOnboardingCompletedByUserId,
   setOnboardingCompletedByStripeAccountId,
 } = require('./userService');
+const { createWebhookHandler } = require('./webhookProcessor');
 
 function computeCommission(amountCents) {
   const rate = env.stripeCommissionRate;
@@ -44,6 +45,11 @@ async function createStripeOnboardingLinkForUser({ userId, stripeAccountId }) {
     throw err;
   }
 
+  if (stripeAccountId && stripeAccountId !== user.stripe_account_id) {
+    const err = new Error('Stripe account does not belong to this organizer');
+    err.status = 403;
+    throw err;
+  }
   const accountId = String(stripeAccountId || user.stripe_account_id || '').trim();
   if (!accountId) {
     const err = new Error('Stripe account not found');
@@ -94,73 +100,14 @@ async function syncStripeOnboardingCompletionFromStripeAccountId(stripeAccountId
   return { ok: true, onboarding_completed: completed };
 }
 
-function handleStripeWebhook(rawBody, signature) {
-  let event;
-  try {
-    event = constructWebhookEvent(rawBody, signature);
-  } catch (e) {
-    return { status: 400, text: `Webhook Error: ${(e && e.message) || 'Invalid signature'}` };
-  }
-
-  function errorText(e) {
-    return [e?.message, e?.details, e?.hint, e?.error_description].filter(Boolean).join(' ');
-  }
-
-  function isNonFatalWebhookError(e) {
-    const msg = errorText(e).toLowerCase();
-    return (
-      msg.includes('payment transaction not found') ||
-      msg.includes('does not exist') ||
-      msg.includes('row level security') ||
-      msg.includes('permission denied') ||
-      msg.includes('rls') ||
-      msg.includes('jwt')
-    );
-  }
-
-  return Promise.resolve()
-    .then(async () => {
-      if (event.type === 'payment_intent.succeeded') {
-        const pi = event.data.object;
-        const paymentIntentId = String(pi.id || '');
-        const metadata = pi.metadata || {};
-        let userId = String(metadata.user_id || metadata.supabase_user_id || metadata.userId || '');
-
-        if (!userId && paymentIntentId) {
-          try {
-            const tx = await getPaymentTransactionByIntentId(paymentIntentId);
-            userId = String(tx?.user_id || '');
-          } catch {}
-        }
-
-        if (paymentIntentId && userId) {
-          try {
-            await fulfillPaymentForUser(paymentIntentId, userId);
-          } catch (e) {
-            if (!isNonFatalWebhookError(e)) throw e;
-          }
-        }
-      } else if (event.type === 'payment_intent.payment_failed') {
-        const pi = event.data.object;
-        const paymentIntentId = String(pi.id || '');
-        if (paymentIntentId) {
-          try {
-            await markPaymentStatusByIntentId(paymentIntentId, 'failed');
-          } catch {}
-        }
-      } else if (event.type === 'account.updated') {
-        const account = event.data.object;
-        const completed = Boolean(account.charges_enabled && account.payouts_enabled);
-        try {
-          await setOnboardingCompletedByStripeAccountId(account.id, completed);
-        } catch (e) {
-          if (!isNonFatalWebhookError(e)) throw e;
-        }
-      }
-    })
-    .then(() => ({ status: 200, json: { received: true } }))
-    .catch(() => ({ status: 500, json: { received: true } }));
-}
+const handleStripeWebhook = createWebhookHandler({
+  db: supabaseAdmin,
+  verify: constructWebhookEvent,
+  getTransaction: getPaymentTransactionByIntentId,
+  fulfill: fulfillPaymentForUser,
+  markStatus: markPaymentStatusByIntentId,
+  updateAccount: setOnboardingCompletedByStripeAccountId,
+});
 
 async function deleteStripeAccountForUser(userId) {
   const profile = await getProfileById(userId);
@@ -177,7 +124,7 @@ async function deleteStripeAccountForUser(userId) {
   return { ok: true };
 }
 
-async function createIntentForEvent({ eventId, userId, quantity = 1, ticketTypeId = null }) {
+async function createIntentForEvent({ eventId, userId, quantity = 1, ticketTypeId = null, idempotencyKey }) {
   const { data: eventRow, error: eventError } = await supabaseAdmin
     .from('events')
     .select('id, ticket_price, creator_id')
@@ -219,7 +166,11 @@ async function createIntentForEvent({ eventId, userId, quantity = 1, ticketTypeI
   const commissionCents = computeCommission(amountCents);
   const commissionBps = Math.round(Number(env.stripeCommissionRate) * 10000);
   const destinationAmountCents = Math.max(amountCents - commissionCents, 0);
-  const idempotencyKey = `${userId}:${eventId}:${qty}:${ticketTypeId || ''}`;
+  if (!/^[A-Za-z0-9_.:-]{16,200}$/.test(String(idempotencyKey || ''))) {
+    const err = new Error('Missing or invalid idempotency_key');
+    err.status = 400;
+    throw err;
+  }
 
   const paymentIntent = await createPaymentIntent(
     {
@@ -233,6 +184,7 @@ async function createIntentForEvent({ eventId, userId, quantity = 1, ticketTypeI
         event_id: eventId,
         quantity: String(qty),
         ticket_type_id: ticketTypeId ? String(ticketTypeId) : '',
+        idempotency_key: idempotencyKey,
       },
     },
     { idempotencyKey }
@@ -249,6 +201,7 @@ async function createIntentForEvent({ eventId, userId, quantity = 1, ticketTypeI
     destination_account_id: organizer.stripe_account_id,
     destination_amount_cents: destinationAmountCents,
     commission_bps: commissionBps,
+    idempotency_key: idempotencyKey,
     metadata: {
       event_id: eventId,
       quantity: qty,
@@ -274,6 +227,7 @@ async function markPaymentStatusByIntentId(paymentIntentId, status) {
     .from('payment_transactions')
     .update({ status })
     .eq('stripe_payment_intent_id', paymentIntentId)
+    .not('status', 'in', '(fulfilled,refunded,canceled,cancelled)')
     .select('*')
     .maybeSingle();
   if (error) throw error;

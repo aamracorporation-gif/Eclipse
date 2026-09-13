@@ -6,6 +6,7 @@ import { theme } from '@/theme/styles';
 
 interface ThemedInputProps extends Omit<TextInputProps, 'style'> {
   icon?: AppIconComponent | React.ReactNode;
+  leftIcon?: AppIconComponent | React.ReactNode;
   rightIcon?: React.ReactNode;
   error?: string;
   success?: boolean;
@@ -15,7 +16,8 @@ interface ThemedInputProps extends Omit<TextInputProps, 'style'> {
   inputStyle?: StyleProp<TextStyle>;
 }
 
-export const ThemedInput = forwardRef<TextInput, ThemedInputProps>(({ icon: Icon, rightIcon, error, success, label, style, containerStyle, inputStyle, ...props }, ref) => {
+export const ThemedInput = forwardRef<TextInput, ThemedInputProps>(({ icon, leftIcon, rightIcon, error, success, label, style, containerStyle, inputStyle, ...props }, ref) => {
+  const Icon = icon ?? leftIcon;
   const resolvedRightIcon =
     rightIcon ??
     (error

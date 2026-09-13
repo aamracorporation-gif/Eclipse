@@ -15,6 +15,7 @@
     "lint": "expo lint",
     "typecheck": "tsc --noEmit",
     "test": "jest",
+    "ci:check": "npm run typecheck && npm run lint && npm test -- --runInBand",
     "eas:build:android:preview": "powershell -NoProfile -Command \"$env:EAS_NO_VCS='1'; npx eas-cli build -p android --profile preview\"",
     "eas:configure": "powershell -NoProfile -Command \"$env:EAS_NO_VCS='1'; npx eas-cli build:configure\"",
     "android": "expo run:android",

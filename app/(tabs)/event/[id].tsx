@@ -452,7 +452,7 @@ export default function EventDetailScreen() {
     }
 
     // Check event is not in the past
-    const eventDateTime = new Date(event?.event_date);
+    const eventDateTime = event?.event_date ? new Date(event.event_date) : new Date(NaN);
     if (eventDateTime < new Date()) {
       Alert.alert('Evento finalizado', 'No es posible comprar entradas para un evento que ya ha tenido lugar.');
       return;
@@ -552,6 +552,10 @@ export default function EventDetailScreen() {
         });
 
         if (result.status === 'canceled') return { paid: false as const };
+        if (result.status === 'pending') {
+          showDialog({ title: 'Compra pendiente', message: result.message });
+          return { paid: false as const };
+        }
         if (result.status !== 'succeeded') {
           throw new Error(result.message || 'El pago no se pudo completar.');
         }
@@ -627,11 +631,12 @@ export default function EventDetailScreen() {
 
       // Consume discount code atomically after successful purchase
       if (appliedDiscount) {
-        await supabase.rpc('consume_discount_code', {
+        const { error: consumeDiscountError } = await supabase.rpc('consume_discount_code', {
           p_code_id: appliedDiscount.id,
           p_buyer_name: buyerName || null,
           p_buyer_email: buyerEmail || null,
-        }).catch(() => {});
+        });
+        if (consumeDiscountError) console.warn('[Discount] Could not record usage', consumeDiscountError.message);
         setAppliedDiscount(null);
         setDiscountCode('');
       }
@@ -678,7 +683,7 @@ export default function EventDetailScreen() {
     }
 
     // Check event is not in the past
-    const vipEventDateTime = new Date(event?.event_date);
+    const vipEventDateTime = event?.event_date ? new Date(event.event_date) : new Date(NaN);
     if (vipEventDateTime < new Date()) {
       Alert.alert('Evento finalizado', 'No es posible comprar entradas para un evento que ya ha tenido lugar.');
       return;
@@ -729,6 +734,10 @@ export default function EventDetailScreen() {
         } else if (walletDebit <= 0) {
           const result = await present({ kind: 'vip_table', reference_id: vip.id, buyer_name: buyerName, buyer_email: buyerEmail || user.email || '' });
           if (result.status === 'canceled') return;
+          if (result.status === 'pending') {
+            showDialog({ title: 'Compra pendiente', message: result.message });
+            return;
+          }
           if (result.status !== 'succeeded') {
             throw new Error(result.message || 'El pago no se pudo completar.');
           }
@@ -754,6 +763,10 @@ export default function EventDetailScreen() {
             buyer_email: buyerEmail || user.email || '',
           });
           if (result.status === 'canceled') return;
+          if (result.status === 'pending') {
+            showDialog({ title: 'Compra pendiente', message: result.message });
+            return;
+          }
           if (result.status !== 'succeeded') {
             throw new Error(result.message || 'El pago no se pudo completar.');
           }
@@ -762,6 +775,10 @@ export default function EventDetailScreen() {
       } else {
         const result = await present({ kind: 'vip_table', reference_id: vip.id, buyer_name: buyerName, buyer_email: buyerEmail || user.email || '' });
         if (result.status === 'canceled') return;
+          if (result.status === 'pending') {
+            showDialog({ title: 'Compra pendiente', message: result.message });
+            return;
+          }
         if (result.status !== 'succeeded') {
           throw new Error(result.message || 'El pago no se pudo completar.');
         }

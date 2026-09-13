@@ -30,7 +30,7 @@ const VIEWPORT_DEBOUNCE_MS  = 600;
 
 // ─── Leaflet HTML ─────────────────────────────────────────────────────────────
 // ── Replace YOUR_MAPTILER_KEY with your free key from cloud.maptiler.com ──
-const MAPTILER_KEY = 'F74nnnjzsxrsuFtO0Xf6';
+const MAPTILER_KEY = process.env.EXPO_PUBLIC_MAPTILER_KEY || '';
 
 const buildMapHtml = (lat: number, lng: number) => `<!DOCTYPE html>
 <html>
@@ -296,12 +296,6 @@ export default function PartyMapScreen() {
   const sharedFiltersRef = useRef(sharedFilters);
   useEffect(() => { sharedFiltersRef.current = sharedFilters; }, [sharedFilters]);
 
-  // Keep ref in sync with activeFilter state so sendEventsToMap can read it synchronously
-  useEffect(() => {
-    activeFilterRef.current = activeFilter;
-    if (mapReadyRef.current) sendEventsToMap();
-  }, [activeFilter, sendEventsToMap]);
-
   // ── Helpers ───────────────────────────────────────────────────────────────────
   const haversineKm = useCallback((lat1: number, lon1: number, lat2: number, lon2: number) => {
     const R = 6371, dL = ((lat2 - lat1) * Math.PI) / 180, dO = ((lon2 - lon1) * Math.PI) / 180;
@@ -374,6 +368,12 @@ export default function PartyMapScreen() {
     }
     webViewRef.current?.injectJavaScript(`window.setEvents(${JSON.stringify(json)});true;`);
   }, []);
+
+  // Keep ref in sync after the callback has been initialized.
+  useEffect(() => {
+    activeFilterRef.current = activeFilter;
+    if (mapReadyRef.current) sendEventsToMap();
+  }, [activeFilter, sendEventsToMap]);
 
   // ── Fetch events for viewport ─────────────────────────────────────────────────
   const fetchForRegion = useCallback(async (minLat: number, maxLat: number, minLng: number, maxLng: number) => {
@@ -776,7 +776,7 @@ export default function PartyMapScreen() {
                 searchText.trim().length > 1 ? (
                   <TouchableOpacity onPress={() => void geocodeSearch(searchText)} style={styles.geocodeRow}>
                     <MapPin size={14} color={Colors.dark.primary} />
-                    <Text style={styles.geocodeTxt}>Buscar "{searchText}" en el mapa</Text>
+                    <Text style={styles.geocodeTxt}>{`Buscar "${searchText}" en el mapa`}</Text>
                   </TouchableOpacity>
                 ) : null
               }
@@ -786,7 +786,7 @@ export default function PartyMapScreen() {
 
         {showResults && searchResults.length === 0 && searchText.trim().length > 1 && (
           <Animated.View entering={FadeIn.duration(180)} style={styles.noResults}>
-            <Text style={styles.noResultsTxt}>Sin resultados para "{searchText}"</Text>
+            <Text style={styles.noResultsTxt}>{`Sin resultados para "${searchText}"`}</Text>
             <TouchableOpacity onPress={() => void geocodeSearch(searchText)}>
               <Text style={styles.noResultsSearch}>Buscar ubicación en el mapa →</Text>
             </TouchableOpacity>
@@ -868,7 +868,54 @@ export default function PartyMapScreen() {
 }
 
 // ─── Export for tests ─────────────────────────────────────────────────────────
-export function __test_clusterForRegion() { return []; }
+type TestRegion = { latitude: number; longitude: number; latitudeDelta: number; longitudeDelta: number };
+type TestMarker =
+  | { kind: 'event'; key: string; event: AppEvent; latitude: number; longitude: number; color: string }
+  | { kind: 'cluster'; key: string; count: number; latitude: number; longitude: number; color: string };
+
+/** Deterministic, dependency-free clustering used by unit/stress tests. */
+export function __test_clusterForRegion(
+  events: EventWithGeo[],
+  region: TestRegion,
+  getColor: (event: AppEvent) => string,
+): TestMarker[] {
+  if (!events.length || region.latitudeDelta <= 0 || region.longitudeDelta <= 0) return [];
+  const minLat = region.latitude - region.latitudeDelta / 2;
+  const maxLat = region.latitude + region.latitudeDelta / 2;
+  const minLng = region.longitude - region.longitudeDelta / 2;
+  const maxLng = region.longitude + region.longitudeDelta / 2;
+  const visible = events.filter((event) =>
+    event._lat >= minLat && event._lat <= maxLat && event._lng >= minLng && event._lng <= maxLng,
+  );
+  if (!visible.length) return [];
+
+  const columns = 16;
+  const rows = 16;
+  const buckets = new Map<string, EventWithGeo[]>();
+  for (const event of visible) {
+    const x = Math.min(columns - 1, Math.max(0, Math.floor(((event._lng - minLng) / region.longitudeDelta) * columns)));
+    const y = Math.min(rows - 1, Math.max(0, Math.floor(((event._lat - minLat) / region.latitudeDelta) * rows)));
+    const key = `${x}:${y}`;
+    const bucket = buckets.get(key) ?? [];
+    bucket.push(event);
+    buckets.set(key, bucket);
+  }
+
+  return [...buckets.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([key, bucket]) => {
+    if (bucket.length === 1) {
+      const event = bucket[0];
+      return { kind: 'event' as const, key: `event:${event.id}`, event, latitude: event._lat, longitude: event._lng, color: getColor(event) };
+    }
+    return {
+      kind: 'cluster' as const,
+      key: `cluster:${key}`,
+      count: bucket.length,
+      latitude: bucket.reduce((sum, event) => sum + event._lat, 0) / bucket.length,
+      longitude: bucket.reduce((sum, event) => sum + event._lng, 0) / bucket.length,
+      color: getColor(bucket[0]),
+    };
+  });
+}
 
 const styles = StyleSheet.create({
   container:  { flex: 1, backgroundColor: '#08080F' },

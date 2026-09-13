@@ -287,7 +287,7 @@ export default function DiscountCodesScreen() {
 
         <View style={styles.hintRow}>
           <Text style={styles.hintText}>
-            Para crear códigos, accede a un evento desde "Mis eventos" → %
+            {'Para crear códigos, accede a un evento desde "Mis eventos" → %'}
           </Text>
         </View>
 
@@ -306,7 +306,7 @@ export default function DiscountCodesScreen() {
                 <Text style={styles.emptyText}>
                   {selectedEventId ? 'Sin códigos para este evento' : 'No hay códigos de descuento'}
                 </Text>
-                <Text style={styles.emptyHint}>Crea códigos desde "Mis eventos" → %</Text>
+                <Text style={styles.emptyHint}>{'Crea códigos desde "Mis eventos" → %'}</Text>
               </View>
             }
           />

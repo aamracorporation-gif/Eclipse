@@ -1283,7 +1283,6 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     borderWidth: 1,
     zIndex: 10,
-    backdropFilter: 'blur(8px)',
   },
   tcBadgeDot: {
     width: 6,
@@ -1627,4 +1626,3 @@ const styles = StyleSheet.create({
     width: '100%',
   },
 });
-

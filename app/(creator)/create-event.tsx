@@ -74,7 +74,7 @@ type EventDraft = {
   coordinates: { latitude: number; longitude: number } | null;
 };
 
-const MAPTILER_KEY = 'F74nnnjzsxrsuFtO0Xf6';
+const MAPTILER_KEY = process.env.EXPO_PUBLIC_MAPTILER_KEY || '';
 
 function buildLocationPickerHtml(
   centerLat: number,
@@ -262,8 +262,8 @@ export default function CreateEventScreen() {
         if (data.venues?.name) setLocationQuery(data.venues.name);
         if (Array.isArray(data.event_ticket_types) && data.event_ticket_types.length > 0) {
           const validCats = ['general', 'vip', 'early', 'backstage'];
-          const active = data.event_ticket_types.filter((t) => !t.deleted_at && (t.is_active ?? true));
-          setTicketTypes(active.map((t) => ({
+          const active = data.event_ticket_types.filter((t: any) => !t.deleted_at && (t.is_active ?? true));
+          setTicketTypes(active.map((t: any) => ({
             id: t.id,
             name: t.name ?? '',
             category: (validCats.includes(t.category ?? '') ? t.category : 'general'),
@@ -470,7 +470,7 @@ export default function CreateEventScreen() {
   const searchGeocode = useCallback(async (q: string): Promise<Array<{ id: string; name: string; lat: number; lng: number }>> => {
     if (q.trim().length < 3) return [];
     try {
-      const res = await fetch(`https://api.maptiler.com/geocoding/${encodeURIComponent(q.trim())}.json?key=F74nnnjzsxrsuFtO0Xf6&language=es&limit=5`);
+      const res = await fetch(`https://api.maptiler.com/geocoding/${encodeURIComponent(q.trim())}.json?key=${MAPTILER_KEY}&language=es&limit=5`);
       const json = await res.json() as { features?: any[] };
       return (json.features ?? []).map((f: any) => ({
         id: String(f.id),
@@ -750,7 +750,7 @@ export default function CreateEventScreen() {
         allowResale: draft.allowResale,
         date: toYMD(draft.dateTime),
         time: toHM(draft.dateTime),
-        endDatetime: draft.endDateTime ? draft.endDateTime.toISOString() : null,
+        endDatetime: draft.endDateTime ? draft.endDateTime.toISOString() : undefined,
         price: String(metrics.minPrice ?? 0),
         capacity: metrics.capacity,
         ticketTypes: mappedTicketTypes,
@@ -1586,5 +1586,3 @@ const styles = StyleSheet.create({
     zIndex: 10,
   },
 });
-
-

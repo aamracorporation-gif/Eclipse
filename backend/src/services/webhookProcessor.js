@@ -1,0 +1,64 @@
+const { statusAfterStripeEvent } = require('./webhookPolicy');
+
+function createWebhookHandler({ db, verify, getTransaction, fulfill, markStatus, updateAccount }) {
+  return async (rawBody, signature) => {
+    let event;
+    try {
+      event = verify(rawBody, signature);
+    } catch {
+      return { status: 400, json: { received: false, error: 'Invalid webhook signature' } };
+    }
+    if (!['payment_intent.succeeded', 'payment_intent.payment_failed', 'account.updated'].includes(event.type)) {
+      return { status: 200, json: { received: true, ignored: true } };
+    }
+
+    let token;
+    try {
+      const { data: claim, error } = await db.rpc('claim_stripe_webhook_event', {
+        p_event_id: event.id, p_event_type: event.type, p_object_id: event.data.object.id,
+      });
+      if (error) throw error;
+      if (claim?.duplicate) return { status: 200, json: { received: true, duplicate: true } };
+      if (!claim?.claimed || !claim.processing_token) return { status: 503, json: { received: false, retryable: true } };
+      token = claim.processing_token;
+      const object = event.data.object;
+
+      if (event.type === 'account.updated') {
+        await updateAccount(object.id, Boolean(object.charges_enabled && object.payouts_enabled));
+      } else {
+        const tx = await getTransaction(object.id);
+        if (!tx) throw new Error('transaction_not_found');
+        if (object.metadata?.user_id && object.metadata.user_id !== tx.user_id) throw new Error('payment_owner_mismatch');
+        if (event.type === 'payment_intent.succeeded') {
+          if (object.status !== 'succeeded' || object.amount_received !== Number(tx.amount_cents) || object.currency !== tx.currency) {
+            throw new Error('payment_amount_or_currency_mismatch');
+          }
+          const result = await fulfill(object.id, tx.user_id);
+          if (result?.fulfilled !== true) throw new Error('fulfillment_not_completed');
+        } else {
+          const next = statusAfterStripeEvent(tx.status, event.type);
+          if (next !== tx.status) await markStatus(object.id, next);
+        }
+      }
+
+      const { data: completed, error: completeError } = await db.from('stripe_webhook_events')
+        .update({ processing_status: 'processed', processed_at: new Date().toISOString(), last_error: null, lease_expires_at: null })
+        .eq('event_id', event.id).eq('processing_token', token).eq('processing_status', 'processing')
+        .select('event_id').maybeSingle();
+      if (completeError || !completed) throw completeError || new Error('webhook_lease_lost');
+      return { status: 200, json: { received: true } };
+    } catch {
+      // A stale worker cannot overwrite another delivery's successful result.
+      if (token) {
+        try {
+          await db.from('stripe_webhook_events')
+            .update({ processing_status: 'failed', last_error: 'processing_failed', lease_expires_at: null, updated_at: new Date().toISOString() })
+            .eq('event_id', event.id).eq('processing_token', token).eq('processing_status', 'processing');
+        } catch { /* Stripe retries also cover a temporary ledger outage. */ }
+      }
+      return { status: 500, json: { received: false, retryable: true } };
+    }
+  };
+}
+
+module.exports = { createWebhookHandler };

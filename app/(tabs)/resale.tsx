@@ -398,6 +398,10 @@ export default function ResaleScreen() {
               });
 
               if (result.status === 'canceled') return;
+          if (result.status === 'pending') {
+            showDialog({ title: 'Compra pendiente', message: result.message });
+            return;
+          }
               if (result.status !== 'succeeded') {
                 throw new Error(result.message || t('resale.payment_failed'));
               }

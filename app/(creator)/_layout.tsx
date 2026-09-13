@@ -93,7 +93,7 @@ export default function CreatorLayout() {
     return <Redirect href="/(tabs)" />;
   }
 
-  const inVerification = segments?.[1] === 'verification';
+  const inVerification = (segments as readonly string[])[1] === 'verification';
   if (!isAdminEmail && profileRole === 'organizer' && verificationStatus !== 'verified' && !inVerification) {
     return <Redirect href="/(creator)/verification" />;
   }

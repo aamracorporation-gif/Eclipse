@@ -241,7 +241,6 @@ export default function ScanScreen() {
     try {
       const res = await supabase.rpc('validate_ticket_qr_v3', {
         p_qr_token: token,
-        p_scanned_by_text: user.id,
         p_event_id: selectedEventId,
       });
 
