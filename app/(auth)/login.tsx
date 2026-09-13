@@ -261,7 +261,7 @@ export default function LoginScreen() {
   return (
     <View style={styles.container}>
       <LinearGradient
-        colors={[Colors.dark.background, '#1e1b4b']}
+        colors={Colors.dark.backgroundGradient}
         style={StyleSheet.absoluteFill}
       />
       <SafeAreaView style={styles.safeArea}>
@@ -375,12 +375,12 @@ const styles = StyleSheet.create({
     width: 80,
     height: 80,
     borderRadius: 40,
-    backgroundColor: 'rgba(124, 58, 237, 0.1)',
+    backgroundColor: Colors.dark.primarySoft,
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: theme.space[5],
     borderWidth: 1,
-    borderColor: 'rgba(124, 58, 237, 0.3)',
+    borderColor: Colors.dark.primary,
   },
   title: {
     fontSize: theme.typography.size['3xl'],

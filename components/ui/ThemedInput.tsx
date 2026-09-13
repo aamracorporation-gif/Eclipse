@@ -1,4 +1,4 @@
-﻿import { TextInput, View, StyleSheet, TextInputProps, Text, StyleProp, ViewStyle, TextStyle } from 'react-native';
+import { TextInput, View, StyleSheet, TextInputProps, Text, StyleProp, ViewStyle, TextStyle } from 'react-native';
 import { Colors } from '@/constants/Colors';
 import { AlertCircle, CheckCircle2, AppIconComponent } from '@/lib/icons';
 import React, { forwardRef, isValidElement } from 'react';
@@ -73,10 +73,10 @@ const styles = StyleSheet.create({
   container: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.075)',
-    borderRadius: 18,
+    backgroundColor: Colors.dark.surfaceSubtle,
+    borderRadius: theme.components.input.borderRadius,
     borderWidth: theme.components.input.borderWidth,
-    borderColor: 'rgba(255,255,255,0.12)',
+    borderColor: Colors.dark.border,
     minHeight: theme.components.input.minHeight,
     shadowColor: Colors.dark.primary,
     shadowOpacity: 0.14,

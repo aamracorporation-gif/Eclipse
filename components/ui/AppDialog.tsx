@@ -1,6 +1,5 @@
 import { createContext, useCallback, useContext, useMemo, useState } from 'react';
 import { Modal, StyleSheet, Text, View } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
 import { GlassView } from '@/components/ui/GlassView';
 import { ThemedButton } from '@/components/ui/ThemedButton';
 import { Colors } from '@/constants/Colors';
@@ -44,7 +43,7 @@ export function AppDialogProvider({ children }: { children: React.ReactNode }) {
       {children}
       <Modal visible={!!dialog} transparent animationType="fade" onRequestClose={hide}>
         <View style={styles.overlay}>
-          <LinearGradient colors={['rgba(0,0,0,0.78)', 'rgba(0,0,0,0.70)']} style={StyleSheet.absoluteFill} />
+          <View style={[StyleSheet.absoluteFill, { backgroundColor: Colors.dark.overlay }]} />
           <GlassView
             intensity={18}
             style={[
@@ -103,11 +102,11 @@ const styles = StyleSheet.create({
     width: '100%',
     borderRadius: 22,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.14)',
-    backgroundColor: 'rgba(15, 23, 42, 0.96)',
+    borderColor: Colors.dark.border,
+    backgroundColor: Colors.dark.surfaceOpaque,
   },
   title: {
-    color: 'white',
+    color: Colors.dark.text,
     fontWeight: '900',
     letterSpacing: -0.2,
   },

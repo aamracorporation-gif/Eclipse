@@ -7,11 +7,14 @@ import { supabase } from '@/lib/supabase';
 import { DiscoLoader } from '@/components/ui/DiscoLoader';
 import { Calendar, QrCode, TrendingUp, User } from '@/lib/icons';
 import { useTranslation } from 'react-i18next';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { theme } from '@/theme/styles';
 
 export default function CreatorLayout() {
   const { loading, user } = useAuth();
   const segments = useSegments();
   const { t } = useTranslation();
+  const insets = useSafeAreaInsets();
   const [checkingRole, setCheckingRole] = useState(true);
   const [profileRole, setProfileRole] = useState<string | null>(
     (user?.user_metadata as any)?.role ?? null
@@ -107,13 +110,24 @@ export default function CreatorLayout() {
         initialRouteName="index"
         screenOptions={{
           headerShown: false,
-          tabBarActiveTintColor: '#ffffff',
-          tabBarInactiveTintColor: 'rgba(255,255,255,0.55)',
+          tabBarActiveTintColor: Colors.dark.primary,
+          tabBarInactiveTintColor: Colors.dark.textSecondary,
           tabBarStyle: {
-            backgroundColor: '#050510',
-            borderTopColor: 'rgba(255,255,255,0.06)',
-            borderTopWidth: 1,
+            position: 'absolute',
+            left: 16,
+            right: 16,
+            bottom: 0,
+            height: 56 + insets.bottom,
+            paddingTop: 6,
+            paddingBottom: insets.bottom + 6,
+            borderRadius: theme.radius.lg,
+            backgroundColor: Colors.dark.surfaceStrong,
+            borderColor: Colors.dark.border,
+            borderWidth: 1,
+            elevation: 12,
           },
+          tabBarHideOnKeyboard: true,
+          tabBarLabelStyle: { paddingBottom: 2, fontSize: 10, fontWeight: '600' },
         }}
       >
         <Tabs.Screen
@@ -172,7 +186,7 @@ export default function CreatorLayout() {
     <Stack
       screenOptions={{
         headerShown: false,
-        contentStyle: { backgroundColor: '#050510' },
+        contentStyle: { backgroundColor: Colors.dark.background },
       }}>
       <Stack.Screen name="index" />
       <Stack.Screen name="create-event" />

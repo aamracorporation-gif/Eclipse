@@ -28,6 +28,7 @@ import { invokeEdgeFunctionStrict } from '@/lib/edgeFunctions';
 
 import * as Notifications from 'expo-notifications';
 import * as ExpoLinking from 'expo-linking';
+import { isPasswordRecovery, parseAuthLinkParams } from '@/lib/authDeepLinks';
 
 // Notification handler set via initNotifications() after app is ready
 
@@ -342,9 +343,7 @@ function RootLayoutNav({ fontsLoaded }: { fontsLoaded: boolean }) {
 
       if (url.includes('auth/reset-password')) {
         try {
-          const parsed = ExpoLinking.parse(url);
-          const qp = (parsed.queryParams as Record<string, string>) ?? {};
-          router.push({ pathname: '/auth/reset-password', params: qp });
+          router.replace({ pathname: '/auth/reset-password', params: parseAuthLinkParams(url) });
         } catch (e) {
           console.warn('[linking] auth/reset-password error:', e);
         }
@@ -353,22 +352,14 @@ function RootLayoutNav({ fontsLoaded }: { fontsLoaded: boolean }) {
 
       if (url.includes('auth/callback')) {
         try {
-          const parsed = ExpoLinking.parse(url);
-          const queryParams = (parsed.queryParams as Record<string, string>) ?? {};
+          const params = parseAuthLinkParams(url);
 
-          let hashParams: Record<string, string> = {};
-          try {
-            const hashIdx = url.indexOf('#');
-            if (hashIdx >= 0) {
-              const raw = url.slice(hashIdx + 1);
-              for (const kv of raw.split('&')) {
-                const [k, ...rest] = kv.split('=');
-                if (k) hashParams[decodeURIComponent(k)] = decodeURIComponent(rest.join('='));
-              }
-            }
-          } catch {}
-
-          const params = { ...hashParams, ...queryParams };
+          // Legacy and current Supabase templates may land recovery links on
+          // the generic callback. Keep the credentials and open the reset UI.
+          if (isPasswordRecovery(params)) {
+            router.replace({ pathname: '/auth/reset-password', params });
+            return;
+          }
 
           const tokenHash = params.token_hash;
           const otpType = params.type;
@@ -397,6 +388,13 @@ function RootLayoutNav({ fontsLoaded }: { fontsLoaded: boolean }) {
             } else {
               console.warn('[linking] setSession failed:', error?.message);
             }
+            return;
+          }
+
+          if (params.code) {
+            const { error } = await supabase.auth.exchangeCodeForSession(params.code);
+            if (!error) await afterAuthRedirect();
+            else console.warn('[linking] exchangeCodeForSession failed:', error.message);
             return;
           }
         } catch (e) {

@@ -4,6 +4,11 @@ import { Colors } from '@/constants/Colors';
 export const theme = {
   colors: {
     border: Colors.dark.border,
+    background: Colors.dark.background,
+    surface: Colors.dark.surface,
+    text: Colors.dark.text,
+    textSecondary: Colors.dark.textSecondary,
+    primary: Colors.dark.primary,
   },
   space: [0, 4, 8, 12, 16, 20, 24, 28, 32, 40, 48, 56, 64],
   radius: {
@@ -44,6 +49,7 @@ export const theme = {
     input: {
       minHeight: 60,
       borderWidth: 1,
+      borderRadius: 18,
     },
   },
 } as const;

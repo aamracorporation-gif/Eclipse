@@ -58,6 +58,11 @@ module.exports = () => {
           host,
           pathPrefix: '/evento',
         },
+        {
+          scheme: 'https',
+          host,
+          pathPrefix: '/auth',
+        },
       ],
       category: ['BROWSABLE', 'DEFAULT'],
       autoVerify: false,

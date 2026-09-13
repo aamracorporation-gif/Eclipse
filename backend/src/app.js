@@ -431,6 +431,13 @@ window.addEventListener('load', function(){
   var base = ${JSON.stringify(deepLink)};
   // Añadir hash fragment si existe (access_token en implicit flow)
   var hash = window.location.hash;
+  if (hash && hash.length > 1) {
+    var hashParams = new URLSearchParams(hash.slice(1));
+    if (hashParams.get('type') === 'recovery') {
+      var currentQuery = base.includes('?') ? base.slice(base.indexOf('?')) : '';
+      base = 'eclipse://auth/reset-password' + currentQuery;
+    }
+  }
   var deep = hash && hash.length > 1 ? base + (base.includes('?') ? '&' : '?') + hash.slice(1) : base;
   document.getElementById('openBtn').href = deep;
   try { window.location.href = deep; } catch(e){}

@@ -61,7 +61,8 @@ serve(async (req) => {
     );
   }
 
-  const deepLink = `${APP_SCHEME}://auth/callback${qs ? "?" + qs : ""}`;
+  const route = url.searchParams.get("type") === "recovery" ? "auth/reset-password" : "auth/callback";
+  const deepLink = `${APP_SCHEME}://${route}${qs ? "?" + qs : ""}`;
 
   return htmlPage(
     "Verificando cuenta…",
@@ -75,6 +76,11 @@ serve(async (req) => {
         // Also pick up tokens sent as URL hash fragment (legacy implicit flow)
         var hash = window.location.hash;
         if (hash && hash.length > 1) {
+          var hashParams = new URLSearchParams(hash.slice(1));
+          if (hashParams.get('type') === 'recovery') {
+            var currentQuery = deep.includes('?') ? deep.slice(deep.indexOf('?')) : '';
+            deep = ${JSON.stringify(`${APP_SCHEME}://auth/reset-password`)} + currentQuery;
+          }
           var sep = deep.includes('?') ? '&' : '?';
           deep = deep + sep + hash.slice(1);
           document.getElementById('openBtn').href = deep;

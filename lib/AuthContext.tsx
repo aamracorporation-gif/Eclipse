@@ -217,10 +217,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const resetPassword = async (email: string) => {
     try {
-      // No redirectTo — Supabase uses site_url (https://api.weareeclipseoficial.com/auth/verify)
-      // which forwards token_hash to the app via deep link.
+      const redirectTo =
+        String((process.env.EXPO_PUBLIC_PASSWORD_RESET_REDIRECT_URL as any) || '').trim() ||
+        String((process.env.EXPO_PUBLIC_EMAIL_REDIRECT_URL as any) || '').trim() ||
+        Linking.createURL('auth/reset-password');
       const { error } = await withTimeout(
-        supabase.auth.resetPasswordForEmail(email.trim()),
+        supabase.auth.resetPasswordForEmail(email.trim(), { redirectTo }),
         20000,
         'Reset password'
       );

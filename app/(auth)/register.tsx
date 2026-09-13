@@ -1072,7 +1072,7 @@ export default function RegisterScreen() {
 
   return (
     <View style={styles.container}>
-      <LinearGradient colors={[Colors.dark.background, '#1a1a2e']} style={StyleSheet.absoluteFill} />
+      <LinearGradient colors={Colors.dark.backgroundGradient} style={StyleSheet.absoluteFill} />
 
       {showDatePicker && Platform.OS === 'ios' ? (
         <Modal transparent visible animationType="fade" onRequestClose={confirmIOSDate}>
@@ -1148,7 +1148,7 @@ const styles = StyleSheet.create({
   container: { flex: 1 },
   scrollContent: { flexGrow: 1, padding: 20, paddingBottom: 40 },
   header: { marginBottom: 20, alignItems: 'center' },
-  title: { fontSize: 32, fontWeight: 'bold', color: 'white', marginBottom: 10 },
+  title: { fontSize: 32, fontWeight: 'bold', color: Colors.dark.text, marginBottom: 10 },
   progressContainer: { flexDirection: 'row', gap: 8, marginBottom: 8 },
   progressDot: { width: 8, height: 8, borderRadius: 4 },
   activeDot: { backgroundColor: Colors.dark.primary, width: 16 },
@@ -1157,9 +1157,9 @@ const styles = StyleSheet.create({
   formCard: { padding: 24, borderRadius: 24, width: '100%', maxWidth: 500, alignSelf: 'center' },
   stepContainer: { gap: 16, marginBottom: 20 },
   stepTitle: { fontSize: 20, fontWeight: 'bold', color: 'white', textAlign: 'center' },
-  roleCard: { backgroundColor: 'rgba(255,255,255,0.05)', padding: 20, borderRadius: 16, alignItems: 'center', borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)' },
-  activeRoleCard: { backgroundColor: 'rgba(124, 58, 237, 0.15)', borderColor: Colors.dark.primary },
-  roleTitle: { fontSize: 18, fontWeight: 'bold', color: 'white', marginTop: 10 },
+  roleCard: { backgroundColor: Colors.dark.surfaceSubtle, padding: 20, borderRadius: 16, alignItems: 'center', borderWidth: 1, borderColor: Colors.dark.border },
+  activeRoleCard: { backgroundColor: Colors.dark.primarySoft, borderColor: Colors.dark.primary },
+  roleTitle: { fontSize: 18, fontWeight: 'bold', color: Colors.dark.text, marginTop: 10 },
   activeRoleText: { color: Colors.dark.primary },
   roleDesc: { fontSize: 14, color: '#ccc', textAlign: 'center', marginTop: 5 },
   buttonsContainer: { flexDirection: 'row', marginTop: 10 },

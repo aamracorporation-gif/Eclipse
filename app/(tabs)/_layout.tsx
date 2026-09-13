@@ -25,7 +25,7 @@ export default function TabLayout() {
           paddingTop: paddingV,
           paddingBottom: insets.bottom + paddingV,
           borderRadius: 22,
-          backgroundColor: '#0A0A10',
+          backgroundColor: Colors.dark.surfaceStrong,
           borderWidth: 1,
           borderColor: theme.colors.border,
           shadowColor: '#000',

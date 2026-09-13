@@ -64,8 +64,8 @@ export function ThemedButton({
           disabled 
             ? ['rgba(15, 23, 42, 0.25)', 'rgba(15, 23, 42, 0.18)'] 
             : variant === 'secondary' 
-              ? ['#B39DFF', '#6B4EFF'] 
-              : ['#6B4EFF', '#5B38FF']
+              ? Colors.dark.secondaryGradient
+              : Colors.dark.buttonGradient
         }
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
@@ -105,7 +105,7 @@ const styles = StyleSheet.create({
   },
   // Removed contentContainer as it is no longer needed
   text: {
-    color: 'white',
+    color: Colors.dark.text,
     fontSize: theme.typography.size.md,
     fontWeight: theme.typography.weight.bold,
     letterSpacing: 0.2,

@@ -15,6 +15,7 @@ CREATE OR REPLACE FUNCTION purchase_ticket(
 RETURNS json
 LANGUAGE plpgsql
 SECURITY DEFINER
+SET search_path = public, pg_temp
 AS $$
 DECLARE
   v_event_available integer;
@@ -104,6 +105,9 @@ BEGIN
   RETURN json_build_object('ticket_ids', v_ticket_ids);
 END;
 $$;
+
+REVOKE ALL ON FUNCTION purchase_ticket(uuid, uuid, text, text, integer, numeric, text, uuid) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION purchase_ticket(uuid, uuid, text, text, integer, numeric, text, uuid) TO service_role;
 
 -- 2. Update buy_ticket_with_wallet to handle the new return format
 CREATE OR REPLACE FUNCTION buy_ticket_with_wallet(

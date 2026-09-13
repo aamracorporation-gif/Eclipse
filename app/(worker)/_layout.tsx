@@ -32,7 +32,7 @@ export default function WorkerLayout() {
   }
 
   return (
-    <Stack screenOptions={{ headerShown: false, animation: 'slide_from_right' }}>
+    <Stack screenOptions={{ headerShown: false, animation: 'slide_from_right', contentStyle: { backgroundColor: Colors.dark.background } }}>
       <Stack.Screen name="index" />
       <Stack.Screen name="scan" options={{ presentation: 'modal' }} />
       <Stack.Screen name="sell" />
