@@ -570,22 +570,13 @@ export default function EventDetailScreen() {
 
       const payTicketsWithWalletOnly = async () => {
         setPurchasing(true);
-
-        const qrCode = 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
-          const r = (Math.random() * 16) | 0;
-          const v = c === 'x' ? r : (r & 0x3) | 0x8;
-          return v.toString(16);
-        });
-
         await buyTicketWithCredit({
           p_event_id: event.id,
           p_buyer_name: buyerName,
           p_buyer_email: buyerEmail || user.email || '',
           p_quantity: qty,
-          p_total_price: totalPrice,
-          p_qr_code: qrCode,
           p_ticket_type_id: selectedTicketType,
-          p_service_fee: serviceFeeForPurchase,
+          p_discount_code_id: appliedDiscount?.id ?? null,
         });
       };
 
@@ -629,17 +620,8 @@ export default function EventDetailScreen() {
       await refreshEvents(); // Update global context so dashboards reflect the sale immediately
       await fetchEvent();
 
-      // Consume discount code atomically after successful purchase
-      if (appliedDiscount) {
-        const { error: consumeDiscountError } = await supabase.rpc('consume_discount_code', {
-          p_code_id: appliedDiscount.id,
-          p_buyer_name: buyerName || null,
-          p_buyer_email: buyerEmail || null,
-        });
-        if (consumeDiscountError) console.warn('[Discount] Could not record usage', consumeDiscountError.message);
-        setAppliedDiscount(null);
-        setDiscountCode('');
-      }
+      setAppliedDiscount(null);
+      setDiscountCode('');
 
       const msg =
         qty === 1

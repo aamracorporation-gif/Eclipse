@@ -262,10 +262,7 @@ export function CreditProvider({ children }: { children: React.ReactNode }) {
     if (!user) throw new Error('User not logged in');
 
     try {
-      const { data, error } = await supabase.rpc('buy_ticket_with_credito', {
-        ...params,
-        p_user_id: user.id
-      });
+      const { data, error } = await supabase.rpc('buy_ticket_with_credito_v2', params);
 
       if (error) throw error;
       

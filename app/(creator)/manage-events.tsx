@@ -27,8 +27,6 @@ export default function ManageEventsScreen() {
   const listRef = useRef<FlatList<any> | null>(null);
   const searchRef = useRef<TextInput | null>(null);
 
-  const adminEmail = ((process.env.EXPO_PUBLIC_ADMIN_EMAIL as any) ?? '').toString().trim().toLowerCase() || 'aamracorporation@gmail.com';
-  const isAdminEmail = !!user?.email && user.email.toLowerCase() === adminEmail;
   const metadataRole = useMemo(() => ((user?.user_metadata as any)?.role as any) ?? null, [user?.user_metadata]);
 
   useEffect(() => {
@@ -45,7 +43,7 @@ export default function ManageEventsScreen() {
   }, [metadataRole, user?.id]);
 
   const isAdminDb = profileRole === 'admin';
-  const isAdmin = isAdminDb || isAdminEmail;
+  const isAdmin = isAdminDb;
 
   const createEventLabel = useMemo(() => {
     const translated = String(t('creator.create_event.create_cta', { defaultValue: 'Crear evento' }) || '').trim();
@@ -106,10 +104,6 @@ export default function ManageEventsScreen() {
   };
 
   const handleDelete = (id: string) => {
-    if (isAdminEmail && !isAdminDb) {
-      Alert.alert(t('creator.manage_events.insufficient_permissions_title'), t('creator.manage_events.insufficient_permissions_body'));
-      return;
-    }
     Alert.alert(
       t('creator.manage_events.delete_title'),
       t('creator.manage_events.delete_body'),
@@ -247,18 +241,6 @@ export default function ManageEventsScreen() {
             )}
           </View>
         </View>
-
-        {isAdminEmail && !isAdminDb && (
-          <GlassView intensity={16} style={{ marginHorizontal: 16, marginBottom: 14, padding: 14, borderRadius: 16, borderWidth: 1, borderColor: 'rgba(96, 165, 250, 0.28)' }}>
-            <Text style={{ color: 'white', fontWeight: '800' }}>{t('creator.manage_events.admin_pending_title')}</Text>
-            <Text style={{ color: 'rgba(255,255,255,0.65)', marginTop: 6 }}>
-              {t('creator.manage_events.admin_pending_body')}
-            </Text>
-            <View style={{ marginTop: 12 }}>
-              <ThemedButton title={t('creator.manage_events.admin_pending_cta')} onPress={() => router.push('/(creator)/admin-verification')} />
-            </View>
-          </GlassView>
-        )}
 
         <GlassView intensity={18} style={styles.controlsCard}>
           <View style={styles.searchRow}>

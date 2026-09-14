@@ -111,6 +111,7 @@ export default function ScanScreen() {
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
   const [eventPickerOpen, setEventPickerOpen] = useState(false);
   const [sessionCount, setSessionCount] = useState(0);
+  const [isAdmin, setIsAdmin] = useState(false);
 
   const scannedRef = useRef(false);
   const pulse = useRef(new Animated.Value(0)).current;
@@ -124,8 +125,24 @@ export default function ScanScreen() {
   }, [windowWidth]);
   const frameRadius = useMemo(() => Math.max(18, Math.round(frameSize * 0.085)), [frameSize]);
 
-  const adminEmail = 'aamracorporation@gmail.com';
-  const isAdmin = !!user?.email && user.email.toLowerCase() === adminEmail;
+  useEffect(() => {
+    let cancelled = false;
+    if (!user?.id) {
+      setIsAdmin(false);
+      return;
+    }
+    void supabase
+      .from('profiles')
+      .select('role')
+      .eq('id', user.id)
+      .maybeSingle()
+      .then(({ data, error }) => {
+        if (!cancelled) setIsAdmin(!error && data?.role === 'admin');
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.id]);
 
   const myEvents = useMemo(() => {
     const uid = user?.id;

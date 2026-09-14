@@ -20,9 +20,6 @@ export default function CreatorLayout() {
     (user?.user_metadata as any)?.role ?? null
   );
   const [verificationStatus, setVerificationStatus] = useState<'pending_verification' | 'verified' | 'rejected' | 'needs_correction' | null>(null);
-  const adminEmail = ((process.env.EXPO_PUBLIC_ADMIN_EMAIL as any) ?? '').toString().trim().toLowerCase() || 'aamracorporation@gmail.com';
-  const isAdminEmail = !!user?.email && user.email.toLowerCase() === adminEmail;
-
   useEffect(() => {
     if (!user?.id) {
       setProfileRole(null);
@@ -92,17 +89,16 @@ export default function CreatorLayout() {
     );
   }
 
-  if (!isAdminEmail && profileRole !== 'organizer' && profileRole !== 'admin') {
+  if (profileRole !== 'organizer' && profileRole !== 'admin') {
     return <Redirect href="/(tabs)" />;
   }
 
   const inVerification = (segments as readonly string[])[1] === 'verification';
-  if (!isAdminEmail && profileRole === 'organizer' && verificationStatus !== 'verified' && !inVerification) {
+  if (profileRole === 'organizer' && verificationStatus !== 'verified' && !inVerification) {
     return <Redirect href="/(creator)/verification" />;
   }
 
-  const isAdmin = isAdminEmail || profileRole === 'admin';
-  const isVerifiedOrganizer = !isAdminEmail && profileRole === 'organizer' && verificationStatus === 'verified';
+  const isVerifiedOrganizer = profileRole === 'organizer' && verificationStatus === 'verified';
 
   if (isVerifiedOrganizer) {
     return (

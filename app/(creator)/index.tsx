@@ -51,7 +51,6 @@ export default function CreatorDashboard() {
   const [loadingOnboarding, setLoadingOnboarding] = useState(false);
   const [loadingAdminOverview, setLoadingAdminOverview] = useState(false);
   const [cleaningSystem, setCleaningSystem] = useState(false);
-  const [bootstrappingAdmin, setBootstrappingAdmin] = useState(false);
   const [deletingAccount, setDeletingAccount] = useState(false);
   const pendingStripeReturnRef = useRef(false);
   const stripeAutoRefreshRef = useRef<{ accountId: string | null; attemptedAt: number }>({ accountId: null, attemptedAt: 0 });
@@ -95,11 +94,8 @@ export default function CreatorDashboard() {
     reports7d: null,
   });
 
-  const adminEmail = ((process.env.EXPO_PUBLIC_ADMIN_EMAIL as any) ?? '').toString().trim().toLowerCase() || 'aamracorporation@gmail.com';
-  const isAdminEmail = !!user?.email && user.email.toLowerCase() === adminEmail;
-
   const canCreateEvents = profileRole === 'organizer' && verificationStatus === 'verified';
-  const isAdmin = profileRole === 'admin' || isAdminEmail;
+  const isAdmin = profileRole === 'admin';
 
   useEffect(() => {
     eventsRef.current = events;
@@ -276,22 +272,6 @@ export default function CreatorDashboard() {
     }
   };
 
-  const bootstrapAdminRole = useCallback(async () => {
-    if (!isAdminEmail) return;
-    if (bootstrappingAdmin) return;
-    try {
-      setBootstrappingAdmin(true);
-      const { error } = await supabase.rpc('bootstrap_set_me_admin', { p_admin_email: adminEmail });
-      if (error) throw error;
-      await fetchMyProfile();
-      Alert.alert(t('common.ok'), t('creator.admin.admin_enabled'));
-    } catch {
-      Alert.alert(t('common.error'), t('creator.admin.admin_enable_failed'));
-    } finally {
-      setBootstrappingAdmin(false);
-    }
-  }, [adminEmail, bootstrappingAdmin, fetchMyProfile, isAdminEmail, t]);
-
   const fetchAdminOverview = useCallback(async () => {
     setLoadingAdminOverview(true);
     try {
@@ -416,7 +396,7 @@ export default function CreatorDashboard() {
 
   const runSystemCleanup = async () => {
     if (cleaningSystem) return;
-    if (isAdminEmail && profileRole !== 'admin') {
+    if (profileRole !== 'admin') {
       Alert.alert(t('creator.admin.insufficient_permissions_title'), t('creator.admin.insufficient_permissions_body'));
       return;
     }
@@ -751,22 +731,6 @@ export default function CreatorDashboard() {
                 {t('creator.admin.subtitle')}
               </Text>
 
-              {isAdminEmail && profileRole !== 'admin' && (
-                <GlassView intensity={18} style={{ padding: 16, borderRadius: 18, marginTop: 14, borderWidth: 1, borderColor: 'rgba(96, 165, 250, 0.28)' }}>
-                  <Text style={{ color: 'white', fontSize: 14, fontWeight: '800' }}>{t('creator.admin.pending_permissions_title')}</Text>
-                  <Text style={{ color: Colors.dark.textSecondary, marginTop: 6, fontSize: 13, lineHeight: 18 }}>
-                    {t('creator.admin.pending_permissions_body')}
-                  </Text>
-                  <View style={{ marginTop: 12 }}>
-                    <ThemedButton
-                      title={bootstrappingAdmin ? t('creator.admin.activating') : t('creator.admin.activate')}
-                      onPress={bootstrapAdminRole}
-                      disabled={bootstrappingAdmin}
-                    />
-                  </View>
-                </GlassView>
-              )}
-
               <View style={styles.adminKpiGrid}>
                 <AdminKpiCard label={t('creator.admin.kpi.users')} value={adminOverview.users} tint="#60a5fa" icon={Users} />
                 <AdminKpiCard label={t('creator.admin.kpi.organizers')} value={adminOverview.organizers} tint="#a78bfa" icon={Users} />
@@ -842,7 +806,7 @@ export default function CreatorDashboard() {
             </>
           ) : (
             <>
-              {!isAdminEmail && profileRole === 'organizer' && (
+              {profileRole === 'organizer' && (
                 <View style={{ gap: 12, marginTop: 12 }}>
                   {verificationStatus !== 'verified' && (
                     <GlassView intensity={15} style={{ padding: 16, borderRadius: 18 }}>

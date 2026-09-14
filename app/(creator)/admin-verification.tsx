@@ -67,13 +67,9 @@ export default function AdminVerificationScreen() {
   const { user } = useAuth();
   const { horizontalPadding, maxContentWidth, scaleFont } = useResponsive();
 
-  const adminEmail = ((process.env.EXPO_PUBLIC_ADMIN_EMAIL as any) ?? '').toString().trim().toLowerCase() || 'aamracorporation@gmail.com';
-  const isAdminEmail = !!user?.email && user.email.toLowerCase() === adminEmail;
-
   const [checkingAdmin, setCheckingAdmin] = useState(true);
   const [isAdmin, setIsAdmin] = useState(false);
   const [isAdminDb, setIsAdminDb] = useState(false);
-  const [bootstrappingAdmin, setBootstrappingAdmin] = useState(false);
 
   const [loadingStats, setLoadingStats] = useState(true);
   const [loadingList, setLoadingList] = useState(true);
@@ -157,30 +153,14 @@ export default function AdminVerificationScreen() {
       if (error) throw error;
       const dbAdmin = data?.role === 'admin';
       setIsAdminDb(dbAdmin);
-      setIsAdmin(dbAdmin || isAdminEmail);
+      setIsAdmin(dbAdmin);
     } catch {
       setIsAdminDb(false);
       setIsAdmin(false);
     } finally {
       setCheckingAdmin(false);
     }
-  }, [isAdminEmail, user?.id]);
-
-  const bootstrapRole = useCallback(async () => {
-    if (!isAdminEmail) return;
-    if (bootstrappingAdmin) return;
-    try {
-      setBootstrappingAdmin(true);
-      const { error } = await supabase.rpc('bootstrap_set_me_admin', { p_admin_email: adminEmail });
-      if (error) throw error;
-      await fetchAdminStatus();
-      Alert.alert('Listo', 'Permisos de administrador activados.');
-    } catch {
-      Alert.alert('Error', 'No se pudo activar el rol de administrador.');
-    } finally {
-      setBootstrappingAdmin(false);
-    }
-  }, [adminEmail, bootstrappingAdmin, fetchAdminStatus, isAdminEmail]);
+  }, [user?.id]);
 
   const fetchStats = useCallback(async () => {
     setLoadingStats(true);
@@ -724,20 +704,6 @@ export default function AdminVerificationScreen() {
           showsVerticalScrollIndicator={false}
         >
           <View style={{ width: '100%', maxWidth: maxContentWidth }}>
-            {isAdminEmail && !isAdminDb && (
-              <GlassView intensity={10} style={[styles.alertCard, { borderColor: 'rgba(96, 165, 250, 0.35)' }]}>
-                <Text style={styles.alertTitle}>Permisos de administrador pendientes</Text>
-                <Text style={styles.alertText}>Activa tu rol de admin en la base de datos para poder realizar acciones.</Text>
-                <View style={{ marginTop: 12, flexDirection: 'row', gap: 10 }}>
-                  <ThemedButton
-                    title={bootstrappingAdmin ? 'Activando...' : 'Activar rol admin'}
-                    onPress={bootstrapRole}
-                    disabled={bootstrappingAdmin}
-                  />
-                </View>
-              </GlassView>
-            )}
-
             <View style={styles.statsGrid}>
               <GlassView intensity={12} style={styles.statCard}>
                 <Text style={styles.statLabel}>Pendientes</Text>

@@ -171,8 +171,6 @@ export default function ProfileScreen() {
   );
   const soldListings = useMemo(() => resaleListings.filter(l => l.status === 'sold'), [resaleListings]);
 
-  const adminEmail = ((process.env.EXPO_PUBLIC_ADMIN_EMAIL as any) ?? '').toString().trim().toLowerCase() || 'aamracorporation@gmail.com';
-  const isAdminEmail = !!user?.email && user.email.toLowerCase() === adminEmail;
   const isOrganizer = profileRole === 'organizer';
   const isOrganizerSuspended = !!organizerMeta?.is_suspended;
   const canOrganizerPublish = isOrganizer && verificationStatus === 'verified' && !isOrganizerSuspended;
@@ -1221,7 +1219,7 @@ export default function ProfileScreen() {
                   </TouchableOpacity>
                 )}
 
-                {profileRole === 'organizer' && !isAdminEmail && (
+                {profileRole === 'organizer' && (
                   <TouchableOpacity
                     activeOpacity={0.85}
                     onPress={() => {
