@@ -42,7 +42,6 @@ export default function MyResalesScreen() {
     if (!userId) return;
     try {
       setLoading(true);
-      await supabase.rpc('purge_expired_tickets_and_resales');
       const { data, error } = await supabase
         .from('resale_listings')
         .select(`

@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, StatusBar, AppState, Linking, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Calendar, Plus, Ticket, BarChart3, ScanLine, Users, CreditCard, ArrowUpRight, Flame, ChevronRight, Activity, Trash2, FileText, LogOut } from '@/lib/icons';
+import { Calendar, Plus, Ticket, BarChart3, ScanLine, Users, CreditCard, ArrowUpRight, Flame, ChevronRight, Activity, FileText, LogOut } from '@/lib/icons';
 import { router, useFocusEffect } from 'expo-router';
 import { useAuth } from '@/lib/AuthContext';
 import { useEvents } from '@/lib/EventContext';
@@ -50,7 +50,6 @@ export default function CreatorDashboard() {
   const [onboardingCompleted, setOnboardingCompleted] = useState(false);
   const [loadingOnboarding, setLoadingOnboarding] = useState(false);
   const [loadingAdminOverview, setLoadingAdminOverview] = useState(false);
-  const [cleaningSystem, setCleaningSystem] = useState(false);
   const [deletingAccount, setDeletingAccount] = useState(false);
   const pendingStripeReturnRef = useRef(false);
   const stripeAutoRefreshRef = useRef<{ accountId: string | null; attemptedAt: number }>({ accountId: null, attemptedAt: 0 });
@@ -387,38 +386,6 @@ export default function CreatorDashboard() {
               Alert.alert(t('common.error'), String(e?.message || t('profile.delete_account_failed')));
             } finally {
               setDeletingAccount(false);
-            }
-          },
-        },
-      ]
-    );
-  };
-
-  const runSystemCleanup = async () => {
-    if (cleaningSystem) return;
-    if (profileRole !== 'admin') {
-      Alert.alert(t('creator.admin.insufficient_permissions_title'), t('creator.admin.insufficient_permissions_body'));
-      return;
-    }
-    Alert.alert(
-      t('creator.admin.cleanup_title'),
-      t('creator.admin.cleanup_body'),
-      [
-        { text: t('common.cancel'), style: 'cancel' },
-        {
-          text: t('creator.admin.cleanup_confirm'),
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              setCleaningSystem(true);
-              const { error } = await supabase.rpc('cleanup_old_events');
-              if (error) throw error;
-              await Promise.all([fetchAdminOverview(), refreshEvents()]);
-              Alert.alert(t('common.ok'), t('creator.admin.cleanup_done'));
-            } catch {
-              Alert.alert(t('common.error'), t('creator.admin.cleanup_failed'));
-            } finally {
-              setCleaningSystem(false);
             }
           },
         },
@@ -781,14 +748,6 @@ export default function CreatorDashboard() {
                     icon={Ticket}
                     color="#f472b6"
                     onPress={() => router.push('/(creator)/admin-tickets')}
-                    style={{ flex: 1 }}
-                  />
-                  <ActionCard
-                    title={t('creator.admin.actions.cleanup_title')}
-                    description={cleaningSystem ? t('creator.admin.actions.cleanup_running') : t('creator.admin.actions.cleanup_desc')}
-                    icon={Trash2}
-                    color="#ef4444"
-                    onPress={runSystemCleanup}
                     style={{ flex: 1 }}
                   />
                 </View>

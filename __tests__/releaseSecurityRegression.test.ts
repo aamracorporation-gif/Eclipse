@@ -49,4 +49,20 @@ describe('release security regressions', () => {
     expect(sql).toContain('REVOKE ALL ON FUNCTION public.buy_ticket_with_credito(');
     expect(sql).toContain('FROM PUBLIC, anon, authenticated');
   });
+
+  test('mobile screens cannot invoke destructive maintenance RPCs', () => {
+    const clientSource = [
+      read('app/(tabs)/tickets.tsx'),
+      read('app/my-resales.tsx'),
+      read('app/(creator)/index.tsx'),
+    ].join('\n');
+    const sql = read(
+      'supabase/migrations/20260915121000_restrict_destructive_rpcs_and_record_discounts.sql',
+    );
+
+    expect(clientSource).not.toContain("rpc('purge_expired_tickets_and_resales'");
+    expect(clientSource).not.toContain("rpc('cleanup_old_events'");
+    expect(sql).toContain('record_fulfilled_payment_discount');
+    expect(sql).toContain('REVOKE ALL ON FUNCTION public.cleanup_old_events()');
+  });
 });

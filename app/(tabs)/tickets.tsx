@@ -142,9 +142,6 @@ export default function TicketsScreen() {
     if (!user) return;
 
     try {
-      // Hard-clean expired tickets/resales (event ended >= 5h ago) before loading UI.
-      await supabase.rpc('purge_expired_tickets_and_resales');
-
       // 1. Fetch tickets without the nested relation to avoid PGRST200 error
       // Using range 0-99 to fetch up to 100 tickets initially, can be paginated later if needed
       const { data: ticketsData, error: ticketsError } = await supabase
