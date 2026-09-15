@@ -22,7 +22,6 @@ try { mkdirSync(OUT, { recursive: true }); } catch {}
 const W = 1125, H = 432;
 const CX = W / 2, CY = H / 2;
 const TAU = Math.PI * 2;
-const PHI = (1 + Math.sqrt(5)) / 2;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // UTILITIES

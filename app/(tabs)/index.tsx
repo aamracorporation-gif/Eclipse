@@ -178,7 +178,7 @@ export default function HomeScreen() {
       if (userRole === 'organizer' && !inCreator) {
         router.replace('/(creator)');
       }
-    }, [refreshEvents, userRole, inCreator])
+    }, [inCreator, refreshEvents, router, userRole])
   );
 
   useEffect(() => {
@@ -911,4 +911,3 @@ const styles = StyleSheet.create({
   },
   emptyCtaText: { color: 'white', fontSize: 15, fontWeight: '800', letterSpacing: -0.2 },
 });
-

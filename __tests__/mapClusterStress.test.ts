@@ -1,3 +1,5 @@
+import { __test_clusterForRegion } from '@/app/(tabs)/party-map';
+
 jest.mock('@/lib/EventContext', () => ({
   useEvents: () => ({ events: [] }),
 }));
@@ -13,8 +15,6 @@ jest.mock('react-native-maps', () => ({
 }));
 
 jest.mock('react-native-reanimated', () => require('react-native-reanimated/mock'));
-
-import { __test_clusterForRegion } from '@/app/(tabs)/party-map';
 
 describe('party-map clustering stress', () => {
   it('clusters many events without exceeding the marker cap', () => {

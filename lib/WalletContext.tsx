@@ -50,22 +50,6 @@ export function CreditProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
   const refreshTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  useEffect(() => {
-    if (user) {
-      refreshCredit();
-    } else {
-      setCreditBalance(0);
-      setBalanceReal(0);
-      setBalancePromo(0);
-      setMovimientos([]);
-      setLoading(false);
-      if (refreshTimeoutRef.current) {
-        clearTimeout(refreshTimeoutRef.current);
-        refreshTimeoutRef.current = null;
-      }
-    }
-  }, [user]);
-
   const refreshCredit = useCallback(async () => {
     if (!user) return;
     try {
@@ -108,6 +92,22 @@ export function CreditProvider({ children }: { children: React.ReactNode }) {
       setLoading(false);
     }
   }, [user]);
+
+  useEffect(() => {
+    if (user) {
+      void refreshCredit();
+    } else {
+      setCreditBalance(0);
+      setBalanceReal(0);
+      setBalancePromo(0);
+      setMovimientos([]);
+      setLoading(false);
+      if (refreshTimeoutRef.current) {
+        clearTimeout(refreshTimeoutRef.current);
+        refreshTimeoutRef.current = null;
+      }
+    }
+  }, [refreshCredit, user]);
 
   const scheduleRefresh = useCallback(() => {
     if (!user) return;

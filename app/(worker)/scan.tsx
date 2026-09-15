@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import {
   StyleSheet, Text, View, TouchableOpacity, Modal, Alert,
-  Vibration, TextInput, ScrollView, KeyboardAvoidingView, Platform,
+  Vibration, TextInput, KeyboardAvoidingView, Platform,
 } from 'react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { router } from 'expo-router';

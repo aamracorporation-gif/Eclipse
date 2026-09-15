@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useRef, useState, useMemo } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useFilters } from '@/lib/FilterContext';
 import {
-  View, Text, StyleSheet, Pressable, StatusBar, Platform,
+  View, Text, StyleSheet, Pressable, StatusBar,
   Image, TextInput, Keyboard, FlatList, TouchableOpacity,
   ScrollView,
 } from 'react-native';
@@ -15,7 +15,6 @@ import type { AppEvent } from '@/lib/EventContext';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Search, X, MapPin, Calendar, Flame, Music, Sparkles, Tag } from '@/lib/icons';
 import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
-import { useTranslation } from 'react-i18next';
 import Animated, { FadeIn, FadeOut, SlideInDown, SlideOutDown } from 'react-native-reanimated';
 import WebView from 'react-native-webview';
 
@@ -256,7 +255,6 @@ const EVENT_TYPES = [
 
 // ─── Main component ───────────────────────────────────────────────────────────
 export default function PartyMapScreen() {
-  const { t } = useTranslation();
   const insets  = useSafeAreaInsets();
   const tabBarH = useBottomTabBarHeight();
   const params  = useLocalSearchParams<{ q?: string }>();
@@ -279,9 +277,9 @@ export default function PartyMapScreen() {
   const currentRegionRef = useRef({ lat: 40.4168, lng: -3.7038, zoom: 13 });
 
   // ── State ─────────────────────────────────────────────────────────────────────
-  const [mapReady,      setMapReady]      = useState(false);
-  const [locPerm,       setLocPerm]       = useState<'loading' | 'granted' | 'denied'>('loading');
-  const [initialCenter, setInitialCenter] = useState({ lat: 40.4168, lng: -3.7038 });
+  const [, setMapReady] = useState(false);
+  const [, setLocPerm] = useState<'loading' | 'granted' | 'denied'>('loading');
+  const [, setInitialCenter] = useState({ lat: 40.4168, lng: -3.7038 });
   const [selectedEvent, setSelectedEvent] = useState<EventWithGeo | null>(null);
   const [searchText,    setSearchText]    = useState('');
   const [searchFocused, setSearchFocused] = useState(false);

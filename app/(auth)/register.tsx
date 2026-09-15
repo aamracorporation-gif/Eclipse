@@ -14,7 +14,7 @@ import { ThemedInput } from '@/components/ui/ThemedInput';
 import { GlassView } from '@/components/ui/GlassView';
 import { DiscoLoader } from '@/components/ui/DiscoLoader';
 import { invokeEdgeFunction } from '@/lib/edgeFunctions';
-import { calculateAgeFromDate, getPasswordRequirements, isPasswordStrong, isSafeAddressText, isSafeOrgText, isValidIbanES, isValidPersonName, isValidSpanishTaxId, normalizeWhitespace, normalizeWhitespaceForInput } from '@/lib/validators';
+import { calculateAgeFromDate, getPasswordRequirements, isPasswordStrong, isSafeAddressText, isSafeOrgText, isValidIbanES, isValidPersonName, isValidSpanishTaxId, normalizeWhitespaceForInput } from '@/lib/validators';
 import { useAppDialog } from '@/components/ui/AppDialog';
 
 export default function RegisterScreen() {

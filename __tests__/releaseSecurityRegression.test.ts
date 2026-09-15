@@ -196,6 +196,13 @@ describe('release security regressions', () => {
     expect(login).not.toContain("console.log('Session created'");
   });
 
+  test('mobile storage never provisions a public bucket at runtime', () => {
+    const storage = read('lib/storage.ts');
+
+    expect(storage).not.toContain('storage.createBucket');
+    expect(storage).not.toContain('public: true');
+  });
+
   test('push delivery can only be dispatched by the service role', () => {
     const walletContext = read('lib/WalletContext.tsx');
     const sendPush = read('supabase/functions/send-push/index.ts');

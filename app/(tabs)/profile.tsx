@@ -4,7 +4,7 @@ import { router, useSegments } from 'expo-router';
 import { useAuth } from '@/lib/AuthContext';
 import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
-import { User, Ticket, ChevronRight, Tag, TrendingUp, UserPlus, Calendar, Sparkles, CheckCircle2, ShieldCheck, Wallet, QrCode, Clock, MapPin, Pencil, X, FileText, LogOut, Eye, EyeOff, MessageCircle } from '@/lib/icons';
+import { User, Ticket, ChevronRight, Tag, TrendingUp, UserPlus, Calendar, Sparkles, ShieldCheck, Wallet, QrCode, Clock, MapPin, Pencil, X, FileText, LogOut, Eye, EyeOff, MessageCircle } from '@/lib/icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Colors } from '@/constants/Colors';
 import { GlassView } from '@/components/ui/GlassView';
@@ -164,7 +164,6 @@ export default function ProfileScreen() {
       }
     }, [refreshEvents, profileRole, inCreator])
   );
-  const soldListings = useMemo(() => resaleListings.filter(l => l.status === 'sold'), [resaleListings]);
 
   const isOrganizer = profileRole === 'organizer';
   const isOrganizerSuspended = !!organizerMeta?.is_suspended;
@@ -326,7 +325,7 @@ export default function ProfileScreen() {
       organizer_iban: String(draft.organizer_iban || '').trim().toUpperCase(),
       birthdate: String(draft.birthdate || '').trim(),
     });
-  }, [activeTab, inCreator, profileRole]);
+  }, []);
 
   const profileEditKey = useMemo(() => {
     return buildProfileEditKey(profileDraft);
@@ -673,7 +672,7 @@ export default function ProfileScreen() {
     if (profileRole === 'organizer' && !inCreator && activeTab === 'profile') {
       setActiveTab('panel');
     }
-  }, []);
+  }, [activeTab, inCreator, profileRole]);
 
   // Fetch Profile Stats
   useEffect(() => {

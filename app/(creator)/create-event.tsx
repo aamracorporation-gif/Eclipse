@@ -31,9 +31,7 @@ import {
   parsePositiveInt,
   parsePositiveNumber,
   serializeTicketMetadata,
-  type TicketCategory,
   type TicketDraft,
-  type FreeBottleEntry,
 } from '@/lib/createEventTicketConfig';
 import { uploadImage } from '@/lib/storage';
 import { useAuth } from '@/lib/AuthContext';
@@ -220,12 +218,12 @@ export default function CreateEventScreen() {
   const [isResolvingAddress, setIsResolvingAddress] = useState(false);
 
   const [locationQuery, setLocationQuery] = useState('');
-  const [locationSuggestions, setLocationSuggestions] = useState<Array<{ id: string; name: string; lat: number; lng: number }>>([]);
+  const [locationSuggestions, setLocationSuggestions] = useState<{ id: string; name: string; lat: number; lng: number }[]>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const geocodeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const [mapSearchQuery, setMapSearchQuery] = useState('');
-  const [mapSearchSuggestions, setMapSearchSuggestions] = useState<Array<{ id: string; name: string; lat: number; lng: number }>>([]);
+  const [mapSearchSuggestions, setMapSearchSuggestions] = useState<{ id: string; name: string; lat: number; lng: number }[]>([]);
   const mapGeoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
 
@@ -311,7 +309,7 @@ export default function CreateEventScreen() {
         price: parsePositiveNumber(ticket.price),
         quantity: parsePositiveInt(ticket.quantity),
       }))
-      .filter((ticket) => ticket.price !== null && ticket.quantity !== null) as Array<{ price: number; quantity: number }>;
+      .filter((ticket) => ticket.price !== null && ticket.quantity !== null) as { price: number; quantity: number }[];
 
     const capacity = parsed.reduce((sum, ticket) => sum + ticket.quantity, 0);
     const minPrice = parsed.length ? Math.min(...parsed.map((ticket) => ticket.price)) : null;
@@ -467,7 +465,7 @@ export default function CreateEventScreen() {
     setShowMapModal(true);
   }, [draft.coordinates]);
 
-  const searchGeocode = useCallback(async (q: string): Promise<Array<{ id: string; name: string; lat: number; lng: number }>> => {
+  const searchGeocode = useCallback(async (q: string): Promise<{ id: string; name: string; lat: number; lng: number }[]> => {
     if (q.trim().length < 3) return [];
     try {
       const res = await fetch(`https://api.maptiler.com/geocoding/${encodeURIComponent(q.trim())}.json?key=${MAPTILER_KEY}&language=es&limit=5`);

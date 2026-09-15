@@ -1,6 +1,5 @@
 import { Platform } from 'react-native';
 import { supabase } from '@/lib/supabase';
-import { decode as decodeBase64ToArrayBuffer } from 'base64-arraybuffer';
 import type {
   ConfirmPaymentRequest,
   ConfirmPaymentResponse,
@@ -188,154 +187,11 @@ function isInvalidJwtMessage(message: string): boolean {
   );
 }
 
-function base64ToUtf8(base64: string): string {
-  const atobFn = (globalThis as any)?.atob;
-  if (typeof atobFn === 'function') return atobFn(base64);
-  const arrayBuffer = decodeBase64ToArrayBuffer(base64);
-  const bytes = new Uint8Array(arrayBuffer);
-  const td = (globalThis as any)?.TextDecoder;
-  if (typeof td === 'function') return new td().decode(bytes);
-  let s = '';
-  for (let i = 0; i < bytes.length; i++) s += String.fromCharCode(bytes[i] ?? 0);
-  try {
-    return decodeURIComponent(escape(s));
-  } catch {
-    return s;
-  }
-}
-
-function getJwtIssuer(accessToken: string): string {
-  try {
-    const parts = accessToken.split('.');
-    if (parts.length < 2) return '';
-    const base64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
-    const padded = base64.padEnd(base64.length + ((4 - (base64.length % 4)) % 4), '=');
-    const json = base64ToUtf8(padded);
-    const payload = JSON.parse(json) as any;
-    return typeof payload?.iss === 'string' ? payload.iss : '';
-  } catch {
-    return '';
-  }
-}
-
 function getUrlHost(value: string): string {
   try {
     return new URL(value).host;
   } catch {
     return '';
-  }
-}
-
-async function sleep(ms: number): Promise<void> {
-  await new Promise(resolve => setTimeout(resolve, ms));
-}
-
-async function getAccessTokenForPayment(): Promise<string> {
-  // Use getSession() which is faster and often more reliable for immediate token access
-  const { data: sessionData } = await supabase.auth.getSession();
-  const token = sessionData?.session?.access_token;
-  
-  if (token) {
-    console.log('[DEBUG] Token retrieved from getSession. Length:', token.length);
-    const issuerHost = getUrlHost(getJwtIssuer(token));
-    const supabaseHost = getUrlHost(String(process.env.EXPO_PUBLIC_SUPABASE_URL || ''));
-    if (issuerHost && supabaseHost && issuerHost !== supabaseHost) {
-      console.error('[DEBUG] JWT issuer mismatch. Clearing session.', { issuerHost, supabaseHost });
-      try {
-        await supabase.auth.signOut({ scope: 'local' } as any);
-      } catch {
-        try {
-          await supabase.auth.signOut();
-        } catch {}
-      }
-      return '';
-    }
-    return token;
-  }
-
-  console.log('[DEBUG] No token in getSession, attempting refreshSession...');
-  const { data: refreshed, error: refreshError } = await supabase.auth.refreshSession();
-  if (refreshError) {
-    console.error('[DEBUG] refreshSession failed in getAccessToken:', refreshError.message);
-  }
-  
-  const refreshedToken = refreshed?.session?.access_token || '';
-  if (refreshedToken) {
-    console.log('[DEBUG] Token retrieved after refreshSession. Length:', refreshedToken.length);
-    const issuerHost = getUrlHost(getJwtIssuer(refreshedToken));
-    const supabaseHost = getUrlHost(String(process.env.EXPO_PUBLIC_SUPABASE_URL || ''));
-    if (issuerHost && supabaseHost && issuerHost !== supabaseHost) {
-      console.error('[DEBUG] JWT issuer mismatch after refresh. Clearing session.', { issuerHost, supabaseHost });
-      try {
-        await supabase.auth.signOut({ scope: 'local' } as any);
-      } catch {
-        try {
-          await supabase.auth.signOut();
-        } catch {}
-      }
-      return '';
-    }
-  }
-  return refreshedToken;
-}
-
-async function invokeEdgeFunctionViaFetch<T>(
-  functionName: string,
-  params: { body: any; accessToken?: string }
-): Promise<{ data: T | null; error: any }> {
-  const supabaseUrl = String(process.env.EXPO_PUBLIC_SUPABASE_URL || '').replace(/\/$/, '');
-  const supabaseAnonKey = String(process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '');
-  if (!supabaseUrl || !supabaseAnonKey) {
-    return { data: null, error: { message: 'Falta configuración de Supabase (URL o ANON KEY).' } };
-  }
-
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
-    apikey: supabaseAnonKey,
-  };
-  if (params.accessToken) {
-    headers.Authorization = `Bearer ${params.accessToken}`;
-  }
-
-  const endpoint = `${supabaseUrl}/functions/v1/${functionName}`;
-  const sentAuthorization = Boolean(params.accessToken);
-  const sentIssuerHost = params.accessToken ? getUrlHost(getJwtIssuer(params.accessToken)) : '';
-  console.log('[payments] Calling Edge Function', {
-    name: functionName,
-    endpointHost: getUrlHost(endpoint),
-    sentAuthorization,
-    sentIssuerHost: sentIssuerHost || null,
-  });
-  let response: Response;
-  try {
-    response = await fetch(endpoint, { method: 'POST', headers, body: JSON.stringify(params.body ?? {}) });
-  } catch (e: any) {
-    return { data: null, error: { message: String(e?.message || e || 'Network error') } };
-  }
-
-  if (!response.ok) {
-    let bodyText = '';
-    try {
-      bodyText = await response.clone().text();
-    } catch {}
-    const details = bodyText && bodyText.length > 600 ? `${bodyText.slice(0, 600)}…` : bodyText;
-    const message = details
-      ? `Edge Function error (${response.status}): ${details}`
-      : `Edge Function error (${response.status})`;
-    return {
-      data: null,
-      error: {
-        message,
-        context: { response, body: bodyText, endpoint, sentAuthorization, sentIssuerHost: sentIssuerHost || null },
-      },
-    };
-  }
-
-  try {
-    const data = (await response.json()) as T;
-    return { data, error: null };
-  } catch {
-    return { data: null, error: { message: 'Respuesta inválida del servidor.' } };
   }
 }
 

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, Animated, Easing, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View, Vibration, useWindowDimensions } from 'react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -208,39 +208,15 @@ export default function ScanScreen() {
 
   const lastAutoValidatedRef = useRef<string>('');
 
-  useEffect(() => {
-    if (view !== 'home') return;
-    if (!selectedEventId) return;
-    const raw = manualToken.trim();
-    if (raw.length < 6) {
-      if (manualAutoTimerRef.current) clearTimeout(manualAutoTimerRef.current);
-      manualAutoTimerRef.current = null;
-      lastAutoValidatedRef.current = '';
-      return;
-    }
-    if (busy) return;
-    // Don't re-validate the same token that was just auto-validated
-    if (raw === lastAutoValidatedRef.current) return;
-    if (manualAutoTimerRef.current) clearTimeout(manualAutoTimerRef.current);
-    manualAutoTimerRef.current = setTimeout(() => {
-      lastAutoValidatedRef.current = raw;
-      validateToken(raw).catch(() => null);
-    }, 650);
-    return () => {
-      if (manualAutoTimerRef.current) clearTimeout(manualAutoTimerRef.current);
-      manualAutoTimerRef.current = null;
-    };
-  }, [busy, manualToken, selectedEventId, view]);
-
-  const playFeedback = async (ok: boolean) => {
+  const playFeedback = useCallback(async (ok: boolean) => {
     try {
       await Haptics.notificationAsync(ok ? Haptics.NotificationFeedbackType.Success : Haptics.NotificationFeedbackType.Error);
     } catch {
       Vibration.vibrate(ok ? 80 : 250);
     }
-  };
+  }, []);
 
-  const validateToken = async (raw: string) => {
+  const validateToken = useCallback(async (raw: string) => {
     const token = raw.trim();
     if (!token.length) return;
     if (busy) return;
@@ -283,7 +259,28 @@ export default function ScanScreen() {
     } finally {
       setBusy(false);
     }
-  };
+  }, [busy, playFeedback, selectedEventId, t, user?.id]);
+
+  useEffect(() => {
+    if (view !== 'home' || !selectedEventId) return;
+    const raw = manualToken.trim();
+    if (raw.length < 6) {
+      if (manualAutoTimerRef.current) clearTimeout(manualAutoTimerRef.current);
+      manualAutoTimerRef.current = null;
+      lastAutoValidatedRef.current = '';
+      return;
+    }
+    if (busy || raw === lastAutoValidatedRef.current) return;
+    if (manualAutoTimerRef.current) clearTimeout(manualAutoTimerRef.current);
+    manualAutoTimerRef.current = setTimeout(() => {
+      lastAutoValidatedRef.current = raw;
+      void validateToken(raw);
+    }, 650);
+    return () => {
+      if (manualAutoTimerRef.current) clearTimeout(manualAutoTimerRef.current);
+      manualAutoTimerRef.current = null;
+    };
+  }, [busy, manualToken, selectedEventId, validateToken, view]);
 
   const openScanner = async () => {
     try {

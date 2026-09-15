@@ -271,54 +271,6 @@ function createApp() {
   // into the Eclipse app via deep link. URLs must be whitelisted in Supabase
   // Dashboard → Auth → URL Configuration → Redirect URLs.
 
-  function authRedirectHtml(title, heading, body, deepLink) {
-    return `<!doctype html>
-<html lang="es">
-<head>
-  <meta charset="utf-8"/>
-  <meta name="viewport" content="width=device-width,initial-scale=1"/>
-  <title>${title}</title>
-  <style>
-    *{box-sizing:border-box}
-    body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Arial,sans-serif;
-         background:#0b0b0f;color:#fff;margin:0;display:flex;align-items:center;
-         justify-content:center;min-height:100vh;padding:24px}
-    .card{max-width:440px;width:100%;background:rgba(255,255,255,.06);
-          border:1px solid rgba(255,255,255,.12);border-radius:18px;padding:28px;text-align:center}
-    h2{margin:0 0 10px;font-size:22px}
-    p{color:rgba(255,255,255,.7);font-size:15px;line-height:1.5;margin:0 0 20px}
-    .btn{display:inline-block;padding:14px 28px;border-radius:12px;background:#7C3AED;
-         color:#fff;font-weight:700;font-size:16px;text-decoration:none;margin:4px}
-    .spinner{width:40px;height:40px;border:3px solid rgba(255,255,255,.15);
-             border-top-color:#7C3AED;border-radius:50%;animation:spin .8s linear infinite;margin:0 auto 16px}
-    @keyframes spin{to{transform:rotate(360deg)}}
-    .logo{font-size:28px;margin-bottom:12px}
-  </style>
-</head>
-<body>
-  <div class="card">
-    <div class="logo">☀️</div>
-    <div class="spinner"></div>
-    <h2>${heading}</h2>
-    <p>${body}</p>
-    <a class="btn" id="openBtn" href="${deepLink}">Abrir Eclipse</a>
-  </div>
-  <script>
-    (function(){
-      var deep = ${JSON.stringify(deepLink)};
-      // Pick up any hash fragment tokens (legacy implicit flow)
-      var hash = window.location.hash;
-      if (hash && hash.length > 1) {
-        deep = deep + (deep.includes('?') ? '&' : '?') + hash.slice(1);
-        document.getElementById('openBtn').href = deep;
-      }
-      try { window.location.href = deep; } catch(e){}
-    })();
-  </script>
-</body>
-</html>`;
-  }
-
   function deepLinkPage(deepLink, title, subtitle) {
     return `<!doctype html>
 <html lang="es"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>

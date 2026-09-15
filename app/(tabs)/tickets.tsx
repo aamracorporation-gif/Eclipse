@@ -5,7 +5,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import { supabase, Ticket } from '@/lib/supabase';
 import { useAuth } from '@/lib/AuthContext';
 import { useCredit } from '@/lib/WalletContext';
-import { Ticket as TicketIcon, LogIn, DollarSign, X, Download, ChevronRight, Sparkles, CreditCard } from '@/lib/icons';
+import { Ticket as TicketIcon, LogIn, DollarSign, X, Download, ChevronRight, CreditCard } from '@/lib/icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Colors } from '@/constants/Colors';
 import { GlassView } from '@/components/ui/GlassView';
@@ -16,7 +16,6 @@ import { AuthRequiredScreen } from '@/components/ui/AuthRequiredScreen';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import QRCode from 'react-native-qrcode-svg';
 import * as Print from 'expo-print';
-import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
 import * as Haptics from 'expo-haptics';
 import * as Linking from 'expo-linking';
@@ -784,12 +783,8 @@ export default function TicketsScreen() {
       ? `${eventDate.toLocaleDateString(localeTag, { weekday: 'short' })} · ${eventDate.getDate()} ${eventDate.toLocaleDateString(localeTag, { month: 'short' })}`
       : '—';
     const time = eventDate ? eventDate.toLocaleTimeString(localeTag, { hour: '2-digit', minute: '2-digit' }) : '—';
-    const eventYear = eventDate ? eventDate.getFullYear() : new Date().getFullYear();
-    const ticketShort = item.id.slice(0, 4).toUpperCase();
     const sectionLabel = (ticketTypeName || tierConfig.label.replace(/^[^\s]+\s/, '')).replace(/^Premium · /, '');
-    const rowLabel = '—';
     const seatLabel = `${(item as any).quantity ?? 1}P`;
-    const ticketCode = `ECL-${eventYear}-${ticketShort}-${visualTier.toUpperCase()}`;
 
     // Single shared shimmer translateX — runs on native thread, zero JS cost
     const shimmerX = shimmer.interpolate({ inputRange: [0, 1], outputRange: [-420, 420] });

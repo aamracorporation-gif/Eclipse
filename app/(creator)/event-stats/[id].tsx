@@ -331,7 +331,7 @@ export default function EventStatsScreen() {
     return () => {
       subscription.unsubscribe();
     };
-  }, [event?.id]);
+  }, [event]);
 
   if (!event) {
     return (

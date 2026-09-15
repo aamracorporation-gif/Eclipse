@@ -104,7 +104,7 @@ export default function NotificationPreferencesScreen() {
     return () => {
       mounted = false;
     };
-  }, [userId]);
+  }, [user, userId]);
 
   const items = useMemo(() => {
     const visible = __test_getVisiblePreferenceKeys(profileRole);

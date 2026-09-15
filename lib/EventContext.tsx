@@ -1,8 +1,7 @@
 import { createContext, useContext, useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { supabase, Event } from '@/lib/supabase';
-import i18n from '@/lib/i18n';
+import { supabase } from '@/lib/supabase';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { invokeEdgeFunction, invokeEdgeFunctionStrict } from '@/lib/edgeFunctions';
+import { invokeEdgeFunctionStrict } from '@/lib/edgeFunctions';
 
 export type TicketType = {
   id: string;
@@ -341,7 +340,7 @@ export function EventProvider({ children }: { children: React.ReactNode }) {
         }, 900);
       }
     }
-  }, [fetchEventsQuery]);
+  }, [fetchEventsQuery, isMadridTimezone, madridOffsetMinutesForUtcMs]);
 
   const scheduleRefresh = useCallback(() => {
     if (refreshTimeoutRef.current) clearTimeout(refreshTimeoutRef.current);

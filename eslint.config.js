@@ -32,4 +32,12 @@ module.exports = defineConfig([
       'expo/no-dynamic-env-var': 'off',
     },
   },
+  {
+    files: ['__tests__/**/*.ts', '__tests__/**/*.tsx'],
+    rules: {
+      // Jest module-isolation tests intentionally require modules after mocks
+      // and resetModules calls; static imports would change their semantics.
+      '@typescript-eslint/no-require-imports': 'off',
+    },
+  },
 ]);

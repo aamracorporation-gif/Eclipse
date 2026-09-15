@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, StatusBar, AppState, Linking, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Calendar, Plus, Ticket, BarChart3, ScanLine, Users, CreditCard, ArrowUpRight, Flame, ChevronRight, Activity, FileText, LogOut } from '@/lib/icons';
+import { Calendar, Ticket, BarChart3, Users, CreditCard, ArrowUpRight, Flame, ChevronRight, Activity, LogOut } from '@/lib/icons';
 import { router, useFocusEffect } from 'expo-router';
 import { useAuth } from '@/lib/AuthContext';
 import { useEvents } from '@/lib/EventContext';
@@ -21,7 +21,6 @@ import { scheduleLocalNotification, registerForPushNotifications } from '@/lib/n
 
 
 import { getStripeAccountStats, StripeAccountStats, createStripeConnectOnboardingLink, createStripeConnectAccount } from '@/lib/payments/api';
-import { invokeEdgeFunction } from '@/lib/edgeFunctions';
 import { useTranslation } from 'react-i18next';
 
 export default function CreatorDashboard() {
@@ -50,7 +49,6 @@ export default function CreatorDashboard() {
   const [onboardingCompleted, setOnboardingCompleted] = useState(false);
   const [loadingOnboarding, setLoadingOnboarding] = useState(false);
   const [loadingAdminOverview, setLoadingAdminOverview] = useState(false);
-  const [deletingAccount, setDeletingAccount] = useState(false);
   const pendingStripeReturnRef = useRef(false);
   const stripeAutoRefreshRef = useRef<{ accountId: string | null; attemptedAt: number }>({ accountId: null, attemptedAt: 0 });
   const salesDataRef = useRef(salesData);
@@ -93,7 +91,6 @@ export default function CreatorDashboard() {
     reports7d: null,
   });
 
-  const canCreateEvents = profileRole === 'organizer' && verificationStatus === 'verified';
   const isAdmin = profileRole === 'admin';
 
   useEffect(() => {
@@ -363,34 +360,6 @@ export default function CreatorDashboard() {
     } catch (error) {
       console.error('Error logging out:', error);
     }
-  };
-
-  const handleDeleteAccount = () => {
-    if (deletingAccount) return;
-    Alert.alert(
-      t('profile.delete_account_title'),
-      t('profile.delete_account_body'),
-      [
-        { text: t('common.cancel'), style: 'cancel' },
-        {
-          text: t('profile.delete_account_confirm'),
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              setDeletingAccount(true);
-              const { error } = await invokeEdgeFunction('delete-account', {});
-              if (error) throw new Error(String(error.message || t('profile.delete_account_failed')));
-              await signOut();
-              router.replace('/(auth)/login');
-            } catch (e: any) {
-              Alert.alert(t('common.error'), String(e?.message || t('profile.delete_account_failed')));
-            } finally {
-              setDeletingAccount(false);
-            }
-          },
-        },
-      ]
-    );
   };
 
   useFocusEffect(

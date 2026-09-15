@@ -1,10 +1,9 @@
 import {
   View, Text, StyleSheet, FlatList, TouchableOpacity,
-  Alert, ActivityIndicator, Switch, Modal, Platform,
+  Alert, ActivityIndicator, Switch, Modal,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useRouter } from 'expo-router';
 import { Tag, RefreshCw, ChevronDown, Trash2, Users, ChevronUp } from '@/lib/icons';
 import { GlassView } from '@/components/ui/GlassView';
 import { supabase } from '@/lib/supabase';
@@ -37,6 +36,7 @@ type EventOption = { id: string; title: string };
 
 export default function DiscountCodesScreen() {
   const { user } = useAuth();
+  const userId = user?.id;
 
   const [allCodes, setAllCodes] = useState<DiscountCode[]>([]);
   const [eventOptions, setEventOptions] = useState<EventOption[]>([]);
@@ -53,13 +53,13 @@ export default function DiscountCodesScreen() {
     : allCodes;
 
   const fetchCodes = useCallback(async () => {
-    if (!user) return;
+    if (!userId) return;
     setLoading(true);
     try {
       const { data, error } = await supabase
         .from('discount_codes')
         .select('*')
-        .eq('creator_id', user.id)
+        .eq('creator_id', userId)
         .order('created_at', { ascending: false });
       if (error) throw error;
 
@@ -85,7 +85,7 @@ export default function DiscountCodesScreen() {
     } finally {
       setLoading(false);
     }
-  }, [user?.id]);
+  }, [userId]);
 
   useEffect(() => { fetchCodes(); }, [fetchCodes]);
 

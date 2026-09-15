@@ -1,5 +1,5 @@
 import 'react-native-url-polyfill/auto';
-import { Component, type ReactNode, useEffect, useRef, useState } from 'react';
+import { Component, type ReactNode, useCallback, useEffect, useRef, useState } from 'react';
 import { AppState, Modal, StyleSheet, Text, View } from 'react-native';
 import { router, Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
@@ -61,14 +61,14 @@ function OfflineGuard({ children }: { children: ReactNode }) {
   const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const offlineSinceRef = useRef<number | null>(null);
 
-  const clearGrace = () => {
+  const clearGrace = useCallback(() => {
     if (graceTimerRef.current) { clearTimeout(graceTimerRef.current); graceTimerRef.current = null; }
     if (countdownRef.current) { clearInterval(countdownRef.current); countdownRef.current = null; }
     offlineSinceRef.current = null;
     setCountdown(0);
-  };
+  }, []);
 
-  const ping = async () => {
+  const ping = useCallback(async () => {
     const online = await checkOnline();
 
     if (online) {
@@ -97,7 +97,7 @@ function OfflineGuard({ children }: { children: ReactNode }) {
         setShowOffline(true);
       }, OFFLINE_GRACE_MS);
     }
-  };
+  }, [clearGrace, showOffline]);
 
   useEffect(() => {
     ping();
@@ -112,7 +112,7 @@ function OfflineGuard({ children }: { children: ReactNode }) {
       clearGrace();
       sub.remove();
     };
-  }, []);
+  }, [clearGrace, ping]);
 
   return (
     <View style={{ flex: 1 }}>

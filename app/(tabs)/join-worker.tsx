@@ -8,12 +8,10 @@ import { GlassView } from '@/components/ui/GlassView';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ChevronLeft, QrCode, Check } from '@/lib/icons';
 import { supabase } from '@/lib/supabase';
-import { useAuth } from '@/lib/AuthContext';
 import * as Haptics from 'expo-haptics';
 
 export default function JoinWorkerScreen() {
   const router = useRouter();
-  const { user } = useAuth();
   const [permission, requestPermission] = useCameraPermissions();
   const [scanning, setScanning] = useState(false);
   const [busy, setBusy] = useState(false);

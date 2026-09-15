@@ -11,7 +11,7 @@ import { useAuth } from '@/lib/AuthContext';
 import { supabase } from '@/lib/supabase';
 import { useI18n } from '@/lib/I18nContext';
 import { invokeEdgeFunction } from '@/lib/edgeFunctions';
-import { ShieldCheck, User, Pencil, ChevronRight, X, Lock, SlidersHorizontal, MessageCircle } from '@/lib/icons';
+import { User, Pencil, ChevronRight, X, Lock, SlidersHorizontal, MessageCircle } from '@/lib/icons';
 import { isSafeAddressText, isSafeOrgText, isValidIbanES, isValidPersonName, normalizeWhitespace, normalizeWhitespaceForInput } from '@/lib/validators';
 
 type ProfileData = {
@@ -43,18 +43,6 @@ function alpha(hex: string, a: number) {
   const g = parseInt(h.slice(2, 4), 16);
   const b = parseInt(h.slice(4, 6), 16);
   return `rgba(${r},${g},${b},${a})`;
-}
-
-function TitleRow(props: { title: string; subtitle?: string; right?: any }) {
-  return (
-    <View style={ui.titleRow}>
-      <View style={{ flex: 1 }}>
-        <Text style={ui.h1}>{props.title}</Text>
-        {!!props.subtitle && <Text style={ui.h2}>{props.subtitle}</Text>}
-      </View>
-      {props.right}
-    </View>
-  );
 }
 
 function Badge(props: { tone: 'ok' | 'warn' | 'error' | 'neutral'; label: string }) {
@@ -195,6 +183,28 @@ const EMPTY_DRAFT = {
   organizer_iban: '',
 };
 
+function profileKey(d: typeof EMPTY_DRAFT) {
+  return [
+    d.full_name,
+    d.phone,
+    d.city,
+    d.country,
+    d.gender,
+    d.age,
+    d.club_name,
+    d.business_email,
+    d.instagram_account,
+    d.organizer_venue_address,
+    d.organizer_fiscal_address,
+    d.organizer_postal_code,
+    d.organizer_responsible_name,
+    d.organizer_responsible_birthdate,
+    d.organizer_iban,
+  ]
+    .map((x) => String(x || '').trim())
+    .join('|');
+}
+
 export default function OrganizerProfileTab() {
   const { user, signOut } = useAuth();
   const { t } = useTranslation();
@@ -231,27 +241,6 @@ export default function OrganizerProfileTab() {
     const b = parts.length > 1 ? (parts[1]?.[0] || '') : '';
     return (a + b).toUpperCase();
   }, [displayName, email]);
-
-  const profileKey = (d: typeof draft) =>
-    [
-      d.full_name,
-      d.phone,
-      d.city,
-      d.country,
-      d.gender,
-      d.age,
-      d.club_name,
-      d.business_email,
-      d.instagram_account,
-      d.organizer_venue_address,
-      d.organizer_fiscal_address,
-      d.organizer_postal_code,
-      d.organizer_responsible_name,
-      d.organizer_responsible_birthdate,
-      d.organizer_iban,
-    ]
-      .map((x) => String(x || '').trim())
-      .join('|');
 
   const fetchProfile = useCallback(async () => {
     if (!user?.id) return;
@@ -506,7 +495,7 @@ export default function OrganizerProfileTab() {
       setSupportMessage('');
       setSupportCategory('Problema técnico');
       Alert.alert('¡Mensaje enviado!', 'Hemos recibido tu consulta. Te responderemos lo antes posible.');
-    } catch (e: any) {
+    } catch {
       Alert.alert('Error al enviar', 'No se pudo enviar el mensaje. Inténtalo de nuevo o escríbenos a ' + SUPPORT_EMAIL);
     } finally {
       setSupportSending(false);
