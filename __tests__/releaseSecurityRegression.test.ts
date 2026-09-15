@@ -203,6 +203,15 @@ describe('release security regressions', () => {
     expect(storage).not.toContain('public: true');
   });
 
+  test('keeps the native Stripe SDK out of the web payment handler', () => {
+    const webPaymentHandler = read('components/PaymentSheetHandler.web.tsx');
+
+    expect(webPaymentHandler).not.toContain('@stripe/stripe-react-native');
+    expect(webPaymentHandler).toContain(
+      'Las compras están disponibles en la aplicación Eclipse',
+    );
+  });
+
   test('push delivery can only be dispatched by the service role', () => {
     const walletContext = read('lib/WalletContext.tsx');
     const sendPush = read('supabase/functions/send-push/index.ts');
