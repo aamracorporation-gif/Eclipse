@@ -65,4 +65,18 @@ describe('release security regressions', () => {
     expect(sql).toContain('record_fulfilled_payment_discount');
     expect(sql).toContain('REVOKE ALL ON FUNCTION public.cleanup_old_events()');
   });
+
+  test('registration cannot bypass email confirmation through a service-role function', () => {
+    const registration = read('app/(auth)/register.tsx');
+    const retiredEndpoint = read('supabase/functions/register-user-fallback/index.ts');
+    const supportConfig = read('supabase/functions/send-support-email/config.toml');
+    const supportFunction = read('supabase/functions/send-support-email/index.ts');
+
+    expect(registration).not.toContain('/functions/v1/register-user-fallback');
+    expect(registration).not.toContain('EXPO_PUBLIC_DEV_BYPASS_EMAIL_RATE_LIMIT');
+    expect(retiredEndpoint).not.toContain('auth.admin.createUser');
+    expect(retiredEndpoint).toContain('status: 410');
+    expect(supportConfig).toContain('verify_jwt = true');
+    expect(supportFunction).toContain('client.auth.getUser()');
+  });
 });

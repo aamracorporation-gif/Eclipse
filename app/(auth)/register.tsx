@@ -542,89 +542,12 @@ export default function RegisterScreen() {
       const lower = msg.toLowerCase();
       const isEmailRateLimit = lower.includes('email rate limit') || lower.includes('rate limit exceeded');
       if (isEmailRateLimit) {
-        const allowDevBypass = __DEV__ && String(process.env.EXPO_PUBLIC_DEV_BYPASS_EMAIL_RATE_LIMIT || '') === '1';
-        if (!allowDevBypass) {
-          showDialog({
-            title: 'Límite de emails alcanzado',
-            message:
-              'Supabase ha bloqueado temporalmente el envío de emails de confirmación (rate limit). Para poder registrar más cuentas debes:\n\n- Esperar y reintentar más tarde, o\n- Configurar un proveedor SMTP propio en Supabase (Auth → Email) para aumentar límites.\n\nEn desarrollo puedes activar un bypass con EXPO_PUBLIC_DEV_BYPASS_EMAIL_RATE_LIMIT=1.',
-          });
-          return;
-        }
-
-        try {
-          const age = birthDate ? calculateAgeFromDate(birthDate) : 0;
-          const acceptedAt = new Date().toISOString();
-          const metadata = {
-            role: safeRole,
-            full_name: safeRole === 'organizer' ? formData.clubName : `${formData.firstName} ${formData.lastName}`,
-            email: formData.email.trim(),
-            club_name: formData.clubName,
-            address: formData.venueAddress,
-            legal_name: formData.legalName,
-            tax_id_number: formData.taxIdNumber,
-            business_type: formData.businessType,
-            first_name: formData.firstName,
-            last_name: formData.lastName,
-            age: age,
-            city: formData.city,
-            country: formData.country,
-            organizer_venue_address: formData.venueAddress,
-            organizer_fiscal_address: formData.fiscalAddress,
-            organizer_postal_code: formData.postalCode,
-            organizer_responsible_name: formData.responsibleName,
-            organizer_responsible_birthdate: responsibleBirthDate ? responsibleBirthDate.toISOString().slice(0, 10) : null,
-            organizer_iban: formData.iban,
-            organizer_licenses_declared_at: safeRole === 'organizer' ? acceptedAt : null,
-            accepted_terms_at: acceptedAt,
-            accepted_privacy_at: acceptedAt,
-          };
-
-          const supabaseUrl = String(process.env.EXPO_PUBLIC_SUPABASE_URL || '').replace(/\/$/, '');
-          const anonKey = String(process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '');
-          if (!supabaseUrl || !anonKey) throw new Error('Falta configuración de Supabase (URL/ANON KEY).');
-
-          const endpoint = `${supabaseUrl}/functions/v1/register-user-fallback`;
-          const res = await fetch(endpoint, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              apikey: anonKey,
-            },
-            body: JSON.stringify({ email: formData.email, password: formData.password, metadata }),
-          });
-
-          const text = await res.text().catch(() => '');
-          let json: any = null;
-          try {
-            json = text ? JSON.parse(text) : null;
-          } catch {
-            json = null;
-          }
-
-          if (!res.ok || json?.ok === false) {
-            throw new Error(String(json?.error || json?.message || text || 'No se pudo crear la cuenta.'));
-          }
-
-          const { error: signInError } = await supabase.auth.signInWithPassword({
-            email: formData.email.trim(),
-            password: formData.password,
-          });
-          if (signInError) throw signInError;
-
-          await invokeEdgeFunction('record-legal-acceptance', {});
-
-          showDialog({
-            title: 'Cuenta creada (DEV)',
-            message:
-              'Por límite de emails, en desarrollo se creó la cuenta sin enviar el email de confirmación. En producción el email será obligatorio.',
-          });
-          router.replace(formData.role === 'organizer' ? '/(creator)/verification' : '/(tabs)');
-          return;
-        } catch (e: any) {
-          showDialog({ title: 'Error de Registro', message: String(e?.message || 'No se pudo registrar por bypass DEV.') });
-          return;
-        }
+        showDialog({
+          title: 'Límite de emails alcanzado',
+          message:
+            'El servicio de correo ha alcanzado temporalmente su límite. Espera unos minutos y vuelve a intentarlo. La cuenta nunca se activará sin verificar el email.',
+        });
+        return;
       }
       const hint = msg.includes('Database error saving new user')
         ? '\n\nSuele indicar que falló un trigger/migración en Supabase (creación de profile/wallet). Aplica las migraciones y refresca el schema cache.'

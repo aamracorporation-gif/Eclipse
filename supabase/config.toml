@@ -26,7 +26,7 @@ verify_jwt = true
 verify_jwt = true
 
 [functions.send-support-email]
-verify_jwt = false
+verify_jwt = true
 
 [functions.auth-redirect]
 verify_jwt = false
