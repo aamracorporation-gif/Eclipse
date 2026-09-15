@@ -153,6 +153,13 @@ describe('release security regressions', () => {
     expect(saleSql).toContain('worker_event_assignments');
     expect(saleSql).toContain('FOR UPDATE');
     expect(saleSql).toContain('v_type.price');
+
+    const vipSql = read(
+      'supabase/migrations/20260915122300_harden_worker_vip_sales.sql',
+    );
+    expect(vipSql).toContain("permissions ? 'sell'");
+    expect(vipSql).toContain('worker_event_assignments');
+    expect(vipSql.match(/FOR UPDATE/g)?.length).toBeGreaterThanOrEqual(2);
   });
 
   test('registration cannot bypass email confirmation through a service-role function', () => {
