@@ -209,24 +209,7 @@ export function CreditProvider({ children }: { children: React.ReactNode }) {
 
     try {
       const { error } = await supabase.rpc('cancel_resale_listing_secure', { p_ticket_id: ticketId });
-      if (error) {
-        const { error: directError } = await supabase
-          .from('resale_listings')
-          .delete()
-          .eq('ticket_id', ticketId)
-          .eq('seller_id', user.id)
-          .eq('status', 'active');
-
-        if (directError) throw error;
-
-        const { error: ticketUpdateError } = await supabase
-          .from('tickets')
-          .update({ status: 'valid', ticket_status: 'active' })
-          .eq('id', ticketId)
-          .eq('user_id', user.id);
-
-        if (ticketUpdateError) throw ticketUpdateError;
-      }
+      if (error) throw error;
 
       await refreshCredit();
     } catch (error) {

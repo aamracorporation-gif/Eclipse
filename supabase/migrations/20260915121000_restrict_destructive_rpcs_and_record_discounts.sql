@@ -1,5 +1,6 @@
--- Destructive maintenance is run by pg_cron/service workers, never by a mobile
--- session. Card discount usage is recorded when fulfillment becomes terminal.
+-- Card discount usage is recorded exactly once when fulfillment becomes
+-- terminal. Maintenance and legacy scanner permissions are isolated in later
+-- migrations so each production change can be validated independently.
 
 ALTER TABLE public.discount_code_uses
   ADD COLUMN IF NOT EXISTS payment_transaction_id uuid
@@ -65,19 +66,4 @@ REVOKE ALL ON FUNCTION public.record_fulfilled_payment_discount()
   FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION public.consume_discount_code(uuid,text,text)
   FROM PUBLIC, anon, authenticated;
-REVOKE ALL ON FUNCTION public.cleanup_old_events()
-  FROM PUBLIC, anon, authenticated;
-REVOKE ALL ON FUNCTION public.purge_expired_tickets_and_resales()
-  FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.consume_discount_code(uuid,text,text) TO service_role;
-GRANT EXECUTE ON FUNCTION public.cleanup_old_events() TO service_role;
-GRANT EXECUTE ON FUNCTION public.purge_expired_tickets_and_resales() TO service_role;
-
-REVOKE ALL ON FUNCTION public.validate_ticket_qr_v2(text,text)
-  FROM PUBLIC, anon, authenticated;
-REVOKE ALL ON FUNCTION public.validate_ticket_qr_v2(uuid,text)
-  FROM PUBLIC, anon, authenticated;
-REVOKE ALL ON FUNCTION public.validate_ticket_qr_v3(text,text,uuid)
-  FROM PUBLIC, anon, authenticated;
-REVOKE ALL ON FUNCTION public.validate_ticket_worker(text,uuid)
-  FROM PUBLIC, anon, authenticated;

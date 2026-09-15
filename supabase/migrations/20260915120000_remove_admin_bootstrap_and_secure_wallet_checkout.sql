@@ -187,26 +187,3 @@ GRANT EXECUTE ON FUNCTION public.add_funds(uuid,numeric) TO service_role;
 GRANT EXECUTE ON FUNCTION public.apply_credito_delta(uuid,numeric,public.ledger_movimiento_tipo,text,text) TO service_role;
 GRANT EXECUTE ON FUNCTION public.fulfill_payment_for_user(text,uuid) TO service_role;
 GRANT EXECUTE ON FUNCTION public.admin_purge_user_data(uuid) TO service_role;
-
--- Retire spoofable and obsolete scanner signatures.
-REVOKE ALL ON FUNCTION public.validate_ticket_qr_v2(text,text) FROM PUBLIC, anon, authenticated;
-REVOKE ALL ON FUNCTION public.validate_ticket_qr_v2(uuid,text) FROM PUBLIC, anon, authenticated;
-REVOKE ALL ON FUNCTION public.validate_ticket_qr_v3(text,text,uuid) FROM PUBLIC, anon, authenticated;
-REVOKE ALL ON FUNCTION public.validate_ticket_worker(text,uuid) FROM PUBLIC, anon, authenticated;
-
--- Anonymous callers never need a SECURITY DEFINER routine. Explicit public
--- endpoints are implemented as bounded Edge Functions instead.
-DO $security$
-DECLARE
-  fn record;
-BEGIN
-  FOR fn IN
-    SELECT p.oid::regprocedure AS signature
-    FROM pg_proc p
-    JOIN pg_namespace n ON n.oid = p.pronamespace
-    WHERE n.nspname = 'public' AND p.prosecdef
-  LOOP
-    EXECUTE format('REVOKE EXECUTE ON FUNCTION %s FROM PUBLIC, anon', fn.signature);
-  END LOOP;
-END
-$security$;

@@ -4,7 +4,7 @@ CREATE OR REPLACE FUNCTION public.validate_ticket_qr_v3(p_qr_token text, p_event
 RETURNS jsonb
 LANGUAGE plpgsql
 SECURITY DEFINER
-SET search_path = public
+SET search_path = pg_catalog, public, pg_temp
 AS $$
 DECLARE
   v_ticket public.tickets%ROWTYPE;
@@ -20,9 +20,7 @@ BEGIN
 
   SELECT * INTO v_event FROM public.events WHERE id = p_event_id;
   IF NOT FOUND THEN RETURN jsonb_build_object('valid', false, 'message', 'Evento no encontrado'); END IF;
-  IF v_event.creator_id IS DISTINCT FROM auth.uid() AND NOT EXISTS (
-    SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'admin'
-  ) THEN
+  IF v_event.creator_id IS DISTINCT FROM auth.uid() THEN
     RAISE EXCEPTION 'Forbidden' USING ERRCODE = '42501';
   END IF;
 
@@ -56,7 +54,7 @@ CREATE OR REPLACE FUNCTION public.validate_ticket_worker_v2(p_qr_token text, p_w
 RETURNS jsonb
 LANGUAGE plpgsql
 SECURITY DEFINER
-SET search_path = public
+SET search_path = pg_catalog, public, pg_temp
 AS $$
 DECLARE
   v_worker public.workers%ROWTYPE;
@@ -68,7 +66,13 @@ DECLARE
 BEGIN
   IF auth.uid() IS NULL THEN RAISE EXCEPTION 'Not authenticated' USING ERRCODE = '42501'; END IF;
   SELECT * INTO v_worker FROM public.workers
-   WHERE id=p_worker_id AND user_id=auth.uid() AND status='active' AND coalesce((permissions->>'scan')::boolean, false);
+   WHERE id=p_worker_id
+     AND user_id=auth.uid()
+     AND status='active'
+     AND (
+       permissions ? 'scan'
+       OR lower(coalesce(permissions->>'scan', 'false')) = 'true'
+     );
   IF NOT FOUND THEN RAISE EXCEPTION 'Worker not found, inactive, or scan permission denied' USING ERRCODE = '42501'; END IF;
   IF NOT EXISTS (SELECT 1 FROM public.worker_event_assignments WHERE worker_id=v_worker.id AND event_id=p_event_id AND status='active') THEN
     RAISE EXCEPTION 'Worker is not assigned to this event' USING ERRCODE = '42501';

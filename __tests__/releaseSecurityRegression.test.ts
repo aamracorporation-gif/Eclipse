@@ -56,14 +56,57 @@ describe('release security regressions', () => {
       read('app/my-resales.tsx'),
       read('app/(creator)/index.tsx'),
     ].join('\n');
-    const sql = read(
+    const discountSql = read(
       'supabase/migrations/20260915121000_restrict_destructive_rpcs_and_record_discounts.sql',
+    );
+    const maintenanceSql = read(
+      'supabase/migrations/20260915121100_restrict_maintenance_rpcs.sql',
     );
 
     expect(clientSource).not.toContain("rpc('purge_expired_tickets_and_resales'");
     expect(clientSource).not.toContain("rpc('cleanup_old_events'");
-    expect(sql).toContain('record_fulfilled_payment_discount');
-    expect(sql).toContain('REVOKE ALL ON FUNCTION public.cleanup_old_events()');
+    expect(discountSql).toContain('record_fulfilled_payment_discount');
+    expect(maintenanceSql).toContain('REVOKE ALL ON FUNCTION public.cleanup_old_events()');
+  });
+
+  test('ticket scanners bind identity and serialize ticket consumption', () => {
+    const scannerSql = read(
+      'supabase/migrations/20260913000000_harden_atomic_ticket_scanning.sql',
+    );
+    const retiredSql = read(
+      'supabase/migrations/20260915121200_retire_legacy_ticket_scanners.sql',
+    );
+
+    expect(scannerSql).toContain('user_id=auth.uid()');
+    expect(scannerSql).toContain("permissions ? 'scan'");
+    expect(scannerSql).toContain('worker_event_assignments');
+    expect(scannerSql.match(/FOR UPDATE/g)?.length).toBeGreaterThanOrEqual(2);
+    expect(retiredSql).toContain('REVOKE ALL ON FUNCTION public.validate_ticket_qr_v3(text,text,uuid)');
+  });
+
+  test('privileged database routines use an authenticated allowlist', () => {
+    const allowlistSql = read(
+      'supabase/migrations/20260915121400_allowlist_security_definer_rpcs.sql',
+    );
+
+    expect(allowlistSql).toContain('FROM PUBLIC, anon, authenticated');
+    expect(allowlistSql).toContain('TO service_role');
+    expect(allowlistSql).toContain(
+      'GRANT EXECUTE ON FUNCTION public.buy_ticket_with_credito_v2',
+    );
+  });
+
+  test('resale cancellation and notification bulk-read stay server-authoritative', () => {
+    const walletContext = read('lib/WalletContext.tsx');
+    const notificationContext = read('lib/NotificationContext.tsx');
+    const rpcSql = read(
+      'supabase/migrations/20260915121500_restore_secure_user_rpcs.sql',
+    );
+
+    expect(walletContext).not.toContain("from('resale_listings')\n          .delete()");
+    expect(notificationContext).not.toContain("from('notifications')\n          .update({ read: true");
+    expect(rpcSql).toContain('p_user_id IS DISTINCT FROM auth.uid()');
+    expect(rpcSql).toContain('seller_id = auth.uid()');
   });
 
   test('registration cannot bypass email confirmation through a service-role function', () => {
