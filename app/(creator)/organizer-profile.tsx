@@ -497,11 +497,8 @@ export default function OrganizerProfileTab() {
     }
     setSupportSending(true);
     try {
-      const userName = profile?.full_name || profile?.club_name || user?.user_metadata?.full_name || 'Organizador';
-      const userEmail = user?.email || '';
-      const userId = user?.id || 'desconocido';
       const { data, error } = await supabase.functions.invoke('send-support-email', {
-        body: { userName, userEmail, userId, category: supportCategory, message: supportMessage.trim() },
+        body: { category: supportCategory, message: supportMessage.trim() },
       });
       if (error) throw error;
       if (data && !data.ok) throw new Error(JSON.stringify(data.error || data));

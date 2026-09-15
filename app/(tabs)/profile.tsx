@@ -74,19 +74,14 @@ export default function ProfileScreen() {
     }
     setSupportSending(true);
     try {
-      const userName = profileDraft.full_name || profileDraft.first_name || user?.user_metadata?.full_name || 'Usuario';
-      const userEmail = user?.email || 'sin email';
-      const userId = user?.id || 'desconocido';
-
       const { data, error } = await supabase.functions.invoke('send-support-email', {
-        body: { userName, userEmail, userId, category: supportCategory, message: supportMessage.trim() },
+        body: { category: supportCategory, message: supportMessage.trim() },
       });
 
       if (error) throw error;
       if (data && !data.ok) {
-        const detail = JSON.stringify(data.data || data.error || data);
-        console.error('[Support] Resend error:', detail);
-        Alert.alert('Error al enviar', 'Resend rechazó el email:\n' + detail);
+        console.error('[Support] Email service rejected the request');
+        Alert.alert('Error al enviar', 'No se pudo enviar el mensaje. Inténtalo de nuevo.');
         return;
       }
 
