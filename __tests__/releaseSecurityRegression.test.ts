@@ -88,4 +88,14 @@ describe('release security regressions', () => {
     expect(sendPush).toContain('authorization !== `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`');
     expect(sendPush).toContain('status: 403');
   });
+
+  test('legacy payment creation endpoint is retired', () => {
+    const legacyPayment = read('supabase/functions/create-payment-intent/index.ts');
+    const paymentApi = read('lib/payments/api.ts');
+
+    expect(legacyPayment).toContain('status: 410');
+    expect(legacyPayment).not.toContain('STRIPE_SECRET_KEY');
+    expect(paymentApi).toContain("'create-payment-intent-v2'");
+    expect(paymentApi).not.toContain("invokeWithJwtRecovery<CreatePaymentIntentResponse>('create-payment-intent'");
+  });
 });
