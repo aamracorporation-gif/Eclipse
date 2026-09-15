@@ -23,6 +23,8 @@ jobs:
           node-version: 20
           cache: npm
       - run: npm ci
+      - name: Validate Expo dependency alignment
+        run: npx expo install --check
       - run: npm run typecheck
       - run: npm run lint
       - run: npm test -- --runInBand

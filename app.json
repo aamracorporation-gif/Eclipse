@@ -6,10 +6,10 @@
     "orientation": "portrait",
     "icon": "./assets/images/Icon.png",
     "scheme": "eclipse",
-    "userInterfaceStyle": "automatic",
+    "userInterfaceStyle": "dark",
     "newArchEnabled": true,
     "ios": {
-      "supportsTablet": true,
+      "supportsTablet": false,
       "bundleIdentifier": "com.achraf.eclipse",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
@@ -35,13 +35,19 @@
       [
         "expo-image-picker",
         {
-          "photosPermission": "The app accesses your photos to let you share them with your friends."
+          "photosPermission": "Eclipse necesita acceso a tus fotos para que puedas elegir imágenes de perfil y de eventos."
+        }
+      ],
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Eclipse necesita acceso a la cámara para escanear entradas y seleccionar fotografías."
         }
       ],
       [
         "expo-location",
         {
-          "locationWhenInUsePermission": "Allow $(PRODUCT_NAME) to access your location to verify event addresses."
+          "locationWhenInUsePermission": "Eclipse usa tu ubicación para mostrar eventos cercanos, verificar recintos y registrar escaneos autorizados."
         }
       ],
       [

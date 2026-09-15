@@ -224,6 +224,17 @@ describe('release security regressions', () => {
     expect(appleWallet).not.toContain('ticket: ${ticket_id}');
   });
 
+  test('release configuration uses coherent UI and explicit Spanish permissions', () => {
+    const appConfig = read('app.json');
+    const config = JSON.parse(appConfig).expo;
+
+    expect(config.userInterfaceStyle).toBe('dark');
+    expect(config.ios.supportsTablet).toBe(false);
+    expect(appConfig).toContain('Eclipse necesita acceso a la cámara');
+    expect(appConfig).toContain('Eclipse necesita acceso a tus fotos');
+    expect(appConfig).toContain('Eclipse usa tu ubicación');
+  });
+
   test('push delivery can only be dispatched by the service role', () => {
     const walletContext = read('lib/WalletContext.tsx');
     const sendPush = read('supabase/functions/send-push/index.ts');
