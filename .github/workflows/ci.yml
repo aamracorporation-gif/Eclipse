@@ -26,6 +26,8 @@ jobs:
       - run: npm run typecheck
       - run: npm run lint
       - run: npm test -- --runInBand
+      - name: Validate Expo web bundle
+        run: npm run build:web
       - name: Backend dependencies and tests
         working-directory: backend
         run: npm ci && npm test
