@@ -742,7 +742,11 @@ export default function ResaleScreen() {
 
                     <TouchableOpacity
                       activeOpacity={0.85}
-                      onPress={() => { Haptics.selectionAsync(); hasActiveFilters ? clearFilters() : router.push('/(tabs)'); }}
+                      onPress={() => {
+                        void Haptics.selectionAsync();
+                        if (hasActiveFilters) clearFilters();
+                        else router.push('/(tabs)');
+                      }}
                       style={styles.emptyCtaOuter}
                     >
                       <LinearGradient

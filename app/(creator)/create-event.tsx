@@ -1,4 +1,4 @@
-﻿import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
   Image,
@@ -368,7 +368,7 @@ export default function CreateEventScreen() {
     }
 
     return e;
-  }, [draft, minDateTime, ticketTypes.length]);
+  }, [draft, isEditing, minDateTime, ticketTypes.length]);
 
   const getError = useCallback(
     (key: string) => {

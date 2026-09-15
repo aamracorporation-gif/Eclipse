@@ -326,7 +326,7 @@ export default function ProfileScreen() {
       organizer_iban: String(draft.organizer_iban || '').trim().toUpperCase(),
       birthdate: String(draft.birthdate || '').trim(),
     });
-  }, []);
+  }, [activeTab, inCreator, profileRole]);
 
   const profileEditKey = useMemo(() => {
     return buildProfileEditKey(profileDraft);
