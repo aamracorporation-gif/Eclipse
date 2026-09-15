@@ -22,16 +22,9 @@ jobs:
         with:
           node-version: 22
           cache: npm
-      - name: Generate aligned lockfile artifact
-        run: npm install --package-lock-only --ignore-scripts
-      - name: Upload aligned lockfile
-        uses: actions/upload-artifact@v4
-        with:
-          name: expo-lockfile
-          path: package-lock.json
-          if-no-files-found: error
-          retention-days: 1
       - run: npm ci
+      - name: Audit production dependencies
+        run: npm audit --omit=dev --audit-level=critical
       - name: Validate Expo dependency alignment
         run: npx expo install --check
       - run: npm run typecheck
