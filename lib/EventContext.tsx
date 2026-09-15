@@ -77,6 +77,20 @@ export function __test_shouldApplyRemoteEvents(prevCount: number, remoteCount: n
   return true;
 }
 
+export async function __test_collectPaginatedRows<T>(
+  fetchPage: (from: number, to: number) => Promise<{ data: T[] | null; error: unknown }>,
+  pageSize = 200
+) {
+  const rows: T[] = [];
+  for (let from = 0; ; from += pageSize) {
+    const page = await fetchPage(from, from + pageSize - 1);
+    if (page.error) throw page.error;
+    const pageRows = page.data ?? [];
+    rows.push(...pageRows);
+    if (pageRows.length < pageSize) return rows;
+  }
+}
+
 export function EventProvider({ children }: { children: React.ReactNode }) {
   const [events, setEvents] = useState<AppEvent[]>(INITIAL_EVENTS);
   const [nowMs, setNowMs] = useState(() => Date.now());
@@ -214,17 +228,24 @@ export function EventProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const fetchEventsQuery = useCallback(async () => {
-    return supabase
-      .from('events')
-      .select(
-        `
-          *,
-          venues (*),
-          event_ticket_types (*)
-        `
-      )
-      .order('event_date', { ascending: true })
-      .limit(200); // TODO: implement cursor-based pagination
+    const pageSize = 200;
+    const rows = await __test_collectPaginatedRows<any>(
+      (from, to) => supabase
+        .from('events')
+        .select(
+          `
+            *,
+            venues (*),
+            event_ticket_types (*)
+          `
+        )
+        .order('event_date', { ascending: true })
+        .order('id', { ascending: true })
+        .range(from, to) as any,
+      pageSize
+    );
+
+    return { data: rows, error: null };
   }, []);
 
   const fetchEvents = useCallback(async () => {
@@ -247,12 +268,15 @@ export function EventProvider({ children }: { children: React.ReactNode }) {
         const creatorIds = [...new Set(data.map((e: any) => e.creator_id).filter(Boolean))];
         const creatorProfiles = new Map<string, any>();
         if (creatorIds.length > 0) {
-          const cardsResult = await (supabase as any)
-            .from('public_profile_cards')
-            .select('id, full_name, club_name, verification_status')
-            .in('id', creatorIds);
-          if (cardsResult.error) throw cardsResult.error;
-          for (const card of cardsResult.data || []) creatorProfiles.set(card.id, card);
+          const profileBatchSize = 100;
+          for (let from = 0; from < creatorIds.length; from += profileBatchSize) {
+            const cardsResult = await (supabase as any)
+              .from('public_profile_cards')
+              .select('id, full_name, club_name, verification_status')
+              .in('id', creatorIds.slice(from, from + profileBatchSize));
+            if (cardsResult.error) throw cardsResult.error;
+            for (const card of cardsResult.data || []) creatorProfiles.set(card.id, card);
+          }
         }
 
         const mappedEvents: AppEvent[] = data.map((e: any) => {

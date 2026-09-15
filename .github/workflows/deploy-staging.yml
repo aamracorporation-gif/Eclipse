@@ -8,10 +8,6 @@ on:
         required: true
         default: true
         type: boolean
-  push:
-    branches: [codex/release-hardening]
-    paths: [.github/workflows/deploy-staging.yml]
-
 concurrency:
   group: supabase-staging
   cancel-in-progress: false
