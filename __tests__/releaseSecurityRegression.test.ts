@@ -176,6 +176,17 @@ describe('release security regressions', () => {
     expect(supportFunction).toContain('client.auth.getUser()');
   });
 
+  test('password recovery handoff accepts browser-only implicit-flow fragments', () => {
+    const authRedirect = read('supabase/functions/auth-redirect/index.ts');
+
+    // URL fragments never reach the Edge Function. The returned page must read
+    // the fragment in the browser before deciding that a link is invalid.
+    expect(authRedirect).toContain("new URLSearchParams(hash && hash.length > 1 ? hash.slice(1) : '')");
+    expect(authRedirect).toContain("hashParams.get('type') === 'recovery'");
+    expect(authRedirect).toContain('hashParams.has(\'access_token\')');
+    expect(authRedirect).not.toContain('if (!hasToken && !qs)');
+  });
+
   test('push delivery can only be dispatched by the service role', () => {
     const walletContext = read('lib/WalletContext.tsx');
     const sendPush = read('supabase/functions/send-push/index.ts');

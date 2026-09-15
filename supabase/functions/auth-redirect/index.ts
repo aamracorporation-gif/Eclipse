@@ -45,22 +45,11 @@ function htmlPage(title: string, body: string) {
 serve(async (req) => {
   const url = new URL(req.url);
 
-  // Supabase appends token_hash + type as query params when the redirect_to URL
-  // is whitelisted. If both are missing the URL is not whitelisted yet.
+  // PKCE can arrive as query parameters, while the legacy implicit flow puts
+  // the recovery tokens in the URL fragment. Fragments are browser-only and
+  // are never sent to this Edge Function, so validation must happen in the
+  // page script after it can inspect window.location.hash.
   const qs = url.searchParams.toString();
-  const hasToken = url.searchParams.has("token_hash") || url.searchParams.has("access_token") || url.searchParams.has("code");
-
-  if (!hasToken && !qs) {
-    // No token received — URL is not in Supabase's allowed redirect list.
-    return htmlPage(
-      "Enlace inválido",
-      `<h2>⚠️ Enlace expirado o inválido</h2>
-      <p>El enlace de recuperación no incluye el token de seguridad. Esto ocurre cuando el enlace ya fue usado, ha expirado (duran 1 hora), o si fue abierto desde un dispositivo diferente al que solicitó el cambio.</p>
-      <p style="font-size:13px;color:rgba(255,255,255,0.45)">Si el problema persiste, solicita un nuevo enlace desde la pantalla de inicio de sesión.</p>
-      <a class="btn sec" href="${APP_SCHEME}://auth/login">Ir al inicio de sesión</a>`
-    );
-  }
-
   const route = url.searchParams.get("type") === "recovery" ? "auth/reset-password" : "auth/callback";
   const deepLink = `${APP_SCHEME}://${route}${qs ? "?" + qs : ""}`;
 
@@ -73,10 +62,24 @@ serve(async (req) => {
     <script>
       (function(){
         var deep = ${JSON.stringify(deepLink)};
+        var queryParams = new URLSearchParams(window.location.search);
         // Also pick up tokens sent as URL hash fragment (legacy implicit flow)
         var hash = window.location.hash;
+        var hashParams = new URLSearchParams(hash && hash.length > 1 ? hash.slice(1) : '');
+        var hasToken = queryParams.has('token_hash') || queryParams.has('access_token') ||
+          queryParams.has('code') || hashParams.has('access_token') ||
+          hashParams.has('refresh_token') || hashParams.has('token_hash') ||
+          hashParams.has('code');
+
+        if (!hasToken) {
+          document.querySelector('.card').innerHTML =
+            '<h2>⚠️ Enlace expirado o inválido</h2>' +
+            '<p>El enlace no incluye una sesión de recuperación válida. Solicita uno nuevo desde el inicio de sesión.</p>' +
+            '<a class="btn sec" href="${APP_SCHEME}://auth/login">Ir al inicio de sesión</a>';
+          return;
+        }
+
         if (hash && hash.length > 1) {
-          var hashParams = new URLSearchParams(hash.slice(1));
           if (hashParams.get('type') === 'recovery') {
             var currentQuery = deep.includes('?') ? deep.slice(deep.indexOf('?')) : '';
             deep = ${JSON.stringify(`${APP_SCHEME}://auth/reset-password`)} + currentQuery;
