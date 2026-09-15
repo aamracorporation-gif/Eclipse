@@ -15,16 +15,6 @@ import { theme } from '@/theme/styles';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAppDialog } from '@/components/ui/AppDialog';
 
-async function fetchWithTimeout(input: RequestInfo | URL, init: RequestInit, ms: number): Promise<Response> {
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), ms);
-  try {
-    return await fetch(input, { ...init, signal: controller.signal });
-  } finally {
-    clearTimeout(timeoutId);
-  }
-}
-
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export default function LoginScreen() {
@@ -156,37 +146,12 @@ export default function LoginScreen() {
     try {
       setLoading(true);
 
-      try {
-        const res = await fetchWithTimeout(
-          `${sbUrl}/auth/v1/health`,
-          {
-            method: 'GET',
-            headers: { apikey: sbAnonKey },
-          },
-          7000
-        );
-        if (!res.ok) {
-          throw new Error(`Supabase health HTTP ${res.status}`);
-        }
-      } catch (e: any) {
-        const msg = String(e?.message || e || '');
-        const isAbort = msg.includes('aborted') || msg.includes('AbortError');
-        showDialog({
-          title: t('errors.network'),
-          message: isAbort ? t('auth.login_screen.supabase_timeout') : t('auth.login_screen.supabase_unreachable'),
-        });
-        setLoading(false);
-        return;
-      }
-      
-      // 2. Attempt Sign In
+      // The sign-in request is the authoritative connectivity check. A
+      // separate /health preflight added latency and could reject valid logins
+      // because of transient network or CORS differences.
       const { data, error } = await signIn(cleanEmail, cleanPassword);
-      
-      console.log('Login result:', { data, error });
 
       if (error) {
-        console.log('Login Error Details:', error);
-        
         // Handle specific error cases
         if (error.message?.includes('Email not confirmed')) {
           showDialog({
@@ -216,7 +181,6 @@ export default function LoginScreen() {
       }
 
       if (data.session) {
-        console.log('Session created, redirecting...');
         // Redirigir siempre a la pestaña principal como pidió el usuario
         const metadata = data.user?.user_metadata || {};
         const metadataRole = metadata.role;

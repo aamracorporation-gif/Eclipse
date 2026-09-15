@@ -187,6 +187,15 @@ describe('release security regressions', () => {
     expect(authRedirect).not.toContain('if (!hasToken && !qs)');
   });
 
+  test('login neither preflights auth health nor logs session data', () => {
+    const login = read('app/(auth)/login.tsx');
+
+    expect(login).not.toContain('/auth/v1/health');
+    expect(login).not.toContain("console.log('Login result:'");
+    expect(login).not.toContain("console.log('Login Error Details:'");
+    expect(login).not.toContain("console.log('Session created'");
+  });
+
   test('push delivery can only be dispatched by the service role', () => {
     const walletContext = read('lib/WalletContext.tsx');
     const sendPush = read('supabase/functions/send-push/index.ts');
