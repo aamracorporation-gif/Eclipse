@@ -109,6 +109,24 @@ describe('release security regressions', () => {
     expect(rpcSql).toContain('seller_id = auth.uid()');
   });
 
+  test('public profile reads use a minimal card instead of the private profile row', () => {
+    const eventContext = read('lib/EventContext.tsx');
+    const resaleScreen = read('app/(tabs)/resale.tsx');
+    const ticketsScreen = read('app/(tabs)/tickets.tsx');
+    const registration = read('app/(auth)/register.tsx');
+    const profileSql = read(
+      'supabase/migrations/20260915122000_secure_profiles_and_public_cards.sql',
+    );
+
+    for (const source of [eventContext, resaleScreen, ticketsScreen, registration]) {
+      expect(source).toContain('public_profile_cards');
+    }
+    expect(resaleScreen).not.toContain(".select('id, full_name, email')");
+    expect(profileSql).toContain('DROP POLICY IF EXISTS "Public profiles are viewable by everyone"');
+    expect(profileSql).toContain('REVOKE ALL ON TABLE public.profiles FROM PUBLIC, anon, authenticated');
+    expect(profileSql).not.toContain('aamracorporation@gmail.com');
+  });
+
   test('registration cannot bypass email confirmation through a service-role function', () => {
     const registration = read('app/(auth)/register.tsx');
     const retiredEndpoint = read('supabase/functions/register-user-fallback/index.ts');

@@ -400,8 +400,8 @@ export default function RegisterScreen() {
         
         setLoading(true);
         try {
-          const { data } = await supabase
-            .from('profiles')
+          const { data } = await (supabase as any)
+            .from('public_profile_cards')
             .select('id')
             .ilike('club_name', formData.clubName.trim())
             .maybeSingle();

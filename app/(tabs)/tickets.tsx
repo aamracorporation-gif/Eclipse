@@ -151,7 +151,6 @@ export default function TicketsScreen() {
           events (
             *,
             venues (*),
-            profiles:creator_id (full_name, club_name),
             event_ticket_types (id, name, category, metadata)
           )
         `)
@@ -166,6 +165,24 @@ export default function TicketsScreen() {
 
       // 2. Fetch resale listings manually for these tickets
       let processedTickets = ticketsData || [];
+      const creatorIds = [...new Set(processedTickets
+        .map((ticket: any) => ticket.events?.creator_id)
+        .filter(Boolean))];
+      const creatorProfiles = new Map<string, any>();
+      if (creatorIds.length > 0) {
+        const cardsResult = await (supabase as any)
+          .from('public_profile_cards')
+          .select('id, full_name, club_name')
+          .in('id', creatorIds);
+        if (cardsResult.error) throw cardsResult.error;
+        for (const card of cardsResult.data || []) creatorProfiles.set(card.id, card);
+      }
+      processedTickets = processedTickets.map((ticket: any) => ({
+        ...ticket,
+        events: ticket.events
+          ? { ...ticket.events, profiles: creatorProfiles.get(ticket.events.creator_id) ?? null }
+          : ticket.events,
+      }));
 
       // Filter out tickets for events that have already ended.
       const now = Date.now();

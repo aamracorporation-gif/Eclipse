@@ -261,9 +261,9 @@ export default function ResaleScreen() {
       let profilesMap: Record<string, any> = {};
       
       if (sellerIds.length > 0) {
-        const { data: profilesData } = await supabase
-          .from('profiles')
-          .select('id, full_name, email')
+        const { data: profilesData } = await (supabase as any)
+          .from('public_profile_cards')
+          .select('id, full_name')
           .in('id', sellerIds);
           
         if (profilesData) {

@@ -214,19 +214,14 @@ export function EventProvider({ children }: { children: React.ReactNode }) {
       .catch(() => {});
   }, []);
 
-  const fetchEventsQuery = useCallback(async (includeVerificationStatus: boolean) => {
+  const fetchEventsQuery = useCallback(async () => {
     return supabase
       .from('events')
       .select(
         `
           *,
           venues (*),
-          event_ticket_types (*),
-          profiles!events_creator_id_fkey_profiles (
-            id,
-            full_name,
-            club_name${includeVerificationStatus ? ',\n            verification_status' : ''}
-          )
+          event_ticket_types (*)
         `
       )
       .order('event_date', { ascending: true })
@@ -243,21 +238,24 @@ export function EventProvider({ children }: { children: React.ReactNode }) {
       let data: any[] | null = null;
       let error: any = null;
 
-      {
-        const res = await fetchEventsQuery(true);
-        data = res.data as any;
-        error = res.error as any;
-      }
-
-      if (error?.code === '42703' && String(error?.message || '').includes('verification_status')) {
-        const res = await fetchEventsQuery(false);
-        data = res.data as any;
-        error = res.error as any;
-      }
+      const res = await fetchEventsQuery();
+      data = res.data as any;
+      error = res.error as any;
 
       if (error) throw error;
 
       if (data) {
+        const creatorIds = [...new Set(data.map((e: any) => e.creator_id).filter(Boolean))];
+        const creatorProfiles = new Map<string, any>();
+        if (creatorIds.length > 0) {
+          const cardsResult = await (supabase as any)
+            .from('public_profile_cards')
+            .select('id, full_name, club_name, verification_status')
+            .in('id', creatorIds);
+          if (cardsResult.error) throw cardsResult.error;
+          for (const card of cardsResult.data || []) creatorProfiles.set(card.id, card);
+        }
+
         const mappedEvents: AppEvent[] = data.map((e: any) => {
           const rawMs = new Date(e.event_date).getTime();
           const eventDate = Number.isFinite(rawMs)
@@ -265,7 +263,7 @@ export function EventProvider({ children }: { children: React.ReactNode }) {
               ? new Date(rawMs + madridOffsetMinutesForUtcMs(rawMs) * 60_000)
               : new Date(rawMs)
             : new Date(e.event_date);
-          const creatorProfile = Array.isArray(e.profiles) ? e.profiles[0] : e.profiles;
+          const creatorProfile = creatorProfiles.get(e.creator_id);
           const pad2 = (n: number) => String(n).padStart(2, '0');
           const localDate = isMadridTimezone
             ? `${eventDate.getUTCFullYear()}-${pad2(eventDate.getUTCMonth() + 1)}-${pad2(eventDate.getUTCDate())}`
