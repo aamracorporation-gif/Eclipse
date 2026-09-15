@@ -22,16 +22,6 @@ jobs:
         with:
           node-version: 22
           cache: npm
-      - name: Generate security-updated lockfile
-        run: npm audit fix --package-lock-only --omit=dev --ignore-scripts
-        continue-on-error: true
-      - name: Upload security-updated lockfile
-        uses: actions/upload-artifact@v4
-        with:
-          name: secure-lockfile
-          path: package-lock.json
-          if-no-files-found: error
-          retention-days: 1
       - run: npm ci
       - name: Audit production dependencies
         run: npm audit --omit=dev --audit-level=critical
