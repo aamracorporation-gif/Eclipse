@@ -127,6 +127,34 @@ describe('release security regressions', () => {
     expect(profileSql).not.toContain('aamracorporation@gmail.com');
   });
 
+  test('resale browsing never reads ticket secrets', () => {
+    const resaleScreen = read('app/(tabs)/resale.tsx');
+    const ticketsScreen = read('app/(tabs)/tickets.tsx');
+    const resaleSql = read(
+      'supabase/migrations/20260915122100_secure_ticket_visibility_and_resale_cards.sql',
+    );
+
+    expect(resaleScreen).toContain("from('public_resale_cards')");
+    expect(resaleScreen).not.toContain('ticket:tickets');
+    expect(ticketsScreen).toContain("rpc('mark_ticket_wallet_added'");
+    expect(resaleSql).toContain('REVOKE ALL ON TABLE public.tickets FROM PUBLIC, anon, authenticated');
+    expect(resaleSql).toContain('DROP POLICY IF EXISTS "Public can view tickets in active resale"');
+  });
+
+  test('worker cash sales are priced and stocked by an authenticated RPC', () => {
+    const workerSale = read('app/(worker)/sell.tsx');
+    const saleSql = read(
+      'supabase/migrations/20260915122200_authoritative_worker_cash_sales.sql',
+    );
+
+    expect(workerSale).toContain("rpc('sell_tickets_manual_v2'");
+    expect(workerSale).not.toContain("from('tickets').insert(ticketsToCreate)");
+    expect(saleSql).toContain("permissions ? 'sell'");
+    expect(saleSql).toContain('worker_event_assignments');
+    expect(saleSql).toContain('FOR UPDATE');
+    expect(saleSql).toContain('v_type.price');
+  });
+
   test('registration cannot bypass email confirmation through a service-role function', () => {
     const registration = read('app/(auth)/register.tsx');
     const retiredEndpoint = read('supabase/functions/register-user-fallback/index.ts');

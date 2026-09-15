@@ -452,7 +452,11 @@ export default function TicketsScreen() {
           throw new Error(result?.error || 'No se pudo abrir Apple Wallet.');
         }
 
-        await supabase.from('tickets').update({ wallet_added: true, wallet_pass_id: ticket.id }).eq('id', ticket.id);
+        const { error: walletRecordError } = await supabase.rpc('mark_ticket_wallet_added', {
+          p_ticket_id: ticket.id,
+          p_wallet_pass_id: ticket.id,
+        });
+        if (walletRecordError) throw walletRecordError;
         setTickets((prev) => prev.map((t) => (t.id === ticket.id ? { ...t, wallet_added: true, wallet_pass_id: ticket.id } : t)));
       } else {
         // Android Google Wallet handling

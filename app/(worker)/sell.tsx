@@ -339,39 +339,33 @@ export default function WorkerSell() {
     setProcessing(true);
 
     try {
-      // Create tickets in DB
-      const ticketsToCreate = [];
-      for (const type of ticketTypes) {
-        const qty = quantities[type.id] || 0;
-        for (let i = 0; i < qty; i++) {
-          ticketsToCreate.push({
-            event_id: selectedEvent.id,
-            ticket_type: type.name, // Matches organizer's ticket name
-            ticket_type_id: type.id, // Link to exact ticket type
-            price: type.price,
-            quantity: 1,
-            total_price: type.price,
-            status: 'valid',
-            payment_status: 'paid', // Cash
-            sold_by_worker_id: workerProfile.id,
-            purchase_date: new Date().toISOString(), // Ensure purchase date is set
-            // Buyer Details
-            attendee_name: buyerDetails.name,
-            attendee_email: buyerDetails.email,
-            attendee_age: parseInt(buyerDetails.age) || 0,
-            // Fallback columns if schema requires them (backward compatibility)
-            buyer_name: buyerDetails.name, 
-            buyer_email: buyerDetails.email
-            
-            // qr_token and qr_code omitted to let Postgres generate them correctly
-          });
+      const saleItems = ticketTypes
+        .map((type) => ({
+          ticket_type_id: type.id,
+          quantity: quantities[type.id] || 0,
+        }))
+        .filter((item) => item.quantity > 0);
+
+      let allTickets: any[] = [];
+      if (saleItems.length > 0) {
+        const { data: saleResult, error: saleError } = await supabase.rpc('sell_tickets_manual_v2', {
+          p_worker_id: workerProfile.id,
+          p_event_id: selectedEvent.id,
+          p_items: saleItems,
+          p_buyer_name: buyerDetails.name,
+          p_buyer_email: buyerDetails.email,
+          p_buyer_age: parseInt(buyerDetails.age) || null,
+        });
+        if (saleError) throw saleError;
+        if (saleResult?.ticket_ids?.length) {
+          const { data: soldTickets, error: soldTicketsError } = await supabase
+            .from('tickets')
+            .select('*')
+            .in('id', saleResult.ticket_ids);
+          if (soldTicketsError) throw soldTicketsError;
+          allTickets = soldTickets || [];
         }
       }
-
-      const { data, error } = await supabase.from('tickets').insert(ticketsToCreate).select();
-      if (error) throw error;
-
-      let allTickets = data || [];
 
       if (selectedVipId && vipQty > 0) {
         const { data: vipResult, error: vipError } = await supabase.rpc('sell_vip_manual', {

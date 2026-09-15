@@ -34,10 +34,8 @@ type ResaleListing = {
   seller_id: string;
   seller?: {
     full_name: string;
-    email: string;
   };
   ticket: {
-    id: string;
     type: string;
     ticket_type_id?: string | null;
     quantity?: number | null;
@@ -219,36 +217,32 @@ export default function ResaleScreen() {
     try {
       setLoading(true);
       
-      const { data, error } = await supabase
-        .from('resale_listings')
+      const { data, error } = await (supabase as any)
+        .from('public_resale_cards')
         .select(`
-          id,
+          listing_id,
           price,
           seller_id,
           created_at,
-          ticket:tickets (
+          ticket_type_id,
+          quantity,
+          total_price,
+          event:events (
             id,
-            ticket_type_id,
-            quantity,
-            total_price,
-            event:events (
+            title,
+            event_date,
+            description,
+            reservados_vip (
               id,
-              title,
-              event_date,
-              description,
-              reservados_vip (
-                id,
-                name,
-                base_price,
-                capacity_people,
-                included_bottles,
-                extra_bottle_price
-              ),
-              poster_url
-            )
+              name,
+              base_price,
+              capacity_people,
+              included_bottles,
+              extra_bottle_price
+            ),
+            poster_url
           )
         `)
-        .eq('status', 'active')
         .order('created_at', { ascending: false })
         .limit(100);
 
@@ -256,8 +250,21 @@ export default function ResaleScreen() {
         throw error;
       }
       
-      // FETCH PROFILES MANUALLY
-      const sellerIds = [...new Set((data || []).map((item: any) => item.seller_id))];
+      const safeListings = (data || []).map((item: any) => ({
+        id: item.listing_id,
+        price: item.price,
+        seller_id: item.seller_id,
+        created_at: item.created_at,
+        ticket: {
+          ticket_type_id: item.ticket_type_id,
+          quantity: item.quantity,
+          total_price: item.total_price,
+          event: item.event,
+        },
+      }));
+
+      // Fetch only the deliberately public seller card.
+      const sellerIds = [...new Set(safeListings.map((item: any) => item.seller_id))];
       let profilesMap: Record<string, any> = {};
       
       if (sellerIds.length > 0) {
@@ -273,7 +280,7 @@ export default function ResaleScreen() {
         }
       }
 
-      const formattedData = (data || []).map((item: any) => {
+      const formattedData = safeListings.map((item: any) => {
         const ticket = Array.isArray(item.ticket) ? item.ticket[0] : item.ticket;
         const sellerProfile = profilesMap[item.seller_id];
         
@@ -314,7 +321,7 @@ export default function ResaleScreen() {
           }
         };
       })
-      .filter((item): item is ResaleListing => item !== null);
+      .filter((item: any): item is ResaleListing => item !== null);
 
       setAllListings(formattedData);
       setListings(formattedData);
