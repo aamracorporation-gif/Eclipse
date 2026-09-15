@@ -194,4 +194,20 @@ describe('release security regressions', () => {
     expect(paymentApi).toContain("'create-payment-intent-v2'");
     expect(paymentApi).not.toContain("invokeWithJwtRecovery<CreatePaymentIntentResponse>('create-payment-intent'");
   });
+
+  test('payment retries use a durable webhook ledger and private QA sessions', () => {
+    const ledgerSql = read(
+      'supabase/migrations/20260913010000_payment_webhook_idempotency_and_qa_security.sql',
+    );
+    const claimSql = read(
+      'supabase/migrations/20260913020000_claim_stripe_webhook_events.sql',
+    );
+
+    expect(ledgerSql).toContain('payment_transactions_idempotency_key_uidx');
+    expect(ledgerSql).toContain('stripe_webhook_events');
+    expect(ledgerSql).toContain('FROM PUBLIC, anon, authenticated');
+    expect(claimSql).toContain('FOR UPDATE');
+    expect(claimSql).toContain("lease_expires_at = now() + interval '5 minutes'");
+    expect(claimSql).toContain('TO service_role');
+  });
 });

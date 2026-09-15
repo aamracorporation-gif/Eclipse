@@ -8,12 +8,19 @@ CREATE OR REPLACE FUNCTION public.claim_stripe_webhook_event(
 )
 RETURNS jsonb
 LANGUAGE plpgsql SECURITY DEFINER
-SET search_path = public, pg_temp
+SET search_path = pg_catalog, public, extensions, pg_temp
 AS $$
 DECLARE
   v_existing public.stripe_webhook_events%ROWTYPE;
   v_token uuid := gen_random_uuid();
 BEGIN
+  IF nullif(btrim(p_event_id), '') IS NULL
+    OR nullif(btrim(p_event_type), '') IS NULL
+    OR length(p_event_id) > 255 OR length(p_event_type) > 255
+    OR (p_object_id IS NOT NULL AND length(p_object_id) > 255)
+  THEN
+    RAISE EXCEPTION 'Invalid Stripe event claim';
+  END IF;
   INSERT INTO public.stripe_webhook_events(event_id, event_type, object_id, processing_token, lease_expires_at)
   VALUES(p_event_id, p_event_type, p_object_id, v_token, now() + interval '5 minutes')
   ON CONFLICT(event_id) DO NOTHING;

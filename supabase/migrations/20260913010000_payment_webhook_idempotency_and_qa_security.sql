@@ -18,9 +18,12 @@ CREATE TABLE IF NOT EXISTS public.stripe_webhook_events (
   processed_at timestamptz,
   updated_at timestamptz NOT NULL DEFAULT now()
 );
+CREATE INDEX IF NOT EXISTS stripe_webhook_events_object_id_idx
+  ON public.stripe_webhook_events(object_id)
+  WHERE object_id IS NOT NULL;
 
 ALTER TABLE public.stripe_webhook_events ENABLE ROW LEVEL SECURITY;
-REVOKE ALL ON public.stripe_webhook_events FROM anon, authenticated;
+REVOKE ALL ON public.stripe_webhook_events FROM PUBLIC, anon, authenticated;
 GRANT ALL ON public.stripe_webhook_events TO service_role;
 
 -- QA sessions are no longer public or usable as a code-only backdoor.
@@ -31,16 +34,16 @@ DROP POLICY IF EXISTS "qa_sessions_owner_read" ON public.qa_sessions;
 DROP POLICY IF EXISTS "qa_sessions_owner_insert" ON public.qa_sessions;
 DROP POLICY IF EXISTS "qa_sessions_owner_update" ON public.qa_sessions;
 DROP POLICY IF EXISTS "qa_sessions_owner_delete" ON public.qa_sessions;
-REVOKE ALL ON public.qa_sessions FROM anon;
+REVOKE ALL ON public.qa_sessions FROM PUBLIC, anon, authenticated;
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.qa_sessions TO authenticated;
 CREATE POLICY "qa_sessions_owner_read" ON public.qa_sessions FOR SELECT TO authenticated
-  USING (created_by = auth.uid());
+  USING (created_by = (SELECT auth.uid()));
 CREATE POLICY "qa_sessions_owner_insert" ON public.qa_sessions FOR INSERT TO authenticated
-  WITH CHECK (created_by = auth.uid());
+  WITH CHECK (created_by = (SELECT auth.uid()));
 CREATE POLICY "qa_sessions_owner_update" ON public.qa_sessions FOR UPDATE TO authenticated
-  USING (created_by = auth.uid()) WITH CHECK (created_by = auth.uid());
+  USING (created_by = (SELECT auth.uid())) WITH CHECK (created_by = (SELECT auth.uid()));
 CREATE POLICY "qa_sessions_owner_delete" ON public.qa_sessions FOR DELETE TO authenticated
-  USING (created_by = auth.uid());
+  USING (created_by = (SELECT auth.uid()));
 
 -- Fulfillment remains callable only by the trusted server role.
 REVOKE ALL ON FUNCTION public.fulfill_payment_for_user(text, uuid) FROM PUBLIC, anon, authenticated;
