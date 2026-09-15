@@ -24,6 +24,7 @@ jobs:
           cache: npm
       - name: Generate security-updated lockfile
         run: npm audit fix --package-lock-only --omit=dev --ignore-scripts
+        continue-on-error: true
       - name: Upload security-updated lockfile
         uses: actions/upload-artifact@v4
         with:
