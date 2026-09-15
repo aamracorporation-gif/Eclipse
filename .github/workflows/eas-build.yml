@@ -1,0 +1,50 @@
+name: EAS release build
+
+on:
+  workflow_dispatch:
+    inputs:
+      platform:
+        description: Platform to build
+        required: true
+        default: all
+        type: choice
+        options:
+          - all
+          - android
+          - ios
+      profile:
+        description: EAS build profile
+        required: true
+        default: preview
+        type: choice
+        options:
+          - preview
+          - production
+
+concurrency:
+  group: eas-${{ inputs.profile }}-${{ inputs.platform }}
+  cancel-in-progress: false
+
+jobs:
+  validate-and-build:
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.profile == 'production' && 'production' || 'staging' }}
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Run release gates
+        run: npm run ci:check
+      - name: Configure EAS
+        uses: expo/expo-github-action@v8
+        with:
+          eas-version: 18.0.1
+          token: ${{ secrets.EXPO_TOKEN }}
+      - name: Queue signed build
+        run: eas build --platform "${{ inputs.platform }}" --profile "${{ inputs.profile }}" --non-interactive --no-wait
