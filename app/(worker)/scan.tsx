@@ -72,8 +72,8 @@ export default function WorkerScanScreen() {
           const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
           userLoc = { lat: loc.coords.latitude, lon: loc.coords.longitude };
         }
-      } catch (e) {
-        console.log('Could not get location:', e);
+      } catch {
+        console.warn('No se pudo obtener la ubicación para el escaneo.');
       }
 
       // Include events from the last 12 hours so overnight parties still show up

@@ -173,19 +173,14 @@ export default function CreatorDashboard() {
 
         if (shouldAttempt) {
           stripeAutoRefreshRef.current = { accountId: data.stripe_account_id, attemptedAt: now };
-          console.log('[DEBUG] Checking real Stripe status...');
           try {
             const { refreshStripeConnectStatus } = await import('@/lib/payments/api');
             const status = await refreshStripeConnectStatus();
-            console.log('[DEBUG] Stripe real status:', status);
 
             if (status.stripe_charges_enabled || status.stripe_onboarding_completed) {
-              console.log('[DEBUG] Stripe status is now COMPLETED/ENABLED');
               setOnboardingCompleted(true);
             }
-          } catch (e) {
-            console.error('[DEBUG] Failed to auto-refresh Stripe status:', e);
-          }
+          } catch {}
         }
       }
 
@@ -194,9 +189,7 @@ export default function CreatorDashboard() {
         const shouldFetchStripe = force || now - lastStripeStatsFetchAtRef.current > 5 * 60_000;
         if (shouldFetchStripe) {
           try {
-            console.log('[DEBUG] Fetching Stripe stats...');
             const stats = await getStripeAccountStats();
-            console.log('[DEBUG] Stripe stats received:', stats);
             setStripeStats(stats);
             lastStripeStatsFetchAtRef.current = Date.now();
           } catch (e) {
@@ -230,8 +223,6 @@ export default function CreatorDashboard() {
     if (loadingOnboarding) return;
     setLoadingOnboarding(true);
     try {
-      console.log('[DEBUG] Generating Stripe onboarding link...');
-
       if (!stripeAccountId) {
         const created = await createStripeConnectAccount();
         if (!created?.stripe_account_id) {
@@ -249,19 +240,15 @@ export default function CreatorDashboard() {
         refresh_url,
       });
       
-      console.log('[DEBUG] Stripe response:', res);
-      
       if (!res?.url) {
         throw new Error(t('creator.stripe.invalid_url'));
       }
 
-      console.log('[DEBUG] Opening browser with URL:', res.url);
       pendingStripeReturnRef.current = true;
       const can = await Linking.canOpenURL(res.url);
       if (!can) throw new Error(t('creator.stripe.cannot_open_link'));
       await Linking.openURL(res.url);
     } catch (e: any) {
-      console.error('[DEBUG] Onboarding error:', e);
       Alert.alert(t('common.error'), e.message || t('creator.stripe.link_failed'));
     } finally {
       setLoadingOnboarding(false);
@@ -383,7 +370,7 @@ export default function CreatorDashboard() {
     async function requestPermissions() {
       const { status } = await Notifications.requestPermissionsAsync();
       if (status !== 'granted') {
-        console.log('Notification permissions not granted');
+        console.warn('Permiso de notificaciones no concedido.');
       }
     }
     requestPermissions();

@@ -52,8 +52,8 @@ export default function WorkerDashboard() {
         latitude: loc.coords.latitude,
         longitude: loc.coords.longitude
       });
-    } catch (e) {
-      console.log('Error getting location:', e);
+    } catch {
+      console.warn('No se pudo obtener la ubicación del trabajador.');
     }
   }, []);
 

@@ -212,6 +212,18 @@ describe('release security regressions', () => {
     );
   });
 
+  test('production payment and wallet flows do not log sensitive payloads', () => {
+    const paymentApi = read('lib/payments/api.ts');
+    const registration = read('app/(auth)/register.tsx');
+    const appleWallet = read('supabase/functions/apple-wallet-generator/index.ts');
+
+    expect(paymentApi).not.toContain('console.log');
+    expect(registration).not.toContain("console.log('Register");
+    expect(appleWallet).not.toContain('pass.json preview');
+    expect(appleWallet).not.toContain('manifest preview');
+    expect(appleWallet).not.toContain('ticket: ${ticket_id}');
+  });
+
   test('push delivery can only be dispatched by the service role', () => {
     const walletContext = read('lib/WalletContext.tsx');
     const sendPush = read('supabase/functions/send-push/index.ts');

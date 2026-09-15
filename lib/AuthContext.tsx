@@ -113,8 +113,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       } else {
         setWorkerProfile(null);
       }
-    } catch (e) {
-      console.log('Error fetching worker profile:', e);
+    } catch {
+      console.error('No se pudo cargar el perfil de trabajador.');
       setWorkerProfile(null);
     }
   };

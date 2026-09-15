@@ -743,14 +743,13 @@ export function EventProvider({ children }: { children: React.ReactNode }) {
 
       await fetchEvents();
       try {
-        const dispatchResult: any = await invokeEdgeFunctionStrict('dispatch-notifications', {
+        await invokeEdgeFunctionStrict('dispatch-notifications', {
           limit: 400,
           eventId: id,
           enqueueEventUpdate: true,
         });
-        console.log('[dispatch-notifications][event_update]', JSON.stringify(dispatchResult));
-      } catch (e) {
-        console.warn('dispatch-notifications failed after event update:', e);
+      } catch {
+        console.warn('No se pudieron enviar las notificaciones del evento actualizado.');
       }
       return updatedAt;
     } catch (error) {

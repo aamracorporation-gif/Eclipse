@@ -237,8 +237,8 @@ export default function RegisterScreen() {
         country: country || prev.country,
       }));
       setLocationStatus('success');
-    } catch (error: any) {
-      console.log('Location error:', error);
+    } catch {
+      console.warn('No se pudo obtener la ubicación durante el registro.');
       setLocationStatus('error');
       setManualLocation(true);
       showDialog({
@@ -525,8 +525,7 @@ export default function RegisterScreen() {
         accepted_privacy_at: acceptedAt
       };
 
-      const { data, error } = await signUp(email, password, metadata);
-      console.log('Register result:', { data, error });
+      const { error } = await signUp(email, password, metadata);
 
       if (error) throw error;
 
@@ -537,7 +536,6 @@ export default function RegisterScreen() {
       });
 
     } catch (error: any) {
-      console.log('Register error raw:', error);
       const msg = error?.message ? String(error.message) : 'Ocurrió un error.';
       const lower = msg.toLowerCase();
       const isEmailRateLimit = lower.includes('email rate limit') || lower.includes('rate limit exceeded');

@@ -237,7 +237,12 @@ export default function CreateEventScreen() {
           .select('*, venues(*), event_ticket_types(*)')
           .eq('id', eventId)
           .single();
-        if (error || !data) { console.log('[edit] error', error); return; }
+        if (error || !data) {
+          Alert.alert('No se pudo cargar el evento', 'Inténtalo de nuevo en unos segundos.', [
+            { text: 'Volver', onPress: () => router.back() },
+          ]);
+          return;
+        }
         const rawDate = data.event_date ? new Date(data.event_date) : null;
         const rawEnd = data.end_datetime ? new Date(data.end_datetime) : null;
         setDraft({
@@ -279,9 +284,13 @@ export default function CreateEventScreen() {
             backstageHost: '',
           })));
         }
-      } catch (err) { console.log('[edit] catch', err); }
+      } catch {
+        Alert.alert('No se pudo cargar el evento', 'Comprueba tu conexión e inténtalo de nuevo.', [
+          { text: 'Volver', onPress: () => router.back() },
+        ]);
+      }
     })();
-  }, [isEditing, eventId]);;
+  }, [eventId, isEditing, router]);
   const eventTypeOptions = useMemo(
     () => [
       { key: 'party', label: 'Fiesta', Icon: Sparkles },

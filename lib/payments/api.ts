@@ -196,17 +196,12 @@ function getUrlHost(value: string): string {
 }
 
 async function invokeAuthed<T>(functionName: string, body: any): Promise<{ data: T | null; error: any }> {
-  const { data: { session } } = await supabase.auth.getSession();
-  const hasToken = Boolean(session?.access_token);
-  console.log('[DEBUG] Sending JWT to function:', functionName, hasToken);
-
   const r = await invokeEdgeFunction<T>(functionName, body ?? {});
   if (r.error) return { data: null, error: r.error };
   return { data: r.data as T, error: null };
 }
 
 async function invokeWithJwtRecovery<T>(functionName: string, body: any): Promise<{ data: T | null; error: any }> {
-  console.log(`[DEBUG] invokeWithJwtRecovery START for: ${functionName}`);
   const first = await invokeAuthed<T>(functionName, body);
   
   if (!first.error) {
@@ -217,47 +212,30 @@ async function invokeWithJwtRecovery<T>(functionName: string, body: any): Promis
   const firstDetails = await getEdgeFunctionErrorMessage(first.error, '');
   const combinedFirst = `${firstMsg} ${firstDetails}`.trim();
   
-  console.log(`[DEBUG] ${functionName} first attempt failed. Error:`, combinedFirst);
-
   if (!isInvalidJwtMessage(combinedFirst)) {
-    console.log(`[DEBUG] Error is NOT a JWT error. Returning error to caller.`);
     return first as any;
   }
-
-  console.log(`[DEBUG] JWT Error detected. Attempting session refresh...`);
 
   try {
     const { error: refreshError } = await supabase.auth.refreshSession();
     if (refreshError) {
-      console.error('[DEBUG] Session refresh failed:', refreshError.message);
-      // COMENTADO: No cerrar sesión automáticamente para evitar que la app se cierre al entrar
-      // await supabase.auth.signOut();
-      // throw new Error('Tu sesión ha expirado. Por favor, inicia sesión de nuevo.');
       return first as any;
     }
-    console.log('[DEBUG] Session refreshed successfully. New token ready.');
-  } catch (e: any) {
-    console.error('[DEBUG] Refresh logic critical error:', e.message);
+  } catch {
     return first as any;
   }
 
-  console.log(`[DEBUG] Retrying ${functionName} with new token...`);
   const second = await invokeAuthed<T>(functionName, body);
   
   if (second.error) {
     const secondMsg = String(second?.error?.message || '');
     const secondDetails = await getEdgeFunctionErrorMessage(second.error, '');
     const combinedSecond = `${secondMsg} ${secondDetails}`.trim();
-    console.error(`[DEBUG] ${functionName} retry failed too:`, combinedSecond);
-    
     if (isInvalidJwtMessage(combinedSecond)) {
-      console.error('[DEBUG] Still getting 401 after refresh.');
       try {
         await supabase.auth.signOut({ scope: 'local' } as any);
       } catch {}
     }
-  } else {
-    console.log(`[DEBUG] ${functionName} SUCCEEDED on second attempt!`);
   }
 
   return second as any;
@@ -295,11 +273,6 @@ export async function createPaymentIntent(req: CreatePaymentIntentRequest): Prom
         jwtHostLabel || supabaseHost
           ? ` (JWT=${jwtHostLabel || 'desconocido'}; app=${supabaseHost || 'desconocido'})`
           : '';
-      console.log('[payments] Invalid JWT en create-payment-intent', {
-        issuerHost: sentIssuerHost || null,
-        supabaseHost: supabaseHost || null,
-        hasAccessToken: sentAuthorization,
-      });
       if (!sentAuthorization) {
         throw new Error(
           `No se pudo obtener tu sesión de autenticación (access_token).${mismatchHint} Reinicia la app o reinicia Expo con caché limpia (npx expo start -c) e inténtalo de nuevo.`
@@ -342,11 +315,6 @@ export async function confirmPayment(req: ConfirmPaymentRequest): Promise<Confir
         jwtHostLabel || supabaseHost
           ? ` (JWT=${jwtHostLabel || 'desconocido'}; app=${supabaseHost || 'desconocido'})`
           : '';
-      console.log('[payments] Invalid JWT en confirm-payment', {
-        issuerHost: sentIssuerHost || null,
-        supabaseHost: supabaseHost || null,
-        hasAccessToken: sentAuthorization,
-      });
       if (!sentAuthorization) {
         throw new Error(
           `No se pudo obtener tu sesión de autenticación (access_token).${mismatchHint} Reinicia la app o reinicia Expo con caché limpia (npx expo start -c) e inténtalo de nuevo.`
@@ -366,10 +334,8 @@ export async function confirmPayment(req: ConfirmPaymentRequest): Promise<Confir
 }
 
 export async function createStripeConnectAccount(): Promise<CreateStripeConnectAccountResponse> {
-  console.log('[DEBUG] EXPLICIT CALL to createStripeConnectAccount');
   const { data, error } = await invokeWithJwtRecovery<CreateStripeConnectAccountResponse>('stripe-connect-create-account', {});
   if (error) {
-    console.error('[DEBUG] createStripeConnectAccount error after recovery:', error);
     throw new Error(await getEdgeFunctionErrorMessage(error, 'Failed to create Stripe Connect account.'));
   }
   return data as CreateStripeConnectAccountResponse;

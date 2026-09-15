@@ -309,7 +309,6 @@ serve(async (req) => {
       .sign(key);
 
     const url = `https://pay.google.com/gp/v/save/${jwt}`;
-    console.log(`[WALLET] Success! Generated Google Wallet link for ticket ${ticket_id}`);
     return jsonResponse({ ok: true, platform: "android", url, objectId });
 
   } catch (err) {

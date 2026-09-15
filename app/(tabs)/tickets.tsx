@@ -218,7 +218,6 @@ export default function TicketsScreen() {
         }
       }
 
-      console.log('Tickets fetched:', processedTickets.length);
       setTickets(processedTickets);
     } catch (error) {
       console.error('Error fetching tickets:', error);

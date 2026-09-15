@@ -1,7 +1,6 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 import { PKPass } from "https://esm.sh/passkit-generator@3.1.10";
 import forge from "https://esm.sh/node-forge@1.4.0";
-import JSZip from "https://esm.sh/jszip@3.10.1";
 import { Buffer } from "node:buffer";
 import {
   BUNDLED_FOOTER_PNG_BASE64,
@@ -21,7 +20,7 @@ const corsHeaders = {
 
 /**
  * REESCRITURA TOTAL: APPLE WALLET GENERATOR
- * Esta versión incluye logs detallados para el panel de Supabase y validación extrema.
+ * Genera el pase y valida de forma estricta certificados, propiedad y contenido.
  */
 Deno.serve(async (req) => {
   // 1. Manejo de CORS (Preflight)
@@ -30,8 +29,6 @@ Deno.serve(async (req) => {
   }
 
   try {
-    console.log("[START] Petición de generación de Wallet recibida.");
-
     const tryDecodeBase64Text = (value: string) => {
       try {
         const cleaned = String(value || "").replace(/\s+/g, "");
@@ -114,15 +111,8 @@ Deno.serve(async (req) => {
       lastLine: String(value.split("\n").slice(-1)[0] || ""),
     });
 
-    console.log("[PEM] Summary:", JSON.stringify({
-      wwdr: pemSummary("wwdr", WWDR_CERT),
-      signerCert: pemSummary("signerCert", SIGNER_CERT),
-      signerKey: pemSummary("signerKey", SIGNER_KEY),
-    }));
-
     try {
       forge.pki.certificateFromPem(WWDR_CERT);
-      console.log("[PEM] WWDR OK");
     } catch (e: any) {
       console.error("[PEM] WWDR INVALID:", String(e?.message || e));
       const summary = pemSummary("wwdr", WWDR_CERT);
@@ -148,19 +138,7 @@ Deno.serve(async (req) => {
     )?.value;
 
     try {
-      console.log("[PEM] PASS CERT SUBJECT:", JSON.stringify({
-        commonName: signerCommonName || null,
-        organizationalUnit: signerOrgUnit || null,
-      }));
-      console.log("[PEM] PASS CERT OK");
-    } catch (e: any) {
-      console.error("[PEM] PASS CERT INVALID:", String(e?.message || e));
-      throw new Error(`APPLE_PASS_CERT inválido: ${String(e?.message || e)}`);
-    }
-
-    try {
       forge.pki.privateKeyFromPem(SIGNER_KEY);
-      console.log("[PEM] PASS KEY OK");
     } catch (e: any) {
       console.error("[PEM] PASS KEY INVALID:", String(e?.message || e));
       throw new Error(`APPLE_PASS_KEY inválido: ${String(e?.message || e)}`);
@@ -204,41 +182,6 @@ Deno.serve(async (req) => {
       return out;
     };
 
-    const hexPrefix = (bytes: Uint8Array, length = 8) =>
-      Array.from(bytes.slice(0, length)).map((b) => b.toString(16).padStart(2, "0")).join("");
-
-    const pngInfo = (bytes: Uint8Array | null) => {
-      if (!bytes || bytes.length < 33) return null;
-      const signature = hexPrefix(bytes);
-      if (signature !== "89504e470d0a1a0a") {
-        return {
-          validPng: false,
-          length: bytes.length,
-          hexPrefix: signature,
-        };
-      }
-
-      const width =
-        (bytes[16] << 24) |
-        (bytes[17] << 16) |
-        (bytes[18] << 8) |
-        bytes[19];
-      const height =
-        (bytes[20] << 24) |
-        (bytes[21] << 16) |
-        (bytes[22] << 8) |
-        bytes[23];
-
-      return {
-        validPng: true,
-        length: bytes.length,
-        width: width >>> 0,
-        height: height >>> 0,
-        bitDepth: bytes[24],
-        colorType: bytes[25],
-      };
-    };
-
     // 3. Validación de JWT (Sesión del Usuario)
     const authHeader = req.headers.get("Authorization");
     if (!authHeader) {
@@ -270,12 +213,6 @@ Deno.serve(async (req) => {
       console.error("[ERROR] Falta ticket_id en el body.");
       return new Response(JSON.stringify({ error: "Missing ticket_id" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
-
-    console.log(`[INFO] Generando pase para ticket: ${ticket_id} | Usuario: ${user.id}`);
-    console.log("[INFO] Pass identity:", JSON.stringify({
-      passTypeIdentifier: APPLE_PASS_TYPE_ID,
-      teamIdentifier: APPLE_TEAM_ID,
-    }));
 
     // 5. Query de Base de Datos (Seguridad RLS activa)
     const { data: ticket, error: dbError } = await supabase
@@ -312,7 +249,6 @@ Deno.serve(async (req) => {
     }
 
     // 6. Configuración de Passkit
-    console.log("[INFO] Construyendo pass.json...");
     const iconPng = decodeBase64ToUint8Array(PASS_ICON_PNG_BASE64 || BUNDLED_ICON_PNG_BASE64);
     if (!iconPng || iconPng.length === 0) {
       console.error("[ERROR] No se encontró icon.png ni por secret ni empaquetado en el módulo.");
@@ -475,23 +411,6 @@ Deno.serve(async (req) => {
       bundledStripBase64 || BUNDLED_LOGO_PNG_BASE64 || BUNDLED_ICON_PNG_BASE64,
     );
 
-    // ── Asset log + file bundle (all assets now resolved) ────────────────────
-    console.log("[INFO] Asset signatures:", JSON.stringify({
-      iconLength: iconPng.length,
-      iconHexPrefix: hexPrefix(iconPng),
-      logoLength: logoPng?.length || 0,
-      logoHexPrefix: logoPng ? hexPrefix(logoPng) : null,
-      stripLength: stripPng?.length || 0,
-      stripHexPrefix: stripPng ? hexPrefix(stripPng) : null,
-      iconInfo: pngInfo(iconPng),
-      logoInfo: pngInfo(logoPng),
-      effectiveLogoInfo: pngInfo(effectiveLogoPng),
-      footerInfo: pngInfo(footerPng),
-      stripInfo: pngInfo(stripPng),
-      tier,
-      passVisualTier,
-      palette: palette.name,
-    }));
     const iconBuffer = Buffer.from(iconPng);
     const logoBuffer = Buffer.from(effectiveLogoPng);
     const footerBuffer = Buffer.from(footerPng);
@@ -732,21 +651,6 @@ Deno.serve(async (req) => {
       "date, venue, and access tier shown. Must be presented at entry. " +
       "ECLIPSE reserves the right to refuse admission.");
     pushBackField("support",    "SUPPORT",             "help@eclipse.app");
-    console.log("[INFO] pass.json preview:", JSON.stringify({
-      formatVersion: passJson.formatVersion,
-      passTypeIdentifier: passJson.passTypeIdentifier,
-      teamIdentifier: passJson.teamIdentifier,
-      serialNumber: passJson.serialNumber,
-      description: passJson.description,
-      organizationName: passJson.organizationName,
-      hasEventTicket: !!passJson.eventTicket,
-      primaryFields: passJson.eventTicket?.primaryFields?.length || 0,
-      secondaryFields: passJson.eventTicket?.secondaryFields?.length || 0,
-      auxiliaryFields: passJson.eventTicket?.auxiliaryFields?.length || 0,
-      backFields: passJson.eventTicket?.backFields?.length || 0,
-      barcodeMessageLength: String(passJson.barcodes?.[0]?.message || "").length,
-    }));
-
     const pass = new PKPass(
       {
         ...files,
@@ -756,59 +660,15 @@ Deno.serve(async (req) => {
     );
 
     // 7. Exportación a Buffer y Base64 Seguro
-    console.log("[INFO] Firmando y exportando .pkpass...");
     const buffer = pass.getAsBuffer();
     
     // Conversión segura de Buffer -> Base64 en Deno Edge Runtime
     const uint8Array = new Uint8Array(buffer);
-    try {
-      const zip = await JSZip.loadAsync(uint8Array);
-      const zipEntries = Object.keys(zip.files).sort();
-      const manifestText = await zip.file("manifest.json")?.async("string");
-      const manifestJson = manifestText ? JSON.parse(manifestText) : null;
-      const signatureBytes = await zip.file("signature")?.async("uint8array");
-      const packedPassJsonText = await zip.file("pass.json")?.async("string");
-      const packedPassJson = packedPassJsonText ? JSON.parse(packedPassJsonText) : null;
-
-      console.log("[INFO] ZIP entries:", JSON.stringify(zipEntries));
-      console.log("[INFO] manifest preview:", JSON.stringify(
-        manifestJson
-          ? Object.fromEntries(
-              Object.entries(manifestJson).map(([key, value]) => [
-                key,
-                String(value).slice(0, 12),
-              ]),
-            )
-          : null,
-      ));
-      console.log("[INFO] signature info:", JSON.stringify({
-        length: signatureBytes?.length || 0,
-        hexPrefix: signatureBytes
-          ? Array.from(signatureBytes.slice(0, 8)).map((b) => b.toString(16).padStart(2, "0")).join("")
-          : null,
-      }));
-      console.log("[INFO] packed pass.json preview:", JSON.stringify(
-        packedPassJson
-          ? {
-              passTypeIdentifier: packedPassJson.passTypeIdentifier || null,
-              teamIdentifier: packedPassJson.teamIdentifier || null,
-              serialNumber: packedPassJson.serialNumber || null,
-              hasEventTicketObject: !!packedPassJson.eventTicket,
-              topLevelKeys: Object.keys(packedPassJson).sort(),
-            }
-          : null,
-      ));
-    } catch (zipDebugError: any) {
-      console.error("[ZIP DEBUG] No se pudo inspeccionar el pkpass generado:", String(zipDebugError?.message || zipDebugError));
-    }
-
     let binaryString = "";
     for (let i = 0; i < uint8Array.byteLength; i++) {
       binaryString += String.fromCharCode(uint8Array[i]);
     }
     const base64 = btoa(binaryString);
-
-    console.log("[SUCCESS] Pase generado correctamente en Base64.");
 
     // 8. Respuesta Exitosa
     return new Response(JSON.stringify({ base64 }), {

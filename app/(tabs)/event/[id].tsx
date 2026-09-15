@@ -252,16 +252,6 @@ export default function EventDetailScreen() {
         );
       }
 
-      if (__DEV__) {
-        try {
-          console.log('[EVENT]', {
-            id: String(normalizedEvent?.id || ''),
-            event_type: normalizedEvent?.event_type,
-            theme: normalizedEvent?.theme,
-          });
-        } catch {}
-      }
-
       setEvent({ ...normalizedEvent, reservados_vip: vipRows } as any);
     } catch (error) {
       console.error('Error fetching event:', error);

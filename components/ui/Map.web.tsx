@@ -19,16 +19,14 @@ export const Callout = (props: any) => {
 
 const MapView = forwardRef((props: any, ref) => {
   useImperativeHandle(ref, () => ({
-    animateToRegion: (region: Region, duration?: number) => {
-      console.log('Map.animateToRegion called on web (mock)', region);
-    },
+    animateToRegion: (_region: Region, _duration?: number) => {},
     fitToSuppliedMarkers: () => {},
     fitToCoordinates: () => {},
   }));
 
   return (
     <View style={[{ backgroundColor: '#eee', justifyContent: 'center', alignItems: 'center' }, props.style]}>
-      <Text>Map not supported on Web</Text>
+      <Text>El mapa interactivo está disponible en la app móvil.</Text>
       {props.children}
     </View>
   );
