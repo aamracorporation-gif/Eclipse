@@ -4,16 +4,17 @@ import { Colors } from '@/constants/Colors';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { ChevronLeft } from '@/lib/icons';
+import { theme } from '@/theme/styles';
 
 export function LegalDocumentScreen({ title, text }: { title: string; text: string }) {
   const insets = useSafeAreaInsets();
 
   return (
     <View style={styles.container}>
-      <LinearGradient colors={[Colors.dark.background, '#1a1a2e']} style={StyleSheet.absoluteFill} />
+      <LinearGradient colors={Colors.dark.backgroundGradient} style={StyleSheet.absoluteFill} />
       <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
         <TouchableOpacity onPress={() => router.back()} activeOpacity={0.8} style={styles.backBtn}>
-          <ChevronLeft size={22} color="#fff" />
+          <ChevronLeft size={22} color={Colors.dark.text} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>{title}</Text>
         <View style={{ width: 42 }} />
@@ -28,8 +29,8 @@ export function LegalDocumentScreen({ title, text }: { title: string; text: stri
 const styles = StyleSheet.create({
   container: { flex: 1 },
   header: {
-    paddingHorizontal: 16,
-    paddingBottom: 12,
+    paddingHorizontal: theme.space[4],
+    paddingBottom: theme.space[3],
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
@@ -37,14 +38,14 @@ const styles = StyleSheet.create({
   backBtn: {
     width: 42,
     height: 42,
-    borderRadius: 12,
+    borderRadius: theme.radius.md,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(255,255,255,0.08)',
+    backgroundColor: Colors.dark.surfaceSubtle,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.12)',
+    borderColor: Colors.dark.border,
   },
-  headerTitle: { color: '#fff', fontSize: 18, fontWeight: '700' },
-  content: { paddingHorizontal: 20, paddingTop: 16 },
-  body: { color: 'rgba(255,255,255,0.86)', fontSize: 15, lineHeight: 22 },
+  headerTitle: { color: Colors.dark.text, fontSize: theme.typography.size.lg, fontWeight: theme.typography.weight.bold },
+  content: { paddingHorizontal: theme.space[5], paddingTop: theme.space[4] },
+  body: { color: Colors.dark.text, opacity: 0.86, fontSize: 15, lineHeight: 22 },
 });
