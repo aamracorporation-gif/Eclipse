@@ -79,4 +79,13 @@ describe('release security regressions', () => {
     expect(supportConfig).toContain('verify_jwt = true');
     expect(supportFunction).toContain('client.auth.getUser()');
   });
+
+  test('push delivery can only be dispatched by the service role', () => {
+    const walletContext = read('lib/WalletContext.tsx');
+    const sendPush = read('supabase/functions/send-push/index.ts');
+
+    expect(walletContext).not.toContain("invokeEdgeFunction('send-push'");
+    expect(sendPush).toContain('authorization !== `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`');
+    expect(sendPush).toContain('status: 403');
+  });
 });

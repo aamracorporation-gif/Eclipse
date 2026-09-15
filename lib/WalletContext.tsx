@@ -1,7 +1,6 @@
 import { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from './AuthContext';
-import { invokeEdgeFunction } from '@/lib/edgeFunctions';
 
 type LedgerMovimiento = {
   id: string;
@@ -249,9 +248,6 @@ export function CreditProvider({ children }: { children: React.ReactNode }) {
 
       await refreshCredit();
       scheduleRefresh();
-      try {
-        await invokeEdgeFunction('send-push', { limit: 25 });
-      } catch {}
     } catch (error) {
       console.error('Error buying resale ticket with credit:', error);
       throw error;
@@ -269,9 +265,6 @@ export function CreditProvider({ children }: { children: React.ReactNode }) {
       await refreshCredit();
       scheduleRefresh();
 
-      try {
-        await invokeEdgeFunction('send-push', { limit: 25 });
-      } catch {}
       return data;
     } catch (error) {
       console.error('Error buying ticket with credit:', error);
@@ -294,9 +287,6 @@ export function CreditProvider({ children }: { children: React.ReactNode }) {
 
       await refreshCredit();
       scheduleRefresh();
-      try {
-        await invokeEdgeFunction('send-push', { limit: 25 });
-      } catch {}
       return data;
     } catch (error) {
       console.error('Error buying VIP with credit:', error);
