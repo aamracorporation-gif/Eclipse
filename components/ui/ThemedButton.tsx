@@ -15,6 +15,9 @@ interface ThemedButtonProps {
   textStyle?: StyleProp<TextStyle>;
   icon?: React.ReactNode;
   iconPosition?: 'left' | 'right';
+  accessibilityLabel?: string;
+  accessibilityHint?: string;
+  testID?: string;
 }
 
 export function ThemedButton({ 
@@ -26,17 +29,29 @@ export function ThemedButton({
   style,
   textStyle,
   icon,
-  iconPosition = 'left'
+  iconPosition = 'left',
+  accessibilityLabel,
+  accessibilityHint,
+  testID,
 }: ThemedButtonProps) {
+  const isDisabled = disabled || loading;
+  const accessibilityProps = {
+    accessibilityRole: 'button' as const,
+    accessibilityLabel: accessibilityLabel ?? title,
+    accessibilityHint,
+    accessibilityState: { disabled: isDisabled, busy: loading },
+    testID,
+  };
   
   if (variant === 'outline') {
     return (
       <TouchableOpacity
         onPress={onPress}
-        disabled={disabled || loading}
+        disabled={isDisabled}
         style={[styles.outlineButton, disabled && styles.disabled, style]}
         activeOpacity={0.7}
         hitSlop={theme.layout.minTapSize >= 44 ? 6 : 0}
+        {...accessibilityProps}
       >
         {loading ? (
           <DiscoLoader size={18} />
@@ -54,10 +69,11 @@ export function ThemedButton({
   return (
     <TouchableOpacity
       onPress={onPress}
-      disabled={disabled || loading}
+      disabled={isDisabled}
       activeOpacity={0.8}
       style={[styles.container, disabled && styles.disabled, style]}
       hitSlop={theme.layout.minTapSize >= 44 ? 6 : 0}
+      {...accessibilityProps}
     >
       <LinearGradient
         colors={

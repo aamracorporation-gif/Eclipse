@@ -26,7 +26,7 @@ export function usePaymentSheetHandler() {
   const present = useCallback(
     async (purchase: CreatePaymentIntentRequest): Promise<PaymentSheetResult> => {
       if (Platform.OS === 'web') {
-        return { status: 'failed', message: 'Payments are not supported on web.' };
+        return { status: 'failed', message: 'Las compras están disponibles en la app para iOS y Android.' };
       }
 
       const isExpoGo = (Constants as any)?.appOwnership === 'expo';
@@ -173,7 +173,7 @@ export function usePaymentSheetHandler() {
         checkout.current = null;
         return { status: 'succeeded', fulfillment };
       } catch (e: any) {
-        const message = e?.message || 'Payment failed.';
+        const message = e?.message || 'No se pudo completar el pago.';
         return { status: 'failed', message };
       } finally {
         active.current = false;

@@ -16,7 +16,7 @@ interface ThemedInputProps extends Omit<TextInputProps, 'style'> {
   inputStyle?: StyleProp<TextStyle>;
 }
 
-export const ThemedInput = forwardRef<TextInput, ThemedInputProps>(({ icon, leftIcon, rightIcon, error, success, label, style, containerStyle, inputStyle, ...props }, ref) => {
+export const ThemedInput = forwardRef<TextInput, ThemedInputProps>(({ icon, leftIcon, rightIcon, error, success, label, style, containerStyle, inputStyle, accessibilityLabel, ...props }, ref) => {
   const Icon = icon ?? leftIcon;
   const resolvedRightIcon =
     rightIcon ??
@@ -43,6 +43,8 @@ export const ThemedInput = forwardRef<TextInput, ThemedInputProps>(({ icon, left
           ref={ref}
           style={[styles.input, !Icon && styles.noIconInput, !!resolvedRightIcon && styles.inputWithRightIcon, inputStyle]}
           placeholderTextColor={Colors.dark.textSecondary}
+          accessibilityLabel={accessibilityLabel ?? label}
+          accessibilityState={{ disabled: props.editable === false }}
           {...props}
         />
         {resolvedRightIcon && (
@@ -51,7 +53,11 @@ export const ThemedInput = forwardRef<TextInput, ThemedInputProps>(({ icon, left
           </View>
         )}
       </View>
-      {error && <Text style={styles.errorText}>{error}</Text>}
+      {error && (
+        <Text style={styles.errorText} accessibilityRole="alert" accessibilityLiveRegion="polite">
+          {error}
+        </Text>
+      )}
     </View>
   );
 });

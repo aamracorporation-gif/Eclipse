@@ -243,7 +243,7 @@ async function invokeWithJwtRecovery<T>(functionName: string, body: any): Promis
 
 export async function createPaymentIntent(req: CreatePaymentIntentRequest): Promise<CreatePaymentIntentResponse> {
   if (Platform.OS === 'web') {
-    throw new Error('Payments are not supported on web.');
+    throw new Error('Las compras están disponibles en la app para iOS y Android.');
   }
 
   // One key per checkout attempt. The same object is reused by the JWT retry path,
@@ -293,7 +293,7 @@ export async function createPaymentIntent(req: CreatePaymentIntentRequest): Prom
 
 export async function confirmPayment(req: ConfirmPaymentRequest): Promise<ConfirmPaymentResponse> {
   if (Platform.OS === 'web') {
-    throw new Error('Payments are not supported on web.');
+    throw new Error('Las compras están disponibles en la app para iOS y Android.');
   }
 
   const { data, error } = await invokeWithJwtRecovery<ConfirmPaymentResponse>('confirm-payment', req);

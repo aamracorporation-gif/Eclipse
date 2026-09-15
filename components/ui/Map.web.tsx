@@ -1,5 +1,7 @@
 import { View, Text } from 'react-native';
 import React, { forwardRef, useImperativeHandle } from 'react';
+import { Colors } from '@/constants/Colors';
+import { theme } from '@/theme/styles';
 
 // Mock types
 export type Region = {
@@ -10,11 +12,11 @@ export type Region = {
 };
 
 export const Marker = (props: any) => {
-  return <View style={{ width: 20, height: 20, backgroundColor: 'red' }} />;
+  return <View style={{ width: 20, height: 20, borderRadius: 10, backgroundColor: Colors.dark.primary }} />;
 };
 
 export const Callout = (props: any) => {
-    return <View style={{ padding: 10, backgroundColor: 'white' }}>{props.children}</View>;
+    return <View style={{ padding: theme.space[3], backgroundColor: Colors.dark.surfaceOpaque }}>{props.children}</View>;
 };
 
 const MapView = forwardRef((props: any, ref) => {
@@ -25,8 +27,8 @@ const MapView = forwardRef((props: any, ref) => {
   }));
 
   return (
-    <View style={[{ backgroundColor: '#eee', justifyContent: 'center', alignItems: 'center' }, props.style]}>
-      <Text>El mapa interactivo está disponible en la app móvil.</Text>
+    <View style={[{ backgroundColor: Colors.dark.surfaceOpaque, justifyContent: 'center', alignItems: 'center' }, props.style]}>
+      <Text style={{ color: Colors.dark.textSecondary }}>El mapa interactivo está disponible en la app móvil.</Text>
       {props.children}
     </View>
   );

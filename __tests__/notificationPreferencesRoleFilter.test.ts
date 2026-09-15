@@ -6,6 +6,8 @@ jest.mock('@/lib/supabase', () => ({
   supabase: {},
 }));
 
+jest.mock('expo-notifications', () => ({}));
+
 const { __test_getVisiblePreferenceKeys } = require('@/app/notification-preferences');
 
 describe('notification preferences role filtering', () => {
