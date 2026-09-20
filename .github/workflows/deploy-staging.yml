@@ -21,6 +21,13 @@ jobs:
       - uses: supabase/setup-cli@v1
         with:
           version: latest
+      - name: Require a reviewed schema baseline
+        run: |
+          if [ -f supabase/migrations/99999999999999_full_schema_fix.sql ]; then
+            echo 'Staging schema has drifted. The legacy full_schema_fix migration can reopen RLS policies.' >&2
+            echo 'Create and verify a clean production-schema baseline before running this workflow.' >&2
+            exit 1
+          fi
       - name: Link staging project
         run: supabase link --project-ref "$SUPABASE_PROJECT_REF"
         env:
