@@ -4,13 +4,14 @@
 2. Configure GitHub environment `staging` with `SUPABASE_ACCESS_TOKEN`,
    `SUPABASE_DB_PASSWORD`, `SUPABASE_STAGING_PROJECT_REF` and `STAGING_API_URL`.
 3. Add Stripe **test-mode** secrets to staging, including a staging-only webhook secret.
-4. Run the manual workflow `Deploy Supabase staging` and require one reviewer.
-5. Confirm migration `20260913010000_payment_webhook_idempotency_and_qa_security.sql` applied.
-6. Use Stripe CLI to send succeeded, duplicate, delayed-failure and reordered events.
-7. Verify one transaction, one fulfillment, one set of tickets, and ledger status `processed`.
-8. Run `k6 run tests/load/api-smoke.js` and `k6 run tests/load/payment-status.js` with staging variables.
-9. Run both Maestro smoke flows on iOS and Android release candidates.
-10. Promote only when CI, P1 QA and rollback checks pass.
+4. Restore a reviewed schema baseline to staging before running the manual workflow. The current staging project has only 7 public tables versus 49 in production; do not bypass the workflow's legacy migration guard or apply the historical `99999999999999_full_schema_fix.sql` directly.
+5. Confirm migrations `20260913010000_payment_webhook_idempotency_and_qa_security.sql`, `20260920104448_repair_resale_credit_and_ticket_transfer.sql`, and `20260920112000_resale_refund_statuses.sql` applied.
+6. Configure the staging Stripe webhook for `payment_intent.succeeded`, `payment_intent.payment_failed`, `account.updated`, `refund.updated`, and `refund.failed`.
+7. Use Stripe test mode to send succeeded, duplicate, delayed-failure and reordered events. Race a card payment against a wallet purchase of the same resale listing and confirm that the losing card payment is refunded.
+8. Verify one transaction, one fulfillment, one set of tickets, and ledger status `processed`; a failed refund must be visible as `refund_failed` and reconciled manually.
+9. Run `k6 run tests/load/api-smoke.js` and `k6 run tests/load/payment-status.js` with staging variables.
+10. Run both Maestro smoke flows on iOS and Android release candidates.
+11. Promote only when CI, P1 QA and rollback checks pass.
 
 Rollback is forward-only: restore function versions, then apply a compensating migration.
 Do not delete the webhook ledger or idempotency keys.
