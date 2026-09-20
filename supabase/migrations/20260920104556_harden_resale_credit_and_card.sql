@@ -535,7 +535,7 @@ BEGIN
     END IF;
     PERFORM 1 FROM public.events e WHERE e.id = v_ticket.event_id
       AND e.allow_resale IS TRUE AND e.is_cancelled IS FALSE
-      AND e.status = 'scheduled'
+      AND e.status NOT IN ('cancelled', 'deleted')
       AND COALESCE(e.end_datetime, e.event_date + interval '5 hours') > now();
     IF NOT FOUND THEN RAISE EXCEPTION 'Event unavailable for resale'; END IF;
 
