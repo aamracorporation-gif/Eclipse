@@ -108,6 +108,10 @@ BEGIN
     (listing_id, ticket_id, seller_id, buyer_id, price, commission, seller_amount)
   VALUES (v_listing.id, v_ticket.id, v_listing.seller_id, p_buyer_id,
           v_listing.price, 0, v_listing.price);
+  INSERT INTO public.ledger_movimientos (tipo, usuario_id, importe, referencia_id, descripcion)
+  VALUES ('compra_con_credito', p_buyer_id, -v_listing.price, v_listing.id::text, 'Compra de entrada de reventa'),
+         ('generacion_credito_reventa', v_listing.seller_id, v_listing.price,
+          v_listing.id::text, 'Venta de entrada de reventa');
   RETURN jsonb_build_object('ok', true, 'ticket_id', v_ticket.id,
                              'event_id', COALESCE(v_ticket.event_id::text, ''));
 END;
@@ -527,6 +531,10 @@ BEGIN
     VALUES
       (v_listing.id, v_listing.ticket_id, v_listing.seller_id, p_user_id,
        v_listing.price, v_commission, v_seller_amount, v_tx.id, v_tx.stripe_payment_intent_id);
+
+    INSERT INTO public.ledger_movimientos (tipo, usuario_id, importe, referencia_id, descripcion)
+    VALUES ('generacion_credito_reventa', v_listing.seller_id, v_seller_amount,
+            v_listing.id::text, 'Venta de entrada de reventa');
 
     UPDATE public.payment_transactions SET status = 'fulfilled', fulfilled_at = now() WHERE id = v_tx.id;
 
