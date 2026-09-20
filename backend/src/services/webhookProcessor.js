@@ -1,6 +1,6 @@
 const { statusAfterStripeEvent } = require('./webhookPolicy');
 
-function createWebhookHandler({ db, verify, getTransaction, fulfill, markStatus, updateAccount }) {
+function createWebhookHandler({ db, verify, getTransaction, fulfill, markStatus, updateAccount, refund }) {
   return async (rawBody, signature) => {
     let event;
     try {
@@ -8,7 +8,7 @@ function createWebhookHandler({ db, verify, getTransaction, fulfill, markStatus,
     } catch {
       return { status: 400, json: { received: false, error: 'Invalid webhook signature' } };
     }
-    if (!['payment_intent.succeeded', 'payment_intent.payment_failed', 'account.updated'].includes(event.type)) {
+    if (!['payment_intent.succeeded', 'payment_intent.payment_failed', 'account.updated', 'refund.updated'].includes(event.type)) {
       return { status: 200, json: { received: true, ignored: true } };
     }
 
@@ -25,6 +25,16 @@ function createWebhookHandler({ db, verify, getTransaction, fulfill, markStatus,
 
       if (event.type === 'account.updated') {
         await updateAccount(object.id, Boolean(object.charges_enabled && object.payouts_enabled));
+      } else if (event.type === 'refund.updated') {
+        if (object.metadata?.eclipse_reason === 'resale_unavailable' && object.payment_intent) {
+          const tx = await getTransaction(object.payment_intent);
+          if (!tx || tx.kind !== 'resale_ticket') throw new Error('refund_transaction_not_found');
+          if (tx.status === 'created') throw new Error('refund_status_not_yet_saved');
+          if (['refund_pending', 'refund_failed', 'refunded'].includes(tx.status)) {
+            const next = object.status === 'succeeded' ? 'refunded' : object.status === 'failed' ? 'refund_failed' : 'refund_pending';
+            if (next !== tx.status) await markStatus(object.payment_intent, next);
+          }
+        }
       } else {
         const tx = await getTransaction(object.id);
         if (!tx) throw new Error('transaction_not_found');
@@ -33,8 +43,19 @@ function createWebhookHandler({ db, verify, getTransaction, fulfill, markStatus,
           if (object.status !== 'succeeded' || object.amount_received !== Number(tx.amount_cents) || object.currency !== tx.currency) {
             throw new Error('payment_amount_or_currency_mismatch');
           }
-          const result = await fulfill(object.id, tx.user_id);
-          if (result?.fulfilled !== true) throw new Error('fulfillment_not_completed');
+          if (tx.status !== 'refunded' && tx.status !== 'refund_pending' && tx.status !== 'refund_failed') {
+            try {
+              const result = await fulfill(object.id, tx.user_id);
+              if (result?.fulfilled !== true) throw new Error('fulfillment_not_completed');
+            } catch (error) {
+              if (tx.kind !== 'resale_ticket' || !refund) throw error;
+              // Retrying this event repeats the same Stripe refund, never a second one.
+              const result = await refund(object.id);
+              const next = result.status === 'succeeded' ? 'refunded' : result.status === 'failed' ? 'refund_failed' : 'refund_pending';
+              const updated = await markStatus(object.id, next);
+              if (!updated && tx.status !== next) throw new Error('refund_status_not_saved');
+            }
+          }
         } else {
           const next = statusAfterStripeEvent(tx.status, event.type);
           if (next !== tx.status) await markStatus(object.id, next);
