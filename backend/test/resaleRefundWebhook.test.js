@@ -53,6 +53,19 @@ test('failed fulfillment outside resale does not issue a refund', async () => {
   assert.equal(state.refundCalls, 0);
 });
 
+test('a lost RPC response after ticket transfer does not refund the buyer', async () => {
+  let state;
+  const flow = makeHandler({
+    transaction: { kind: 'resale_ticket', user_id: 'buyer', amount_cents: 1050, currency: 'eur', status: 'created' },
+    fulfill: () => { state.status = 'fulfilled'; throw new Error('response lost'); },
+    refund: () => ({ status: 'succeeded' }),
+  });
+  state = flow.state;
+  assert.equal((await flow.handler(Buffer.from('{}'), 'signature')).status, 200);
+  assert.equal(state.status, 'fulfilled');
+  assert.equal(state.refundCalls, 0);
+});
+
 test('Stripe refund failure stays visible for reconciliation', async () => {
   const { handler, state } = makeHandler({
     transaction: { kind: 'resale_ticket', user_id: 'buyer', amount_cents: 1050, currency: 'eur', status: 'refund_pending' },
