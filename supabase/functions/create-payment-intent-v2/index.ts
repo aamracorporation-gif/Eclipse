@@ -500,16 +500,24 @@ Deno.serve(async (req) => {
       const ticketRes = await restGet(
         SUPABASE_URL,
         SUPABASE_SERVICE_ROLE_KEY,
-        `tickets?id=eq.${encodeURIComponent(ticketId)}&select=id,event_id,total_price,status,ticket_status,user_id`,
+        `tickets?id=eq.${encodeURIComponent(ticketId)}&select=id,event_id,total_price,status,ticket_status,user_id,scanned_at,validation_status,payment_status,wallet_added`,
       );
       if (!ticketRes.ok || !Array.isArray(ticketRes.json) || ticketRes.json.length === 0) {
         return jsonResponse({ ok: false, error: "Ticket not found" });
       }
       const ticket = ticketRes.json[0];
+      if (String(ticket.user_id || "") !== String(listing.seller_id || "")) {
+        return jsonResponse({ ok: false, error: "Listing owner no longer owns the ticket" });
+      }
 
       const inResaleState =
-        String(ticket.ticket_status || "") === "reselling" || String(ticket.status || "") === "resale";
-      if (!inResaleState) return jsonResponse({ ok: false, error: "Ticket is not in resale state" });
+        String(ticket.ticket_status || "") === "reselling" && String(ticket.status || "") === "resale";
+      if (!inResaleState || ticket.scanned_at || ticket.validation_status === "used" || ticket.wallet_added) {
+        return jsonResponse({ ok: false, error: "Ticket is not eligible for resale" });
+      }
+      if (ticket.payment_status && ticket.payment_status !== "paid") {
+        return jsonResponse({ ok: false, error: "Ticket payment is not complete" });
+      }
 
       const eventId = String(ticket.event_id || "");
       if (!eventId) return jsonResponse({ ok: false, error: "Event not found" });
@@ -517,12 +525,21 @@ Deno.serve(async (req) => {
       const ev = await restGet(
         SUPABASE_URL,
         SUPABASE_SERVICE_ROLE_KEY,
-        `events?id=eq.${encodeURIComponent(eventId)}&select=id,title,creator_id,allow_resale`,
+        `events?id=eq.${encodeURIComponent(eventId)}&select=id,title,creator_id,allow_resale,event_date,end_datetime,is_cancelled,status`,
       );
       if (!ev.ok || !Array.isArray(ev.json) || ev.json.length === 0) return jsonResponse({ ok: false, error: "Event not found" });
       const eventRow = ev.json[0];
       const allowResale = eventRow?.allow_resale ?? true;
       if (allowResale === false) return jsonResponse({ ok: false, error: "Resale not allowed for this event" });
+      if (eventRow.is_cancelled || ["cancelled", "deleted"].includes(String(eventRow.status || ""))) {
+        return jsonResponse({ ok: false, error: "Event is not available" });
+      }
+      const endDate = eventRow.end_datetime
+        ? new Date(eventRow.end_datetime)
+        : new Date(new Date(eventRow.event_date).getTime() + 5 * 60 * 60 * 1000);
+      if (!Number.isFinite(endDate.getTime()) || endDate.getTime() <= Date.now()) {
+        return jsonResponse({ ok: false, error: "Event has ended" });
+      }
 
       const priceEur = Number(listing.price ?? 0);
       const originalResaleCents = Math.round(priceEur * 100);
