@@ -9,6 +9,8 @@ test('a processed Stripe event is ignored when delivered twice', () => {
 
 test('a delayed failure cannot undo a fulfilled payment', () => {
   assert.equal(statusAfterStripeEvent('fulfilled', 'payment_intent.payment_failed'), 'fulfilled');
+  assert.equal(statusAfterStripeEvent('refund_pending', 'payment_intent.payment_failed'), 'refund_pending');
+  assert.equal(statusAfterStripeEvent('refunded', 'payment_intent.payment_failed'), 'refunded');
 });
 
 test('an out-of-order failure may mark only an unfulfilled payment failed', () => {
