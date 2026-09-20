@@ -3,7 +3,7 @@ function isDuplicateProcessed(existing) {
 }
 
 function statusAfterStripeEvent(currentStatus, eventType) {
-  if (['fulfilled', 'refunded', 'canceled', 'cancelled'].includes(currentStatus)) return currentStatus;
+  if (['fulfilled', 'refunded', 'refund_pending', 'refund_failed', 'canceled', 'cancelled'].includes(currentStatus)) return currentStatus;
   if (eventType === 'payment_intent.payment_failed') return 'failed';
   return currentStatus;
 }
