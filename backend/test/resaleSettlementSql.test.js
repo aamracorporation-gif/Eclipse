@@ -210,4 +210,10 @@ test('resale settlement database guard', async (t) => {
     await db.exec('UPDATE tickets SET status = NULL, ticket_status = NULL');
     await assert.rejects(buyCredit(), /Ticket unavailable for resale/);
   });
+
+  await t.test('an unconfirmed original payment cannot enter credit resale', async () => {
+    await seedCredit(0, 10, 0);
+    await db.exec('UPDATE tickets SET payment_status = NULL');
+    await assert.rejects(buyCredit(), /Ticket unavailable for resale/);
+  });
 });

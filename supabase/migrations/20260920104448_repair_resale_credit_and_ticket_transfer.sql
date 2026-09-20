@@ -46,7 +46,7 @@ BEGIN
     OR v_ticket.status IS DISTINCT FROM 'resale' OR v_ticket.ticket_status IS DISTINCT FROM 'reselling'
     OR v_ticket.scanned_at IS NOT NULL OR v_ticket.validation_status = 'used'
     OR coalesce(v_ticket.wallet_added, false)
-    OR (v_ticket.payment_status IS NOT NULL AND v_ticket.payment_status <> 'paid') THEN
+    OR v_ticket.payment_status IS DISTINCT FROM 'paid' THEN
     RAISE EXCEPTION 'Ticket unavailable for resale';
   END IF;
 
