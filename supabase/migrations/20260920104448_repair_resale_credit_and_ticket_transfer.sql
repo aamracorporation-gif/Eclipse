@@ -31,7 +31,7 @@ BEGIN
   FROM public.resale_listings
   WHERE id = p_listing_id
   FOR UPDATE;
-  IF NOT FOUND OR v_listing.status <> 'active'
+  IF NOT FOUND OR v_listing.status IS DISTINCT FROM 'active'
     OR v_listing.seller_id IS NULL OR v_listing.seller_id = p_buyer_id
     OR v_listing.price IS NULL OR v_listing.price <= 0
     OR v_listing.price <> round(v_listing.price, 2) THEN
@@ -43,7 +43,7 @@ BEGIN
   WHERE id = v_listing.ticket_id
   FOR UPDATE;
   IF NOT FOUND OR v_ticket.user_id IS DISTINCT FROM v_listing.seller_id
-    OR v_ticket.status <> 'resale' OR v_ticket.ticket_status <> 'reselling'
+    OR v_ticket.status IS DISTINCT FROM 'resale' OR v_ticket.ticket_status IS DISTINCT FROM 'reselling'
     OR v_ticket.scanned_at IS NOT NULL OR v_ticket.validation_status = 'used'
     OR coalesce(v_ticket.wallet_added, false)
     OR (v_ticket.payment_status IS NOT NULL AND v_ticket.payment_status <> 'paid') THEN
@@ -54,11 +54,18 @@ BEGIN
   IF NOT FOUND OR NOT coalesce(v_event.allow_resale, true)
     OR coalesce(v_event.is_cancelled, false)
     OR v_event.status IN ('cancelled', 'deleted')
+    OR coalesce(v_event.end_datetime, v_event.event_date + interval '5 hours') IS NULL
     OR coalesce(v_event.end_datetime, v_event.event_date + interval '5 hours') <= now() THEN
     RAISE EXCEPTION 'Event unavailable for resale';
   END IF;
 
-  -- Lock the buyer balance and verify that both classes of credit cover the price.
+  -- Lock balances in a stable order for reciprocal purchases by the same users.
+  INSERT INTO public.user_credit (user_id, balance_real, balance_promo)
+  VALUES (v_listing.seller_id, 0, 0) ON CONFLICT (user_id) DO NOTHING;
+  PERFORM user_id FROM public.user_credit
+  WHERE user_id IN (p_buyer_id, v_listing.seller_id) ORDER BY user_id FOR UPDATE;
+
+  -- Verify that both classes of credit cover the price.
   SELECT * INTO v_buyer
   FROM public.user_credit
   WHERE user_id = p_buyer_id
@@ -147,6 +154,8 @@ BEGIN
   UPDATE public.tickets
   SET user_id = p_buyer_id, status = 'valid', ticket_status = 'active',
       qr_token = v_qr, qr_code = v_qr::text,
+      buyer_name = coalesce((SELECT nullif(full_name, '') FROM public.profiles WHERE id = p_buyer_id), 'Comprador'),
+      buyer_email = coalesce((SELECT email FROM public.profiles WHERE id = p_buyer_id), ''),
       transfer_count = coalesce(transfer_count, 0) + 1,
       last_transferred_at = now()
   WHERE id = v_listing.ticket_id;
@@ -215,7 +224,7 @@ BEGIN
   SELECT * INTO v_ticket FROM public.tickets
   WHERE id = p_ticket_id FOR UPDATE;
   IF NOT FOUND OR v_ticket.user_id IS DISTINCT FROM auth.uid()
-    OR v_ticket.status <> 'valid' OR v_ticket.ticket_status <> 'active'
+    OR v_ticket.status IS DISTINCT FROM 'valid' OR v_ticket.ticket_status IS DISTINCT FROM 'active'
     OR v_ticket.scanned_at IS NOT NULL OR v_ticket.validation_status = 'used'
     OR coalesce(v_ticket.wallet_added, false)
     OR v_ticket.payment_status IS DISTINCT FROM 'paid' THEN
@@ -226,6 +235,7 @@ BEGIN
   IF NOT FOUND OR NOT coalesce(v_event.allow_resale, true)
     OR coalesce(v_event.is_cancelled, false)
     OR v_event.status IN ('cancelled', 'deleted')
+    OR coalesce(v_event.end_datetime, v_event.event_date + interval '5 hours') IS NULL
     OR coalesce(v_event.end_datetime, v_event.event_date + interval '5 hours') <= now() THEN
     RAISE EXCEPTION 'Event unavailable for resale';
   END IF;

@@ -5,7 +5,7 @@ import * as Linking from 'expo-linking';
 import Constants from 'expo-constants';
 import { confirmPayment, createPaymentIntent } from '@/lib/payments/api';
 import type { ConfirmPaymentResponse, CreatePaymentIntentRequest } from '@/lib/payments/types';
-import { waitForFulfillment } from '@/lib/payments/waitForFulfillment';
+import { getRefundMessage, waitForFulfillment } from '@/lib/payments/waitForFulfillment';
 
 type PaymentSheetResult =
   | { status: 'canceled' }
@@ -68,6 +68,11 @@ export function usePaymentSheetHandler() {
         const fingerprint = JSON.stringify(purchase);
         if (checkout.current?.submitted && checkout.current.intentId) {
           const current = await waitForFulfillment(() => confirmPayment({ payment_intent_id: checkout.current!.intentId! }));
+          const refundMessage = getRefundMessage(current?.status);
+          if (refundMessage) {
+            checkout.current = null;
+            return { status: 'failed', message: refundMessage };
+          }
           if (!current?.fulfilled) {
             return { status: 'pending', message: 'Estamos confirmando tu compra anterior. Revisa Mis entradas antes de volver a pagar.' };
           }
@@ -167,6 +172,11 @@ export function usePaymentSheetHandler() {
 
         checkout.current.submitted = true;
         const fulfillment = await waitForFulfillment(() => confirmPayment({ payment_intent_id: intent.payment_intent_id }));
+        const refundMessage = getRefundMessage(fulfillment?.status);
+        if (refundMessage) {
+          checkout.current = null;
+          return { status: 'failed', message: refundMessage };
+        }
         if (!fulfillment?.fulfilled) {
           return { status: 'pending', message: 'El pago se está confirmando. Tu entrada aparecerá en Mis entradas. No necesitas volver a pagar.' };
         }

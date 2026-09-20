@@ -229,7 +229,8 @@ async function markPaymentStatusByIntentId(paymentIntentId, status) {
     .from('payment_transactions')
     .update({ status })
     .eq('stripe_payment_intent_id', paymentIntentId)
-    .not('status', 'in', '(fulfilled,refunded,canceled,cancelled)')
+    .in('status', ['refund_pending', 'refunded', 'refund_failed'].includes(status)
+      ? ['refund_pending'] : ['created', 'failed'])
     .select('*')
     .maybeSingle();
   if (error) throw error;

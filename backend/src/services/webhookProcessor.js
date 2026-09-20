@@ -29,10 +29,16 @@ function createWebhookHandler({ db, verify, getTransaction, fulfill, markStatus,
         if (object.metadata?.eclipse_reason === 'resale_unavailable' && object.payment_intent) {
           const tx = await getTransaction(object.payment_intent);
           if (!tx || tx.kind !== 'resale_ticket') throw new Error('refund_transaction_not_found');
-          if (tx.status === 'created') throw new Error('refund_status_not_yet_saved');
-          if (['refund_pending', 'refund_failed', 'refunded'].includes(tx.status)) {
-            const next = object.status === 'succeeded' ? 'refunded' : object.status === 'failed' ? 'refund_failed' : 'refund_pending';
-            if (next !== tx.status) await markStatus(object.payment_intent, next);
+          if (['created', 'failed'].includes(tx.status)) throw new Error('refund_status_not_yet_saved');
+          if (tx.status === 'refund_pending') {
+            const next = object.status === 'succeeded' ? 'refunded' : ['failed', 'canceled'].includes(object.status) ? 'refund_failed' : 'refund_pending';
+            if (next !== tx.status) {
+              const updated = await markStatus(object.payment_intent, next);
+              if (!updated) {
+                const current = await getTransaction(object.payment_intent);
+                if (!['refunded', 'refund_failed'].includes(current?.status)) throw new Error('refund_status_not_saved');
+              }
+            }
           }
         }
       } else {
@@ -43,27 +49,20 @@ function createWebhookHandler({ db, verify, getTransaction, fulfill, markStatus,
           if (object.status !== 'succeeded' || object.amount_received !== Number(tx.amount_cents) || object.currency !== tx.currency) {
             throw new Error('payment_amount_or_currency_mismatch');
           }
-          if (tx.status !== 'refunded' && tx.status !== 'refund_pending' && tx.status !== 'refund_failed') {
-            try {
-              const result = await fulfill(object.id, tx.user_id);
-              if (result?.fulfilled !== true) throw new Error('fulfillment_not_completed');
-            } catch (error) {
-              if (tx.kind !== 'resale_ticket' || !refund) throw error;
-              // An RPC response can fail after its database transaction commits.
-              // Never refund an entry that was actually transferred.
-              const current = await getTransaction(object.id);
-              if (!current) throw new Error('transaction_not_found_after_fulfillment');
-              if (current.status === 'fulfilled') {
-                // The webhook ledger can be acknowledged; the ticket already changed hands.
-              } else if (['refunded', 'refund_pending', 'refund_failed'].includes(current.status)) {
-                // A prior delivery started or completed the refund.
-              } else {
-                // Retrying this event repeats the same Stripe refund, never a second one.
-                const result = await refund(object.id);
-                const next = result.status === 'succeeded' ? 'refunded' : result.status === 'failed' ? 'refund_failed' : 'refund_pending';
-                const updated = await markStatus(object.id, next);
-                if (!updated) throw new Error('refund_status_not_saved');
+          if (!['refunded', 'refund_failed'].includes(tx.status)) {
+            const result = await fulfill(object.id, tx.user_id);
+            if (result?.refund_required === true && tx.kind === 'resale_ticket' && refund) {
+              // The database has durably blocked fulfillment before requesting a refund.
+              const refundResult = await refund(object.id);
+              const next = refundResult.status === 'succeeded' ? 'refunded'
+                : ['failed', 'canceled'].includes(refundResult.status) ? 'refund_failed' : 'refund_pending';
+              const updated = await markStatus(object.id, next);
+              if (!updated) {
+                const current = await getTransaction(object.id);
+                if (!['refunded', 'refund_failed'].includes(current?.status)) throw new Error('refund_status_not_saved');
               }
+            } else if (result?.fulfilled !== true && !['refunded', 'refund_failed'].includes(result?.status)) {
+              throw new Error('fulfillment_not_completed');
             }
           }
         } else {

@@ -189,8 +189,12 @@ function constructWebhookEvent(rawBody, signature) {
 
 async function refundPaymentIntent(paymentIntentId) {
   const stripe = getStripeClient();
+  // Stripe may prune idempotency keys after 24h. Reuse the recorded refund on later retries.
+  for await (const existing of stripe.refunds.list({ payment_intent: paymentIntentId, limit: 100 })) {
+    if (existing.metadata?.eclipse_reason === 'resale_unavailable') return existing;
+  }
   return stripe.refunds.create(
-    { payment_intent: paymentIntentId, reason: 'requested_by_customer', metadata: { eclipse_reason: 'resale_unavailable' } },
+    { payment_intent: paymentIntentId, metadata: { eclipse_reason: 'resale_unavailable' } },
     { idempotencyKey: `resale-unavailable:${paymentIntentId}` }
   );
 }

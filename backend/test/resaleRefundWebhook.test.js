@@ -12,7 +12,7 @@ function makeHandler({ transaction, fulfill, refund, event }) {
     db,
     verify: () => event || ({ id: 'evt_1', type: 'payment_intent.succeeded', data: { object: { id: 'pi_1', status: 'succeeded', amount_received: 1050, currency: 'eur', metadata: { user_id: 'buyer' } } } }),
     getTransaction: async () => ({ ...transaction, status: state.status }),
-    fulfill: async () => { state.calls++; return fulfill(); },
+    fulfill: async () => { state.calls++; return fulfill(state); },
     refund: async () => { state.refundCalls++; return refund(); },
     markStatus: async (_intent, next) => { state.status = next; return { status: next }; },
     updateAccount: async () => {},
@@ -23,7 +23,7 @@ function makeHandler({ transaction, fulfill, refund, event }) {
 test('a paid resale whose ticket is unavailable is refunded once and marked refunded', async () => {
   const { handler, state } = makeHandler({
     transaction: { kind: 'resale_ticket', user_id: 'buyer', amount_cents: 1050, currency: 'eur', status: 'created' },
-    fulfill: () => { throw new Error('Listing not active'); },
+    fulfill: state => { state.status = 'refund_pending'; return { refund_required: true }; },
     refund: () => ({ status: 'succeeded' }),
   });
   assert.equal((await handler(Buffer.from('{}'), 'signature')).status, 200);
@@ -36,11 +36,11 @@ test('a paid resale whose ticket is unavailable is refunded once and marked refu
 test('refund failure retries the Stripe webhook rather than acknowledging an unresolved charge', async () => {
   const { handler, state } = makeHandler({
     transaction: { kind: 'resale_ticket', user_id: 'buyer', amount_cents: 1050, currency: 'eur', status: 'created' },
-    fulfill: () => { throw new Error('Listing not active'); },
+    fulfill: state => { state.status = 'refund_pending'; return { refund_required: true }; },
     refund: () => { throw new Error('Stripe unavailable'); },
   });
   assert.equal((await handler(Buffer.from('{}'), 'signature')).status, 500);
-  assert.equal(state.status, 'created');
+  assert.equal(state.status, 'refund_pending');
 });
 
 test('failed fulfillment outside resale does not issue a refund', async () => {
@@ -53,6 +53,28 @@ test('failed fulfillment outside resale does not issue a refund', async () => {
   assert.equal(state.refundCalls, 0);
 });
 
+test('a resale database outage does not trigger a refund without a durable decision', async () => {
+  const { handler, state } = makeHandler({
+    transaction: { kind: 'resale_ticket', user_id: 'buyer', amount_cents: 1050, currency: 'eur', status: 'created' },
+    fulfill: () => { throw new Error('Database unavailable'); },
+    refund: () => ({ status: 'succeeded' }),
+  });
+  assert.equal((await handler(Buffer.from('{}'), 'signature')).status, 500);
+  assert.equal(state.refundCalls, 0);
+  assert.equal(state.status, 'created');
+});
+
+test('a persisted pending refund is resumed after a crash before contacting Stripe', async () => {
+  const { handler, state } = makeHandler({
+    transaction: { kind: 'resale_ticket', user_id: 'buyer', amount_cents: 1050, currency: 'eur', status: 'refund_pending' },
+    fulfill: () => ({ refund_required: true, status: 'refund_pending' }),
+    refund: () => ({ status: 'succeeded' }),
+  });
+  assert.equal((await handler(Buffer.from('{}'), 'signature')).status, 200);
+  assert.equal(state.refundCalls, 1);
+  assert.equal(state.status, 'refunded');
+});
+
 test('a lost RPC response after ticket transfer does not refund the buyer', async () => {
   let state;
   const flow = makeHandler({
@@ -61,7 +83,7 @@ test('a lost RPC response after ticket transfer does not refund the buyer', asyn
     refund: () => ({ status: 'succeeded' }),
   });
   state = flow.state;
-  assert.equal((await flow.handler(Buffer.from('{}'), 'signature')).status, 200);
+  assert.equal((await flow.handler(Buffer.from('{}'), 'signature')).status, 500);
   assert.equal(state.status, 'fulfilled');
   assert.equal(state.refundCalls, 0);
 });
@@ -70,6 +92,15 @@ test('Stripe refund failure stays visible for reconciliation', async () => {
   const { handler, state } = makeHandler({
     transaction: { kind: 'resale_ticket', user_id: 'buyer', amount_cents: 1050, currency: 'eur', status: 'refund_pending' },
     event: { id: 'evt_refund', type: 'refund.failed', data: { object: { id: 're_1', payment_intent: 'pi_1', status: 'failed', metadata: { eclipse_reason: 'resale_unavailable' } } } },
+  });
+  assert.equal((await handler(Buffer.from('{}'), 'signature')).status, 200);
+  assert.equal(state.status, 'refund_failed');
+});
+
+test('a delayed pending refund event cannot overwrite refund failure', async () => {
+  const { handler, state } = makeHandler({
+    transaction: { kind: 'resale_ticket', user_id: 'buyer', amount_cents: 1050, currency: 'eur', status: 'refund_failed' },
+    event: { id: 'evt_refund', type: 'refund.updated', data: { object: { id: 're_1', payment_intent: 'pi_1', status: 'pending', metadata: { eclipse_reason: 'resale_unavailable' } } } },
   });
   assert.equal((await handler(Buffer.from('{}'), 'signature')).status, 200);
   assert.equal(state.status, 'refund_failed');

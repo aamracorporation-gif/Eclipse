@@ -1,4 +1,4 @@
-import { waitForFulfillment } from '../lib/payments/waitForFulfillment';
+import { getRefundMessage, waitForFulfillment } from '../lib/payments/waitForFulfillment';
 
 const pending = { kind: 'event_ticket' as const, fulfilled: false, status: 'created' };
 const complete = { ...pending, fulfilled: true, status: 'fulfilled' };
@@ -31,4 +31,12 @@ test('returns a known cancellation without further polling', async () => {
   const read = jest.fn().mockResolvedValue(cancelled);
   expect(await waitForFulfillment(read, { sleep })).toEqual(cancelled);
   expect(read).toHaveBeenCalledTimes(1);
+});
+
+test.each(['refund_pending', 'refunded', 'refund_failed'])('returns %s without waiting for a ticket', async status => {
+  const refund = { ...pending, kind: 'resale_ticket' as const, status };
+  const read = jest.fn().mockResolvedValue(refund);
+  expect(await waitForFulfillment(read, { sleep })).toEqual(refund);
+  expect(read).toHaveBeenCalledTimes(1);
+  expect(getRefundMessage(status)).toBeTruthy();
 });
