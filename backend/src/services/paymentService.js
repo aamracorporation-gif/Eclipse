@@ -7,6 +7,7 @@ const {
   retrieveAccount,
   autoCompleteConnectOnboardingInTestMode,
   constructWebhookEvent,
+  refundPaymentIntent,
   deleteStripeAccount,
 } = require('./stripeService');
 const {
@@ -107,6 +108,7 @@ const handleStripeWebhook = createWebhookHandler({
   fulfill: fulfillPaymentForUser,
   markStatus: markPaymentStatusByIntentId,
   updateAccount: setOnboardingCompletedByStripeAccountId,
+  refund: refundPaymentIntent,
 });
 
 async function deleteStripeAccountForUser(userId) {
