@@ -49,11 +49,21 @@ function createWebhookHandler({ db, verify, getTransaction, fulfill, markStatus,
               if (result?.fulfilled !== true) throw new Error('fulfillment_not_completed');
             } catch (error) {
               if (tx.kind !== 'resale_ticket' || !refund) throw error;
-              // Retrying this event repeats the same Stripe refund, never a second one.
-              const result = await refund(object.id);
-              const next = result.status === 'succeeded' ? 'refunded' : result.status === 'failed' ? 'refund_failed' : 'refund_pending';
-              const updated = await markStatus(object.id, next);
-              if (!updated && tx.status !== next) throw new Error('refund_status_not_saved');
+              // An RPC response can fail after its database transaction commits.
+              // Never refund an entry that was actually transferred.
+              const current = await getTransaction(object.id);
+              if (!current) throw new Error('transaction_not_found_after_fulfillment');
+              if (current.status === 'fulfilled') {
+                // The webhook ledger can be acknowledged; the ticket already changed hands.
+              } else if (['refunded', 'refund_pending', 'refund_failed'].includes(current.status)) {
+                // A prior delivery started or completed the refund.
+              } else {
+                // Retrying this event repeats the same Stripe refund, never a second one.
+                const result = await refund(object.id);
+                const next = result.status === 'succeeded' ? 'refunded' : result.status === 'failed' ? 'refund_failed' : 'refund_pending';
+                const updated = await markStatus(object.id, next);
+                if (!updated) throw new Error('refund_status_not_saved');
+              }
             }
           }
         } else {
