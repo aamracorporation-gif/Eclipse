@@ -231,6 +231,10 @@ export default function ResaleScreen() {
             id,
             title,
             event_date,
+            end_datetime,
+            allow_resale,
+            is_cancelled,
+            status,
             description,
             reservados_vip (
               id,
@@ -288,16 +292,15 @@ export default function ResaleScreen() {
 
         const event = Array.isArray(ticket?.event) ? ticket.event[0] : ticket?.event;
         
-        if (!event) return null;
+        if (!event || event.allow_resale === false || event.is_cancelled
+          || ['cancelled', 'deleted'].includes(String(event.status || ''))) return null;
 
-        let eventDate = new Date();
-        if (event.event_date) {
-            try {
-                eventDate = new Date(event.event_date);
-            } catch {
-                console.warn('Invalid date format:', event.event_date);
-            }
-        }
+        const eventDate = new Date(event.event_date);
+        const endDate = event.end_datetime
+          ? new Date(event.end_datetime)
+          : new Date(eventDate.getTime() + 5 * 60 * 60 * 1000);
+        if (!Number.isFinite(eventDate.getTime()) || !Number.isFinite(endDate.getTime())
+          || endDate.getTime() <= Date.now()) return null;
         
         const dateStr = eventDate.toLocaleDateString();
         const timeStr = eventDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
