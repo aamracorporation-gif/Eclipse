@@ -318,6 +318,7 @@ DECLARE
   v_reserve               RECORD;
   v_buyer_email           text;
   v_buyer_name            text;
+  v_resale_notification   jsonb;
 BEGIN
   SELECT * INTO v_tx
   FROM public.payment_transactions
@@ -603,6 +604,24 @@ BEGIN
     INSERT INTO public.ledger_movimientos (tipo, usuario_id, importe, referencia_id, descripcion)
     VALUES ('generacion_credito_reventa', v_listing.seller_id, v_seller_amount,
             v_listing.id::text, 'Venta de entrada de reventa');
+
+    v_resale_notification := jsonb_build_object(
+      'buyer_id', p_user_id::text, 'seller_id', v_listing.seller_id::text,
+      'event_id', v_ticket.event_id::text,
+      'event_title', COALESCE((SELECT e.title FROM public.events e WHERE e.id = v_ticket.event_id), ''),
+      'quantity', '1', 'ticket_id', v_ticket.id::text,
+      'listing_id', v_listing.id::text, 'payment_intent_id', p_payment_intent_id
+    );
+    BEGIN
+      PERFORM public.enqueue_notification_from_template(
+        p_user_id, 'attendee', 'purchase_completed', v_resale_notification
+      );
+      PERFORM public.enqueue_notification_from_template(
+        v_listing.seller_id, 'attendee', 'resale_sold', v_resale_notification
+      );
+    EXCEPTION WHEN others THEN
+      NULL; -- A notification failure must not reverse a paid purchase.
+    END;
 
     UPDATE public.payment_transactions SET status = 'fulfilled', fulfilled_at = now() WHERE id = v_tx.id;
 
