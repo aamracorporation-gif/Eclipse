@@ -187,6 +187,14 @@ function constructWebhookEvent(rawBody, signature) {
   return stripe.webhooks.constructEvent(rawBody, signature, getStripeWebhookSecret());
 }
 
+async function refundPaymentIntent(paymentIntentId) {
+  const stripe = getStripeClient();
+  return stripe.refunds.create(
+    { payment_intent: paymentIntentId, reason: 'requested_by_customer', metadata: { eclipse_reason: 'resale_unavailable' } },
+    { idempotencyKey: `resale-unavailable:${paymentIntentId}` }
+  );
+}
+
 async function deleteStripeAccount(accountId) {
   const stripe = getStripeClient();
   return stripe.accounts.del(accountId);
@@ -199,5 +207,6 @@ module.exports = {
   autoCompleteConnectOnboardingInTestMode,
   createPaymentIntent,
   constructWebhookEvent,
+  refundPaymentIntent,
   deleteStripeAccount,
 };
