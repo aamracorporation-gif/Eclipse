@@ -8,7 +8,7 @@ function createWebhookHandler({ db, verify, getTransaction, fulfill, markStatus,
     } catch {
       return { status: 400, json: { received: false, error: 'Invalid webhook signature' } };
     }
-    if (!['payment_intent.succeeded', 'payment_intent.payment_failed', 'account.updated', 'refund.updated'].includes(event.type)) {
+    if (!['payment_intent.succeeded', 'payment_intent.payment_failed', 'account.updated', 'refund.updated', 'refund.failed'].includes(event.type)) {
       return { status: 200, json: { received: true, ignored: true } };
     }
 
@@ -25,7 +25,7 @@ function createWebhookHandler({ db, verify, getTransaction, fulfill, markStatus,
 
       if (event.type === 'account.updated') {
         await updateAccount(object.id, Boolean(object.charges_enabled && object.payouts_enabled));
-      } else if (event.type === 'refund.updated') {
+      } else if (event.type === 'refund.updated' || event.type === 'refund.failed') {
         if (object.metadata?.eclipse_reason === 'resale_unavailable' && object.payment_intent) {
           const tx = await getTransaction(object.payment_intent);
           if (!tx || tx.kind !== 'resale_ticket') throw new Error('refund_transaction_not_found');
