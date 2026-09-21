@@ -47,7 +47,8 @@ BEGIN
       OR v_ticket.user_id IS DISTINCT FROM v_listing.seller_id
       OR v_ticket.status IS DISTINCT FROM 'resale'
       OR v_ticket.ticket_status IS DISTINCT FROM 'reselling'
-      OR v_ticket.scanned_at IS NOT NULL OR v_ticket.validation_status = 'used'
+      OR v_ticket.scanned_at IS NOT NULL
+      OR v_ticket.validation_status IS DISTINCT FROM 'valid'
       OR coalesce(v_ticket.wallet_added, false)
       OR v_ticket.payment_status IS DISTINCT FROM 'paid' THEN
       v_reason := 'ticket_unavailable';
