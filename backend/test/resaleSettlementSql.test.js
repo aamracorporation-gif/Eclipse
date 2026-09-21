@@ -55,7 +55,7 @@ test('resale settlement database guard', async (t) => {
     await db.query(`INSERT INTO profiles VALUES ($1,'New holder','buyer@example.test')`, [buyer]);
     await db.query(`INSERT INTO events VALUES ($1, true, false, 'active', now() + interval '1 day', now())`, [event]);
     await db.query(`INSERT INTO tickets (id,user_id,event_id,status,ticket_status,validation_status,wallet_added,payment_status,buyer_name,buyer_email)
-      VALUES ($1,$2,$3,'resale','reselling','unused',false,'paid','Previous holder','seller@example.test')`, [ticket, seller, event]);
+      VALUES ($1,$2,$3,'resale','reselling','valid',false,'paid','Previous holder','seller@example.test')`, [ticket, seller, event]);
     await db.query(`INSERT INTO resale_listings VALUES ($1,$2,$3,'active',10)`, [listing, ticket, seller]);
     await db.query(`INSERT INTO payment_transactions (stripe_payment_intent_id,user_id,kind,status,metadata)
       VALUES ('pi_1',$1,'resale_ticket','created',$2)`, [buyer, JSON.stringify({ listing_id: listing, ticket_id: ticket, seller_id: seller, original_total_cents: 1000 })]);
@@ -88,6 +88,7 @@ test('resale settlement database guard', async (t) => {
   for (const [label, sql] of [
     ['expired event', "UPDATE events SET end_datetime = now() - interval '1 second'"],
     ['used ticket', "UPDATE tickets SET scanned_at = now()"],
+    ['revoked ticket', "UPDATE tickets SET validation_status = 'revoked'"],
     ['changed owner', `UPDATE tickets SET user_id = '${buyer}'`],
     ['changed price', 'UPDATE resale_listings SET price = 11'],
     ['cancelled event', 'UPDATE events SET is_cancelled = true'],
