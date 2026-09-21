@@ -63,6 +63,10 @@ test('resale wallet settles credit and Stripe reserves atomically', async (t) =>
   await db.exec(migration.slice(migration.indexOf('CREATE OR REPLACE FUNCTION public.buy_resale_ticket_with_credito'),
     migration.indexOf('CREATE OR REPLACE FUNCTION public.create_resale_listing_secure')));
   const scalar = async (sql, params = []) => (await db.query(sql, params)).rows[0];
+  const balances = async (id) => {
+    const row = await scalar('SELECT balance_real,balance_promo FROM public.user_credit WHERE user_id=$1',[id]);
+    return { real: Number(row.balance_real), promo: Number(row.balance_promo) };
+  };
 
   async function seed(real, promo, reserve) {
     await db.exec('TRUNCATE public.notifications, public.movements, public.resale_transactions, public.wallets, public.wallet_reserves, public.user_credit, public.resale_listings, public.tickets, public.events, auth.users');
@@ -83,10 +87,8 @@ test('resale wallet settles credit and Stripe reserves atomically', async (t) =>
   await t.test('promo credit transfers without creating real backing', async () => {
     await seed(20,30,0);
     assert.equal((await buy()).rows[0].result.success, true);
-    assert.deepEqual(await scalar('SELECT balance_real,balance_promo FROM public.user_credit WHERE user_id=$1',[seller]),
-      { balance_real: '0', balance_promo: '10' });
-    assert.deepEqual(await scalar('SELECT balance_real,balance_promo FROM public.user_credit WHERE user_id=$1',[buyer]),
-      { balance_real: '20', balance_promo: '20' });
+    assert.deepEqual(await balances(seller), { real: 0, promo: 10 });
+    assert.deepEqual(await balances(buyer), { real: 20, promo: 20 });
     const changed = await scalar(`SELECT user_id,buyer_name,attendee_name,short_code,wallet_added,
       qr_code = qr_token::text AS matching_qr, qr_code <> 'old-qr' AS rotated
       FROM public.tickets WHERE id=$1`,[ticket]);
@@ -105,10 +107,9 @@ test('resale wallet settles credit and Stripe reserves atomically', async (t) =>
   await t.test('real credit transfers its original payment reserve', async () => {
     await seed(10,0,10);
     await buy();
-    assert.deepEqual(await scalar('SELECT balance_real,balance_promo FROM public.user_credit WHERE user_id=$1',[seller]),
-      { balance_real: '10', balance_promo: '0' });
+    assert.deepEqual(await balances(seller), { real: 10, promo: 0 });
     assert.equal((await scalar('SELECT user_id FROM public.wallet_reserves')).user_id,seller);
-    assert.equal((await scalar('SELECT balance FROM public.wallets WHERE user_id=$1',[seller])).balance,'10');
+    assert.equal(Number((await scalar('SELECT balance FROM public.wallets WHERE user_id=$1',[seller])).balance),10);
   });
 
   await t.test('missing reserve rolls back every change', async () => {
