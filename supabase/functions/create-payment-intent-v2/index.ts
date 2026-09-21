@@ -512,7 +512,7 @@ Deno.serve(async (req) => {
 
       const inResaleState =
         String(ticket.ticket_status || "") === "reselling" && String(ticket.status || "") === "resale";
-      if (!inResaleState || ticket.scanned_at || ticket.validation_status === "used" || ticket.wallet_added) {
+      if (!inResaleState || ticket.scanned_at || ticket.validation_status !== "valid" || ticket.wallet_added) {
         return jsonResponse({ ok: false, error: "Ticket is not eligible for resale" });
       }
       if (ticket.payment_status !== "paid") {
@@ -545,9 +545,7 @@ Deno.serve(async (req) => {
       const originalResaleCents = Math.round(priceEur * 100);
       if (!Number.isFinite(originalResaleCents) || originalResaleCents <= 0) return jsonResponse({ ok: false, error: "Invalid price" });
 
-      const resaleEclipseRateBps = getEclipseNetRateBps();
-      // Reventa: sin Connect, la comisión se descuenta del crédito del vendedor en fulfill.
-      // El comprador solo paga la tasa de Stripe.
+      // En reventa el vendedor recibe el precio íntegro; el comprador paga la tasa de Stripe.
       const resaleServiceFeeCents = computeStripePassthroughCents(originalResaleCents);
       const resaleAmountCents = originalResaleCents + resaleServiceFeeCents;
 
@@ -591,7 +589,7 @@ Deno.serve(async (req) => {
         platform_fee_cents: resaleServiceFeeCents,
         destination_account_id: null,
         destination_amount_cents: 0,
-        commission_bps: resaleEclipseRateBps,
+        commission_bps: 0,
         idempotency_key: idempotencyKey,
         metadata,
       });
