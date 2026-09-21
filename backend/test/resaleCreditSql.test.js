@@ -61,7 +61,7 @@ test('resale wallet settles credit and Stripe reserves atomically', async (t) =>
   const migration = fs.readFileSync(path.join(__dirname,
     '../../supabase/migrations/20260920104556_harden_resale_credit_and_card.sql'), 'utf8');
   await db.exec(migration.slice(migration.indexOf('CREATE OR REPLACE FUNCTION public.buy_resale_ticket_with_credito'),
-    migration.indexOf('-- Listing eligibility')));
+    migration.indexOf('CREATE OR REPLACE FUNCTION public.create_resale_listing_secure')));
   const scalar = async (sql, params = []) => (await db.query(sql, params)).rows[0];
 
   async function seed(real, promo, reserve) {
