@@ -48,6 +48,7 @@ test('resale settlement database guard', async (t) => {
     GRANT EXECUTE ON FUNCTION public.fulfill_payment_for_user(text, uuid) TO service_role;
   `);
   await db.exec(fs.readFileSync(path.join(__dirname, '../../supabase/migrations/20260920120000_atomic_resale_refund_decision.sql'), 'utf8'));
+  await db.exec(fs.readFileSync(path.join(__dirname, '../../supabase/migrations/20260920121000_align_resale_refund_guard_locks.sql'), 'utf8'));
 
   async function seed() {
     await db.exec('TRUNCATE payment_transactions, resale_listings, tickets, events, profiles');
