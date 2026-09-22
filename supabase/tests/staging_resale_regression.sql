@@ -7,8 +7,8 @@ INSERT INTO auth.users(id,email,raw_user_meta_data) VALUES
  ('10000000-0000-0000-0000-000000000002','seller@example.test','{"full_name":"Fixture Seller"}');
 INSERT INTO public.events(id,title,event_date,end_datetime,ticket_price,available_tickets,creator_id)
 VALUES ('40000000-0000-0000-0000-000000000001','Fixture Event',now()+interval '1 day',now()+interval '2 days',10,100,'10000000-0000-0000-0000-000000000002');
-INSERT INTO public.tickets(id,event_id,user_id,buyer_name,buyer_email,total_price,status,ticket_status)
-VALUES ('30000000-0000-0000-0000-000000000001','40000000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000002','Fixture Seller','seller@example.test',10,'resale','reselling');
+INSERT INTO public.tickets(id,event_id,user_id,buyer_name,buyer_email,total_price,status,ticket_status,short_code,wallet_added,wallet_pass_id)
+VALUES ('30000000-0000-0000-0000-000000000001','40000000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000002','Fixture Seller','seller@example.test',10,'resale','reselling','OLD-SHORT',false,'OLD-PASS');
 INSERT INTO public.resale_listings(id,ticket_id,seller_id,price) VALUES
  ('20000000-0000-0000-0000-000000000001','30000000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000002',10);
 INSERT INTO public.payment_transactions(user_id,kind,amount_cents,stripe_payment_intent_id,metadata)
@@ -26,8 +26,8 @@ SELECT public.fulfill_payment_for_user('pi_fixture_resale','10000000-0000-0000-0
 SELECT public.fulfill_payment_for_user('pi_fixture_resale','10000000-0000-0000-0000-000000000001');
 RESET ROLE;
 DO $$ BEGIN
-IF NOT EXISTS(SELECT 1 FROM public.tickets WHERE user_id='10000000-0000-0000-0000-000000000001' AND buyer_name='Fixture Buyer' AND qr_code=qr_token::text) THEN RAISE EXCEPTION 'Bad holder or QR'; END IF;
-IF (SELECT count(*) FROM public.resale_transactions) <> 1 OR (SELECT sum(balance_real) FROM public.user_credit) <> 9 OR (SELECT sum(amount) FROM public.wallet_reserves) <> 9 THEN RAISE EXCEPTION 'Duplicate or unbacked credit'; END IF;
+IF NOT EXISTS(SELECT 1 FROM public.tickets WHERE user_id='10000000-0000-0000-0000-000000000001' AND buyer_name='Fixture Buyer' AND qr_code=qr_token::text AND short_code IS NULL AND wallet_added=false AND wallet_pass_id IS NULL) THEN RAISE EXCEPTION 'Bad holder or QR'; END IF;
+IF (SELECT count(*) FROM public.resale_transactions) <> 1 OR (SELECT sum(balance_real) FROM public.user_credit) <> 10 OR (SELECT sum(amount) FROM public.wallet_reserves) <> 10 THEN RAISE EXCEPTION 'Duplicate or unbacked credit'; END IF;
 END $$;
 ROLLBACK TO fixture;
 
@@ -135,6 +135,6 @@ OR NOT EXISTS(SELECT 1 FROM public.tickets WHERE stripe_payment_intent_id='pi_fi
 THEN RAISE EXCEPTION 'Primary purchase duplicate or QR mismatch'; END IF;
 END $$;
 ROLLBACK TO fixture;
-SELECT '12 production-schema regression cases passed' AS result;
+SELECT '12 production-schema regression cases passed with resale parity' AS result;
 ROLLBACK;
 
