@@ -33,6 +33,29 @@ test('a paid resale whose ticket is unavailable is refunded once and marked refu
   assert.equal(state.refundCalls, 1);
 });
 
+test('a paid VIP with a durable unavailable decision refunds exactly once', async () => {
+  const { handler, state } = makeHandler({
+    transaction: { kind: 'vip_table', user_id: 'buyer', amount_cents: 1050, currency: 'eur', status: 'created' },
+    fulfill: state => { state.status = 'refund_pending'; return { refund_required: true }; },
+    refund: () => ({ status: 'succeeded' }),
+  });
+  assert.equal((await handler(Buffer.from('{}'), 'signature')).status, 200);
+  assert.equal((await handler(Buffer.from('{}'), 'signature')).status, 200);
+  assert.equal(state.status, 'refunded');
+  assert.equal(state.refundCalls, 1);
+});
+
+test('VIP failed refund remains visible for reconciliation', async () => {
+  const { handler, state } = makeHandler({
+    transaction: { kind: 'vip_table', user_id: 'buyer', amount_cents: 1050, currency: 'eur', status: 'refund_pending' },
+    event: { id: 'evt_vip_refund', type: 'refund.failed', data: { object: {
+      id: 're_vip', payment_intent: 'pi_1', status: 'failed', metadata: { eclipse_reason: 'vip_unavailable' },
+    } } },
+  });
+  assert.equal((await handler(Buffer.from('{}'), 'signature')).status, 200);
+  assert.equal(state.status, 'refund_failed');
+});
+
 test('refund failure retries the Stripe webhook rather than acknowledging an unresolved charge', async () => {
   const { handler, state } = makeHandler({
     transaction: { kind: 'resale_ticket', user_id: 'buyer', amount_cents: 1050, currency: 'eur', status: 'created' },

@@ -85,6 +85,29 @@ The pg_net extension placement warning also remains.
 See https://supabase.com/docs/guides/database/database-linter.
 
 Remaining payment findings: card resale applies 10% while credit resale applies
-zero; primary/VIP credit reserve accounting needs further review, and the legacy
-VIP card branch marks payment fulfilled without visibly creating a VIP ticket.
-Do not treat a green resale suite as approval to launch VIP checkout.
+zero. Primary and full-wallet VIP credit accounting still need review.
+The VIP card branch has now been repaired as described below; this does not approve launch.
+
+## VIP card repair (2026-09-22)
+
+`20260922130423_fulfill_vip_card_atomically.sql` routes card/hybrid VIP payments
+through a private helper. It locks inventory, rejects expired/inactive/deleted or
+changed offers, checks credit backing, issues one capacity-sized ticket with a
+consistent QR, decrements VIP stock and calls the existing amount/debit core in
+one transaction. A duplicate delivery is idempotent. A known unavailable offer
+persists refund_pending before Stripe is called; infrastructure failures roll back.
+
+The Node webhook now supports VIP refund decisions and refund lifecycle events.
+VIP destination-charge refunds reverse the connected transfer and refund the
+application fee, while platform-only charges omit those flags. Previously created
+refunds are reused. Deploy the updated Node backend before enabling staging checkout.
+
+Eleven additional database regressions passed using real functions/triggers:
+card delivery/replay, hybrid real/promo debit and reserve splitting, sold-out second
+charge, mismatch rollback, inactive/deleted/changed-price/expired offers, insufficient
+credit and insufficient backing. This is sequential database testing, not a real
+simultaneous Stripe payment race. Backend suite: 42 tests passed.
+
+The authenticated `create-payment-intent-v2` and `confirm-payment` Edge Functions
+were deployed to staging. Stripe test secrets and a staging Node webhook endpoint
+still need end-to-end verification. No Stripe charges/refunds were created by this work.

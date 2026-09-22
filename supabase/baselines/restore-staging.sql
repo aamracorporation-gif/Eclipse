@@ -26,5 +26,6 @@ CREATE TRIGGER on_auth_user_created_link_worker AFTER INSERT ON auth.users FOR E
 \ir ../migrations/20260921224229_restrict_signup_roles_and_resale_validation.sql
 \ir ../migrations/20260921224553_align_primary_ticket_qr.sql
 \ir ../migrations/20260921224725_prevent_signup_admin_role.sql
+\ir ../migrations/20260922130423_fulfill_vip_card_atomically.sql
 NOTIFY pgrst, 'reload schema';
 COMMIT;

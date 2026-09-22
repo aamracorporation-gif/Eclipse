@@ -187,16 +187,9 @@ function constructWebhookEvent(rawBody, signature) {
   return stripe.webhooks.constructEvent(rawBody, signature, getStripeWebhookSecret());
 }
 
-async function refundPaymentIntent(paymentIntentId) {
-  const stripe = getStripeClient();
-  // Stripe may prune idempotency keys after 24h. Reuse the recorded refund on later retries.
-  for await (const existing of stripe.refunds.list({ payment_intent: paymentIntentId, limit: 100 })) {
-    if (existing.metadata?.eclipse_reason === 'resale_unavailable') return existing;
-  }
-  return stripe.refunds.create(
-    { payment_intent: paymentIntentId, metadata: { eclipse_reason: 'resale_unavailable' } },
-    { idempotencyKey: `resale-unavailable:${paymentIntentId}` }
-  );
+async function refundPaymentIntent(paymentIntentId, kind = 'resale_ticket') {
+  const { refundUnavailablePurchase } = require('./refundUnavailablePurchase');
+  return refundUnavailablePurchase(getStripeClient(), paymentIntentId, kind);
 }
 
 async function deleteStripeAccount(accountId) {

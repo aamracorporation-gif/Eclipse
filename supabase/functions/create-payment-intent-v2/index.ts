@@ -621,12 +621,12 @@ Deno.serve(async (req) => {
       const vipRes = await restGet(
         SUPABASE_URL,
         SUPABASE_SERVICE_ROLE_KEY,
-        `reservados_vip?id=eq.${encodeURIComponent(vipId)}&select=id,event_id,base_price,quantity_available,capacity_people,name`,
+        `reservados_vip?id=eq.${encodeURIComponent(vipId)}&select=id,event_id,base_price,quantity_available,capacity_people,name,is_active,deleted_at`,
       );
       if (!vipRes.ok || !Array.isArray(vipRes.json) || vipRes.json.length === 0) return jsonResponse({ ok: false, error: "VIP not found" });
       const vip = vipRes.json[0];
 
-      if (Number(vip.quantity_available ?? 0) < 1) return jsonResponse({ ok: false, error: "VIP sold out" });
+      if (vip.is_active !== true || vip.deleted_at || Number(vip.quantity_available ?? 0) < 1) return jsonResponse({ ok: false, error: "VIP sold out" });
 
       const eventId = String(vip.event_id || "");
       if (!eventId) return jsonResponse({ ok: false, error: "VIP not found" });
@@ -634,10 +634,16 @@ Deno.serve(async (req) => {
       const ev = await restGet(
         SUPABASE_URL,
         SUPABASE_SERVICE_ROLE_KEY,
-        `events?id=eq.${encodeURIComponent(eventId)}&select=id,title,creator_id`,
+        `events?id=eq.${encodeURIComponent(eventId)}&select=id,title,creator_id,is_cancelled,status,end_datetime,event_date`,
       );
       if (!ev.ok || !Array.isArray(ev.json) || ev.json.length === 0) return jsonResponse({ ok: false, error: "Event not found" });
       const eventRow = ev.json[0];
+      const vipEventEnd = eventRow.end_datetime
+        ? new Date(eventRow.end_datetime).getTime()
+        : new Date(eventRow.event_date).getTime() + 5 * 60 * 60 * 1000;
+      if (eventRow.is_cancelled || eventRow.status === "cancelled" || !Number.isFinite(vipEventEnd) || vipEventEnd <= Date.now()) {
+        return jsonResponse({ ok: false, error: "Event is not available" });
+      }
 
       const basePrice = Number(vip.base_price ?? 0);
       const vipOriginalCents = Math.round(basePrice * 100);
@@ -760,6 +766,7 @@ Deno.serve(async (req) => {
         credit_debit_cents: creditDebitCents,
         event_title: String(eventRow.title || ""),
         vip_name: String(vip.name || ""),
+        capacity_people: Number(vip.capacity_people),
         platform_fee_cents: vipPlatformFeeCents,
         destination_amount_cents: destinationAmountCents,
       };

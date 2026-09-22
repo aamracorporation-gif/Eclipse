@@ -26,9 +26,10 @@ function createWebhookHandler({ db, verify, getTransaction, fulfill, markStatus,
       if (event.type === 'account.updated') {
         await updateAccount(object.id, Boolean(object.charges_enabled && object.payouts_enabled));
       } else if (event.type === 'refund.updated' || event.type === 'refund.failed') {
-        if (object.metadata?.eclipse_reason === 'resale_unavailable' && object.payment_intent) {
+        if (['resale_unavailable', 'vip_unavailable'].includes(object.metadata?.eclipse_reason) && object.payment_intent) {
           const tx = await getTransaction(object.payment_intent);
-          if (!tx || tx.kind !== 'resale_ticket') throw new Error('refund_transaction_not_found');
+          if (!tx || !['resale_ticket', 'vip_table'].includes(tx.kind) ||
+              object.metadata.eclipse_reason !== (tx.kind === 'vip_table' ? 'vip_unavailable' : 'resale_unavailable')) throw new Error('refund_transaction_not_found');
           if (['created', 'failed'].includes(tx.status)) throw new Error('refund_status_not_yet_saved');
           if (tx.status === 'refund_pending') {
             const next = object.status === 'succeeded' ? 'refunded' : ['failed', 'canceled'].includes(object.status) ? 'refund_failed' : 'refund_pending';
@@ -51,9 +52,9 @@ function createWebhookHandler({ db, verify, getTransaction, fulfill, markStatus,
           }
           if (!['refunded', 'refund_failed'].includes(tx.status)) {
             const result = await fulfill(object.id, tx.user_id);
-            if (result?.refund_required === true && tx.kind === 'resale_ticket' && refund) {
+            if (result?.refund_required === true && ['resale_ticket', 'vip_table'].includes(tx.kind) && refund) {
               // The database has durably blocked fulfillment before requesting a refund.
-              const refundResult = await refund(object.id);
+              const refundResult = await refund(object.id, tx.kind);
               const next = refundResult.status === 'succeeded' ? 'refunded'
                 : ['failed', 'canceled'].includes(refundResult.status) ? 'refund_failed' : 'refund_pending';
               const updated = await markStatus(object.id, next);
