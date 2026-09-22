@@ -54,7 +54,7 @@ test('resale settlement database guard', async (t) => {
     await db.query(`INSERT INTO profiles VALUES ($1,'New holder','buyer@example.test')`, [buyer]);
     await db.query(`INSERT INTO events VALUES ($1, true, false, 'active', now() + interval '1 day', now())`, [event]);
     await db.query(`INSERT INTO tickets (id,user_id,event_id,status,ticket_status,validation_status,wallet_added,payment_status,buyer_name,buyer_email)
-      VALUES ($1,$2,$3,'resale','reselling','unused',false,'paid','Previous holder','seller@example.test')`, [ticket, seller, event]);
+      VALUES ($1,$2,$3,'resale','reselling','valid',false,'paid','Previous holder','seller@example.test')`, [ticket, seller, event]);
     await db.query(`INSERT INTO resale_listings VALUES ($1,$2,$3,'active',10)`, [listing, ticket, seller]);
     await db.query(`INSERT INTO payment_transactions (stripe_payment_intent_id,user_id,kind,status,metadata)
       VALUES ('pi_1',$1,'resale_ticket','created',$2)`, [buyer, JSON.stringify({ listing_id: listing, ticket_id: ticket, seller_id: seller, original_total_cents: 1000 })]);
@@ -156,6 +156,8 @@ test('resale settlement database guard', async (t) => {
     $$;
   `);
   await db.exec(fs.readFileSync(path.join(__dirname, '../../supabase/migrations/20260920104448_repair_resale_credit_and_ticket_transfer.sql'), 'utf8'));
+  await db.exec("CREATE FUNCTION public.handle_new_user() RETURNS trigger LANGUAGE plpgsql AS $$ DECLARE v_role text; BEGIN IF v_role NOT IN ('attendee', 'organizer', 'admin') THEN v_role := 'attendee'; END IF; RETURN NEW; END $$;");
+  await db.exec(fs.readFileSync(path.join(__dirname, '../../supabase/migrations/20260921224229_restrict_signup_roles_and_resale_validation.sql'), 'utf8'));
   async function seedCredit(real, promo, backing) {
     await seed();
     await db.exec('TRUNCATE user_credit, wallets, wallet_reserves, resale_transactions, ledger_movimientos');
@@ -164,6 +166,16 @@ test('resale settlement database guard', async (t) => {
     if (backing > 0) await db.query("INSERT INTO wallet_reserves(user_id,amount,stripe_payment_intent_id) VALUES ($1,$2,'pi_backing')", [buyer, backing]);
   }
   const buyCredit = async () => (await db.query('SELECT public.buy_resale_ticket_with_credito($1,$2) AS result', [listing, buyer])).rows[0].result;
+
+  for (const validationStatus of ['revoked', 'expired', null]) {
+    await t.test(`validation ${validationStatus} blocks card and wallet resale`, async () => {
+      await seedCredit(0, 10, 0);
+      await db.query('UPDATE tickets SET validation_status = $1', [validationStatus]);
+      await assert.rejects(buyCredit(), /Ticket unavailable for resale/);
+      assert.equal((await fulfill()).refund_required, true);
+      assert.equal((await db.query('SELECT count(*)::int AS count FROM resale_transactions')).rows[0].count, 0);
+    });
+  }
 
   await t.test('credit purchase preserves real backing and promotional credit separately', async () => {
     await seedCredit(20, 3, 20);

@@ -4,7 +4,7 @@
 2. Configure GitHub environment `staging` with `SUPABASE_ACCESS_TOKEN`,
    `SUPABASE_DB_PASSWORD`, `SUPABASE_STAGING_PROJECT_REF` and `STAGING_API_URL`.
 3. Add Stripe **test-mode** secrets to staging, including a staging-only webhook secret.
-4. Restore a reviewed schema baseline to staging before running the manual workflow. The current staging project has only 7 public tables versus 49 in production; do not bypass the workflow's legacy migration guard or apply the historical `99999999999999_full_schema_fix.sql` directly.
+4. Restore a reviewed schema baseline to staging before running the manual workflow. The reviewed baseline was restored on 2026-09-21; staging now has 49 public tables with RLS. The previous seven empty tables are preserved in the inaccessible `eclipse_prebaseline` schema; do not bypass the workflow's legacy migration guard or apply the historical `99999999999999_full_schema_fix.sql` directly.
 5. Confirm migrations `20260913010000_payment_webhook_idempotency_and_qa_security.sql`, `20260920104448_repair_resale_credit_and_ticket_transfer.sql`, `20260920112000_resale_refund_statuses.sql`, and `20260920120000_atomic_resale_refund_decision.sql` applied before deploying the updated backend.
 6. Configure the staging Stripe webhook for `payment_intent.succeeded`, `payment_intent.payment_failed`, `account.updated`, `refund.updated`, and `refund.failed`.
 7. Use Stripe test mode to send succeeded, duplicate, delayed-failure and reordered events. Race a card payment against a wallet purchase of the same resale listing and confirm that the losing card payment is refunded.
@@ -37,3 +37,54 @@ a real Stripe test-mode checkout.
 Refund statuses are persisted before Stripe is contacted. Unexpected database
 failures return a retryable webhook error. Both `refund.updated` and
 `refund.failed` must be subscribed; reconcile every `refund_failed` payment.
+
+## Schema rehearsal completed on 2026-09-21
+
+The user-supplied AppFest schema-only dump must be supplied locally at
+`supabase/baselines/appfest-schema-20260921.sql`; it is deliberately not committed. It contains 49 application tables
+and 138 functions, no copied rows or credential literals. It is a historical
+snapshot, not an independently safe deployment: always apply the subsequent fixes.
+
+`supabase/baselines/restore-staging.sql` is the one-time transactional restore for
+the original empty seven-table staging project. Its guards abort if rows, users,
+a different table count, or an existing archive are found. A full rollback rehearsal
+passed before the real restore. Do not rerun it on rebuilt staging or production.
+The remote baseline and subsequent migrations are recorded by Supabase MCP; the
+historical migration chain remains unsafe to replay with `db push --include-all`.
+
+The two custom `auth.users` triggers were restored separately because the default
+schema dump excludes managed-schema customizations. Storage bucket configuration,
+Storage policies, notification-template seed data, cron jobs and Edge Function
+secrets still require separate review; this is not a full project clone.
+
+Run `supabase/tests/staging_resale_regression.sql` against staging with psql
+`-v ON_ERROR_STOP=1`. Twelve assertions passed against the real functions, constraints,
+and triggers: signup role rejection, card ownership/QR and duplicate replay,
+credit conservation/reserve split, wallet-then-card refund decision, revoked/expired/
+null validation rejection, event expiry, internal RPC grants and primary purchase QR.
+Every test is rolled back. Follow-up inspection found zero auth users and tickets.
+These are database rehearsals, not actual Stripe charges or simultaneous sessions.
+Backend regression suite: 36 tests passed (including 18 PostgreSQL/WASM subtests).
+
+Additional corrections deployed to staging:
+- Signup cannot choose administrator through user-editable metadata.
+- Listing, wallet settlement and card settlement require validation_status=valid.
+- Primary card purchases generate one consistent QR identity per ticket.
+- The archived schema's RPC execution privileges are revoked.
+
+Only the narrow, drift-aware `prevent_signup_admin_role` fix was also applied to
+production; the whitelist was verified afterward. Existing profiles were not
+modified. Payment/revenue changes remain staging-only pending Stripe integration QA.
+Audit existing privileged profiles separately; the patch prevents future escalation
+but does not establish how any earlier administrator profile was created.
+
+Security advisors: all 49 public tables have RLS. Backend-only tables without
+client policies intentionally deny clients. The 26 callable SECURITY DEFINER RPCs
+need authorization review; the advisor label alone does not prove a vulnerability.
+The pg_net extension placement warning also remains.
+See https://supabase.com/docs/guides/database/database-linter.
+
+Remaining payment findings: card resale applies 10% while credit resale applies
+zero; primary/VIP credit reserve accounting needs further review, and the legacy
+VIP card branch marks payment fulfilled without visibly creating a VIP ticket.
+Do not treat a green resale suite as approval to launch VIP checkout.

@@ -512,7 +512,7 @@ Deno.serve(async (req) => {
 
       const inResaleState =
         String(ticket.ticket_status || "") === "reselling" && String(ticket.status || "") === "resale";
-      if (!inResaleState || ticket.scanned_at || ticket.validation_status === "used" || ticket.wallet_added) {
+      if (!inResaleState || ticket.scanned_at || ticket.validation_status !== "valid" || ticket.wallet_added) {
         return jsonResponse({ ok: false, error: "Ticket is not eligible for resale" });
       }
       if (ticket.payment_status !== "paid") {
