@@ -143,5 +143,63 @@ IF result->>'status' <> 'refund_pending' THEN RAISE EXCEPTION 'Refund decision r
 END $$;
 ROLLBACK TO fixture;
 
-SELECT '11 VIP production-schema regression cases passed' AS result;
+
+-- expired event without explicit end: no inventory or credit consumption; refund decision survives recovery.
+UPDATE public.events SET event_date=now()-interval '1 day',end_datetime=NULL WHERE id='40000000-0000-0000-0000-000000000001';
+UPDATE public.payment_transactions SET amount_cents=9000, metadata=metadata||'{"credit_debit_cents":1000}'::jsonb WHERE stripe_payment_intent_id='pi_fixture_vip';
+INSERT INTO public.user_credit(user_id,balance_real,balance_promo) VALUES('10000000-0000-0000-0000-000000000001',10,0) ON CONFLICT(user_id) DO UPDATE SET balance_real=10,balance_promo=0;
+INSERT INTO public.wallet_reserves(user_id,amount,stripe_payment_intent_id) VALUES('10000000-0000-0000-0000-000000000001',10,'pi_fixture_event_backing');
+DO $$ DECLARE result jsonb; BEGIN
+result:=public.fulfill_payment_for_user('pi_fixture_vip','10000000-0000-0000-0000-000000000001');
+IF result->>'status' IS DISTINCT FROM 'refund_pending'
+ OR EXISTS(SELECT 1 FROM public.tickets WHERE stripe_payment_intent_id='pi_fixture_vip')
+ OR (SELECT quantity_available FROM public.reservados_vip WHERE id='50000000-0000-0000-0000-000000000001') IS DISTINCT FROM 1
+ OR (SELECT balance_real FROM public.user_credit WHERE user_id='10000000-0000-0000-0000-000000000001') IS DISTINCT FROM 10
+ OR (SELECT amount FROM public.wallet_reserves WHERE stripe_payment_intent_id='pi_fixture_event_backing' AND status='pending') IS DISTINCT FROM 10
+ THEN RAISE EXCEPTION 'expired event without explicit end: unavailable VIP delivered or balance consumed'; END IF;
+UPDATE public.events SET status='scheduled',is_cancelled=false,event_date=now()+interval '1 day',end_datetime=now()+interval '2 days' WHERE id='40000000-0000-0000-0000-000000000001';
+result:=public.fulfill_payment_for_user('pi_fixture_vip','10000000-0000-0000-0000-000000000001');
+IF result->>'status' IS DISTINCT FROM 'refund_pending' THEN RAISE EXCEPTION 'expired event without explicit end: refund decision reversed'; END IF;
+END $$;
+ROLLBACK TO fixture;
+
+-- cancelled event flag: no inventory or credit consumption; refund decision survives recovery.
+UPDATE public.events SET is_cancelled=true WHERE id='40000000-0000-0000-0000-000000000001';
+UPDATE public.payment_transactions SET amount_cents=9000, metadata=metadata||'{"credit_debit_cents":1000}'::jsonb WHERE stripe_payment_intent_id='pi_fixture_vip';
+INSERT INTO public.user_credit(user_id,balance_real,balance_promo) VALUES('10000000-0000-0000-0000-000000000001',10,0) ON CONFLICT(user_id) DO UPDATE SET balance_real=10,balance_promo=0;
+INSERT INTO public.wallet_reserves(user_id,amount,stripe_payment_intent_id) VALUES('10000000-0000-0000-0000-000000000001',10,'pi_fixture_event_backing');
+DO $$ DECLARE result jsonb; BEGIN
+result:=public.fulfill_payment_for_user('pi_fixture_vip','10000000-0000-0000-0000-000000000001');
+IF result->>'status' IS DISTINCT FROM 'refund_pending'
+ OR EXISTS(SELECT 1 FROM public.tickets WHERE stripe_payment_intent_id='pi_fixture_vip')
+ OR (SELECT quantity_available FROM public.reservados_vip WHERE id='50000000-0000-0000-0000-000000000001') IS DISTINCT FROM 1
+ OR (SELECT balance_real FROM public.user_credit WHERE user_id='10000000-0000-0000-0000-000000000001') IS DISTINCT FROM 10
+ OR (SELECT amount FROM public.wallet_reserves WHERE stripe_payment_intent_id='pi_fixture_event_backing' AND status='pending') IS DISTINCT FROM 10
+ THEN RAISE EXCEPTION 'cancelled event flag: unavailable VIP delivered or balance consumed'; END IF;
+UPDATE public.events SET status='scheduled',is_cancelled=false,event_date=now()+interval '1 day',end_datetime=now()+interval '2 days' WHERE id='40000000-0000-0000-0000-000000000001';
+result:=public.fulfill_payment_for_user('pi_fixture_vip','10000000-0000-0000-0000-000000000001');
+IF result->>'status' IS DISTINCT FROM 'refund_pending' THEN RAISE EXCEPTION 'cancelled event flag: refund decision reversed'; END IF;
+END $$;
+ROLLBACK TO fixture;
+
+-- cancelled event status: no inventory or credit consumption; refund decision survives recovery.
+UPDATE public.events SET status='cancelled' WHERE id='40000000-0000-0000-0000-000000000001';
+UPDATE public.payment_transactions SET amount_cents=9000, metadata=metadata||'{"credit_debit_cents":1000}'::jsonb WHERE stripe_payment_intent_id='pi_fixture_vip';
+INSERT INTO public.user_credit(user_id,balance_real,balance_promo) VALUES('10000000-0000-0000-0000-000000000001',10,0) ON CONFLICT(user_id) DO UPDATE SET balance_real=10,balance_promo=0;
+INSERT INTO public.wallet_reserves(user_id,amount,stripe_payment_intent_id) VALUES('10000000-0000-0000-0000-000000000001',10,'pi_fixture_event_backing');
+DO $$ DECLARE result jsonb; BEGIN
+result:=public.fulfill_payment_for_user('pi_fixture_vip','10000000-0000-0000-0000-000000000001');
+IF result->>'status' IS DISTINCT FROM 'refund_pending'
+ OR EXISTS(SELECT 1 FROM public.tickets WHERE stripe_payment_intent_id='pi_fixture_vip')
+ OR (SELECT quantity_available FROM public.reservados_vip WHERE id='50000000-0000-0000-0000-000000000001') IS DISTINCT FROM 1
+ OR (SELECT balance_real FROM public.user_credit WHERE user_id='10000000-0000-0000-0000-000000000001') IS DISTINCT FROM 10
+ OR (SELECT amount FROM public.wallet_reserves WHERE stripe_payment_intent_id='pi_fixture_event_backing' AND status='pending') IS DISTINCT FROM 10
+ THEN RAISE EXCEPTION 'cancelled event status: unavailable VIP delivered or balance consumed'; END IF;
+UPDATE public.events SET status='scheduled',is_cancelled=false,event_date=now()+interval '1 day',end_datetime=now()+interval '2 days' WHERE id='40000000-0000-0000-0000-000000000001';
+result:=public.fulfill_payment_for_user('pi_fixture_vip','10000000-0000-0000-0000-000000000001');
+IF result->>'status' IS DISTINCT FROM 'refund_pending' THEN RAISE EXCEPTION 'cancelled event status: refund decision reversed'; END IF;
+END $$;
+ROLLBACK TO fixture;
+
+SELECT '14 VIP staging regression cases passed' AS result;
 ROLLBACK;
