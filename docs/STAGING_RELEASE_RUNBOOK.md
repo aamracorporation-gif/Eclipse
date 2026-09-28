@@ -111,3 +111,24 @@ simultaneous Stripe payment race. Backend suite: 42 tests passed.
 The authenticated `create-payment-intent-v2` and `confirm-payment` Edge Functions
 were deployed to staging. Stripe test secrets and a staging Node webhook endpoint
 still need end-to-end verification. No Stripe charges/refunds were created by this work.
+
+## VIP wallet eligibility and RPC repair (2026-09-28)
+
+Staging migrations applied:
+- Local 20260928012107_harden_vip_wallet_eligibility.sql; managed staging version 20260928012134.
+- Local 20260928012258_disambiguate_vip_wallet_rpc.sql; managed staging version 20260928012320.
+
+A rollback-only regression first reproduced that an inactive VIP could be purchased through the internal wallet function. Both existing overloads now reject inactive/deleted/sold-out VIPs and cancelled/deleted/expired or undated events before debit. Both issue matching qr_code/qr_token identities and explicitly mark tickets paid and active.
+
+The internal five-argument overload had a default fee argument that made a four-argument SQL call ambiguous (42725). It was recreated without the default after verifying zero dependent objects; DROP used no CASCADE. Its prior service_role-only execution ACL was restored explicitly in the same migration. The public four-argument function remains callable only by authenticated/service roles, not anon. No new client access was granted to the fee-taking function.
+
+Run supabase/tests/staging_vip_wallet_regression.sql only in the existing staging QA fixture. Twelve rejection cases (six per overload), two valid purchases, the four-argument RPC under SET LOCAL ROLE authenticated, debit/inventory checks, QR consistency and privilege checks passed against real functions and triggers. All test data was rolled back. Post-test inspection found zero temporary VIPs, no residual buyer legacy-credit row, and the one original resale ticket unchanged.
+
+This patch intentionally preserves legacy fee/accounting behavior. It does NOT reconcile creditos_usuario with user_credit/wallet_reserves, establish organizer settlement, make wallet purchase retries idempotent, or approve launch. Five-argument direct client access remains denied. Full authenticated mobile checkout, VIP destination charges and device testing remain outstanding.
+
+Security advisors still report 26 authenticated SECURITY DEFINER functions requiring contextual review, pg_net in public, leaked-password protection, and nine RLS-enabled server tables without client policies. All public tables have RLS. References:
+- https://supabase.com/docs/guides/database/database-linter?lint=0029_authenticated_security_definer_function_executable
+- https://supabase.com/docs/guides/database/database-linter?lint=0014_extension_in_public
+- https://supabase.com/docs/guides/auth/password-security
+
+The preceding signup fix (3713be3) is deployed successfully to Railway staging and CI #80 passed. See STAGING_STRIPE_QA_20260927.md for actual sandbox payments/refunds and successful delayed-event retries; earlier notes saying no Stripe charges were created refer only to the September 22 rehearsal.
