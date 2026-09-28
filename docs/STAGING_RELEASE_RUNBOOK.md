@@ -132,3 +132,15 @@ Security advisors still report 26 authenticated SECURITY DEFINER functions requi
 - https://supabase.com/docs/guides/auth/password-security
 
 The preceding signup fix (3713be3) is deployed successfully to Railway staging and CI #80 passed. See STAGING_STRIPE_QA_20260927.md for actual sandbox payments/refunds and successful delayed-event retries; earlier notes saying no Stripe charges were created refer only to the September 22 rehearsal.
+
+## Credit backing and legacy-wallet write protection (2026-09-28)
+
+Staging-only migrations applied and verified:
+- 20260928013528_require_complete_credit_backing.sql (managed version 20260928013654).
+- 20260928013844_lock_legacy_wallet_client_mutations.sql (managed version 20260928013937).
+
+The internal primary/VIP card debit loops previously accepted real credit without enough pending reserves. A database-only rollback test reproduced primary fulfillment with no backing. Both loops now raise Insufficient credit backing if any real debit remains unbacked, rolling back all balance, reserve, inventory and ticket changes. Reserve locks use created_at,id ordering. Ten scenarios pass across both core branches: absent/partial backing rejected atomically, reserve splitting, mixed real/promotional credit, promotional-only credit, and replay without duplicate debit. These tests do not create or confirm Stripe payments.
+
+A separate rollback test demonstrated an authenticated QA seller could directly increase their legacy wallets.balance from 10 to 133. The client UPDATE policy and mutation grants were removed. Regression checks confirm own-wallet SELECT, cross-user isolation, denied client mutations and retained service-role writes. The attempted increase was rolled back; no real or synthetic funds were retained.
+
+Run supabase/tests/staging_credit_backing_regression.sql and supabase/tests/staging_wallet_acl_regression.sql only against the named staging QA fixture. All changes roll back. This does not resolve full-wallet purchases using creditos_usuario while the app displays user_credit, nor organizer settlement, mobile checkout or Connect E2E testing. Production is unchanged.
