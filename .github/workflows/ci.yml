@@ -23,6 +23,8 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      - name: Validate release environment guards
+        run: node --test scripts/tests/buildEnvironment.test.cjs
       - name: Audit production dependencies
         run: npm audit --omit=dev --audit-level=critical
       - name: Validate Expo dependency alignment

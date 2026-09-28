@@ -1,4 +1,5 @@
 const appJson = require('./app.json');
+const { validateBuildEnvironment } = require('./scripts/buildEnvironment.cjs');
 
 const PASSKITE_PLUGIN_PATH = './plugins/withPasskite';
 
@@ -25,6 +26,7 @@ const getHttpsHost = () => {
 };
 
 module.exports = () => {
+  validateBuildEnvironment();
   const host = getHttpsHost();
   const expoConfig = appJson.expo;
   const plugins = normalizePlugins(expoConfig.plugins);

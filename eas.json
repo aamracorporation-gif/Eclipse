@@ -12,6 +12,7 @@
       }
     },
     "preview": {
+      "env": { "ECLIPSE_BUILD_ENV": "staging" },
       "distribution": "internal",
       "channel": "staging",
       "environment": "preview",
@@ -20,6 +21,7 @@
       }
     },
     "production": {
+      "env": { "ECLIPSE_BUILD_ENV": "production" },
       "autoIncrement": true,
       "environment": "production",
       "channel": "production"
