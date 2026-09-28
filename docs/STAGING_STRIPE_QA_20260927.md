@@ -53,3 +53,17 @@ This endpoint has connect=false; connected-account event coverage remains unveri
 - These results do not approve production launch.
 
 Synthetic fixture IDs use prefix `a9270000-0000-4000-8000-`: buyer 000000000001, seller 000000000002, event 000000000003, successful ticket/listing 000000000004/000000000005, revoked ticket/listing 000000000006/000000000007. Keep payment and webhook ledgers for reconciliation; do not erase idempotency evidence.
+
+## Follow-up — 2026-09-28
+
+Both initial declined-payment events have now been processed by actual Stripe retries:
+- evt_3UKMQhQX94Oeeb3v1TyfqnMW: processed, attempts 3.
+- evt_3UKMUVQX94Oeeb3v4u41arax: processed, attempts 2.
+
+The respective application transactions remain fulfilled and refunded. This closes the delayed-failure retry check above; no ledger states were manually overwritten.
+
+An unauthenticated request to create-payment-intent-v2 and an unauthenticated POST to confirm-payment both returned HTTP 401. This is only an authentication-boundary smoke test, not an authenticated checkout test.
+
+Stripe GetAccounts returned an empty list in Eclipse Staging, and staging profiles contain zero linked Stripe accounts. VIP destination-charge E2E testing still requires a synthetic connected organizer and authenticated QA session.
+
+During authentication review, the backend public signup handler was found to fall back to privileged createUser(email_confirm=true) when signUp was rate-limited. The fallback has been removed: rate limits now return HTTP 429 without administrative user creation or automatic login. Six isolated regression tests cover message/status/error-code rate limits, email verification and ordinary errors. Backend npm test: 48 passed, zero failed. No real signup or email was triggered for these tests. Production is unchanged; this is a release-hardening branch fix pending deployment verification.
