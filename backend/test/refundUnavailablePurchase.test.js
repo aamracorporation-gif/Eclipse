@@ -39,3 +39,24 @@ test('resale keeps its established idempotency key', async () => {
   assert.equal(stripe.calls[0].options.idempotencyKey, 'resale-unavailable:pi_fixture');
   assert.equal(stripe.calls[0].params.metadata.eclipse_reason, 'resale_unavailable');
 });
+
+test('primary destination refund reverses transfer and fee with its own idempotency key', async () => {
+  const stripe = mockStripe({ transfer_data: { destination: 'acct_fixture' }, application_fee_amount: 150 });
+  await refundUnavailablePurchase(stripe, 'pi_primary', 'event_ticket');
+  assert.deepEqual(stripe.calls, [{ params: { payment_intent: 'pi_primary',
+    metadata: { eclipse_reason: 'primary_unavailable' }, reverse_transfer: true, refund_application_fee: true },
+    options: { idempotencyKey: 'primary-unavailable:pi_primary' } }]);
+});
+
+test('primary platform refund does not request a nonexistent transfer reversal', async () => {
+  const stripe = mockStripe({ transfer_data: null });
+  await refundUnavailablePurchase(stripe, 'pi_primary', 'event_ticket');
+  assert.equal(stripe.calls[0].params.reverse_transfer, undefined);
+});
+
+test('existing primary refund is reused after the idempotency window', async () => {
+  const existing = { id: 're_old', status: 'succeeded', metadata: { eclipse_reason: 'primary_unavailable' } };
+  const stripe = mockStripe(null, [existing]);
+  assert.equal(await refundUnavailablePurchase(stripe, 'pi_primary', 'event_ticket'), existing);
+  assert.equal(stripe.calls.length, 0);
+});

@@ -26,10 +26,10 @@ function createWebhookHandler({ db, verify, getTransaction, fulfill, markStatus,
       if (event.type === 'account.updated') {
         await updateAccount(object.id, Boolean(object.charges_enabled && object.payouts_enabled));
       } else if (event.type === 'refund.updated' || event.type === 'refund.failed') {
-        if (['resale_unavailable', 'vip_unavailable'].includes(object.metadata?.eclipse_reason) && object.payment_intent) {
+        if (['resale_unavailable', 'vip_unavailable', 'primary_unavailable'].includes(object.metadata?.eclipse_reason) && object.payment_intent) {
           const tx = await getTransaction(object.payment_intent);
-          if (!tx || !['resale_ticket', 'vip_table'].includes(tx.kind) ||
-              object.metadata.eclipse_reason !== (tx.kind === 'vip_table' ? 'vip_unavailable' : 'resale_unavailable')) throw new Error('refund_transaction_not_found');
+          const expectedReason = { resale_ticket: 'resale_unavailable', vip_table: 'vip_unavailable', event_ticket: 'primary_unavailable' }[tx?.kind];
+          if (!tx || !expectedReason || object.metadata.eclipse_reason !== expectedReason) throw new Error('refund_transaction_not_found');
           if (['created', 'failed'].includes(tx.status)) throw new Error('refund_status_not_yet_saved');
           if (tx.status === 'refund_pending') {
             const next = object.status === 'succeeded' ? 'refunded' : ['failed', 'canceled'].includes(object.status) ? 'refund_failed' : 'refund_pending';
@@ -52,7 +52,7 @@ function createWebhookHandler({ db, verify, getTransaction, fulfill, markStatus,
           }
           if (!['refunded', 'refund_failed'].includes(tx.status)) {
             const result = await fulfill(object.id, tx.user_id);
-            if (result?.refund_required === true && ['resale_ticket', 'vip_table'].includes(tx.kind) && refund) {
+            if (result?.refund_required === true && ['resale_ticket', 'vip_table', 'event_ticket'].includes(tx.kind) && refund) {
               // The database has durably blocked fulfillment before requesting a refund.
               const refundResult = await refund(object.id, tx.kind);
               const next = refundResult.status === 'succeeded' ? 'refunded'
