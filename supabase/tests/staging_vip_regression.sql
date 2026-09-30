@@ -7,15 +7,7 @@ INSERT INTO auth.users(id,email,raw_user_meta_data) VALUES
  ('10000000-0000-0000-0000-000000000002','seller@example.test','{"full_name":"Fixture Seller"}');
 INSERT INTO public.events(id,title,event_date,end_datetime,ticket_price,available_tickets,creator_id)
 VALUES ('40000000-0000-0000-0000-000000000001','Fixture Event',now()+interval '1 day',now()+interval '2 days',10,100,'10000000-0000-0000-0000-000000000002');
-INSERT INTO public.tickets(id,event_id,user_id,buyer_name,buyer_email,total_price,status,ticket_status)
-VALUES ('30000000-0000-0000-0000-000000000001','40000000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000002','Fixture Seller','seller@example.test',10,'resale','reselling');
-INSERT INTO public.resale_listings(id,ticket_id,seller_id,price) VALUES
- ('20000000-0000-0000-0000-000000000001','30000000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000002',10);
-INSERT INTO public.payment_transactions(user_id,kind,amount_cents,stripe_payment_intent_id,metadata)
-VALUES ('10000000-0000-0000-0000-000000000001','resale_ticket',1000,'pi_fixture_resale',
-'{"listing_id":"20000000-0000-0000-0000-000000000001","ticket_id":"30000000-0000-0000-0000-000000000001","seller_id":"10000000-0000-0000-0000-000000000002","original_total_cents":1000}');
-
-
+-- VIP tests deliberately do not create unrelated resale fixtures (disabled at launch).
 INSERT INTO public.reservados_vip(id,event_id,name,base_price,capacity_people,quantity_available)
 VALUES('50000000-0000-0000-0000-000000000001','40000000-0000-0000-0000-000000000001','Fixture VIP',100,4,1);
 INSERT INTO public.payment_transactions(user_id,kind,amount_cents,stripe_payment_intent_id,metadata)
@@ -203,3 +195,4 @@ ROLLBACK TO fixture;
 
 SELECT '14 VIP staging regression cases passed' AS result;
 ROLLBACK;
+

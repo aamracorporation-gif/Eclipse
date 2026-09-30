@@ -1,3 +1,4 @@
+import { checkoutUnavailableReason } from '../_shared/launchPolicy.ts';
 type Json = Record<string, unknown>;
 
 const corsHeaders = {
@@ -220,6 +221,9 @@ Deno.serve(async (req) => {
       return jsonResponse({ ok: false, error: "Invalid JSON" });
     }
 
+    const unavailable = checkoutUnavailableReason(body ?? {});
+    if (unavailable) return jsonResponse({ ok: false, error: unavailable, code: "FEATURE_DISABLED" });
+
     const kind = body?.kind;
     if (kind !== "event_ticket" && kind !== "vip_table" && kind !== "resale_ticket") {
       return jsonResponse({ ok: false, error: "Not implemented" });
@@ -233,10 +237,12 @@ Deno.serve(async (req) => {
     const previous = await restGet(
       SUPABASE_URL,
       SUPABASE_SERVICE_ROLE_KEY,
-      `payment_transactions?idempotency_key=eq.${encodeURIComponent(idempotencyKey)}&user_id=eq.${encodeURIComponent(userId)}&select=id,stripe_payment_intent_id`,
+      `payment_transactions?idempotency_key=eq.${encodeURIComponent(idempotencyKey)}&user_id=eq.${encodeURIComponent(userId)}&select=id,stripe_payment_intent_id,kind,metadata`,
     );
     if (previous.ok && Array.isArray(previous.json) && previous.json.length > 0) {
       const tx = previous.json[0];
+      const replayUnavailable = checkoutUnavailableReason({ ...(tx.metadata || {}), kind: tx.kind });
+      if (replayUnavailable) return jsonResponse({ ok: false, error: replayUnavailable, code: "FEATURE_DISABLED" });
       const intent = await stripeRetrievePaymentIntent(String(tx.stripe_payment_intent_id));
       return jsonResponse({
         ok: true,
@@ -809,3 +815,4 @@ Deno.serve(async (req) => {
     return jsonResponse({ ok: false, error: `create-payment-intent: ${e?.message || "Internal error"}` });
   }
 });
+

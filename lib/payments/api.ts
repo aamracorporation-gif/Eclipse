@@ -1,3 +1,4 @@
+import { checkoutUnavailableReason } from '@/lib/launchFeatures';
 import { Platform } from 'react-native';
 import { supabase } from '@/lib/supabase';
 import type {
@@ -242,6 +243,8 @@ async function invokeWithJwtRecovery<T>(functionName: string, body: any): Promis
 }
 
 export async function createPaymentIntent(req: CreatePaymentIntentRequest): Promise<CreatePaymentIntentResponse> {
+  const unavailable = checkoutUnavailableReason(req);
+  if (unavailable) throw new Error(unavailable);
   if (Platform.OS === 'web') {
     throw new Error('Las compras están disponibles en la app para iOS y Android.');
   }
@@ -368,3 +371,4 @@ export async function getStripeAccountStats(): Promise<StripeAccountStats> {
   if (error) throw new Error(await getEdgeFunctionErrorMessage(error, 'Failed to get Stripe stats.'));
   return data as StripeAccountStats;
 }
+

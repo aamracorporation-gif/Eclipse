@@ -1,3 +1,4 @@
+import { LAUNCH_FEATURES } from '@/lib/launchFeatures';
 import 'react-native-url-polyfill/auto';
 import { Component, type ReactNode, useCallback, useEffect, useRef, useState } from 'react';
 import { AppState, Modal, StyleSheet, Text, View } from 'react-native';
@@ -457,7 +458,7 @@ function RootLayoutNav({ fontsLoaded }: { fontsLoaded: boolean }) {
       // Resale notifications → resale screen
       const resaleTypes = ['resale_sold', 'resale_purchased', 'resale_update', 'resale_purchase', 'compra_reventa'];
       if (resaleTypes.some(t => type.includes(t))) {
-        router.push('/(tabs)/resale' as any);
+        router.push((LAUNCH_FEATURES.resale ? '/(tabs)/resale' : '/(tabs)/tickets') as any);
         return;
       }
 
@@ -651,3 +652,4 @@ const errorStyles = StyleSheet.create({
   title: { color: Colors.dark.text, fontWeight: '900', fontSize: 18 },
   body: { marginTop: 10, color: Colors.dark.textSecondary, fontWeight: '700', lineHeight: 20 },
 });
+

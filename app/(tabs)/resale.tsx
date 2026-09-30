@@ -1,3 +1,5 @@
+import { Redirect } from 'expo-router';
+import { LAUNCH_FEATURES } from '@/lib/launchFeatures';
 import { View, Text, StyleSheet, FlatList, Image, TouchableOpacity, RefreshControl, StatusBar, Animated, Easing } from 'react-native';
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
@@ -53,7 +55,11 @@ type ResaleListing = {
   }
 };
 
-export default function ResaleScreen() {
+export default function ResaleScreenRoute() {
+  return LAUNCH_FEATURES.resale ? <ResaleScreen /> : <Redirect href="/(tabs)/tickets" />;
+}
+
+function ResaleScreen() {
   const insets = useSafeAreaInsets();
   const { t } = useTranslation();
   const { language } = useI18n();
@@ -1136,3 +1142,4 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(10, 132, 255, 0.1)',
   },
 });
+

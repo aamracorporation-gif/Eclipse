@@ -1,3 +1,4 @@
+import { LAUNCH_FEATURES } from '@/lib/launchFeatures';
 import { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from './AuthContext';
@@ -51,6 +52,7 @@ export function CreditProvider({ children }: { children: React.ReactNode }) {
   const refreshTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const refreshCredit = useCallback(async () => {
+    if (!LAUNCH_FEATURES.walletCredit) { setLoading(false); return; }
     if (!user) return;
     try {
       // Leer saldo del sistema unificado user_credit
@@ -118,7 +120,7 @@ export function CreditProvider({ children }: { children: React.ReactNode }) {
   }, [refreshCredit, user]);
 
   useEffect(() => {
-    if (!user) return;
+    if (!LAUNCH_FEATURES.walletCredit || !user) return;
 
     const channel = supabase
       .channel(`credito_${user.id}`)
@@ -145,6 +147,7 @@ export function CreditProvider({ children }: { children: React.ReactNode }) {
   }, [scheduleRefresh, user]);
 
   const createResaleListing = async (ticketId: string, price: number) => {
+    if (!LAUNCH_FEATURES.resale) throw new Error('Función no disponible en esta versión.');
     if (!user) throw new Error('Usuario no autenticado');
 
     try {
@@ -219,6 +222,7 @@ export function CreditProvider({ children }: { children: React.ReactNode }) {
   };
 
   const buyResaleTicketWithCredit = async (listingId: string) => {
+    if (!LAUNCH_FEATURES.walletCredit) throw new Error('Función no disponible en esta versión.');
     if (!user) throw new Error('Usuario no autenticado');
 
     try {
@@ -238,6 +242,7 @@ export function CreditProvider({ children }: { children: React.ReactNode }) {
   };
 
   const buyTicketWithCredit = async (params: any) => {
+    if (!LAUNCH_FEATURES.walletCredit) throw new Error('Función no disponible en esta versión.');
     if (!user) throw new Error('User not logged in');
 
     try {
@@ -256,6 +261,7 @@ export function CreditProvider({ children }: { children: React.ReactNode }) {
   };
 
   const buyVipWithCredit = async (params: { p_vip_reservado_id: string; p_buyer_name: string; p_buyer_email: string }) => {
+    if (!LAUNCH_FEATURES.walletCredit) throw new Error('Función no disponible en esta versión.');
     if (!user) throw new Error('User not logged in');
 
     try {
@@ -283,3 +289,4 @@ export function CreditProvider({ children }: { children: React.ReactNode }) {
     </CreditContext.Provider>
   );
 }
+

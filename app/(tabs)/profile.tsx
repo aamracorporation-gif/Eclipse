@@ -1,3 +1,4 @@
+import { LAUNCH_FEATURES } from '@/lib/launchFeatures';
 import { View, Text, StyleSheet, TouchableOpacity, Platform, ScrollView, Image, RefreshControl, StatusBar, Modal, TextInput, KeyboardAvoidingView, Switch, Alert, useWindowDimensions, Pressable } from 'react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { router, useSegments } from 'expo-router';
@@ -662,6 +663,7 @@ export default function ProfileScreen() {
 
   // Animation for tab switching
   const handleTabChange = (tab: 'profile' | 'panel' | 'account' | 'resale') => {
+    if (tab === 'resale' && !LAUNCH_FEATURES.resale) return;
     Haptics.selectionAsync();
     // LayoutAnimation can conflict with Reanimated on some devices, removing for stability
     // LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut); 
@@ -832,7 +834,7 @@ export default function ProfileScreen() {
 
   // Fetch Resale Listings + Transaction History
   const fetchResales = useCallback(async () => {
-    if (!user) return;
+    if (!LAUNCH_FEATURES.resale || !user) return;
     try {
       setLoadingResales(true);
 
@@ -886,7 +888,7 @@ export default function ProfileScreen() {
   }, [fetchResales, user]);
 
   useEffect(() => {
-    if (!user) return;
+    if (!LAUNCH_FEATURES.resale || !user) return;
 
     const channel = supabase
       .channel(`profile_resales_${user.id}`)
@@ -1318,7 +1320,7 @@ export default function ProfileScreen() {
                       )}
                       <Text style={[styles.segmentText, activeTab === 'profile' && styles.segmentTextActive]}>{t('profile.segment_my_profile')}</Text>
                     </TouchableOpacity>
-                    <TouchableOpacity
+                    {LAUNCH_FEATURES.resale && (<TouchableOpacity
                       style={styles.segmentButtonWrapper}
                       onPress={() => handleTabChange('resale')}
                       activeOpacity={0.8}
@@ -1330,7 +1332,7 @@ export default function ProfileScreen() {
                         />
                       )}
                       <Text style={[styles.segmentText, activeTab === 'resale' && styles.segmentTextActive]}>{t('tabs.resale')}</Text>
-                    </TouchableOpacity>
+                    </TouchableOpacity>)}
                     <TouchableOpacity
                       style={styles.segmentButtonWrapper}
                       onPress={() => handleTabChange('account')}
@@ -1360,7 +1362,7 @@ export default function ProfileScreen() {
                   )}
                   <Text style={[styles.segmentText, activeTab === 'profile' && styles.segmentTextActive]}>{t('tabs.profile')}</Text>
                 </TouchableOpacity>
-                <TouchableOpacity 
+                {LAUNCH_FEATURES.resale && (<TouchableOpacity 
                   style={styles.segmentButtonWrapper}
                   onPress={() => handleTabChange('resale')}
                   activeOpacity={0.8}
@@ -1372,7 +1374,7 @@ export default function ProfileScreen() {
                     />
                   )}
                   <Text style={[styles.segmentText, activeTab === 'resale' && styles.segmentTextActive]}>{t('tabs.resale')}</Text>
-                </TouchableOpacity>
+                </TouchableOpacity>)}
                   </>
                 )}
                 </View>
@@ -1775,14 +1777,14 @@ export default function ProfileScreen() {
                   <Text style={styles.sectionHeader}>{t('profile.section_management')}</Text>
                   <View style={styles.iosGroup}>
                     <GlassView intensity={14} style={[styles.iosGroupContainer, styles.premiumCard]}>
-                      <TouchableOpacity onPress={() => router.push('/wallet')} activeOpacity={0.7} style={styles.iosButtonRow}>
+                      {LAUNCH_FEATURES.walletCredit && (<><TouchableOpacity onPress={() => router.push('/wallet')} activeOpacity={0.7} style={styles.iosButtonRow}>
                         <View style={[styles.iosIcon, { backgroundColor: '#FFD60A' }]}>
                           <Wallet size={16} color="#000" />
                         </View>
                         <Text style={styles.iosButtonText}>{t('profile.wallet')}</Text>
                         <ChevronRight size={16} color="#8E8E93" />
                       </TouchableOpacity>
-                      <View style={styles.iosDivider} />
+                      <View style={styles.iosDivider} /></>)}
                       <TouchableOpacity onPress={() => router.push('/(tabs)/tickets')} activeOpacity={0.7} style={styles.iosButtonRow}>
                         <View style={[styles.iosIcon, { backgroundColor: '#BF5AF2' }]}>
                           <Ticket size={16} color="#FFF" />
@@ -3720,3 +3722,4 @@ const pwdStyles = StyleSheet.create({
   doneBtnGrad: { paddingVertical: 16, alignItems: 'center' },
   doneBtnTxt: { color: 'white', fontSize: 16, fontWeight: '800' },
 });
+

@@ -1,3 +1,4 @@
+import { LAUNCH_FEATURES } from '@/lib/launchFeatures';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
@@ -191,7 +192,7 @@ export default function CreateEventScreen() {
     dressCode: '',
     ageRestriction: '18',
     eventType: 'party',
-    allowResale: true,
+    allowResale: LAUNCH_FEATURES.resale,
     dateTime: null,
     endDateTime: null,
     coordinates: null,
@@ -863,7 +864,7 @@ export default function CreateEventScreen() {
               </View>
             </TouchableOpacity>
             <Text style={{ color: 'rgba(255,255,255,0.4)', fontSize: 12, marginTop: 8, lineHeight: 16 }}>
-              Al finalizar el evento se eliminarán automáticamente las entradas y ofertas de reventa.
+              Al finalizar el evento se eliminarán automáticamente las entradas caducadas.
             </Text>
           </GlassView>
 
@@ -1247,12 +1248,12 @@ export default function CreateEventScreen() {
               icon={<Lock size={20} color={Colors.dark.textSecondary} />}
             />
 
-            <View style={styles.toggleRow}>
+            {LAUNCH_FEATURES.resale && (<View style={styles.toggleRow}>
               <Text style={styles.toggleLabel}>Permitir reventa</Text>
               <Pressable onPress={() => updateDraft('allowResale', !draft.allowResale)} style={[styles.switchPill, draft.allowResale ? styles.switchPillOn : null]}>
                 <Text style={styles.switchPillText}>{draft.allowResale ? 'Sí' : 'No'}</Text>
               </Pressable>
-            </View>
+            </View>)}
           </GlassView>
 
           <ThemedButton title="Publicar evento" onPress={submit} loading={loading} icon={<Check size={18} color="white" />} />
@@ -1593,3 +1594,4 @@ const styles = StyleSheet.create({
     zIndex: 10,
   },
 });
+

@@ -1,3 +1,4 @@
+import { LAUNCH_FEATURES } from '@/lib/launchFeatures';
 import { View, Text, StyleSheet, FlatList, Image, TouchableOpacity, RefreshControl, Platform, Modal, KeyboardAvoidingView, Animated, Easing, Alert } from 'react-native';
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { router } from 'expo-router';
@@ -295,7 +296,7 @@ export default function TicketsScreen() {
       return;
     }
 
-    const allowResaleForEvent = (ticket as any)?.events?.allow_resale ?? true;
+    const allowResaleForEvent = LAUNCH_FEATURES.resale && ((ticket as any)?.events?.allow_resale ?? true);
     if (!allowResaleForEvent) {
       showDialog({ title: t('tickets.action_not_allowed_title'), message: t('tickets.resale_disabled_event') });
       return;
@@ -377,7 +378,7 @@ export default function TicketsScreen() {
     if (addingToWallet) return;
     
     // Warn user that adding to wallet blocks resale
-    const allowResale = (ticket as any)?.events?.allow_resale ?? true;
+    const allowResale = LAUNCH_FEATURES.resale && ((ticket as any)?.events?.allow_resale ?? true);
     const originalPrice = typeof (ticket as any).total_price === 'string' ? Number((ticket as any).total_price) : ((ticket as any).total_price ?? 0);
     const canResell = allowResale && originalPrice > 0;
     if (canResell) {
@@ -949,7 +950,7 @@ export default function TicketsScreen() {
 
           {/* ══ ACTION ROW ════════════════════════════════════════════ */}
           {/* Avisos de restricciones */}
-          {(item.wallet_added || (item as any)?.events?.allow_resale === false) && !isUsed && !isResale && (
+          {LAUNCH_FEATURES.resale && (item.wallet_added || (item as any)?.events?.allow_resale === false) && !isUsed && !isResale && (
             <View style={{ paddingHorizontal: 12, paddingTop: 8, gap: 4 }}>
               {item.wallet_added && (
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: 'rgba(255,255,255,0.04)', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 5, borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)' }}>
@@ -984,6 +985,7 @@ export default function TicketsScreen() {
             )}
 
             {(() => {
+              if (!LAUNCH_FEATURES.resale && !isResale) return null;
               const resaleBlocked = isUsed || !!item.wallet_added || (item as any)?.events?.allow_resale === false;
               return !isResale ? (
                 <TouchableOpacity
@@ -1140,13 +1142,13 @@ export default function TicketsScreen() {
                         <ChevronRight size={16} color="white" />
                       </LinearGradient>
                     </TouchableOpacity>
-                    <TouchableOpacity
+                    {LAUNCH_FEATURES.resale && (<TouchableOpacity
                       activeOpacity={0.75}
                       onPress={() => { Haptics.selectionAsync(); router.push('/(tabs)/resale'); }}
                       style={styles.emptyCtaSecondary}
                     >
                       <Text style={styles.emptyCtaSecondaryText}>{t('tickets.empty.view_resale')}</Text>
-                    </TouchableOpacity>
+                    </TouchableOpacity>)}
                   </View>
                 </LinearGradient>
               </Animated.View>
@@ -1638,3 +1640,4 @@ const styles = StyleSheet.create({
     width: '100%',
   },
 });
+

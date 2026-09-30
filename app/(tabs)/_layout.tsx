@@ -1,3 +1,4 @@
+import { LAUNCH_FEATURES } from '@/lib/launchFeatures';
 import { Tabs } from 'expo-router';
 import { Home, Ticket, User, Repeat, Map as MapIcon } from '@/lib/icons';
 import { Colors } from '@/constants/Colors';
@@ -69,6 +70,7 @@ export default function TabLayout() {
         name="resale"
         options={{
           title: t('tabs.resale'),
+          href: LAUNCH_FEATURES.resale ? '/resale' : null,
           tabBarIcon: ({ size, color }) => (
             <Repeat size={size} color={color} />
           ),
@@ -98,3 +100,4 @@ export default function TabLayout() {
     </Tabs>
   );
 }
+

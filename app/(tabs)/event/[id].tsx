@@ -1,3 +1,4 @@
+import { LAUNCH_FEATURES } from '@/lib/launchFeatures';
 import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, Linking, Platform, KeyboardAvoidingView, Modal, Switch, Animated, Easing, Share, Alert, TextInput } from 'react-native';
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { router, useLocalSearchParams, useSegments } from 'expo-router';
@@ -570,7 +571,7 @@ export default function EventDetailScreen() {
         });
       };
 
-      if (!payWithWallet) {
+      if (!LAUNCH_FEATURES.walletCredit || !payWithWallet) {
         const r = await payTicketsWithCard();
         if (!r.paid) return;
       } else {
@@ -690,7 +691,7 @@ export default function EventDetailScreen() {
         showDialog({ title: 'Cartera', message: 'Estamos cargando tu saldo. Espera un momento y vuelve a intentarlo.' });
         return;
       }
-      if (payVipWithWallet) {
+      if (LAUNCH_FEATURES.walletCredit && payVipWithWallet) {
         const vipServiceFee = Math.round(((vip.base_price * 0.015 + 0.25) / 0.985) * 100) / 100;
         const vipGrandTotal = vip.base_price + vipServiceFee;
         const walletDebit = Math.min(Math.max(creditBalance, 0), vip.base_price);
@@ -1380,7 +1381,7 @@ export default function EventDetailScreen() {
                     )}
                   </View>
 
-                  {user && !!selectedVip && (
+                  {LAUNCH_FEATURES.walletCredit && user && !!selectedVip && (
                     <View style={[styles.walletPayContainer, styles.walletPayContainerVip]}>
                       <View style={styles.walletPayHeader}>
                         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
@@ -1441,7 +1442,7 @@ export default function EventDetailScreen() {
               )}
 
               {/* Resale prohibited banner */}
-              {purchaseTab === 'tickets' && (event as any).allow_resale === false && (
+              {LAUNCH_FEATURES.resale && purchaseTab === 'tickets' && (event as any).allow_resale === false && (
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: 'rgba(255,255,255,0.04)', borderRadius: 12, paddingHorizontal: 14, paddingVertical: 10, borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)', marginBottom: 12 }}>
                   <Text style={{ fontSize: 14 }}>🔒</Text>
                   <Text style={{ flex: 1, fontSize: 12, color: 'rgba(255,255,255,0.40)', fontWeight: '600', lineHeight: 17 }}>
@@ -1699,7 +1700,7 @@ export default function EventDetailScreen() {
                     </View>
                   )}
 
-                  {user && (
+                  {LAUNCH_FEATURES.walletCredit && user && (
                     <View style={styles.walletPayContainer}>
                       <View style={styles.walletPayHeader}>
                         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
@@ -2726,3 +2727,4 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
 });
+
