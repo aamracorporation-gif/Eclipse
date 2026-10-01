@@ -6,14 +6,14 @@ const PROJECTS = {
 function validateBuildEnvironment(env = process.env) {
   const target = env.ECLIPSE_BUILD_ENV;
   if (!target) {
-    if (['preview', 'production'].includes(env.EAS_BUILD_PROFILE)) {
+    if (['preview', 'testflight', 'production'].includes(env.EAS_BUILD_PROFILE)) {
       throw new Error('ECLIPSE_BUILD_ENV is required for release builds.');
     }
     return; // Local development and CI bundle checks do not require release credentials.
   }
   if (!Object.hasOwn(PROJECTS, target)) throw new Error('Unknown ECLIPSE_BUILD_ENV.');
-  const expectedProfile = target === 'staging' ? 'preview' : 'production';
-  if (env.EAS_BUILD_PROFILE && env.EAS_BUILD_PROFILE !== expectedProfile) {
+  const expectedProfiles = target === 'staging' ? ['preview', 'testflight'] : ['production'];
+  if (env.EAS_BUILD_PROFILE && !expectedProfiles.includes(env.EAS_BUILD_PROFILE)) {
     throw new Error('Build profile and ECLIPSE_BUILD_ENV disagree.');
   }
   const project = PROJECTS[target];

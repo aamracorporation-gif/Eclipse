@@ -56,3 +56,13 @@ test('Supabase URL cannot carry credentials or a substituted host', () => {
     assert.throws(() => validateBuildEnvironment({ ...fixture(), EXPO_PUBLIC_SUPABASE_URL: url }));
   }
 });
+
+test('TestFlight uses store signing with staging services and rejects production', () => {
+  assert.equal(eas.build.testflight.extends, 'preview');
+  assert.equal(eas.build.testflight.distribution, 'store');
+  const env = { ...fixture(), EAS_BUILD_PROFILE: 'testflight' };
+  assert.doesNotThrow(() => validateBuildEnvironment(env));
+  assert.throws(() => validateBuildEnvironment({ EAS_BUILD_PROFILE: 'testflight' }), /required/);
+  assert.throws(() => validateBuildEnvironment({ ...fixture('production'), EAS_BUILD_PROFILE: 'testflight' }), /disagree/);
+  assert.throws(() => validateBuildEnvironment({ ...env, EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY: 'pk_live_fixture' }), /Stripe/);
+});
