@@ -12,7 +12,9 @@
       }
     },
     "preview": {
-      "env": { "ECLIPSE_BUILD_ENV": "staging" },
+      "env": {
+        "ECLIPSE_BUILD_ENV": "staging"
+      },
       "distribution": "internal",
       "channel": "staging",
       "environment": "preview",
@@ -21,14 +23,26 @@
       }
     },
     "production": {
-      "env": { "ECLIPSE_BUILD_ENV": "production" },
+      "env": {
+        "ECLIPSE_BUILD_ENV": "production"
+      },
       "autoIncrement": true,
       "environment": "production",
       "channel": "production"
+    },
+    "testflight": {
+      "extends": "preview",
+      "distribution": "store",
+      "autoIncrement": true
     }
   },
   "submit": {
     "production": {
+      "ios": {
+        "ascAppId": "6773071994"
+      }
+    },
+    "testflight": {
       "ios": {
         "ascAppId": "6773071994"
       }
