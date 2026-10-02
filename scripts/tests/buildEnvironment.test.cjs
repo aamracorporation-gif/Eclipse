@@ -5,6 +5,7 @@ const eas = require('../../eas.json');
 
 const fixture = (target = 'staging') => ({
   ECLIPSE_BUILD_ENV: target,
+  EXPO_PUBLIC_MAPTILER_KEY: 'maptiler_fixture',
   EAS_BUILD_PROFILE: target === 'staging' ? 'preview' : 'production',
   EXPO_PUBLIC_SUPABASE_URL: `https://${target === 'staging' ? 'uhondxttdpvywvkyqlkk' : 'zurbdrfmwjqbrscairub'}.supabase.co`,
   EXPO_PUBLIC_SUPABASE_ANON_KEY: 'sb_publishable_fixture',
@@ -20,6 +21,16 @@ test('preview and production profiles explicitly select their environments', () 
 });
 test('local config checks do not require release credentials', () => {
   assert.doesNotThrow(() => validateBuildEnvironment({}));
+});
+
+test('every release profile rejects a missing MapTiler key', () => {
+  for (const profile of ['preview', 'testflight', 'production']) {
+    const env = { ...fixture(profile === 'production' ? 'production' : 'staging'), EAS_BUILD_PROFILE: profile };
+    for (const value of [undefined, '', '   ']) {
+      assert.throws(() => validateBuildEnvironment({ ...env, EXPO_PUBLIC_MAPTILER_KEY: value }), /MAPTILER/);
+    }
+    assert.doesNotThrow(() => validateBuildEnvironment(env));
+  }
 });
 test('release profile cannot silently skip validation', () => {
   assert.throws(() => validateBuildEnvironment({ EAS_BUILD_PROFILE: 'preview' }), /required/);

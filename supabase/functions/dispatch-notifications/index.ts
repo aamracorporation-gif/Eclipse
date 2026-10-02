@@ -43,6 +43,12 @@ serve(async (req) => {
   try {
     const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
     const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
+      return jsonResponse({ ok: false, error: "Service unavailable" }, 503);
+    }
+    if (req.headers.get("authorization") !== `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`) {
+      return jsonResponse({ ok: false, error: "Forbidden" }, 403);
+    }
     const WEB_BASE_URL = String(Deno.env.get("NOTIFICATIONS_WEB_BASE_URL") || Deno.env.get("WEB_BASE_URL") || "").replace(/\/$/, "");
     const { limit = 50, eventId = null, enqueueEventUpdate = false } = await req.json().catch(() => ({ limit: 50 }));
 

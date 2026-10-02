@@ -7,12 +7,13 @@ Configure these values in the EAS preview environment before building the releas
 - EXPO_PUBLIC_SUPABASE_ANON_KEY: publishable or legacy anon key for Eclipse Staging
 - EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY: pk_test_ key from the Eclipse Staging Stripe sandbox
 - EXPO_PUBLIC_API_URL=https://eclipse-staging-staging.up.railway.app (when used)
+- EXPO_PUBLIC_MAPTILER_KEY: active MapTiler client key, required by the MapLibre WebView on both iOS and Android. The Google Maps key does not replace it.
 
 Never supply service-role or Stripe secret keys to EXPO_PUBLIC variables. These checks validate configuration shape and environment alignment; they do not authenticate API keys or verify that a Stripe publishable key belongs to the correct sandbox. An authenticated test checkout is still required.
 
-Local development and generic CI bundle builds without a release profile remain usable without production credentials. Ten Node tests run in CI via node --test scripts/tests/buildEnvironment.test.cjs.
+Local development and generic CI bundle builds without a release profile remain usable without production credentials. CI runs the build environment and staging service regression tests under Node 22.
 
-Use the existing EAS release build workflow with ref codex/release-hardening, profile preview and platform android/ios. Do not choose production or submit to a store for this QA phase. A signed build has not been requested by this change, and the EAS environment values have not been verified through the available connectors.
+Use preview for the Android APK and testflight for iOS; testflight inherits preview services with store signing. The user has authorized TestFlight distribution. Production remains separate. See STAGING_PARITY_20261002.md for verified gaps before building again.
 
 Expo references:
 - https://docs.expo.dev/build/eas-json/

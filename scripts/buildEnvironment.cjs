@@ -12,6 +12,9 @@ function validateBuildEnvironment(env = process.env) {
     return; // Local development and CI bundle checks do not require release credentials.
   }
   if (!Object.hasOwn(PROJECTS, target)) throw new Error('Unknown ECLIPSE_BUILD_ENV.');
+  if (!String(env.EXPO_PUBLIC_MAPTILER_KEY || '').trim()) {
+    throw new Error('EXPO_PUBLIC_MAPTILER_KEY is required for release builds.');
+  }
   const expectedProfiles = target === 'staging' ? ['preview', 'testflight'] : ['production'];
   if (env.EAS_BUILD_PROFILE && !expectedProfiles.includes(env.EAS_BUILD_PROFILE)) {
     throw new Error('Build profile and ECLIPSE_BUILD_ENV disagree.');

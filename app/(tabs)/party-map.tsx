@@ -51,6 +51,7 @@ html,body{width:100%;height:100%;background:#0d1117;overflow:hidden;-webkit-tap-
 <script>
 var RN=window.ReactNativeWebView;
 function post(o){try{RN.postMessage(JSON.stringify(o));}catch(e){}}
+window.addEventListener('error',function(){post({type:'mapError'});});
 
 function eventColor(type){
   if(!type)return'#A78BFA';
@@ -75,13 +76,14 @@ var sc=new Supercluster({radius:55,maxZoom:PRICE_ZOOM-1,minPoints:2});
 
 var map=new maplibregl.Map({
   container:'map',
-  style:'https://api.maptiler.com/maps/streets-v4/style.json?key=${MAPTILER_KEY}',
+  style:'https://api.maptiler.com/maps/streets-v4/style.json?key=${encodeURIComponent(MAPTILER_KEY)}',
   center:[${lng},${lat}],
   zoom:13,
   attributionControl:false,
   fadeDuration:200,
 });
 
+map.on('error',function(){if(!map.isStyleLoaded())post({type:'mapError'});});
 map.on('load',function(){
   scheduleRefresh();
   map.on('moveend',scheduleRefresh);
@@ -288,6 +290,7 @@ export default function PartyMapScreen() {
   const activeFilterRef = useRef('all');
   const [isSearching,   setIsSearching]   = useState(false);
   const [htmlContent,   setHtmlContent]   = useState<string | null>(null);
+  const [mapError, setMapError] = useState(!MAPTILER_KEY.trim());
 
   // ── Shared filters (from feed) ────────────────────────────────────────────────
   const { filters: sharedFilters } = useFilters();
@@ -473,12 +476,17 @@ export default function PartyMapScreen() {
     try {
       const msg = JSON.parse(event.nativeEvent.data);
       if (msg.type === 'ready') {
+        setMapError(false);
         mapReadyRef.current = true;
         setMapReady(true);
         if (pendingEventsRef.current) {
           webViewRef.current?.injectJavaScript(`window.setEvents(${JSON.stringify(pendingEventsRef.current)});true;`);
           pendingEventsRef.current = null;
+        } else {
+          sendEventsToMap();
         }
+      } else if (msg.type === 'mapError') {
+        setMapError(true);
       } else if (msg.type === 'regionChange') {
         currentRegionRef.current = { lat: msg.lat, lng: msg.lng, zoom: msg.zoom };
         if (debounceRef.current) clearTimeout(debounceRef.current);
@@ -494,7 +502,7 @@ export default function PartyMapScreen() {
         setSelectedEvent(null);
       }
     } catch {}
-  }, [fetchForRegion]);
+  }, [fetchForRegion, sendEventsToMap]);
 
   // ── Location permission ───────────────────────────────────────────────────────
   useEffect(() => {
@@ -672,7 +680,7 @@ export default function PartyMapScreen() {
           originWhitelist={['*']}
           mixedContentMode="always"
           androidLayerType="hardware"
-          onError={() => {}}
+          onError={() => setMapError(true)}
           renderLoading={() => (
             <View style={[StyleSheet.absoluteFill, styles.center]}>
               <DiscoLoader size={60} />
@@ -685,6 +693,22 @@ export default function PartyMapScreen() {
         <View style={[StyleSheet.absoluteFill, styles.center]}>
           <DiscoLoader size={60} />
           <Text style={styles.loadingTxt}>Obteniendo ubicación…</Text>
+        </View>
+      )}
+
+      {mapError && (
+        <View style={[StyleSheet.absoluteFill, styles.center, { backgroundColor: '#08080F', zIndex: 50 }]}>
+          <MapPin size={32} color={Colors.dark.primary} />
+          <Text style={{ color: 'white', fontWeight: '700', textAlign: 'center' }}>No se ha podido cargar el mapa.</Text>
+          <Text style={{ color: 'rgba(255,255,255,0.65)', textAlign: 'center' }}>Puedes seguir consultando los eventos en la lista.</Text>
+          <Pressable accessibilityRole="button" onPress={() => {
+            setMapError(!MAPTILER_KEY.trim());
+            mapReadyRef.current = false;
+            webViewRef.current?.reload();
+          }}><Text style={{ color: Colors.dark.primary, padding: 12 }}>Reintentar</Text></Pressable>
+          <Pressable accessibilityRole="button" onPress={() => router.push('/(tabs)')}>
+            <Text style={{ color: 'white', padding: 12 }}>Ver eventos</Text>
+          </Pressable>
         </View>
       )}
 
