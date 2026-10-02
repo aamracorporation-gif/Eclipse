@@ -16,6 +16,7 @@ import { DiscoLoader } from '@/components/ui/DiscoLoader';
 import { invokeEdgeFunction } from '@/lib/edgeFunctions';
 import { calculateAgeFromDate, getPasswordRequirements, isPasswordStrong, isSafeAddressText, isSafeOrgText, isValidIbanES, isValidPersonName, isValidSpanishTaxId, normalizeWhitespaceForInput } from '@/lib/validators';
 import { useAppDialog } from '@/components/ui/AppDialog';
+import { VenueLocationPicker } from '@/components/ui/VenueLocationPicker';
 
 export default function RegisterScreen() {
   const router = useRouter();
@@ -43,6 +44,7 @@ export default function RegisterScreen() {
   // Location State
   const [locationStatus, setLocationStatus] = useState<'idle' | 'detecting' | 'success' | 'error'>('idle');
   const [manualLocation, setManualLocation] = useState(false);
+  const [showVenueMap, setShowVenueMap] = useState(false);
   const [acceptedTerms, setAcceptedTerms] = useState(false);
   const [acceptedPrivacy, setAcceptedPrivacy] = useState(false);
   const [acceptedLicenses, setAcceptedLicenses] = useState(false);
@@ -250,10 +252,10 @@ export default function RegisterScreen() {
 
   // Auto-detect location when entering Step 2
   useEffect(() => {
-    if (step === 2 && locationStatus === 'idle') {
+    if (step === 2 && formData.role !== 'organizer' && locationStatus === 'idle') {
       detectLocation();
     }
-  }, [detectLocation, locationStatus, step]);
+  }, [detectLocation, locationStatus, step, formData.role]);
 
   const onDateChange = (_event: any, selectedDate?: Date) => {
     if (!selectedDate) return;
@@ -538,6 +540,13 @@ export default function RegisterScreen() {
     } catch (error: any) {
       const msg = error?.message ? String(error.message) : 'Ocurrió un error.';
       const lower = msg.toLowerCase();
+      if (lower.includes('error sending confirmation email') || lower.includes('error sending email') || lower.includes('smtp')) {
+        showDialog({
+          title: 'No se pudo enviar el correo de confirmación',
+          message: 'Hay un problema con el servicio de correo. Tus datos siguen en el formulario. Inténtalo cuando el servicio esté restablecido; no necesitas rellenarlo de nuevo.',
+        });
+        return;
+      }
       const isEmailRateLimit = lower.includes('email rate limit') || lower.includes('rate limit exceeded');
       if (isEmailRateLimit) {
         showDialog({
@@ -606,6 +615,23 @@ export default function RegisterScreen() {
             success={showFieldSuccess('venueAddress')}
             icon={MapPin}
           />
+          {Platform.OS !== 'web' && <>
+            <TouchableOpacity accessibilityRole="button" onPress={() => setShowVenueMap(true)} style={styles.retryLocation}>
+              <MapPin size={20} color={Colors.dark.primary} />
+              <Text style={{ color: Colors.dark.primary, marginLeft: 8 }}>Elegir la calle en el mapa</Text>
+            </TouchableOpacity>
+            {showVenueMap && <VenueLocationPicker
+              initialAddress={[formData.venueAddress, formData.city].filter(Boolean).join(', ')}
+              onClose={() => setShowVenueMap(false)}
+              onSelect={location => {
+                setField('venueAddress', location.address);
+                setField('city', location.city);
+                setField('postalCode', location.postalCode);
+                if (location.country) setField('country', location.country);
+                setShowVenueMap(false);
+              }}
+            />}
+          </>}
           <ThemedInput
             placeholder="Ciudad"
             value={formData.city}
