@@ -433,8 +433,8 @@ export default function OrganizerVerificationScreen() {
               <Text style={styles.headerSubtitle}>{t('creator.verification.subtitle')}</Text>
             </View>
 
-            <TouchableOpacity onPress={handleSignOut} style={styles.logoutButton}>
-              <GlassView intensity={22} style={styles.logoutButtonContainer}>
+            <TouchableOpacity accessibilityRole="button" accessibilityLabel="Cerrar sesión" onPress={handleSignOut} style={styles.logoutButton}>
+              <GlassView intensity={22} style={styles.logoutButtonContainer} contentContainerStyle={{ padding: 0, flex: 1, alignItems: "center", justifyContent: "center" }}>
                 <LogOut size={18} color={Colors.dark.text} />
               </GlassView>
             </TouchableOpacity>

@@ -99,8 +99,7 @@ BEGIN
       USING (true);
   END IF;
 
-  -- Creator insert access (checked via event ownership or just authenticated for now, but strictly should check event.creator_id)
-  -- Simplified: Authenticated users can insert ticket types
+  -- Only the owner of the event can create ticket types.
   IF NOT EXISTS (
     SELECT 1 FROM pg_policies 
     WHERE tablename = 'event_ticket_types' 
@@ -109,11 +108,16 @@ BEGIN
     CREATE POLICY "Authenticated users can create ticket types"
       ON event_ticket_types FOR INSERT
       TO authenticated
-      WITH CHECK (true);
+      WITH CHECK (
+        EXISTS (
+          SELECT 1 FROM events
+          WHERE events.id = event_ticket_types.event_id
+          AND events.creator_id = auth.uid()
+        )
+      );
   END IF;
 
-  -- Creator update/delete access
-  -- Simplified: Authenticated users can update/delete
+  -- Only the owner of the event can update or delete ticket types.
   IF NOT EXISTS (
     SELECT 1 FROM pg_policies 
     WHERE tablename = 'event_ticket_types' 
@@ -122,8 +126,20 @@ BEGIN
     CREATE POLICY "Authenticated users can update ticket types"
       ON event_ticket_types FOR UPDATE
       TO authenticated
-      USING (true)
-      WITH CHECK (true);
+      USING (
+        EXISTS (
+          SELECT 1 FROM events
+          WHERE events.id = event_ticket_types.event_id
+          AND events.creator_id = auth.uid()
+        )
+      )
+      WITH CHECK (
+        EXISTS (
+          SELECT 1 FROM events
+          WHERE events.id = event_ticket_types.event_id
+          AND events.creator_id = auth.uid()
+        )
+      );
   END IF;
 
     IF NOT EXISTS (
@@ -134,7 +150,13 @@ BEGIN
     CREATE POLICY "Authenticated users can delete ticket types"
       ON event_ticket_types FOR DELETE
       TO authenticated
-      USING (true);
+      USING (
+        EXISTS (
+          SELECT 1 FROM events
+          WHERE events.id = event_ticket_types.event_id
+          AND events.creator_id = auth.uid()
+        )
+      );
   END IF;
 END $$;
 

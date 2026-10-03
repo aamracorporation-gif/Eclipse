@@ -24,6 +24,17 @@ serve(async (req) => {
   const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY") || "";
   const FROM_EMAIL = Deno.env.get("NOTIFICATIONS_FROM_EMAIL") || "";
 
+  if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
+    return jsonResponse({ ok: false, error: "Service unavailable" }, 503);
+  }
+  if (req.headers.get("authorization") !== `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`) {
+    return jsonResponse({ ok: false, error: "Forbidden" }, 403);
+  }
+  // Configuration failures must not permanently fail queued deliveries.
+  if (!RESEND_API_KEY || !FROM_EMAIL) {
+    return jsonResponse({ ok: false, error: "Email provider not configured" }, 503);
+  }
+
   const { limit = 50 } = await req.json().catch(() => ({ limit: 50 }));
 
   const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
@@ -61,15 +72,6 @@ serve(async (req) => {
 
   const candidates = (pending as any[]) || [];
   if (candidates.length === 0) return jsonResponse({ ok: true, sent: 0, failed: 0 });
-
-  if (!RESEND_API_KEY || !FROM_EMAIL) {
-    const ids = candidates.map((n) => n.id);
-    await supabase
-      .from("notification_deliveries")
-      .update({ status: "failed", last_error: "Missing RESEND_API_KEY or NOTIFICATIONS_FROM_EMAIL", updated_at: now })
-      .in("id", ids);
-    return jsonResponse({ ok: false, error: "Missing RESEND_API_KEY or NOTIFICATIONS_FROM_EMAIL" }, 500);
-  }
 
   let sent = 0;
   let failed = 0;

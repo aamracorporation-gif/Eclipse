@@ -42,7 +42,7 @@ export async function registerForPushNotifications(userId: string | null) {
 
     const tokenData = await Notifications.getExpoPushTokenAsync({ projectId } as any);
     token = tokenData.data;
-  } catch (error) {
+  } catch {
     await AsyncStorage.setItem('remote_push_enabled', '0');
     return;
   }
@@ -103,7 +103,7 @@ export async function initNotifications() {
 }
 
 // Local notifications disabled — all push notifications are sent server-side only
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
+ 
 export async function scheduleLocalNotification(_title: string, _body: string, _data: any = {}, _delaySeconds: number = 0) {
   // no-op
 }

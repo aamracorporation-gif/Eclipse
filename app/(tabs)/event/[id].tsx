@@ -1,3 +1,4 @@
+import { LAUNCH_FEATURES } from '@/lib/launchFeatures';
 import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, Linking, Platform, KeyboardAvoidingView, Modal, Switch, Animated, Easing, Share, Alert, TextInput } from 'react-native';
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { router, useLocalSearchParams, useSegments } from 'expo-router';
@@ -42,6 +43,7 @@ export default function EventDetailScreen() {
   const [buyerEmail, setBuyerEmail] = useState('');
   const [quantity, setQuantity] = useState('1');
   const [purchasing, setPurchasing] = useState(false);
+  const freeClaimRef = useRef<{ signature: string; id: string } | null>(null);
   const [vipPurchasing, setVipPurchasing] = useState(false);
   const [selectedTicketType, setSelectedTicketType] = useState<string | null>(null);
   const [selectedVipReservadoId, setSelectedVipReservadoId] = useState<string | null>(null);
@@ -252,16 +254,6 @@ export default function EventDetailScreen() {
         );
       }
 
-      if (__DEV__) {
-        try {
-          console.log('[EVENT]', {
-            id: String(normalizedEvent?.id || ''),
-            event_type: normalizedEvent?.event_type,
-            theme: normalizedEvent?.theme,
-          });
-        } catch {}
-      }
-
       setEvent({ ...normalizedEvent, reservados_vip: vipRows } as any);
     } catch (error) {
       console.error('Error fetching event:', error);
@@ -452,7 +444,7 @@ export default function EventDetailScreen() {
     }
 
     // Check event is not in the past
-    const eventDateTime = new Date(event?.event_date);
+    const eventDateTime = event?.event_date ? new Date(event.event_date) : new Date(NaN);
     if (eventDateTime < new Date()) {
       Alert.alert('Evento finalizado', 'No es posible comprar entradas para un evento que ya ha tenido lugar.');
       return;
@@ -552,6 +544,10 @@ export default function EventDetailScreen() {
         });
 
         if (result.status === 'canceled') return { paid: false as const };
+        if (result.status === 'pending') {
+          showDialog({ title: 'Compra pendiente', message: result.message });
+          return { paid: false as const };
+        }
         if (result.status !== 'succeeded') {
           throw new Error(result.message || 'El pago no se pudo completar.');
         }
@@ -560,32 +556,33 @@ export default function EventDetailScreen() {
 
       // Service fee — integer-cent arithmetic, identical to create-payment-intent-v2
       const _totalPriceCents = Math.round(totalPrice * 100);
-      const _svcFeeCents = Math.max(Math.round((_totalPriceCents * 0.015 + 25) / 0.985), 50);
+      const _svcFeeCents = Number(pricePerTicket) === 0 ? 0 : Math.max(Math.round((_totalPriceCents * 0.015 + 25) / 0.985), 50);
       const serviceFeeForPurchase = _svcFeeCents / 100;
       const grandTotalForPurchase = (_totalPriceCents + _svcFeeCents) / 100;
 
       const payTicketsWithWalletOnly = async () => {
         setPurchasing(true);
-
-        const qrCode = 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
-          const r = (Math.random() * 16) | 0;
-          const v = c === 'x' ? r : (r & 0x3) | 0x8;
-          return v.toString(16);
-        });
-
         await buyTicketWithCredit({
           p_event_id: event.id,
           p_buyer_name: buyerName,
           p_buyer_email: buyerEmail || user.email || '',
           p_quantity: qty,
-          p_total_price: totalPrice,
-          p_qr_code: qrCode,
           p_ticket_type_id: selectedTicketType,
-          p_service_fee: serviceFeeForPurchase,
+          p_discount_code_id: appliedDiscount?.id ?? null,
         });
       };
 
-      if (!payWithWallet) {
+      if (Number(pricePerTicket) === 0) {
+        const signature = JSON.stringify([event.id, selectedTicketType, qty, buyerName, user.id]);
+        if (freeClaimRef.current?.signature !== signature) freeClaimRef.current = { signature, id: 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => { const n = Math.floor(Math.random() * 16); return (c === 'x' ? n : (n & 3) | 8).toString(16); }) };
+        const { data, error } = await supabase.rpc('claim_free_tickets', {
+          p_event_id: event.id, p_ticket_type_id: selectedTicketType,
+          p_quantity: qty, p_buyer_name: buyerName, p_request_id: freeClaimRef.current.id,
+        });
+        if (error) throw error;
+        if (!data?.success) throw new Error('No se pudo obtener la entrada gratuita.');
+        freeClaimRef.current = null;
+      } else if (!LAUNCH_FEATURES.walletCredit || !payWithWallet) {
         const r = await payTicketsWithCard();
         if (!r.paid) return;
       } else {
@@ -625,16 +622,8 @@ export default function EventDetailScreen() {
       await refreshEvents(); // Update global context so dashboards reflect the sale immediately
       await fetchEvent();
 
-      // Consume discount code atomically after successful purchase
-      if (appliedDiscount) {
-        await supabase.rpc('consume_discount_code', {
-          p_code_id: appliedDiscount.id,
-          p_buyer_name: buyerName || null,
-          p_buyer_email: buyerEmail || null,
-        }).catch(() => {});
-        setAppliedDiscount(null);
-        setDiscountCode('');
-      }
+      setAppliedDiscount(null);
+      setDiscountCode('');
 
       const msg =
         qty === 1
@@ -678,7 +667,7 @@ export default function EventDetailScreen() {
     }
 
     // Check event is not in the past
-    const vipEventDateTime = new Date(event?.event_date);
+    const vipEventDateTime = event?.event_date ? new Date(event.event_date) : new Date(NaN);
     if (vipEventDateTime < new Date()) {
       Alert.alert('Evento finalizado', 'No es posible comprar entradas para un evento que ya ha tenido lugar.');
       return;
@@ -713,7 +702,7 @@ export default function EventDetailScreen() {
         showDialog({ title: 'Cartera', message: 'Estamos cargando tu saldo. Espera un momento y vuelve a intentarlo.' });
         return;
       }
-      if (payVipWithWallet) {
+      if (LAUNCH_FEATURES.walletCredit && payVipWithWallet) {
         const vipServiceFee = Math.round(((vip.base_price * 0.015 + 0.25) / 0.985) * 100) / 100;
         const vipGrandTotal = vip.base_price + vipServiceFee;
         const walletDebit = Math.min(Math.max(creditBalance, 0), vip.base_price);
@@ -729,6 +718,10 @@ export default function EventDetailScreen() {
         } else if (walletDebit <= 0) {
           const result = await present({ kind: 'vip_table', reference_id: vip.id, buyer_name: buyerName, buyer_email: buyerEmail || user.email || '' });
           if (result.status === 'canceled') return;
+          if (result.status === 'pending') {
+            showDialog({ title: 'Compra pendiente', message: result.message });
+            return;
+          }
           if (result.status !== 'succeeded') {
             throw new Error(result.message || 'El pago no se pudo completar.');
           }
@@ -754,6 +747,10 @@ export default function EventDetailScreen() {
             buyer_email: buyerEmail || user.email || '',
           });
           if (result.status === 'canceled') return;
+          if (result.status === 'pending') {
+            showDialog({ title: 'Compra pendiente', message: result.message });
+            return;
+          }
           if (result.status !== 'succeeded') {
             throw new Error(result.message || 'El pago no se pudo completar.');
           }
@@ -762,6 +759,10 @@ export default function EventDetailScreen() {
       } else {
         const result = await present({ kind: 'vip_table', reference_id: vip.id, buyer_name: buyerName, buyer_email: buyerEmail || user.email || '' });
         if (result.status === 'canceled') return;
+          if (result.status === 'pending') {
+            showDialog({ title: 'Compra pendiente', message: result.message });
+            return;
+          }
         if (result.status !== 'succeeded') {
           throw new Error(result.message || 'El pago no se pudo completar.');
         }
@@ -911,7 +912,7 @@ export default function EventDetailScreen() {
 
   // Service fee — integer-cent arithmetic, identical to create-payment-intent-v2
   const _discountedCents = Math.round(discountedTotal * 100);
-  const _serviceFeeCents = Math.max(Math.round((_discountedCents * 0.015 + 25) / 0.985), 50);
+  const _serviceFeeCents = Number(currentPrice) === 0 ? 0 : Math.max(Math.round((_discountedCents * 0.015 + 25) / 0.985), 50);
   const estimatedServiceFee = _serviceFeeCents / 100;
   const grandTotal = (_discountedCents + _serviceFeeCents) / 100;
 
@@ -1391,7 +1392,7 @@ export default function EventDetailScreen() {
                     )}
                   </View>
 
-                  {user && !!selectedVip && (
+                  {LAUNCH_FEATURES.walletCredit && user && !!selectedVip && (
                     <View style={[styles.walletPayContainer, styles.walletPayContainerVip]}>
                       <View style={styles.walletPayHeader}>
                         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
@@ -1452,7 +1453,7 @@ export default function EventDetailScreen() {
               )}
 
               {/* Resale prohibited banner */}
-              {purchaseTab === 'tickets' && (event as any).allow_resale === false && (
+              {LAUNCH_FEATURES.resale && purchaseTab === 'tickets' && (event as any).allow_resale === false && (
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: 'rgba(255,255,255,0.04)', borderRadius: 12, paddingHorizontal: 14, paddingVertical: 10, borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)', marginBottom: 12 }}>
                   <Text style={{ fontSize: 14 }}>🔒</Text>
                   <Text style={{ flex: 1, fontSize: 12, color: 'rgba(255,255,255,0.40)', fontWeight: '600', lineHeight: 17 }}>
@@ -1710,7 +1711,7 @@ export default function EventDetailScreen() {
                     </View>
                   )}
 
-                  {user && (
+                  {LAUNCH_FEATURES.walletCredit && user && (
                     <View style={styles.walletPayContainer}>
                       <View style={styles.walletPayHeader}>
                         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
@@ -1772,7 +1773,7 @@ export default function EventDetailScreen() {
                       currentAvailable <= 0
                         ? t('event.tickets.sold_out')
                         : user
-                          ? payWithWallet
+                          ? Number(currentPrice) === 0 ? 'Obtener entrada gratis' : payWithWallet
                             ? creditBalance > 0 && creditBalance < grandTotal
                               ? t('event.purchase.pay_split')
                               : t('event.purchase.pay_wallet')
@@ -2737,3 +2738,4 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
 });
+

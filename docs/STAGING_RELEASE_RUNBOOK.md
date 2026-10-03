@@ -1,0 +1,146 @@
+# Supabase staging release runbook
+
+1. Create a dedicated staging Supabase project; never link this repository to production locally.
+2. Configure GitHub environment `staging` with `SUPABASE_ACCESS_TOKEN`,
+   `SUPABASE_DB_PASSWORD`, `SUPABASE_STAGING_PROJECT_REF` and `STAGING_API_URL`.
+3. Add Stripe **test-mode** secrets to staging, including a staging-only webhook secret.
+4. Restore a reviewed schema baseline to staging before running the manual workflow. The reviewed baseline was restored on 2026-09-21; staging now has 49 public tables with RLS. The previous seven empty tables are preserved in the inaccessible `eclipse_prebaseline` schema; do not bypass the workflow's legacy migration guard or apply the historical `99999999999999_full_schema_fix.sql` directly.
+5. Confirm migrations `20260913010000_payment_webhook_idempotency_and_qa_security.sql`, `20260920104448_repair_resale_credit_and_ticket_transfer.sql`, `20260920112000_resale_refund_statuses.sql`, and `20260920120000_atomic_resale_refund_decision.sql` applied before deploying the updated backend.
+6. Configure the staging Stripe webhook for `payment_intent.succeeded`, `payment_intent.payment_failed`, `account.updated`, `refund.updated`, and `refund.failed`.
+7. Use Stripe test mode to send succeeded, duplicate, delayed-failure and reordered events. Race a card payment against a wallet purchase of the same resale listing and confirm that the losing card payment is refunded.
+8. Verify one transaction, one fulfillment, one set of tickets, and ledger status `processed`; a failed refund must be visible as `refund_failed` and reconciled manually.
+9. Run `k6 run tests/load/api-smoke.js` and `k6 run tests/load/payment-status.js` with staging variables.
+10. Run both Maestro smoke flows on iOS and Android release candidates.
+11. Promote only when CI, P1 QA and rollback checks pass.
+
+Rollback is forward-only: restore function versions, then apply a compensating migration.
+Do not delete the webhook ledger or idempotency keys.
+
+## Credential rotation and Git history
+
+Rotate Supabase service-role/anon keys as applicable, Stripe secret and webhook
+secrets, EAS tokens, map keys, mail/SMS keys and signing credentials before rewriting
+history. Then run `scripts/audit-and-clean-git-history.ps1` in dry-run mode. Only a
+repository administrator should use `-Execute`; it force-rewrites every ref and
+requires all collaborators to clone again. Old credentials remain compromised even
+after removing them from Git, so rotation must happen first.
+
+## Local resale regression checks
+
+`cd backend && npm ci && npm test` executes the resale migrations against a
+small PostgreSQL/WASM schema fixture. It verifies durable refund decisions,
+blocked resale of used/expired/changed tickets, balance conservation, reserve
+splitting, holder identity updates and QR rotation. The legacy card fulfillment
+is a stub in these tests; they do not replace a production-schema rehearsal or
+a real Stripe test-mode checkout.
+
+Refund statuses are persisted before Stripe is contacted. Unexpected database
+failures return a retryable webhook error. Both `refund.updated` and
+`refund.failed` must be subscribed; reconcile every `refund_failed` payment.
+
+## Schema rehearsal completed on 2026-09-21
+
+The user-supplied AppFest schema-only dump must be supplied locally at
+`supabase/baselines/appfest-schema-20260921.sql`; it is deliberately not committed. It contains 49 application tables
+and 138 functions, no copied rows or credential literals. It is a historical
+snapshot, not an independently safe deployment: always apply the subsequent fixes.
+
+`supabase/baselines/restore-staging.sql` is the one-time transactional restore for
+the original empty seven-table staging project. Its guards abort if rows, users,
+a different table count, or an existing archive are found. A full rollback rehearsal
+passed before the real restore. Do not rerun it on rebuilt staging or production.
+The remote baseline and subsequent migrations are recorded by Supabase MCP; the
+historical migration chain remains unsafe to replay with `db push --include-all`.
+
+The two custom `auth.users` triggers were restored separately because the default
+schema dump excludes managed-schema customizations. Storage bucket configuration,
+Storage policies, notification-template seed data, cron jobs and Edge Function
+secrets still require separate review; this is not a full project clone.
+
+Run `supabase/tests/staging_resale_regression.sql` against staging with psql
+`-v ON_ERROR_STOP=1`. Twelve assertions passed against the real functions, constraints,
+and triggers: signup role rejection, card ownership/QR and duplicate replay,
+credit conservation/reserve split, wallet-then-card refund decision, revoked/expired/
+null validation rejection, event expiry, internal RPC grants and primary purchase QR.
+Every test is rolled back. Follow-up inspection found zero auth users and tickets.
+These are database rehearsals, not actual Stripe charges or simultaneous sessions.
+Backend regression suite: 36 tests passed (including 18 PostgreSQL/WASM subtests).
+
+Additional corrections deployed to staging:
+- Signup cannot choose administrator through user-editable metadata.
+- Listing, wallet settlement and card settlement require validation_status=valid.
+- Primary card purchases generate one consistent QR identity per ticket.
+- The archived schema's RPC execution privileges are revoked.
+
+Only the narrow, drift-aware `prevent_signup_admin_role` fix was also applied to
+production; the whitelist was verified afterward. Existing profiles were not
+modified. Payment/revenue changes remain staging-only pending Stripe integration QA.
+Audit existing privileged profiles separately; the patch prevents future escalation
+but does not establish how any earlier administrator profile was created.
+
+Security advisors: all 49 public tables have RLS. Backend-only tables without
+client policies intentionally deny clients. The 26 callable SECURITY DEFINER RPCs
+need authorization review; the advisor label alone does not prove a vulnerability.
+The pg_net extension placement warning also remains.
+See https://supabase.com/docs/guides/database/database-linter.
+
+Remaining payment findings: card resale applies 10% while credit resale applies
+zero. Primary and full-wallet VIP credit accounting still need review.
+The VIP card branch has now been repaired as described below; this does not approve launch.
+
+## VIP card repair (2026-09-22)
+
+`20260922130423_fulfill_vip_card_atomically.sql` routes card/hybrid VIP payments
+through a private helper. It locks inventory, rejects expired/inactive/deleted or
+changed offers, checks credit backing, issues one capacity-sized ticket with a
+consistent QR, decrements VIP stock and calls the existing amount/debit core in
+one transaction. A duplicate delivery is idempotent. A known unavailable offer
+persists refund_pending before Stripe is called; infrastructure failures roll back.
+
+The Node webhook now supports VIP refund decisions and refund lifecycle events.
+VIP destination-charge refunds reverse the connected transfer and refund the
+application fee, while platform-only charges omit those flags. Previously created
+refunds are reused. Deploy the updated Node backend before enabling staging checkout.
+
+Eleven additional database regressions passed using real functions/triggers:
+card delivery/replay, hybrid real/promo debit and reserve splitting, sold-out second
+charge, mismatch rollback, inactive/deleted/changed-price/expired offers, insufficient
+credit and insufficient backing. This is sequential database testing, not a real
+simultaneous Stripe payment race. Backend suite: 42 tests passed.
+
+The authenticated `create-payment-intent-v2` and `confirm-payment` Edge Functions
+were deployed to staging. Stripe test secrets and a staging Node webhook endpoint
+still need end-to-end verification. No Stripe charges/refunds were created by this work.
+
+## VIP wallet eligibility and RPC repair (2026-09-28)
+
+Staging migrations applied:
+- Local 20260928012107_harden_vip_wallet_eligibility.sql; managed staging version 20260928012134.
+- Local 20260928012258_disambiguate_vip_wallet_rpc.sql; managed staging version 20260928012320.
+
+A rollback-only regression first reproduced that an inactive VIP could be purchased through the internal wallet function. Both existing overloads now reject inactive/deleted/sold-out VIPs and cancelled/deleted/expired or undated events before debit. Both issue matching qr_code/qr_token identities and explicitly mark tickets paid and active.
+
+The internal five-argument overload had a default fee argument that made a four-argument SQL call ambiguous (42725). It was recreated without the default after verifying zero dependent objects; DROP used no CASCADE. Its prior service_role-only execution ACL was restored explicitly in the same migration. The public four-argument function remains callable only by authenticated/service roles, not anon. No new client access was granted to the fee-taking function.
+
+Run supabase/tests/staging_vip_wallet_regression.sql only in the existing staging QA fixture. Twelve rejection cases (six per overload), two valid purchases, the four-argument RPC under SET LOCAL ROLE authenticated, debit/inventory checks, QR consistency and privilege checks passed against real functions and triggers. All test data was rolled back. Post-test inspection found zero temporary VIPs, no residual buyer legacy-credit row, and the one original resale ticket unchanged.
+
+This patch intentionally preserves legacy fee/accounting behavior. It does NOT reconcile creditos_usuario with user_credit/wallet_reserves, establish organizer settlement, make wallet purchase retries idempotent, or approve launch. Five-argument direct client access remains denied. Full authenticated mobile checkout, VIP destination charges and device testing remain outstanding.
+
+Security advisors still report 26 authenticated SECURITY DEFINER functions requiring contextual review, pg_net in public, leaked-password protection, and nine RLS-enabled server tables without client policies. All public tables have RLS. References:
+- https://supabase.com/docs/guides/database/database-linter?lint=0029_authenticated_security_definer_function_executable
+- https://supabase.com/docs/guides/database/database-linter?lint=0014_extension_in_public
+- https://supabase.com/docs/guides/auth/password-security
+
+The preceding signup fix (3713be3) is deployed successfully to Railway staging and CI #80 passed. See STAGING_STRIPE_QA_20260927.md for actual sandbox payments/refunds and successful delayed-event retries; earlier notes saying no Stripe charges were created refer only to the September 22 rehearsal.
+
+## Credit backing and legacy-wallet write protection (2026-09-28)
+
+Staging-only migrations applied and verified:
+- 20260928013528_require_complete_credit_backing.sql (managed version 20260928013654).
+- 20260928013844_lock_legacy_wallet_client_mutations.sql (managed version 20260928013937).
+
+The internal primary/VIP card debit loops previously accepted real credit without enough pending reserves. A database-only rollback test reproduced primary fulfillment with no backing. Both loops now raise Insufficient credit backing if any real debit remains unbacked, rolling back all balance, reserve, inventory and ticket changes. Reserve locks use created_at,id ordering. Ten scenarios pass across both core branches: absent/partial backing rejected atomically, reserve splitting, mixed real/promotional credit, promotional-only credit, and replay without duplicate debit. These tests do not create or confirm Stripe payments.
+
+A separate rollback test demonstrated an authenticated QA seller could directly increase their legacy wallets.balance from 10 to 133. The client UPDATE policy and mutation grants were removed. Regression checks confirm own-wallet SELECT, cross-user isolation, denied client mutations and retained service-role writes. The attempted increase was rolled back; no real or synthetic funds were retained.
+
+Run supabase/tests/staging_credit_backing_regression.sql and supabase/tests/staging_wallet_acl_regression.sql only against the named staging QA fixture. All changes roll back. This does not resolve full-wallet purchases using creditos_usuario while the app displays user_credit, nor organizer settlement, mobile checkout or Connect E2E testing. Production is unchanged.

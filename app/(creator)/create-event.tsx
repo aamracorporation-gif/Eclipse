@@ -1,4 +1,5 @@
-﻿import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { LAUNCH_FEATURES } from '@/lib/launchFeatures';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
   Image,
@@ -31,9 +32,7 @@ import {
   parsePositiveInt,
   parsePositiveNumber,
   serializeTicketMetadata,
-  type TicketCategory,
   type TicketDraft,
-  type FreeBottleEntry,
 } from '@/lib/createEventTicketConfig';
 import { uploadImage } from '@/lib/storage';
 import { useAuth } from '@/lib/AuthContext';
@@ -74,7 +73,7 @@ type EventDraft = {
   coordinates: { latitude: number; longitude: number } | null;
 };
 
-const MAPTILER_KEY = 'F74nnnjzsxrsuFtO0Xf6';
+const MAPTILER_KEY = process.env.EXPO_PUBLIC_MAPTILER_KEY || '';
 
 function buildLocationPickerHtml(
   centerLat: number,
@@ -193,7 +192,7 @@ export default function CreateEventScreen() {
     dressCode: '',
     ageRestriction: '18',
     eventType: 'party',
-    allowResale: true,
+    allowResale: LAUNCH_FEATURES.resale,
     dateTime: null,
     endDateTime: null,
     coordinates: null,
@@ -220,12 +219,12 @@ export default function CreateEventScreen() {
   const [isResolvingAddress, setIsResolvingAddress] = useState(false);
 
   const [locationQuery, setLocationQuery] = useState('');
-  const [locationSuggestions, setLocationSuggestions] = useState<Array<{ id: string; name: string; lat: number; lng: number }>>([]);
+  const [locationSuggestions, setLocationSuggestions] = useState<{ id: string; name: string; lat: number; lng: number }[]>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const geocodeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const [mapSearchQuery, setMapSearchQuery] = useState('');
-  const [mapSearchSuggestions, setMapSearchSuggestions] = useState<Array<{ id: string; name: string; lat: number; lng: number }>>([]);
+  const [mapSearchSuggestions, setMapSearchSuggestions] = useState<{ id: string; name: string; lat: number; lng: number }[]>([]);
   const mapGeoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
 
@@ -239,7 +238,12 @@ export default function CreateEventScreen() {
           .select('*, venues(*), event_ticket_types(*)')
           .eq('id', eventId)
           .single();
-        if (error || !data) { console.log('[edit] error', error); return; }
+        if (error || !data) {
+          Alert.alert('No se pudo cargar el evento', 'Inténtalo de nuevo en unos segundos.', [
+            { text: 'Volver', onPress: () => router.back() },
+          ]);
+          return;
+        }
         const rawDate = data.event_date ? new Date(data.event_date) : null;
         const rawEnd = data.end_datetime ? new Date(data.end_datetime) : null;
         setDraft({
@@ -262,28 +266,33 @@ export default function CreateEventScreen() {
         if (data.venues?.name) setLocationQuery(data.venues.name);
         if (Array.isArray(data.event_ticket_types) && data.event_ticket_types.length > 0) {
           const validCats = ['general', 'vip', 'early', 'backstage'];
-          const active = data.event_ticket_types.filter((t) => !t.deleted_at && (t.is_active ?? true));
-          setTicketTypes(active.map((t) => ({
+          const active = data.event_ticket_types.filter((t: any) => !t.deleted_at && (t.is_active ?? true));
+          setTicketTypes(active.map((t: any) => ({
             id: t.id,
             name: t.name ?? '',
             category: (validCats.includes(t.category ?? '') ? t.category : 'general'),
             price: String(t.price ?? 0),
             quantity: String(t.quantity ?? 0),
-            benefits: '',
-            featured: false,
-            vipGroupSize: '',
-            vipFreeBottles: [],
-            generalAccessZone: '',
-            generalNumberedSeat: false,
-            earlyEntryMinutes: '',
-            earlyDedicatedLane: false,
-            backstageMeetGreet: false,
-            backstageHost: '',
+            benefits: t.metadata?.benefits || '',
+            featured: !!t.metadata?.featured,
+            vipGroupSize: t.metadata?.vipGroupSize ? String(t.metadata.vipGroupSize) : '',
+            vipFreeBottles: (t.metadata?.vipBottles || []).map((b: any) => ({ brand: b.brand || '', quantity: String(b.quantity || 1) })),
+            generalAccessZone: t.metadata?.accessZone || '',
+            generalNumberedSeat: !!t.metadata?.numberedSeat,
+            earlyEntryMinutes: t.metadata?.earlyEntryMinutes ? String(t.metadata.earlyEntryMinutes) : '',
+            entryDeadlineMinutes: t.metadata?.entryDeadlineMinutes != null ? String(t.metadata.entryDeadlineMinutes) : '',
+            earlyDedicatedLane: !!t.metadata?.dedicatedLane,
+            backstageMeetGreet: !!t.metadata?.backstageMeetGreet,
+            backstageHost: t.metadata?.backstageHost || '',
           })));
         }
-      } catch (err) { console.log('[edit] catch', err); }
+      } catch {
+        Alert.alert('No se pudo cargar el evento', 'Comprueba tu conexión e inténtalo de nuevo.', [
+          { text: 'Volver', onPress: () => router.back() },
+        ]);
+      }
     })();
-  }, [isEditing, eventId]);;
+  }, [eventId, isEditing, router]);
   const eventTypeOptions = useMemo(
     () => [
       { key: 'party', label: 'Fiesta', Icon: Sparkles },
@@ -311,7 +320,7 @@ export default function CreateEventScreen() {
         price: parsePositiveNumber(ticket.price),
         quantity: parsePositiveInt(ticket.quantity),
       }))
-      .filter((ticket) => ticket.price !== null && ticket.quantity !== null) as Array<{ price: number; quantity: number }>;
+      .filter((ticket) => ticket.price !== null && ticket.quantity !== null) as { price: number; quantity: number }[];
 
     const capacity = parsed.reduce((sum, ticket) => sum + ticket.quantity, 0);
     const minPrice = parsed.length ? Math.min(...parsed.map((ticket) => ticket.price)) : null;
@@ -368,7 +377,7 @@ export default function CreateEventScreen() {
     }
 
     return e;
-  }, [draft, minDateTime, ticketTypes.length]);
+  }, [draft, isEditing, minDateTime, ticketTypes.length]);
 
   const getError = useCallback(
     (key: string) => {
@@ -467,10 +476,10 @@ export default function CreateEventScreen() {
     setShowMapModal(true);
   }, [draft.coordinates]);
 
-  const searchGeocode = useCallback(async (q: string): Promise<Array<{ id: string; name: string; lat: number; lng: number }>> => {
+  const searchGeocode = useCallback(async (q: string): Promise<{ id: string; name: string; lat: number; lng: number }[]> => {
     if (q.trim().length < 3) return [];
     try {
-      const res = await fetch(`https://api.maptiler.com/geocoding/${encodeURIComponent(q.trim())}.json?key=F74nnnjzsxrsuFtO0Xf6&language=es&limit=5`);
+      const res = await fetch(`https://api.maptiler.com/geocoding/${encodeURIComponent(q.trim())}.json?key=${MAPTILER_KEY}&language=es&limit=5`);
       const json = await res.json() as { features?: any[] };
       return (json.features ?? []).map((f: any) => ({
         id: String(f.id),
@@ -750,7 +759,7 @@ export default function CreateEventScreen() {
         allowResale: draft.allowResale,
         date: toYMD(draft.dateTime),
         time: toHM(draft.dateTime),
-        endDatetime: draft.endDateTime ? draft.endDateTime.toISOString() : null,
+        endDatetime: draft.endDateTime ? draft.endDateTime.toISOString() : undefined,
         price: String(metrics.minPrice ?? 0),
         capacity: metrics.capacity,
         ticketTypes: mappedTicketTypes,
@@ -856,7 +865,7 @@ export default function CreateEventScreen() {
               </View>
             </TouchableOpacity>
             <Text style={{ color: 'rgba(255,255,255,0.4)', fontSize: 12, marginTop: 8, lineHeight: 16 }}>
-              Al finalizar el evento se eliminarán automáticamente las entradas y ofertas de reventa.
+              Al finalizar el evento se eliminarán automáticamente las entradas caducadas.
             </Text>
           </GlassView>
 
@@ -987,7 +996,7 @@ export default function CreateEventScreen() {
               <View style={styles.half}>
                 <ThemedInput
                   label="Precio (€)"
-                  placeholder="Ej: 30"
+                  placeholder="0 para entrada gratis"
                   value={newTicket.price}
                   onChangeText={(value) => setNewTicket((prev) => ({ ...prev, price: value }))}
                   error={newTicketErrors.price}
@@ -1007,6 +1016,17 @@ export default function CreateEventScreen() {
               </View>
             </View>
 
+            {parsePositiveNumber(newTicket.price) === 0 && <ThemedInput
+              label="Límite de acceso (minutos desde el inicio, opcional)"
+              placeholder="Ej: 120 = acceso hasta 2 horas después del inicio"
+              value={newTicket.entryDeadlineMinutes || ''}
+              onChangeText={(value) => setNewTicket((prev) => ({ ...prev, entryDeadlineMinutes: value }))}
+              error={newTicketErrors.entryDeadlineMinutes}
+              keyboardType="number-pad"
+            />}
+            {parsePositiveNumber(newTicket.price) === 0 && !!newTicket.entryDeadlineMinutes && draft.dateTime && (
+              <Text style={styles.metricsText}>Acceso antes de: {new Date(draft.dateTime.getTime() + Number(newTicket.entryDeadlineMinutes) * 60000).toLocaleString('es-ES')}</Text>
+            )}
             <ThemedInput
               label="Beneficios / preferencias"
               placeholder="Ej: Fast lane, copa incluida, zona reservada"
@@ -1240,12 +1260,12 @@ export default function CreateEventScreen() {
               icon={<Lock size={20} color={Colors.dark.textSecondary} />}
             />
 
-            <View style={styles.toggleRow}>
+            {LAUNCH_FEATURES.resale && (<View style={styles.toggleRow}>
               <Text style={styles.toggleLabel}>Permitir reventa</Text>
               <Pressable onPress={() => updateDraft('allowResale', !draft.allowResale)} style={[styles.switchPill, draft.allowResale ? styles.switchPillOn : null]}>
                 <Text style={styles.switchPillText}>{draft.allowResale ? 'Sí' : 'No'}</Text>
               </Pressable>
-            </View>
+            </View>)}
           </GlassView>
 
           <ThemedButton title="Publicar evento" onPress={submit} loading={loading} icon={<Check size={18} color="white" />} />
@@ -1586,5 +1606,4 @@ const styles = StyleSheet.create({
     zIndex: 10,
   },
 });
-
 

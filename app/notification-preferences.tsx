@@ -1,3 +1,4 @@
+import { LAUNCH_FEATURES } from '@/lib/launchFeatures';
 import { View, Text, StyleSheet, Switch, TouchableOpacity, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -25,7 +26,7 @@ type Settings = {
 };
 
 const ORGANIZER_ONLY_KEYS = ['stock_alerts', 'realtime_sales', 'daily_summary', 'stock_threshold_alerts'] as const;
-const COMMON_KEYS = ['purchase_updates', 'event_reminders', 'resale_updates'] as const;
+const COMMON_KEYS = (['purchase_updates', 'event_reminders', 'resale_updates'] as const).filter(key => key !== 'resale_updates' || LAUNCH_FEATURES.resale);
 type PreferenceKey = (typeof ORGANIZER_ONLY_KEYS)[number] | (typeof COMMON_KEYS)[number];
 
 export function __test_getVisiblePreferenceKeys(role: string | null | undefined): PreferenceKey[] {
@@ -104,7 +105,7 @@ export default function NotificationPreferencesScreen() {
     return () => {
       mounted = false;
     };
-  }, [userId]);
+  }, [user, userId]);
 
   const items = useMemo(() => {
     const visible = __test_getVisiblePreferenceKeys(profileRole);
@@ -228,3 +229,4 @@ const styles = StyleSheet.create({
   rowLabel: { color: 'white', fontSize: 14, fontWeight: '800' },
   rowDesc: { color: 'rgba(255,255,255,0.60)', marginTop: 4, fontSize: 12, lineHeight: 16 },
 });
+

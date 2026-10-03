@@ -1,8 +1,7 @@
 import { createContext, useContext, useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { supabase, Event } from '@/lib/supabase';
-import i18n from '@/lib/i18n';
+import { supabase } from '@/lib/supabase';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { invokeEdgeFunction, invokeEdgeFunctionStrict } from '@/lib/edgeFunctions';
+import { invokeEdgeFunctionStrict } from '@/lib/edgeFunctions';
 
 export type TicketType = {
   id: string;
@@ -76,6 +75,20 @@ export function __test_shouldApplyRemoteEvents(prevCount: number, remoteCount: n
   const seventyTwoHoursMs = 72 * 60 * 60 * 1000;
   if (remoteCount === 0 && prevCount > 0 && nowMs - lastGoodAtMs < seventyTwoHoursMs) return false;
   return true;
+}
+
+export async function __test_collectPaginatedRows<T>(
+  fetchPage: (from: number, to: number) => Promise<{ data: T[] | null; error: unknown }>,
+  pageSize = 200
+) {
+  const rows: T[] = [];
+  for (let from = 0; ; from += pageSize) {
+    const page = await fetchPage(from, from + pageSize - 1);
+    if (page.error) throw page.error;
+    const pageRows = page.data ?? [];
+    rows.push(...pageRows);
+    if (pageRows.length < pageSize) return rows;
+  }
 }
 
 export function EventProvider({ children }: { children: React.ReactNode }) {
@@ -214,23 +227,25 @@ export function EventProvider({ children }: { children: React.ReactNode }) {
       .catch(() => {});
   }, []);
 
-  const fetchEventsQuery = useCallback(async (includeVerificationStatus: boolean) => {
-    return supabase
-      .from('events')
-      .select(
-        `
-          *,
-          venues (*),
-          event_ticket_types (*),
-          profiles!events_creator_id_fkey_profiles (
-            id,
-            full_name,
-            club_name${includeVerificationStatus ? ',\n            verification_status' : ''}
-          )
-        `
-      )
-      .order('event_date', { ascending: true })
-      .limit(200); // TODO: implement cursor-based pagination
+  const fetchEventsQuery = useCallback(async () => {
+    const pageSize = 200;
+    const rows = await __test_collectPaginatedRows<any>(
+      (from, to) => supabase
+        .from('events')
+        .select(
+          `
+            *,
+            venues (*),
+            event_ticket_types (*)
+          `
+        )
+        .order('event_date', { ascending: true })
+        .order('id', { ascending: true })
+        .range(from, to) as any,
+      pageSize
+    );
+
+    return { data: rows, error: null };
   }, []);
 
   const fetchEvents = useCallback(async () => {
@@ -243,21 +258,27 @@ export function EventProvider({ children }: { children: React.ReactNode }) {
       let data: any[] | null = null;
       let error: any = null;
 
-      {
-        const res = await fetchEventsQuery(true);
-        data = res.data as any;
-        error = res.error as any;
-      }
-
-      if (error?.code === '42703' && String(error?.message || '').includes('verification_status')) {
-        const res = await fetchEventsQuery(false);
-        data = res.data as any;
-        error = res.error as any;
-      }
+      const res = await fetchEventsQuery();
+      data = res.data as any;
+      error = res.error as any;
 
       if (error) throw error;
 
       if (data) {
+        const creatorIds = [...new Set(data.map((e: any) => e.creator_id).filter(Boolean))];
+        const creatorProfiles = new Map<string, any>();
+        if (creatorIds.length > 0) {
+          const profileBatchSize = 100;
+          for (let from = 0; from < creatorIds.length; from += profileBatchSize) {
+            const cardsResult = await (supabase as any)
+              .from('public_profile_cards')
+              .select('id, full_name, club_name, verification_status')
+              .in('id', creatorIds.slice(from, from + profileBatchSize));
+            if (cardsResult.error) throw cardsResult.error;
+            for (const card of cardsResult.data || []) creatorProfiles.set(card.id, card);
+          }
+        }
+
         const mappedEvents: AppEvent[] = data.map((e: any) => {
           const rawMs = new Date(e.event_date).getTime();
           const eventDate = Number.isFinite(rawMs)
@@ -265,7 +286,7 @@ export function EventProvider({ children }: { children: React.ReactNode }) {
               ? new Date(rawMs + madridOffsetMinutesForUtcMs(rawMs) * 60_000)
               : new Date(rawMs)
             : new Date(e.event_date);
-          const creatorProfile = Array.isArray(e.profiles) ? e.profiles[0] : e.profiles;
+          const creatorProfile = creatorProfiles.get(e.creator_id);
           const pad2 = (n: number) => String(n).padStart(2, '0');
           const localDate = isMadridTimezone
             ? `${eventDate.getUTCFullYear()}-${pad2(eventDate.getUTCMonth() + 1)}-${pad2(eventDate.getUTCDate())}`
@@ -343,7 +364,7 @@ export function EventProvider({ children }: { children: React.ReactNode }) {
         }, 900);
       }
     }
-  }, [fetchEventsQuery]);
+  }, [fetchEventsQuery, isMadridTimezone, madridOffsetMinutesForUtcMs]);
 
   const scheduleRefresh = useCallback(() => {
     if (refreshTimeoutRef.current) clearTimeout(refreshTimeoutRef.current);
@@ -694,7 +715,7 @@ export function EventProvider({ children }: { children: React.ReactNode }) {
             // upsert inserts a duplicate when the existing row is hidden by RLS policies.
             const upd = await supabase
               .from('event_ticket_types')
-              .update({ name, price, quantity: qty, is_active: true, deleted_at: null })
+              .update({ name, price, quantity: qty, category: t.category, metadata: t.metadata, is_active: true, deleted_at: null })
               .eq('id', ticketId)
               .eq('event_id', id)
               .select('id')
@@ -704,7 +725,7 @@ export function EventProvider({ children }: { children: React.ReactNode }) {
               // Row not found or RLS blocked update — fall back to insert
               const ins2 = await supabase
                 .from('event_ticket_types')
-                .insert({ event_id: id, name, price, quantity: qty, sold: 0, is_active: true })
+                .insert({ event_id: id, name, price, quantity: qty, category: t.category, metadata: t.metadata, sold: 0, is_active: true })
                 .select('id')
                 .maybeSingle();
               if (ins2.error) throw ins2.error;
@@ -712,7 +733,7 @@ export function EventProvider({ children }: { children: React.ReactNode }) {
           } else {
             const ins = await supabase
               .from('event_ticket_types')
-              .insert({ event_id: id, name, price, quantity: qty, sold: 0, is_active: true })
+              .insert({ event_id: id, name, price, quantity: qty, category: t.category, metadata: t.metadata, sold: 0, is_active: true })
               .select('id')
               .maybeSingle();
             if (ins.error) throw ins.error;
@@ -746,14 +767,13 @@ export function EventProvider({ children }: { children: React.ReactNode }) {
 
       await fetchEvents();
       try {
-        const dispatchResult: any = await invokeEdgeFunctionStrict('dispatch-notifications', {
+        await invokeEdgeFunctionStrict('dispatch-notifications', {
           limit: 400,
           eventId: id,
           enqueueEventUpdate: true,
         });
-        console.log('[dispatch-notifications][event_update]', JSON.stringify(dispatchResult));
-      } catch (e) {
-        console.warn('dispatch-notifications failed after event update:', e);
+      } catch {
+        console.warn('No se pudieron enviar las notificaciones del evento actualizado.');
       }
       return updatedAt;
     } catch (error) {

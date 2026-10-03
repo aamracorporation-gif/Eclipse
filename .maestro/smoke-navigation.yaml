@@ -1,0 +1,13 @@
+appId: com.achraf.eclipse
+name: Smoke - navegacion principal
+---
+- launchApp
+- assertNotVisible: "Something went wrong"
+- tapOn:
+    text: ".*(Eventos|Inicio).*"
+    optional: true
+- assertNotVisible: "Something went wrong"
+- tapOn:
+    text: ".*(Perfil|Profile).*"
+    optional: true
+- assertNotVisible: "Something went wrong"

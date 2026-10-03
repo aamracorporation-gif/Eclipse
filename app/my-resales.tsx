@@ -1,3 +1,5 @@
+import { Redirect } from 'expo-router';
+import { LAUNCH_FEATURES } from '@/lib/launchFeatures';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, Alert } from 'react-native';
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'expo-router';
@@ -17,7 +19,11 @@ import { useI18n } from '@/lib/I18nContext';
 import { AuthRequiredScreen } from '@/components/ui/AuthRequiredScreen';
 import { getErrorMessage } from '@/lib/errorHelpers';
 
-export default function MyResalesScreen() {
+export default function MyResalesScreenRoute() {
+  return LAUNCH_FEATURES.resale ? <MyResalesScreen /> : <Redirect href="/(tabs)/tickets" />;
+}
+
+function MyResalesScreen() {
   const { user } = useAuth();
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -42,7 +48,6 @@ export default function MyResalesScreen() {
     if (!userId) return;
     try {
       setLoading(true);
-      await supabase.rpc('purge_expired_tickets_and_resales');
       const { data, error } = await supabase
         .from('resale_listings')
         .select(`
@@ -475,3 +480,4 @@ const styles = StyleSheet.create({
     color: '#ef4444',
   },
 });
+

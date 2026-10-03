@@ -376,7 +376,7 @@ export default function EventDiscountsScreen() {
                     activeOpacity={0.8}
                   >
                     {formType === t && (
-                      <LinearGradient colors={['#7c3aed', '#5b21b6']} style={StyleSheet.absoluteFill} borderRadius={10} />
+                      <LinearGradient colors={['#7c3aed', '#5b21b6']} style={[StyleSheet.absoluteFill, { borderRadius: 10 }]} />
                     )}
                     <Text style={[styles.typeSymbol, formType === t && { color: '#fff' }]}>
                       {t === 'percentage' ? '%' : '€'}
@@ -455,8 +455,8 @@ export default function EventDiscountsScreen() {
             <>
               <TouchableOpacity style={styles.newBtn} onPress={() => setShowForm(true)} activeOpacity={0.8}>
                 <LinearGradient
-                  colors={['#7c3aed', '#5b21b6']} style={StyleSheet.absoluteFill}
-                  start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} borderRadius={14}
+                  colors={['#7c3aed', '#5b21b6']} style={[StyleSheet.absoluteFill, { borderRadius: 14 }]}
+                  start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
                 />
                 <Plus size={18} color="#fff" />
                 <Text style={styles.newBtnText}>Nuevo código de descuento</Text>

@@ -6,10 +6,10 @@
     "orientation": "portrait",
     "icon": "./assets/images/Icon.png",
     "scheme": "eclipse",
-    "userInterfaceStyle": "automatic",
+    "userInterfaceStyle": "dark",
     "newArchEnabled": true,
     "ios": {
-      "supportsTablet": true,
+      "supportsTablet": false,
       "bundleIdentifier": "com.achraf.eclipse",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
@@ -35,13 +35,19 @@
       [
         "expo-image-picker",
         {
-          "photosPermission": "The app accesses your photos to let you share them with your friends."
+          "photosPermission": "Eclipse necesita acceso a tus fotos para que puedas elegir imágenes de perfil y de eventos."
+        }
+      ],
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Eclipse necesita acceso a la cámara para escanear entradas y seleccionar fotografías."
         }
       ],
       [
         "expo-location",
         {
-          "locationWhenInUsePermission": "Allow $(PRODUCT_NAME) to access your location to verify event addresses."
+          "locationWhenInUsePermission": "Eclipse usa tu ubicación para mostrar eventos cercanos, verificar recintos y registrar escaneos autorizados."
         }
       ],
       [
@@ -75,19 +81,7 @@
       },
       "package": "com.achraf.eclipse",
       "googleServicesFile": "./google-services.json",
-      "config": {
-        "googleMaps": {
-          "apiKey": "AIzaSyAuYYijzfw5NgQEZrwDxp13ntDnakipRO4"
-        }
-      },
       "permissions": [
-        "android.permission.RECORD_AUDIO",
-        "android.permission.ACCESS_COARSE_LOCATION",
-        "android.permission.ACCESS_FINE_LOCATION",
-        "android.permission.POST_NOTIFICATIONS",
-        "android.permission.WAKE_LOCK",
-        "android.permission.RECEIVE_BOOT_COMPLETED",
-        "android.permission.RECORD_AUDIO",
         "android.permission.ACCESS_COARSE_LOCATION",
         "android.permission.ACCESS_FINE_LOCATION",
         "android.permission.POST_NOTIFICATIONS",
@@ -96,7 +90,9 @@
       ]
     },
     "owner": "ashhhhhhhh",
-    "runtimeVersion": "1.0.0",
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
     "updates": {
       "url": "https://u.expo.dev/42ebb6eb-62b1-4784-a483-831ae3c804f2"
     }

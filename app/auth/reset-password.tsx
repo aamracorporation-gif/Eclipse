@@ -10,39 +10,37 @@ import { ThemedInput } from '@/components/ui/ThemedInput';
 import { GlassView } from '@/components/ui/GlassView';
 import { useAppDialog } from '@/components/ui/AppDialog';
 import { SafeAreaView } from 'react-native-safe-area-context';
-
-const SPECIALS = '!@#$%^&*(),.?":{}|<>';
-
-function getReqs(pw: string) {
-  return {
-    len: pw.length >= 6,
-    upper: /[A-Z]/.test(pw),
-    lower: /[a-z]/.test(pw),
-    num: /[0-9]/.test(pw),
-    special: SPECIALS.split('').some(c => pw.includes(c)),
-  };
-}
-
-function isStrong(pw: string) {
-  const r = getReqs(pw);
-  return r.len && r.upper && r.lower && r.num && r.special;
-}
+import { getPasswordRequirements, isPasswordStrong } from '@/lib/validators';
+import { theme } from '@/theme/styles';
 
 const REQ_LABELS = [
-  { key: 'len' as const, label: 'Mínimo 6 caracteres' },
-  { key: 'upper' as const, label: 'Al menos una mayúscula (A-Z)' },
-  { key: 'lower' as const, label: 'Al menos una minúscula (a-z)' },
-  { key: 'num' as const, label: 'Al menos un número (0-9)' },
-  { key: 'special' as const, label: 'Al menos un carácter especial (!@#$…)' },
+  { key: 'minLength' as const, label: 'Mínimo 6 caracteres' },
+  { key: 'hasUpper' as const, label: 'Al menos una mayúscula (A-Z)' },
+  { key: 'hasLower' as const, label: 'Al menos una minúscula (a-z)' },
+  { key: 'hasNumber' as const, label: 'Al menos un número (0-9)' },
+  { key: 'hasSpecial' as const, label: 'Al menos un carácter especial (!@#$…)' },
+  { key: 'onlyAllowedChars' as const, label: 'Sin espacios, emojis ni símbolos no permitidos' },
 ];
+
+function firstParam(value: string | string[] | undefined): string {
+  return Array.isArray(value) ? String(value[0] || '') : String(value || '');
+}
 
 export default function ResetPasswordScreen() {
   const { show: showDialog } = useAppDialog();
-  const params = useLocalSearchParams<{ token_hash?: string; type?: string; access_token?: string }>();
+  const params = useLocalSearchParams<{
+    token_hash?: string;
+    type?: string;
+    access_token?: string;
+    refresh_token?: string;
+    code?: string;
+    error?: string;
+    error_description?: string;
+  }>();
 
   const [verifying, setVerifying] = useState(true);
   const [verified, setVerified] = useState(false);
-  const [sessionToken, setSessionToken] = useState('');
+  const [verificationError, setVerificationError] = useState('');
 
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
@@ -51,22 +49,43 @@ export default function ResetPasswordScreen() {
   const [loading, setLoading] = useState(false);
   const [pwTouched, setPwTouched] = useState(false);
 
-  const reqs = getReqs(password);
-  const strong = isStrong(password);
+  const reqs = getPasswordRequirements(password);
+  const strong = isPasswordStrong(password);
   const confirmErr = confirm && confirm !== password ? 'Las contraseñas no coinciden.' : null;
   const canSubmit = strong && confirm === password && !loading;
 
   // Verify the token on mount
   useEffect(() => {
+    let active = true;
+
     async function verify() {
-      const tokenHash = params.token_hash;
-      const accessToken = params.access_token;
+      const tokenHash = firstParam(params.token_hash);
+      const accessToken = firstParam(params.access_token);
+      const refreshToken = firstParam(params.refresh_token);
+      const code = firstParam(params.code);
+      const authError = firstParam(params.error_description || params.error);
+
+      const fail = (message: string) => {
+        if (!active) return;
+        setVerificationError(message);
+        setVerified(false);
+      };
+
+      if (authError) {
+        fail('El enlace no es válido o ha expirado. Solicita uno nuevo desde el inicio de sesión.');
+        if (active) setVerifying(false);
+        return;
+      }
 
       if (accessToken) {
-        // Implicit flow: access_token already in params
-        setSessionToken(accessToken);
-        setVerified(true);
-        setVerifying(false);
+        if (!refreshToken) {
+          fail('El enlace de recuperación está incompleto. Solicita uno nuevo desde el inicio de sesión.');
+        } else {
+          const { error } = await supabase.auth.setSession({ access_token: accessToken, refresh_token: refreshToken });
+          if (error) fail('El enlace ya fue usado o ha expirado. Solicita uno nuevo.');
+          else if (active) setVerified(true);
+        }
+        if (active) setVerifying(false);
         return;
       }
 
@@ -76,41 +95,25 @@ export default function ResetPasswordScreen() {
             token_hash: tokenHash,
             type: 'recovery',
           });
-          if (error || !data.session?.access_token) {
-            showDialog({
-              title: 'Enlace expirado',
-              message: 'Este enlace ya fue usado o ha expirado. Solicita uno nuevo desde la pantalla de inicio de sesión.',
-              onConfirm: () => router.replace('/(auth)/login'),
-            });
-          } else {
-            setSessionToken(data.session.access_token);
-            setVerified(true);
-          }
+          if (error || !data.session?.access_token) fail('Este enlace ya fue usado o ha expirado. Solicita uno nuevo.');
+          else if (active) setVerified(true);
         } catch {
-          showDialog({
-            title: 'Error',
-            message: 'No se pudo verificar el enlace. Inténtalo de nuevo.',
-            onConfirm: () => router.replace('/(auth)/login'),
-          });
+          fail('No se pudo verificar el enlace. Comprueba tu conexión e inténtalo de nuevo.');
         }
+      } else if (code) {
+        const { error } = await supabase.auth.exchangeCodeForSession(code);
+        if (error) fail('El enlace ya fue usado o ha expirado. Solicita uno nuevo.');
+        else if (active) setVerified(true);
       } else {
-        // No token: check if already have an active session (user navigated here manually)
         const { data } = await supabase.auth.getSession();
-        if (data.session?.access_token) {
-          setSessionToken(data.session.access_token);
-          setVerified(true);
-        } else {
-          showDialog({
-            title: 'Enlace inválido',
-            message: 'No se encontró un token de recuperación. Solicita un nuevo enlace.',
-            onConfirm: () => router.replace('/(auth)/login'),
-          });
-        }
+        if (data.session?.access_token && active) setVerified(true);
+        else fail('No se encontró una sesión de recuperación válida. Solicita un nuevo enlace.');
       }
-      setVerifying(false);
+      if (active) setVerifying(false);
     }
-    verify();
-  }, []);
+    void verify();
+    return () => { active = false; };
+  }, [params.access_token, params.code, params.error, params.error_description, params.refresh_token, params.token_hash]);
 
   const handleUpdate = async () => {
     if (!canSubmit) return;
@@ -136,14 +139,14 @@ export default function ResetPasswordScreen() {
   };
 
   return (
-    <LinearGradient colors={['#0D0D1A', '#1a0533', '#0D0D1A']} style={styles.gradient}>
+    <LinearGradient colors={[Colors.dark.background, Colors.dark.backgroundElevated]} style={styles.gradient}>
       <SafeAreaView style={{ flex: 1 }}>
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
           <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
             <View style={styles.header}>
               <View style={styles.logoWrap}>
-                <LinearGradient colors={['#7C3AED', '#06B6D4']} style={styles.logoGradient}>
-                  <Sparkles size={28} color="#fff" />
+                <LinearGradient colors={Colors.dark.primaryGradient} style={styles.logoGradient}>
+                  <Sparkles size={30} color={Colors.dark.text} />
                 </LinearGradient>
               </View>
               <Text style={styles.title}>Nueva contraseña</Text>
@@ -152,10 +155,19 @@ export default function ResetPasswordScreen() {
 
             {verifying ? (
               <View style={styles.loadingWrap}>
-                <ActivityIndicator size="large" color="#7C3AED" />
+                <ActivityIndicator size="large" color={Colors.dark.primary} />
                 <Text style={styles.loadingText}>Verificando enlace…</Text>
               </View>
-            ) : !verified ? null : (
+            ) : !verified ? (
+              <GlassView intensity={16} style={styles.errorCard}>
+                <Text style={styles.errorTitle}>No podemos abrir este enlace</Text>
+                <Text style={styles.errorBody}>{verificationError}</Text>
+                <ThemedButton
+                  title="Solicitar un enlace nuevo"
+                  onPress={() => router.replace('/(auth)/login')}
+                />
+              </GlassView>
+            ) : (
               <GlassView intensity={16} style={styles.card}>
                 <View style={styles.field}>
                   <ThemedInput
@@ -164,10 +176,10 @@ export default function ResetPasswordScreen() {
                     onChangeText={v => { setPassword(v); if (!pwTouched) setPwTouched(true); }}
                     secureTextEntry={!showPwd}
                     placeholder="Introduce tu contraseña"
-                    leftIcon={<Lock size={18} color="rgba(255,255,255,0.45)" />}
+                    leftIcon={<Lock size={18} color={Colors.dark.textSecondary} />}
                     rightIcon={
                       <TouchableOpacity onPress={() => setShowPwd(v => !v)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                        {showPwd ? <EyeOff size={18} color="rgba(255,255,255,0.45)" /> : <Eye size={18} color="rgba(255,255,255,0.45)" />}
+                        {showPwd ? <EyeOff size={18} color={Colors.dark.textSecondary} /> : <Eye size={18} color={Colors.dark.textSecondary} />}
                       </TouchableOpacity>
                     }
                   />
@@ -192,10 +204,10 @@ export default function ResetPasswordScreen() {
                     onChangeText={setConfirm}
                     secureTextEntry={!showConfirm}
                     placeholder="Repite la contraseña"
-                    leftIcon={<Lock size={18} color="rgba(255,255,255,0.45)" />}
+                    leftIcon={<Lock size={18} color={Colors.dark.textSecondary} />}
                     rightIcon={
                       <TouchableOpacity onPress={() => setShowConfirm(v => !v)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                        {showConfirm ? <EyeOff size={18} color="rgba(255,255,255,0.45)" /> : <Eye size={18} color="rgba(255,255,255,0.45)" />}
+                        {showConfirm ? <EyeOff size={18} color={Colors.dark.textSecondary} /> : <Eye size={18} color={Colors.dark.textSecondary} />}
                       </TouchableOpacity>
                     }
                     error={confirmErr ?? undefined}
@@ -223,23 +235,26 @@ export default function ResetPasswordScreen() {
 
 const styles = StyleSheet.create({
   gradient: { flex: 1 },
-  scroll: { flexGrow: 1, justifyContent: 'center', padding: 24 },
-  header: { alignItems: 'center', marginBottom: 32 },
-  logoWrap: { width: 68, height: 68, borderRadius: 22, overflow: 'hidden', marginBottom: 20 },
+  scroll: { flexGrow: 1, justifyContent: 'center', padding: theme.space[6] },
+  header: { alignItems: 'center', marginBottom: theme.space[8] },
+  logoWrap: { width: 80, height: 80, borderRadius: 40, overflow: 'hidden', marginBottom: theme.space[5] },
   logoGradient: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  title: { color: '#fff', fontSize: 26, fontWeight: '800', textAlign: 'center', marginBottom: 8 },
-  subtitle: { color: 'rgba(255,255,255,0.55)', fontSize: 14, textAlign: 'center', lineHeight: 20 },
-  card: { borderRadius: 20, padding: 20, borderWidth: 1, borderColor: 'rgba(255,255,255,0.10)', marginBottom: 20 },
-  field: { marginBottom: 16 },
+  title: { color: Colors.dark.text, fontSize: theme.typography.size['3xl'], fontWeight: theme.typography.weight.black, textAlign: 'center', marginBottom: theme.space[2] },
+  subtitle: { color: Colors.dark.textSecondary, fontSize: theme.typography.size.md, textAlign: 'center', lineHeight: 22 },
+  card: { marginBottom: theme.space[5] },
+  errorCard: { marginBottom: theme.space[5] },
+  errorTitle: { color: Colors.dark.text, fontSize: theme.typography.size.xl, fontWeight: theme.typography.weight.bold, textAlign: 'center', marginBottom: theme.space[3] },
+  errorBody: { color: Colors.dark.textSecondary, fontSize: theme.typography.size.sm, textAlign: 'center', lineHeight: 21, marginBottom: theme.space[5] },
+  field: { marginBottom: theme.space[2] },
   loadingWrap: { alignItems: 'center', paddingVertical: 40, gap: 16 },
-  loadingText: { color: 'rgba(255,255,255,0.55)', fontSize: 15 },
+  loadingText: { color: Colors.dark.textSecondary, fontSize: theme.typography.size.md },
   reqs: { marginTop: 12, gap: 8 },
   reqRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  reqDot: { width: 18, height: 18, borderRadius: 9, borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.25)', alignItems: 'center', justifyContent: 'center' },
-  reqDotOk: { borderColor: '#4ade80', backgroundColor: '#4ade80' },
-  reqCheck: { color: '#fff', fontSize: 10, fontWeight: '800' },
-  reqText: { color: 'rgba(255,255,255,0.4)', fontSize: 13 },
-  reqTextOk: { color: '#4ade80' },
+  reqDot: { width: 18, height: 18, borderRadius: 9, borderWidth: 1.5, borderColor: Colors.dark.borderStrong, alignItems: 'center', justifyContent: 'center' },
+  reqDotOk: { borderColor: Colors.dark.success, backgroundColor: Colors.dark.success },
+  reqCheck: { color: Colors.dark.text, fontSize: 10, fontWeight: theme.typography.weight.black },
+  reqText: { color: Colors.dark.textMuted, fontSize: 13, flex: 1 },
+  reqTextOk: { color: Colors.dark.success },
   backLink: { alignItems: 'center', paddingVertical: 12 },
   backLinkText: { color: Colors.dark.primary, fontSize: 14, fontWeight: '600' },
 });

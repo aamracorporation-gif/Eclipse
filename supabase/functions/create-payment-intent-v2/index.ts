@@ -1,3 +1,4 @@
+import { checkoutUnavailableReason } from '../_shared/launchPolicy.ts';
 type Json = Record<string, unknown>;
 
 const corsHeaders = {
@@ -110,13 +111,14 @@ async function stripeGetAccount(accountId: string) {
   return data as { id: string };
 }
 
-async function stripeCreatePaymentIntent(params: Record<string, string>) {
+async function stripeCreatePaymentIntent(params: Record<string, string>, idempotencyKey: string) {
   const STRIPE_SECRET_KEY = getStripeSecretKey();
   const res = await fetch("https://api.stripe.com/v1/payment_intents", {
     method: "POST",
     headers: {
       Authorization: `Bearer ${STRIPE_SECRET_KEY}`,
       "Content-Type": "application/x-www-form-urlencoded",
+      "Idempotency-Key": idempotencyKey,
     },
     body: new URLSearchParams(params),
   });
@@ -127,6 +129,15 @@ async function stripeCreatePaymentIntent(params: Record<string, string>) {
     throw new Error(String(msg));
   }
 
+  return data as { id: string; client_secret: string; amount: number; currency: string };
+}
+
+async function stripeRetrievePaymentIntent(paymentIntentId: string) {
+  const res = await fetch(`https://api.stripe.com/v1/payment_intents/${encodeURIComponent(paymentIntentId)}`, {
+    headers: { Authorization: `Bearer ${getStripeSecretKey()}` },
+  });
+  const data = await res.json().catch(() => null);
+  if (!res.ok) throw new Error(String((data as any)?.error?.message || "Stripe error"));
   return data as { id: string; client_secret: string; amount: number; currency: string };
 }
 
@@ -210,9 +221,39 @@ Deno.serve(async (req) => {
       return jsonResponse({ ok: false, error: "Invalid JSON" });
     }
 
+    const unavailable = checkoutUnavailableReason(body ?? {});
+    if (unavailable) return jsonResponse({ ok: false, error: unavailable, code: "FEATURE_DISABLED" });
+
     const kind = body?.kind;
     if (kind !== "event_ticket" && kind !== "vip_table" && kind !== "resale_ticket") {
       return jsonResponse({ ok: false, error: "Not implemented" });
+    }
+
+    const idempotencyKey = String(body?.idempotency_key || "").trim();
+    if (!/^[A-Za-z0-9_.:-]{16,200}$/.test(idempotencyKey)) {
+      return jsonResponse({ ok: false, error: "Missing or invalid idempotency_key" });
+    }
+
+    const previous = await restGet(
+      SUPABASE_URL,
+      SUPABASE_SERVICE_ROLE_KEY,
+      `payment_transactions?idempotency_key=eq.${encodeURIComponent(idempotencyKey)}&user_id=eq.${encodeURIComponent(userId)}&select=id,stripe_payment_intent_id,kind,metadata`,
+    );
+    if (previous.ok && Array.isArray(previous.json) && previous.json.length > 0) {
+      const tx = previous.json[0];
+      const replayUnavailable = checkoutUnavailableReason({ ...(tx.metadata || {}), kind: tx.kind });
+      if (replayUnavailable) return jsonResponse({ ok: false, error: replayUnavailable, code: "FEATURE_DISABLED" });
+      const intent = await stripeRetrievePaymentIntent(String(tx.stripe_payment_intent_id));
+      return jsonResponse({
+        ok: true,
+        client_secret: intent.client_secret,
+        payment_intent_id: intent.id,
+        amount_cents: intent.amount,
+        currency: intent.currency,
+        transaction_id: String(tx.id),
+        idempotent_replay: true,
+        stripe_mode: getStripeMode(),
+      });
     }
 
     const requireOrganizerConnect = (Deno.env.get("REQUIRE_ORGANIZER_STRIPE_CONNECT") ?? "").trim().toLowerCase() === "true";
@@ -357,7 +398,8 @@ Deno.serve(async (req) => {
 
       let intent;
       try {
-        intent = await stripeCreatePaymentIntent(intentParams);
+        intentParams["metadata[idempotency_key]"] = idempotencyKey;
+        intent = await stripeCreatePaymentIntent(intentParams, idempotencyKey);
       } catch (e: any) {
         const message = String(e?.message || e || "");
         if (hasConnect && isStripeConnectPlatformError(message)) {
@@ -420,6 +462,7 @@ Deno.serve(async (req) => {
         destination_account_id: hasConnect ? String(organizerProfile?.stripe_account_id || rawStripeAccountId) : null,
         destination_amount_cents: hasConnect ? destinationAmountCents : 0,
         commission_bps: eclipseNetRateBps,
+        idempotency_key: idempotencyKey,
         metadata,
       });
 
@@ -463,16 +506,24 @@ Deno.serve(async (req) => {
       const ticketRes = await restGet(
         SUPABASE_URL,
         SUPABASE_SERVICE_ROLE_KEY,
-        `tickets?id=eq.${encodeURIComponent(ticketId)}&select=id,event_id,total_price,status,ticket_status,user_id`,
+        `tickets?id=eq.${encodeURIComponent(ticketId)}&select=id,event_id,total_price,status,ticket_status,user_id,scanned_at,validation_status,payment_status,wallet_added`,
       );
       if (!ticketRes.ok || !Array.isArray(ticketRes.json) || ticketRes.json.length === 0) {
         return jsonResponse({ ok: false, error: "Ticket not found" });
       }
       const ticket = ticketRes.json[0];
+      if (String(ticket.user_id || "") !== String(listing.seller_id || "")) {
+        return jsonResponse({ ok: false, error: "Listing owner no longer owns the ticket" });
+      }
 
       const inResaleState =
-        String(ticket.ticket_status || "") === "reselling" || String(ticket.status || "") === "resale";
-      if (!inResaleState) return jsonResponse({ ok: false, error: "Ticket is not in resale state" });
+        String(ticket.ticket_status || "") === "reselling" && String(ticket.status || "") === "resale";
+      if (!inResaleState || ticket.scanned_at || ticket.validation_status !== "valid" || ticket.wallet_added) {
+        return jsonResponse({ ok: false, error: "Ticket is not eligible for resale" });
+      }
+      if (ticket.payment_status !== "paid") {
+        return jsonResponse({ ok: false, error: "Ticket payment is not complete" });
+      }
 
       const eventId = String(ticket.event_id || "");
       if (!eventId) return jsonResponse({ ok: false, error: "Event not found" });
@@ -480,12 +531,21 @@ Deno.serve(async (req) => {
       const ev = await restGet(
         SUPABASE_URL,
         SUPABASE_SERVICE_ROLE_KEY,
-        `events?id=eq.${encodeURIComponent(eventId)}&select=id,title,creator_id,allow_resale`,
+        `events?id=eq.${encodeURIComponent(eventId)}&select=id,title,creator_id,allow_resale,event_date,end_datetime,is_cancelled,status`,
       );
       if (!ev.ok || !Array.isArray(ev.json) || ev.json.length === 0) return jsonResponse({ ok: false, error: "Event not found" });
       const eventRow = ev.json[0];
       const allowResale = eventRow?.allow_resale ?? true;
       if (allowResale === false) return jsonResponse({ ok: false, error: "Resale not allowed for this event" });
+      if (eventRow.is_cancelled || ["cancelled", "deleted"].includes(String(eventRow.status || ""))) {
+        return jsonResponse({ ok: false, error: "Event is not available" });
+      }
+      const endDate = eventRow.end_datetime
+        ? new Date(eventRow.end_datetime)
+        : new Date(new Date(eventRow.event_date).getTime() + 5 * 60 * 60 * 1000);
+      if (!Number.isFinite(endDate.getTime()) || endDate.getTime() <= Date.now()) {
+        return jsonResponse({ ok: false, error: "Event has ended" });
+      }
 
       const priceEur = Number(listing.price ?? 0);
       const originalResaleCents = Math.round(priceEur * 100);
@@ -513,7 +573,8 @@ Deno.serve(async (req) => {
         "metadata[credit_debit_cents]": "0",
       };
 
-      const intent = await stripeCreatePaymentIntent(intentParams);
+      intentParams["metadata[idempotency_key]"] = idempotencyKey;
+      const intent = await stripeCreatePaymentIntent(intentParams, idempotencyKey);
 
       const metadata = {
         event_id: eventId,
@@ -537,6 +598,7 @@ Deno.serve(async (req) => {
         destination_account_id: null,
         destination_amount_cents: 0,
         commission_bps: resaleEclipseRateBps,
+        idempotency_key: idempotencyKey,
         metadata,
       });
 
@@ -565,12 +627,12 @@ Deno.serve(async (req) => {
       const vipRes = await restGet(
         SUPABASE_URL,
         SUPABASE_SERVICE_ROLE_KEY,
-        `reservados_vip?id=eq.${encodeURIComponent(vipId)}&select=id,event_id,base_price,quantity_available,capacity_people,name`,
+        `reservados_vip?id=eq.${encodeURIComponent(vipId)}&select=id,event_id,base_price,quantity_available,capacity_people,name,is_active,deleted_at`,
       );
       if (!vipRes.ok || !Array.isArray(vipRes.json) || vipRes.json.length === 0) return jsonResponse({ ok: false, error: "VIP not found" });
       const vip = vipRes.json[0];
 
-      if (Number(vip.quantity_available ?? 0) < 1) return jsonResponse({ ok: false, error: "VIP sold out" });
+      if (vip.is_active !== true || vip.deleted_at || Number(vip.quantity_available ?? 0) < 1) return jsonResponse({ ok: false, error: "VIP sold out" });
 
       const eventId = String(vip.event_id || "");
       if (!eventId) return jsonResponse({ ok: false, error: "VIP not found" });
@@ -578,10 +640,16 @@ Deno.serve(async (req) => {
       const ev = await restGet(
         SUPABASE_URL,
         SUPABASE_SERVICE_ROLE_KEY,
-        `events?id=eq.${encodeURIComponent(eventId)}&select=id,title,creator_id`,
+        `events?id=eq.${encodeURIComponent(eventId)}&select=id,title,creator_id,is_cancelled,status,end_datetime,event_date`,
       );
       if (!ev.ok || !Array.isArray(ev.json) || ev.json.length === 0) return jsonResponse({ ok: false, error: "Event not found" });
       const eventRow = ev.json[0];
+      const vipEventEnd = eventRow.end_datetime
+        ? new Date(eventRow.end_datetime).getTime()
+        : new Date(eventRow.event_date).getTime() + 5 * 60 * 60 * 1000;
+      if (eventRow.is_cancelled || eventRow.status === "cancelled" || !Number.isFinite(vipEventEnd) || vipEventEnd <= Date.now()) {
+        return jsonResponse({ ok: false, error: "Event is not available" });
+      }
 
       const basePrice = Number(vip.base_price ?? 0);
       const vipOriginalCents = Math.round(basePrice * 100);
@@ -659,7 +727,8 @@ Deno.serve(async (req) => {
 
       let intent;
       try {
-        intent = await stripeCreatePaymentIntent(intentParams);
+        intentParams["metadata[idempotency_key]"] = idempotencyKey;
+        intent = await stripeCreatePaymentIntent(intentParams, idempotencyKey);
       } catch (e: any) {
         const message = String(e?.message || e || "");
         if (hasConnect && isStripeConnectPlatformError(message)) {
@@ -703,6 +772,7 @@ Deno.serve(async (req) => {
         credit_debit_cents: creditDebitCents,
         event_title: String(eventRow.title || ""),
         vip_name: String(vip.name || ""),
+        capacity_people: Number(vip.capacity_people),
         platform_fee_cents: vipPlatformFeeCents,
         destination_amount_cents: destinationAmountCents,
       };
@@ -718,6 +788,7 @@ Deno.serve(async (req) => {
         destination_account_id: hasConnect ? rawStripeAccountId : null,
         destination_amount_cents: hasConnect ? destinationAmountCents : 0,
         commission_bps: vipEclipseRateBps,
+        idempotency_key: idempotencyKey,
         metadata,
       });
 
@@ -744,3 +815,4 @@ Deno.serve(async (req) => {
     return jsonResponse({ ok: false, error: `create-payment-intent: ${e?.message || "Internal error"}` });
   }
 });
+

@@ -4,6 +4,7 @@ export type Currency = 'eur';
 
 export type CreatePaymentIntentRequest =
   | {
+      idempotency_key?: string;
       kind: 'event_ticket';
       event_id: string;
       ticket_type_id?: string | null;
@@ -14,10 +15,12 @@ export type CreatePaymentIntentRequest =
       discount_code_id?: string;
     }
   | {
+      idempotency_key?: string;
       kind: 'resale_ticket';
       listing_id: string;
     }
   | {
+      idempotency_key?: string;
       kind: 'vip_table';
       reference_id: string;
       credit_debit_eur?: number;
@@ -25,6 +28,7 @@ export type CreatePaymentIntentRequest =
       buyer_email?: string;
     }
   | {
+      idempotency_key?: string;
       kind: 'premium_feature';
       reference_id: string;
     };

@@ -6,6 +6,7 @@ const createIntentSchema = z.object({
   event_id: z.string().uuid(),
   quantity: z.number().int().positive().optional(),
   ticket_type_id: z.string().uuid().optional().nullable(),
+  idempotency_key: z.string().min(16).max(200).regex(/^[A-Za-z0-9_.:-]+$/),
 });
 
 const createIntent = asyncHandler(async (req, res) => {
@@ -15,6 +16,7 @@ const createIntent = asyncHandler(async (req, res) => {
     userId: req.auth.userId,
     quantity: input.quantity,
     ticketTypeId: input.ticket_type_id || null,
+    idempotencyKey: input.idempotency_key,
   });
   return res.json({ ok: true, client_secret: out.clientSecret, payment_intent_id: out.paymentIntentId });
 });

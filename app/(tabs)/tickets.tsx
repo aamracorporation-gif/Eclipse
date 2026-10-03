@@ -1,11 +1,12 @@
-﻿﻿import { View, Text, StyleSheet, FlatList, Image, TouchableOpacity, RefreshControl, Platform, Modal, KeyboardAvoidingView, Animated, Easing, Alert } from 'react-native';
+import { LAUNCH_FEATURES } from '@/lib/launchFeatures';
+import { View, Text, StyleSheet, FlatList, Image, TouchableOpacity, RefreshControl, Platform, Modal, KeyboardAvoidingView, Animated, Easing, Alert } from 'react-native';
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { router } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
 import { supabase, Ticket } from '@/lib/supabase';
 import { useAuth } from '@/lib/AuthContext';
 import { useCredit } from '@/lib/WalletContext';
-import { Ticket as TicketIcon, LogIn, DollarSign, X, Download, ChevronRight, Sparkles, CreditCard } from '@/lib/icons';
+import { Ticket as TicketIcon, LogIn, DollarSign, X, Download, ChevronRight, CreditCard } from '@/lib/icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Colors } from '@/constants/Colors';
 import { GlassView } from '@/components/ui/GlassView';
@@ -16,7 +17,6 @@ import { AuthRequiredScreen } from '@/components/ui/AuthRequiredScreen';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import QRCode from 'react-native-qrcode-svg';
 import * as Print from 'expo-print';
-import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
 import * as Haptics from 'expo-haptics';
 import * as Linking from 'expo-linking';
@@ -142,9 +142,6 @@ export default function TicketsScreen() {
     if (!user) return;
 
     try {
-      // Hard-clean expired tickets/resales (event ended >= 5h ago) before loading UI.
-      await supabase.rpc('purge_expired_tickets_and_resales');
-
       // 1. Fetch tickets without the nested relation to avoid PGRST200 error
       // Using range 0-99 to fetch up to 100 tickets initially, can be paginated later if needed
       const { data: ticketsData, error: ticketsError } = await supabase
@@ -154,7 +151,6 @@ export default function TicketsScreen() {
           events (
             *,
             venues (*),
-            profiles:creator_id (full_name, club_name),
             event_ticket_types (id, name, category, metadata)
           )
         `)
@@ -169,6 +165,24 @@ export default function TicketsScreen() {
 
       // 2. Fetch resale listings manually for these tickets
       let processedTickets = ticketsData || [];
+      const creatorIds = [...new Set(processedTickets
+        .map((ticket: any) => ticket.events?.creator_id)
+        .filter(Boolean))];
+      const creatorProfiles = new Map<string, any>();
+      if (creatorIds.length > 0) {
+        const cardsResult = await (supabase as any)
+          .from('public_profile_cards')
+          .select('id, full_name, club_name')
+          .in('id', creatorIds);
+        if (cardsResult.error) throw cardsResult.error;
+        for (const card of cardsResult.data || []) creatorProfiles.set(card.id, card);
+      }
+      processedTickets = processedTickets.map((ticket: any) => ({
+        ...ticket,
+        events: ticket.events
+          ? { ...ticket.events, profiles: creatorProfiles.get(ticket.events.creator_id) ?? null }
+          : ticket.events,
+      }));
 
       // Filter out tickets for events that have already ended.
       const now = Date.now();
@@ -205,7 +219,6 @@ export default function TicketsScreen() {
         }
       }
 
-      console.log('Tickets fetched:', processedTickets.length);
       setTickets(processedTickets);
     } catch (error) {
       console.error('Error fetching tickets:', error);
@@ -283,7 +296,7 @@ export default function TicketsScreen() {
       return;
     }
 
-    const allowResaleForEvent = (ticket as any)?.events?.allow_resale ?? true;
+    const allowResaleForEvent = LAUNCH_FEATURES.resale && ((ticket as any)?.events?.allow_resale ?? true);
     if (!allowResaleForEvent) {
       showDialog({ title: t('tickets.action_not_allowed_title'), message: t('tickets.resale_disabled_event') });
       return;
@@ -365,7 +378,7 @@ export default function TicketsScreen() {
     if (addingToWallet) return;
     
     // Warn user that adding to wallet blocks resale
-    const allowResale = (ticket as any)?.events?.allow_resale ?? true;
+    const allowResale = LAUNCH_FEATURES.resale && ((ticket as any)?.events?.allow_resale ?? true);
     const originalPrice = typeof (ticket as any).total_price === 'string' ? Number((ticket as any).total_price) : ((ticket as any).total_price ?? 0);
     const canResell = allowResale && originalPrice > 0;
     if (canResell) {
@@ -438,7 +451,11 @@ export default function TicketsScreen() {
           throw new Error(result?.error || 'No se pudo abrir Apple Wallet.');
         }
 
-        await supabase.from('tickets').update({ wallet_added: true, wallet_pass_id: ticket.id }).eq('id', ticket.id);
+        const { error: walletRecordError } = await supabase.rpc('mark_ticket_wallet_added', {
+          p_ticket_id: ticket.id,
+          p_wallet_pass_id: ticket.id,
+        });
+        if (walletRecordError) throw walletRecordError;
         setTickets((prev) => prev.map((t) => (t.id === ticket.id ? { ...t, wallet_added: true, wallet_pass_id: ticket.id } : t)));
       } else {
         // Android Google Wallet handling
@@ -766,12 +783,8 @@ export default function TicketsScreen() {
       ? `${eventDate.toLocaleDateString(localeTag, { weekday: 'short' })} · ${eventDate.getDate()} ${eventDate.toLocaleDateString(localeTag, { month: 'short' })}`
       : '—';
     const time = eventDate ? eventDate.toLocaleTimeString(localeTag, { hour: '2-digit', minute: '2-digit' }) : '—';
-    const eventYear = eventDate ? eventDate.getFullYear() : new Date().getFullYear();
-    const ticketShort = item.id.slice(0, 4).toUpperCase();
     const sectionLabel = (ticketTypeName || tierConfig.label.replace(/^[^\s]+\s/, '')).replace(/^Premium · /, '');
-    const rowLabel = '—';
     const seatLabel = `${(item as any).quantity ?? 1}P`;
-    const ticketCode = `ECL-${eventYear}-${ticketShort}-${visualTier.toUpperCase()}`;
 
     // Single shared shimmer translateX — runs on native thread, zero JS cost
     const shimmerX = shimmer.interpolate({ inputRange: [0, 1], outputRange: [-420, 420] });
@@ -935,9 +948,11 @@ export default function TicketsScreen() {
             </View>
           </View>
 
+            {!!item.entry_deadline && <Text style={{ color: '#fbbf24', fontSize: 12 }}>Acceso antes de {new Date(item.entry_deadline).toLocaleString('es-ES')}</Text>}
+
           {/* ══ ACTION ROW ════════════════════════════════════════════ */}
           {/* Avisos de restricciones */}
-          {(item.wallet_added || (item as any)?.events?.allow_resale === false) && !isUsed && !isResale && (
+          {LAUNCH_FEATURES.resale && (item.wallet_added || (item as any)?.events?.allow_resale === false) && !isUsed && !isResale && (
             <View style={{ paddingHorizontal: 12, paddingTop: 8, gap: 4 }}>
               {item.wallet_added && (
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: 'rgba(255,255,255,0.04)', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 5, borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)' }}>
@@ -972,6 +987,7 @@ export default function TicketsScreen() {
             )}
 
             {(() => {
+              if (!LAUNCH_FEATURES.resale && !isResale) return null;
               const resaleBlocked = isUsed || !!item.wallet_added || (item as any)?.events?.allow_resale === false;
               return !isResale ? (
                 <TouchableOpacity
@@ -1128,13 +1144,13 @@ export default function TicketsScreen() {
                         <ChevronRight size={16} color="white" />
                       </LinearGradient>
                     </TouchableOpacity>
-                    <TouchableOpacity
+                    {LAUNCH_FEATURES.resale && (<TouchableOpacity
                       activeOpacity={0.75}
                       onPress={() => { Haptics.selectionAsync(); router.push('/(tabs)/resale'); }}
                       style={styles.emptyCtaSecondary}
                     >
                       <Text style={styles.emptyCtaSecondaryText}>{t('tickets.empty.view_resale')}</Text>
-                    </TouchableOpacity>
+                    </TouchableOpacity>)}
                   </View>
                 </LinearGradient>
               </Animated.View>
@@ -1283,7 +1299,6 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     borderWidth: 1,
     zIndex: 10,
-    backdropFilter: 'blur(8px)',
   },
   tcBadgeDot: {
     width: 6,

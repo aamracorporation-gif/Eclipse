@@ -1,3 +1,5 @@
+import { Redirect } from 'expo-router';
+import { LAUNCH_FEATURES } from '@/lib/launchFeatures';
 import { View, Text, StyleSheet, FlatList, RefreshControl } from 'react-native';
 import { useCredit } from '@/lib/WalletContext';
 import { Colors } from '@/constants/Colors';
@@ -9,7 +11,11 @@ import { Stack } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useResponsive } from '@/lib/responsive';
 
-export default function WalletScreen() {
+export default function WalletScreenRoute() {
+  return LAUNCH_FEATURES.walletCredit ? <WalletScreen /> : <Redirect href="/(tabs)/tickets" />;
+}
+
+function WalletScreen() {
   const { creditBalance, movimientos, refreshCredit, loading } = useCredit();
   const insets = useSafeAreaInsets();
   const { horizontalPadding, maxContentWidth, scaleFont } = useResponsive();
@@ -213,3 +219,4 @@ const styles = StyleSheet.create({
     marginTop: 6,
   },
 });
+

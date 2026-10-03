@@ -94,6 +94,7 @@ export type Event = {
 };
 
 export type Ticket = {
+  entry_deadline?: string | null;
   id: string;
   event_id: string;
   user_id: string | null;

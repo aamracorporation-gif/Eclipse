@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, Animated, Easing, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View, Vibration, useWindowDimensions } from 'react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -111,6 +111,7 @@ export default function ScanScreen() {
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
   const [eventPickerOpen, setEventPickerOpen] = useState(false);
   const [sessionCount, setSessionCount] = useState(0);
+  const [isAdmin, setIsAdmin] = useState(false);
 
   const scannedRef = useRef(false);
   const pulse = useRef(new Animated.Value(0)).current;
@@ -124,8 +125,24 @@ export default function ScanScreen() {
   }, [windowWidth]);
   const frameRadius = useMemo(() => Math.max(18, Math.round(frameSize * 0.085)), [frameSize]);
 
-  const adminEmail = 'aamracorporation@gmail.com';
-  const isAdmin = !!user?.email && user.email.toLowerCase() === adminEmail;
+  useEffect(() => {
+    let cancelled = false;
+    if (!user?.id) {
+      setIsAdmin(false);
+      return;
+    }
+    void supabase
+      .from('profiles')
+      .select('role')
+      .eq('id', user.id)
+      .maybeSingle()
+      .then(({ data, error }) => {
+        if (!cancelled) setIsAdmin(!error && data?.role === 'admin');
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.id]);
 
   const myEvents = useMemo(() => {
     const uid = user?.id;
@@ -191,39 +208,15 @@ export default function ScanScreen() {
 
   const lastAutoValidatedRef = useRef<string>('');
 
-  useEffect(() => {
-    if (view !== 'home') return;
-    if (!selectedEventId) return;
-    const raw = manualToken.trim();
-    if (raw.length < 6) {
-      if (manualAutoTimerRef.current) clearTimeout(manualAutoTimerRef.current);
-      manualAutoTimerRef.current = null;
-      lastAutoValidatedRef.current = '';
-      return;
-    }
-    if (busy) return;
-    // Don't re-validate the same token that was just auto-validated
-    if (raw === lastAutoValidatedRef.current) return;
-    if (manualAutoTimerRef.current) clearTimeout(manualAutoTimerRef.current);
-    manualAutoTimerRef.current = setTimeout(() => {
-      lastAutoValidatedRef.current = raw;
-      validateToken(raw).catch(() => null);
-    }, 650);
-    return () => {
-      if (manualAutoTimerRef.current) clearTimeout(manualAutoTimerRef.current);
-      manualAutoTimerRef.current = null;
-    };
-  }, [busy, manualToken, selectedEventId, view]);
-
-  const playFeedback = async (ok: boolean) => {
+  const playFeedback = useCallback(async (ok: boolean) => {
     try {
       await Haptics.notificationAsync(ok ? Haptics.NotificationFeedbackType.Success : Haptics.NotificationFeedbackType.Error);
     } catch {
       Vibration.vibrate(ok ? 80 : 250);
     }
-  };
+  }, []);
 
-  const validateToken = async (raw: string) => {
+  const validateToken = useCallback(async (raw: string) => {
     const token = raw.trim();
     if (!token.length) return;
     if (busy) return;
@@ -241,7 +234,6 @@ export default function ScanScreen() {
     try {
       const res = await supabase.rpc('validate_ticket_qr_v3', {
         p_qr_token: token,
-        p_scanned_by_text: user.id,
         p_event_id: selectedEventId,
       });
 
@@ -267,7 +259,28 @@ export default function ScanScreen() {
     } finally {
       setBusy(false);
     }
-  };
+  }, [busy, playFeedback, selectedEventId, t, user?.id]);
+
+  useEffect(() => {
+    if (view !== 'home' || !selectedEventId) return;
+    const raw = manualToken.trim();
+    if (raw.length < 6) {
+      if (manualAutoTimerRef.current) clearTimeout(manualAutoTimerRef.current);
+      manualAutoTimerRef.current = null;
+      lastAutoValidatedRef.current = '';
+      return;
+    }
+    if (busy || raw === lastAutoValidatedRef.current) return;
+    if (manualAutoTimerRef.current) clearTimeout(manualAutoTimerRef.current);
+    manualAutoTimerRef.current = setTimeout(() => {
+      lastAutoValidatedRef.current = raw;
+      void validateToken(raw);
+    }, 650);
+    return () => {
+      if (manualAutoTimerRef.current) clearTimeout(manualAutoTimerRef.current);
+      manualAutoTimerRef.current = null;
+    };
+  }, [busy, manualToken, selectedEventId, validateToken, view]);
 
   const openScanner = async () => {
     try {

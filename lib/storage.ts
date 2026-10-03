@@ -1,60 +1,8 @@
 import { supabase } from '@/lib/supabase';
 import * as FileSystem from 'expo-file-system/legacy';
-import { Platform, Alert } from 'react-native';
+import { Platform } from 'react-native';
 import { encode as encodeBase64FromArrayBuffer } from 'base64-arraybuffer';
 import { invokeEdgeFunction } from '@/lib/edgeFunctions';
-
-function decodeBase64UrlToString(input: string): string {
-  const normalized = input.replace(/-/g, '+').replace(/_/g, '/');
-  const pad = normalized.length % 4 ? '='.repeat(4 - (normalized.length % 4)) : '';
-  const base64 = normalized + pad;
-  if (typeof globalThis.atob === 'function') return globalThis.atob(base64);
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const buf = require('buffer').Buffer.from(base64, 'base64');
-  return buf.toString('utf8');
-}
-
-function getJwtIssuer(jwt: string): string {
-  try {
-    const parts = jwt.split('.');
-    if (parts.length < 2) return '';
-    const payloadText = decodeBase64UrlToString(parts[1]);
-    const payload = JSON.parse(payloadText);
-    return typeof payload?.iss === 'string' ? payload.iss : '';
-  } catch {
-    return '';
-  }
-}
-
-function getUrlHost(url: string): string {
-  try {
-    return new URL(url).host;
-  } catch {
-    return '';
-  }
-}
-
-async function getAccessToken(): Promise<string> {
-  const { data } = await supabase.auth.getSession();
-  const token = data?.session?.access_token;
-  if (token) return token;
-  await supabase.auth.refreshSession();
-  const { data: after } = await supabase.auth.getSession();
-  return after?.session?.access_token || '';
-}
-
-function isInvalidJwtMessage(message: string): boolean {
-  const m = String(message || '').toLowerCase();
-  return (
-    m.includes('invalid jwt') ||
-    (m.includes('jwt') && m.includes('invalid')) ||
-    (m.includes('jwt') && m.includes('expired')) ||
-    (m.includes('token') && m.includes('expired')) ||
-    m.includes('jwt expired') ||
-    m.includes('token has expired') ||
-    (m.includes('signature') && m.includes('invalid'))
-  );
-}
 
 function isUnauthorizedMessage(message: string): boolean {
   const m = String(message || '').toLowerCase();
@@ -65,17 +13,6 @@ function isUnauthorizedMessage(message: string): boolean {
     (m.includes('non-2xx') && m.includes('edge function')) ||
     m.includes('edge function returned a non-2xx status code')
   );
-}
-
-function getInvokeErrorDetails(error: any): string {
-  const body = (error as any)?.context?.body;
-  if (typeof body === 'string') return body;
-  if (body && typeof body === 'object') {
-    try {
-      return JSON.stringify(body);
-    } catch {}
-  }
-  return '';
 }
 
 async function callEdgeFunction<T>(functionName: string, body: any): Promise<T> {
@@ -139,43 +76,10 @@ export async function uploadImage(uri: string, bucket: string = 'events'): Promi
       });
 
     if (error) {
-      const errorMsg = error.message || JSON.stringify(error);
-      if (errorMsg.includes('Bucket not found') || errorMsg.includes('The resource was not found')) {
-        console.log(`Bucket '${bucket}' not found. Attempting to create it...`);
-        const { data: bucketData, error: createError } = await supabase.storage.createBucket(bucket, {
-          public: true,
-          fileSizeLimit: 10485760, // 10MB
-          allowedMimeTypes: ['image/png', 'image/jpeg', 'image/webp']
-        });
-
-        if (createError) {
-          console.error('Failed to create bucket:', createError);
-          Alert.alert(
-            'Error de Configuración',
-            `El bucket de almacenamiento '${bucket}' no existe en Supabase y no se pudo crear automáticamente. Por favor, crea un bucket público llamado '${bucket}' en tu panel de Supabase.`,
-            [{ text: 'OK' }]
-          );
-          return null;
-        }
-
-        console.log(`Bucket '${bucket}' created successfully.`);
-
-        // Retry upload
-        const { error: retryError } = await supabase.storage
-          .from(bucket)
-          .upload(filePath, arrayBuffer, {
-            contentType: contentType,
-            upsert: false
-          });
-        
-        if (retryError) {
-           console.error('Error uploading image after bucket creation:', retryError);
-           throw retryError;
-        }
-      } else {
-        console.error('Error uploading image:', error);
-        throw error;
-      }
+      // Storage infrastructure is provisioned by migrations. A mobile client
+      // must never create or make a bucket public as a recovery mechanism.
+      console.error(`Error uploading image to configured bucket '${bucket}':`, error);
+      throw error;
     }
 
     const { data } = supabase.storage

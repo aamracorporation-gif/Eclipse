@@ -1,6 +1,6 @@
 const { z } = require('zod');
 const { asyncHandler } = require('../utils/asyncHandler');
-const { supabaseAdmin, supabaseAnon } = require('../services/supabaseService');
+const { supabaseAnon } = require('../services/supabaseService');
 
 const registerSchema = z.object({
   name: z.string().min(1).max(120),
@@ -32,31 +32,14 @@ const register = asyncHandler(async (req, res) => {
   if (error) {
     const msg = String(error.message || '');
     const lower = msg.toLowerCase();
-    if (lower.includes('rate limit')) {
-      const { data: created, error: createError } = await supabaseAdmin.auth.admin.createUser({
-        email: input.email,
-        password: input.password,
-        email_confirm: true,
-        user_metadata: {
-          full_name: input.name,
-          role,
-        },
-      });
-      if (createError) {
-        return res.status(400).json({ ok: false, error: createError.message || msg || 'Failed to register' });
-      }
-
-      const { data: sessionData } = await supabaseAnon.auth.signInWithPassword({
-        email: input.email,
-        password: input.password,
-      });
-
-      const accessToken = String(sessionData?.session?.access_token || '');
-      return res.status(201).json({
-        ok: true,
-        user: { id: String(created?.user?.id || ''), email: created?.user?.email || input.email, role },
-        access_token: accessToken || null,
-        requires_email_verification: !accessToken,
+    // Preserve Supabase's abuse controls and email verification requirements.
+    // Public signup must never fall back to privileged, auto-confirmed creation.
+    if (error.status === 429 || lower.includes('rate limit') ||
+        ['over_email_send_rate_limit', 'over_request_rate_limit'].includes(error.code)) {
+      return res.status(429).json({
+        ok: false,
+        code: 'SIGNUP_RATE_LIMITED',
+        error: 'Demasiados intentos de registro. Espera antes de volver a intentarlo.',
       });
     }
 

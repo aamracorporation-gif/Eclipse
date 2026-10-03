@@ -106,7 +106,7 @@ const serve = (port) =>
             appendNdjson(event);
             res.writeHead(200, { ...corsHeaders, 'Content-Type': 'application/json' });
             res.end(JSON.stringify({ ok: true }));
-          } catch (e) {
+          } catch (_e) {
             res.writeHead(400, { ...corsHeaders, 'Content-Type': 'application/json' });
             res.end(JSON.stringify({ ok: false, error: 'invalid json' }));
           }
@@ -143,7 +143,7 @@ for (let i = 0; i < 10; i++) {
     server = out.server;
     port = out.port;
     break;
-  } catch (e) {
+  } catch (_e) {
     port += 1;
   }
 }

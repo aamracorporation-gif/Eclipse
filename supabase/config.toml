@@ -1,32 +1,32 @@
 [functions.create-payment-intent-v2]
-verify_jwt = false
+verify_jwt = true
 
 [functions.confirm-payment]
-verify_jwt = false
+verify_jwt = true
 
 [functions.stripe-connect-create-account]
-verify_jwt = false
+verify_jwt = true
 
 [functions.stripe-connect-onboarding-link]
-verify_jwt = false
+verify_jwt = true
 
 [functions.stripe-connect-refresh-status]
-verify_jwt = false
+verify_jwt = true
 
 [functions.stripe-get-account-stats]
-verify_jwt = false
+verify_jwt = true
 
 [functions.send-push]
-verify_jwt = false
+verify_jwt = true
 
 [functions.apple-wallet-generator]
-verify_jwt = false
+verify_jwt = true
 
 [functions.generate-wallet-pass]
-verify_jwt = false
+verify_jwt = true
 
 [functions.send-support-email]
-verify_jwt = false
+verify_jwt = true
 
 [functions.auth-redirect]
 verify_jwt = false
