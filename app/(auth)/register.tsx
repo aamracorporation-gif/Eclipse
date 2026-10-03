@@ -782,6 +782,9 @@ export default function RegisterScreen() {
                 value={responsibleBirthDate || new Date(1990, 0, 1)}
                 mode="date"
                 display="default"
+                startOnYearSelection
+                positiveButton={{ label: "Aceptar" }}
+                negativeButton={{ label: "Cancelar" }}
                 onChange={onDateChange}
                 maximumDate={new Date()}
               />
@@ -837,6 +840,9 @@ export default function RegisterScreen() {
                 value={birthDate || new Date(2000, 0, 1)}
                 mode="date"
                 display="default"
+                startOnYearSelection
+                positiveButton={{ label: "Aceptar" }}
+                negativeButton={{ label: "Cancelar" }}
                 onChange={onDateChange}
                 maximumDate={new Date()}
               />
@@ -977,7 +983,9 @@ export default function RegisterScreen() {
         console.warn('[register-step5] record-legal-acceptance failed (non-blocking):', e);
       }
 
-      if (finalRole === 'admin' || finalRole === 'organizer') {
+      if (finalRole === 'admin') {
+        router.replace('/(creator)');
+      } else if (finalRole === 'organizer') {
         router.replace('/(creator)/verification');
       } else {
         router.replace('/(tabs)');
@@ -992,7 +1000,9 @@ export default function RegisterScreen() {
         return;
       }
       console.warn('[register-step5] login OK but post-step failed (non-blocking):', e);
-      if (finalRole === 'admin' || finalRole === 'organizer') {
+      if (finalRole === 'admin') {
+        router.replace('/(creator)');
+      } else if (finalRole === 'organizer') {
         router.replace('/(creator)/verification');
       } else {
         router.replace('/(tabs)');

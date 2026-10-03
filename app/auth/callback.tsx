@@ -27,7 +27,9 @@ async function routeByRole(uid: string) {
     const { data: profile } = await supabase.from('profiles').select('role').eq('id', uid).maybeSingle();
     role = (profile?.role as string) ?? null;
   } catch {}
-  if (role === 'admin' || role === 'organizer') {
+  if (role === 'admin') {
+    router.replace('/(creator)');
+  } else if (role === 'organizer') {
     router.replace('/(creator)/verification');
   } else {
     router.replace('/(tabs)');

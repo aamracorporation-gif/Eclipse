@@ -208,7 +208,10 @@ function createApp() {
       credentials: true,
     })
   );
-  app.use(morgan(env.nodeEnv === 'production' ? 'combined' : 'dev'));
+  // Auth query strings may contain one-time codes. Never write them to access logs.
+  app.use(morgan(env.nodeEnv === 'production' ? 'combined' : 'dev', {
+    skip: req => req.path.startsWith('/auth/'),
+  }));
 
   app.get('/', (req, res) => res.send('Eclipse API viva 🚀'));
   app.get('/health', (req, res) => {
@@ -271,6 +274,35 @@ function createApp() {
   // into the Eclipse app via deep link. URLs must be whitelisted in Supabase
   // Dashboard → Auth → URL Configuration → Redirect URLs.
 
+  function escapeAuthHtml(value) {
+    return String(value).replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
+  }
+
+  // External script is compatible with Helmet's script-src 'self' policy.
+  app.get('/auth/open.js', (_req, res) => {
+    res.type('application/javascript').send(`
+      (function () {
+        var button = document.getElementById('openBtn');
+        if (!button) return;
+        var base = button.getAttribute('href');
+        var hash = window.location.hash.slice(1);
+        var params = new URLSearchParams(hash);
+        if (params.get('type') === 'recovery') {
+          base = 'eclipse://auth/reset-password' + (base.includes('?') ? base.slice(base.indexOf('?')) : '');
+        }
+        var deep = hash ? base + (base.includes('?') ? '&' : '?') + hash : base;
+        button.href = deep;
+        var spinner = document.getElementById('sp');
+        if (spinner) spinner.style.display = 'none';
+        try { window.location.href = deep; } catch (_) {}
+      })();
+    `);
+  });
+  app.use('/auth', (_req, res, next) => {
+    res.setHeader('Referrer-Policy', 'no-referrer');
+    next();
+  });
+
   function deepLinkPage(deepLink, title, subtitle) {
     return `<!doctype html>
 <html lang="es"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
@@ -296,19 +328,10 @@ p{color:rgba(255,255,255,.55);font-size:15px;line-height:1.5;margin-bottom:28px}
   <div class="sp" id="sp"></div>
   <h2>${title}</h2>
   <p>${subtitle}</p>
-  <a class="open-btn" href="${deepLink}" id="openBtn">Abrir Eclipse</a>
+  <a class="open-btn" href="${escapeAuthHtml(deepLink)}" id="openBtn">Abrir Eclipse</a>
   <p class="hint">Si no se abre, asegúrate de tener Eclipse instalado.</p>
 </div>
-<script>
-window.addEventListener('load', function(){
-  var deep = ${JSON.stringify(deepLink)};
-  document.getElementById('sp').style.display = 'none';
-  try { window.location.href = deep; } catch(e){}
-  setTimeout(function(){
-    document.getElementById('openBtn').style.display = 'block';
-  }, 800);
-});
-</script>
+<script src="/auth/open.js" defer></script>
 </body></html>`;
   }
 
@@ -375,26 +398,10 @@ p{color:rgba(255,255,255,.55);font-size:15px;line-height:1.5;margin-bottom:28px}
   <div class="sp"></div>
   <h2>${title}</h2>
   <p>${subtitle}</p>
-  <a class="open-btn" id="openBtn" href="${deepLink}">Abrir Eclipse</a>
+  <a class="open-btn" id="openBtn" href="${escapeAuthHtml(deepLink)}">Abrir Eclipse</a>
   <p class="hint">Si no se abre, asegúrate de tener Eclipse instalado.</p>
 </div>
-<script>
-window.addEventListener('load', function(){
-  var base = ${JSON.stringify(deepLink)};
-  // Añadir hash fragment si existe (access_token en implicit flow)
-  var hash = window.location.hash;
-  if (hash && hash.length > 1) {
-    var hashParams = new URLSearchParams(hash.slice(1));
-    if (hashParams.get('type') === 'recovery') {
-      var currentQuery = base.includes('?') ? base.slice(base.indexOf('?')) : '';
-      base = 'eclipse://auth/reset-password' + currentQuery;
-    }
-  }
-  var deep = hash && hash.length > 1 ? base + (base.includes('?') ? '&' : '?') + hash.slice(1) : base;
-  document.getElementById('openBtn').href = deep;
-  try { window.location.href = deep; } catch(e){}
-});
-</script>
+<script src="/auth/open.js" defer></script>
 </body></html>`);
   });
   // ────────────────────────────────────────────────────────────────────────────

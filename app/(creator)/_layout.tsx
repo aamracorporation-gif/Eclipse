@@ -16,9 +16,7 @@ export default function CreatorLayout() {
   const { t } = useTranslation();
   const insets = useSafeAreaInsets();
   const [checkingRole, setCheckingRole] = useState(true);
-  const [profileRole, setProfileRole] = useState<string | null>(
-    (user?.user_metadata as any)?.role ?? null
-  );
+  const [profileRole, setProfileRole] = useState<string | null>(null);
   const [verificationStatus, setVerificationStatus] = useState<'pending_verification' | 'verified' | 'rejected' | 'needs_correction' | null>(null);
   useEffect(() => {
     if (!user?.id) {
@@ -98,7 +96,33 @@ export default function CreatorLayout() {
     return <Redirect href="/(creator)/verification" />;
   }
 
+  const adminOnlyRoutes = ['admin-verification', 'admin-tickets', 'admin-profile'];
+  if (profileRole !== 'admin' && adminOnlyRoutes.includes((segments as readonly string[])[1])) {
+    return <Redirect href="/(creator)" />;
+  }
+  if (profileRole === 'admin' && inVerification) return <Redirect href="/(creator)" />;
+
   const isVerifiedOrganizer = profileRole === 'organizer' && verificationStatus === 'verified';
+
+  if (profileRole === 'admin') {
+    return (
+      <Tabs screenOptions={{ headerShown: false, tabBarActiveTintColor: Colors.dark.primary,
+        tabBarInactiveTintColor: Colors.dark.textSecondary,
+        tabBarStyle: { backgroundColor: Colors.dark.background, borderTopColor: Colors.dark.border,
+          height: 60 + insets.bottom, paddingBottom: Math.max(insets.bottom, 8) },
+        tabBarLabelStyle: { fontSize: 10 }, tabBarHideOnKeyboard: true }}>
+        <Tabs.Screen name="index" options={{ title: 'Resumen', tabBarIcon: ({ color, size }) => <TrendingUp color={color} size={size} /> }} />
+        <Tabs.Screen name="admin-verification" options={{ title: 'Usuarios', tabBarIcon: ({ color, size }) => <User color={color} size={size} /> }} />
+        <Tabs.Screen name="manage-events" options={{ title: 'Eventos', tabBarIcon: ({ color, size }) => <Calendar color={color} size={size} /> }} />
+        <Tabs.Screen name="admin-tickets" options={{ title: 'Entradas', tabBarIcon: ({ color, size }) => <QrCode color={color} size={size} /> }} />
+        <Tabs.Screen name="admin-profile" options={{ title: 'Perfil', tabBarIcon: ({ color, size }) => <User color={color} size={size} /> }} />
+        {['create-event', 'workers', 'verification', 'scan', 'stats', 'global-stats', 'event-stats/[id]',
+          'event-discounts', 'discount-codes', 'worker-qr', 'organizer-profile'].map(name => (
+          <Tabs.Screen key={name} name={name} options={{ href: null }} />
+        ))}
+      </Tabs>
+    );
+  }
 
   if (isVerifiedOrganizer) {
     return (
@@ -173,6 +197,7 @@ export default function CreatorLayout() {
         <Tabs.Screen name="event-stats/[id]" options={{ href: null }} />
         <Tabs.Screen name="event-discounts" options={{ href: null }} />
         <Tabs.Screen name="admin-tickets" options={{ href: null }} />
+        <Tabs.Screen name="admin-profile" options={{ href: null }} />
         <Tabs.Screen name="worker-qr" options={{ href: null }} />
       </Tabs>
     );

@@ -1,11 +1,11 @@
 import {
   View, Text, StyleSheet, FlatList, TouchableOpacity,
-  Alert, ActivityIndicator, TextInput,
+  Alert, ActivityIndicator, TextInput, Modal,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
-import { ArrowLeft, Search, Ticket, RefreshCw, XCircle, Trash2, CheckCircle, User as UserIcon } from '@/lib/icons';
+import { ArrowLeft, Search, Ticket, RefreshCw, XCircle, User as UserIcon } from '@/lib/icons';
 import { GlassView } from '@/components/ui/GlassView';
 import { supabase } from '@/lib/supabase';
 import { useCallback, useEffect, useState } from 'react';
@@ -20,6 +20,7 @@ type TicketRow = {
   purchase_date: string;
   ticket_status: string | null;
   status: string | null;
+  payment_status: string | null;
   scanned_at: string | null;
   event_id: string;
   event_title?: string | null;
@@ -32,6 +33,8 @@ export default function AdminTicketsScreen() {
   const [tickets, setTickets] = useState<TicketRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [query, setQuery] = useState('');
+  const [selected, setSelected] = useState<TicketRow | null>(null);
+  const [reason, setReason] = useState('');
   const [actionLoading, setActionLoading] = useState<string | null>(null);
 
   const fetchTickets = useCallback(async (search = '') => {
@@ -39,12 +42,13 @@ export default function AdminTicketsScreen() {
     try {
       let q = supabase
         .from('tickets')
-        .select('id, buyer_name, buyer_email, quantity, total_price, purchase_date, ticket_status, status, scanned_at, event_id, ticket_type_id')
+        .select('id, buyer_name, buyer_email, quantity, total_price, purchase_date, ticket_status, status, payment_status, scanned_at, event_id, ticket_type_id')
         .order('purchase_date', { ascending: false })
         .limit(300);
 
-      if (search.trim()) {
-        q = q.or(`buyer_name.ilike.%${search.trim()}%,buyer_email.ilike.%${search.trim()}%`);
+      const safeSearch = search.trim().replace(/[%,().*\\"]/g, ' ').slice(0, 120);
+      if (safeSearch) {
+        q = q.or(`buyer_name.ilike.%${safeSearch}%,buyer_email.ilike.%${safeSearch}%`);
       }
 
       const { data, error } = await q;
@@ -83,6 +87,7 @@ export default function AdminTicketsScreen() {
         purchase_date: r.purchase_date,
         ticket_status: r.ticket_status ?? r.status ?? 'active',
         status: r.status,
+        payment_status: r.payment_status,
         scanned_at: r.scanned_at,
         event_id: r.event_id,
         event_title: eventMap[r.event_id] ?? null,
@@ -98,69 +103,22 @@ export default function AdminTicketsScreen() {
   useEffect(() => { fetchTickets(); }, [fetchTickets]);
 
   const isActive = (t: TicketRow) =>
-    (t.ticket_status === 'active' || t.ticket_status === null) && t.status !== 'cancelled';
+    (t.ticket_status === 'active' || t.ticket_status === null) &&
+    !['cancelled', 'refunded', 'used'].includes(t.status || '') && !t.scanned_at && t.payment_status === 'paid';
 
-  const handleInvalidate = (ticket: TicketRow) => {
-    const active = isActive(ticket);
-    Alert.alert(
-      active ? 'Invalidar entrada' : 'Reactivar entrada',
-      `¿${active ? 'Invalidar' : 'Reactivar'} la entrada de ${ticket.buyer_name || ticket.buyer_email}?`,
-      [
-        { text: 'Cancelar', style: 'cancel' },
-        {
-          text: active ? 'Invalidar' : 'Reactivar',
-          style: active ? 'destructive' : 'default',
-          onPress: async () => {
-            setActionLoading(ticket.id);
-            try {
-              const newStatus = active ? 'invalidated' : 'active';
-              const { error } = await supabase
-                .from('tickets')
-                .update({ ticket_status: newStatus, status: active ? 'cancelled' : 'active' })
-                .eq('id', ticket.id);
-              if (error) throw error;
-              setTickets((prev) =>
-                prev.map((t) =>
-                  t.id === ticket.id
-                    ? { ...t, ticket_status: newStatus, status: active ? 'cancelled' : 'active' }
-                    : t
-                )
-              );
-            } catch (e: any) {
-              Alert.alert('Error', e?.message);
-            } finally {
-              setActionLoading(null);
-            }
-          },
-        },
-      ]
-    );
-  };
-
-  const handleDelete = (ticket: TicketRow) => {
-    Alert.alert(
-      'Eliminar entrada',
-      `¿Eliminar permanentemente la entrada de ${ticket.buyer_name || ticket.buyer_email}? Esta acción no se puede deshacer.`,
-      [
-        { text: 'Cancelar', style: 'cancel' },
-        {
-          text: 'Eliminar',
-          style: 'destructive',
-          onPress: async () => {
-            setActionLoading(ticket.id);
-            try {
-              const { error } = await supabase.from('tickets').delete().eq('id', ticket.id);
-              if (error) throw error;
-              setTickets((prev) => prev.filter((t) => t.id !== ticket.id));
-            } catch (e: any) {
-              Alert.alert('Error', e?.message);
-            } finally {
-              setActionLoading(null);
-            }
-          },
-        },
-      ]
-    );
+  const invalidate = async () => {
+    if (!selected || reason.trim().length < 5) return;
+    setActionLoading(selected.id);
+    try {
+      const { error } = await supabase.rpc('admin_invalidate_ticket', {
+        p_ticket_id: selected.id, p_reason: reason.trim(),
+      });
+      if (error) throw error;
+      setSelected(null);
+      setReason('');
+      await fetchTickets(query);
+    } catch (error: any) { Alert.alert('No se pudo invalidar', error?.message || 'Inténtalo de nuevo.'); }
+    finally { setActionLoading(null); }
   };
 
   const getStatusLabel = (t: TicketRow) => {
@@ -192,27 +150,11 @@ export default function AdminTicketsScreen() {
             )}
           </View>
           <View style={styles.cardActions}>
-            <TouchableOpacity
-              style={[styles.actionBtn, { backgroundColor: active ? 'rgba(239,68,68,0.12)' : 'rgba(34,197,94,0.12)' }]}
-              onPress={() => handleInvalidate(item)}
-              disabled={isActioning}
-              activeOpacity={0.7}
-            >
-              {isActioning
-                ? <ActivityIndicator size="small" color={active ? '#ef4444' : '#22c55e'} />
-                : active
-                  ? <XCircle size={16} color="#ef4444" />
-                  : <CheckCircle size={16} color="#22c55e" />
-              }
-            </TouchableOpacity>
-            <TouchableOpacity
+            {active && <TouchableOpacity accessibilityRole="button" accessibilityLabel="Invalidar entrada"
               style={[styles.actionBtn, { backgroundColor: 'rgba(239,68,68,0.12)' }]}
-              onPress={() => handleDelete(item)}
-              disabled={isActioning}
-              activeOpacity={0.7}
-            >
-              <Trash2 size={16} color="#ef4444" />
-            </TouchableOpacity>
+              onPress={() => { setSelected(item); setReason(''); }} disabled={isActioning}>
+              <XCircle size={18} color="#ef4444" />
+            </TouchableOpacity>}
           </View>
         </View>
 
@@ -256,6 +198,24 @@ export default function AdminTicketsScreen() {
 
   return (
     <View style={styles.container}>
+      <Modal visible={!!selected} transparent animationType="fade" onRequestClose={() => { if (!actionLoading) setSelected(null); }}>
+        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.85)', justifyContent: 'center', padding: 24 }}>
+          <View style={{ backgroundColor: '#171725', padding: 24, borderRadius: 20, gap: 16 }}>
+            <Text style={styles.title}>Invalidar entrada</Text>
+            <Text style={styles.buyerEmail}>Se bloqueará el acceso. El pago no se reembolsa con esta acción.</Text>
+            <TextInput accessibilityLabel="Motivo de invalidación" placeholder="Motivo (mínimo 5 caracteres)" placeholderTextColor="#999"
+              value={reason} onChangeText={setReason} maxLength={500} multiline underlineColorAndroid="transparent"
+              style={{ color: '#fff', borderWidth: 1, borderColor: '#555', padding: 14, borderRadius: 12, minHeight: 80 }} />
+            <TouchableOpacity accessibilityRole="button" onPress={invalidate} disabled={!!actionLoading || reason.trim().length < 5}
+              style={{ padding: 14, borderRadius: 12, backgroundColor: '#9f1239', opacity: reason.trim().length < 5 ? 0.4 : 1 }}>
+              <Text style={{ color: '#fff', textAlign: 'center', fontWeight: '700' }}>{actionLoading ? 'Guardando…' : 'Confirmar invalidación'}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity accessibilityRole="button" onPress={() => setSelected(null)} disabled={!!actionLoading}>
+              <Text style={{ color: '#fff', textAlign: 'center', padding: 10 }}>Cancelar</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
       <LinearGradient
         colors={['rgba(244,63,94,0.12)', 'transparent']}
         style={StyleSheet.absoluteFill}
@@ -296,21 +256,9 @@ export default function AdminTicketsScreen() {
           )}
         </View>
 
-        {/* Legend */}
-        <View style={styles.legendRow}>
-          <View style={styles.legendItem}>
-            <XCircle size={13} color="#ef4444" />
-            <Text style={styles.legendText}>Invalidar</Text>
-          </View>
-          <View style={styles.legendItem}>
-            <CheckCircle size={13} color="#22c55e" />
-            <Text style={styles.legendText}>Reactivar</Text>
-          </View>
-          <View style={styles.legendItem}>
-            <Trash2 size={13} color="#ef4444" />
-            <Text style={styles.legendText}>Eliminar</Text>
-          </View>
-        </View>
+        <Text style={[styles.legendText, { paddingHorizontal: 20, paddingBottom: 12 }]}>
+          Invalidar bloquea el acceso y registra el motivo. No realiza un reembolso ni elimina la compra.
+        </Text>
 
         {loading ? (
           <ActivityIndicator color="#f472b6" style={{ marginTop: 40 }} />
