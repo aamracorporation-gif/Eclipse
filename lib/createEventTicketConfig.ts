@@ -146,7 +146,7 @@ export function serializeTicketMetadata(ticket: TicketDraft) {
     category: ticket.category,
     featured: ticket.featured,
     benefits: ticket.benefits.trim(),
-    entryDeadlineMinutes: ticket.entryDeadlineMinutes?.trim() ? parsePositiveInt(ticket.entryDeadlineMinutes) : null,
+    entryDeadlineMinutes: parsePositiveNumber(ticket.price) === 0 && ticket.entryDeadlineMinutes?.trim() ? parsePositiveInt(ticket.entryDeadlineMinutes) : null,
   };
 
   if (ticket.category === 'vip') {

@@ -1016,15 +1016,15 @@ export default function CreateEventScreen() {
               </View>
             </View>
 
-            <ThemedInput
+            {parsePositiveNumber(newTicket.price) === 0 && <ThemedInput
               label="Límite de acceso (minutos desde el inicio, opcional)"
               placeholder="Ej: 120 = acceso hasta 2 horas después del inicio"
               value={newTicket.entryDeadlineMinutes || ''}
               onChangeText={(value) => setNewTicket((prev) => ({ ...prev, entryDeadlineMinutes: value }))}
               error={newTicketErrors.entryDeadlineMinutes}
               keyboardType="number-pad"
-            />
-            {!!newTicket.entryDeadlineMinutes && draft.dateTime && (
+            />}
+            {parsePositiveNumber(newTicket.price) === 0 && !!newTicket.entryDeadlineMinutes && draft.dateTime && (
               <Text style={styles.metricsText}>Acceso antes de: {new Date(draft.dateTime.getTime() + Number(newTicket.entryDeadlineMinutes) * 60000).toLocaleString('es-ES')}</Text>
             )}
             <ThemedInput

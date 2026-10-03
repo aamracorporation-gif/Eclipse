@@ -24,7 +24,6 @@ import { invokeEdgeFunctionStrict } from '@/lib/edgeFunctions';
 import { useAppDialog } from '@/components/ui/AppDialog';
 import { useFocusEffect } from '@react-navigation/native';
 import * as ExpoLinking from 'expo-linking';
-import * as Crypto from 'expo-crypto';
 
 export default function EventDetailScreen() {
   const { id } = useLocalSearchParams();
@@ -575,7 +574,7 @@ export default function EventDetailScreen() {
 
       if (Number(pricePerTicket) === 0) {
         const signature = JSON.stringify([event.id, selectedTicketType, qty, buyerName, user.id]);
-        if (freeClaimRef.current?.signature !== signature) freeClaimRef.current = { signature, id: Crypto.randomUUID() };
+        if (freeClaimRef.current?.signature !== signature) freeClaimRef.current = { signature, id: 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => { const n = Math.floor(Math.random() * 16); return (c === 'x' ? n : (n & 3) | 8).toString(16); }) };
         const { data, error } = await supabase.rpc('claim_free_tickets', {
           p_event_id: event.id, p_ticket_type_id: selectedTicketType,
           p_quantity: qty, p_buyer_name: buyerName, p_request_id: freeClaimRef.current.id,
