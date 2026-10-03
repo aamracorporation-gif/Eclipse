@@ -25,7 +25,6 @@ import { AppDialogProvider } from '@/components/ui/AppDialog';
 import { FilterProvider } from '@/lib/FilterContext';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { supabase } from '@/lib/supabase';
-import { invokeEdgeFunctionStrict } from '@/lib/edgeFunctions';
 
 import * as Notifications from 'expo-notifications';
 import * as ExpoLinking from 'expo-linking';
@@ -287,38 +286,6 @@ function RootLayoutNav({ fontsLoaded }: { fontsLoaded: boolean }) {
   useEffect(() => {
     if (!isAppReady) return;
 
-    const afterAuthRedirect = async () => {
-      try {
-        void (async () => {
-          try {
-            await invokeEdgeFunctionStrict('record-legal-acceptance', {});
-          } catch (e) {
-            console.warn('[linking] record-legal-acceptance failed (non-blocking):', e);
-          }
-        })();
-
-        const { data: userData } = await supabase.auth.getUser();
-        const uid = userData?.user?.id;
-        let role: string | null = null;
-        if (uid) {
-          try {
-            const { data: profile } = await supabase.from('profiles').select('role').eq('id', uid).maybeSingle();
-            role = (profile?.role as string) ?? null;
-          } catch {}
-        }
-        if (role === 'admin') {
-          router.replace('/(creator)');
-        } else if (role === 'organizer') {
-          router.replace('/(creator)/verification');
-        } else {
-          router.replace('/(tabs)');
-        }
-      } catch (e) {
-        console.warn('[linking] afterAuthRedirect fallback to /(tabs):', e);
-        router.replace('/(tabs)');
-      }
-    };
-
     const handleUrl = async (url: string | null | undefined) => {
       if (!url) return;
 
@@ -354,55 +321,13 @@ function RootLayoutNav({ fontsLoaded }: { fontsLoaded: boolean }) {
       }
 
       if (url.includes('auth/callback')) {
-        try {
-          const params = parseAuthLinkParams(url);
-
-          // Legacy and current Supabase templates may land recovery links on
-          // the generic callback. Keep the credentials and open the reset UI.
-          if (isPasswordRecovery(params)) {
-            router.replace({ pathname: '/auth/reset-password', params });
-            return;
-          }
-
-          const tokenHash = params.token_hash;
-          const otpType = params.type;
-          if (tokenHash && otpType) {
-            const { data, error } = await supabase.auth.verifyOtp({
-              token_hash: tokenHash,
-              type: otpType as any,
-            });
-            if (!error && data?.session) {
-              await afterAuthRedirect();
-            } else if (error) {
-              console.warn('[linking] verifyOtp failed:', error?.message);
-            }
-            return;
-          }
-
-          const accessToken = params.access_token;
-          const refreshToken = params.refresh_token;
-          if (accessToken && refreshToken) {
-            const { error } = await supabase.auth.setSession({
-              access_token: accessToken,
-              refresh_token: refreshToken,
-            });
-            if (!error) {
-              await afterAuthRedirect();
-            } else {
-              console.warn('[linking] setSession failed:', error?.message);
-            }
-            return;
-          }
-
-          if (params.code) {
-            const { error } = await supabase.auth.exchangeCodeForSession(params.code);
-            if (!error) await afterAuthRedirect();
-            else console.warn('[linking] exchangeCodeForSession failed:', error.message);
-            return;
-          }
-        } catch (e) {
-          console.warn('[linking] auth/callback handled with error:', e);
-        }
+        // The destination screen owns the one-use exchange. Exchanging here as
+        // well races Expo Router's callback mount and can consume the code twice.
+        const params = parseAuthLinkParams(url);
+        router.replace({
+          pathname: isPasswordRecovery(params) ? '/auth/reset-password' : '/auth/callback',
+          params,
+        });
         return;
       }
 

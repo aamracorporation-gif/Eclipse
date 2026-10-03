@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { useLocalSearchParams, router } from 'expo-router';
 import * as Linking from 'expo-linking';
@@ -6,6 +6,7 @@ import { supabase } from '@/lib/supabase';
 import { Colors } from '@/constants/Colors';
 import { invokeEdgeFunctionStrict } from '@/lib/edgeFunctions';
 import { parseAuthLinkParams } from '@/lib/authDeepLinks';
+import { createAuthExchange } from '@/lib/authExchange';
 import { LinearGradient } from 'expo-linear-gradient';
 import { GlassView } from '@/components/ui/GlassView';
 import { DiscoLoader } from '@/components/ui/DiscoLoader';
@@ -38,6 +39,7 @@ async function routeByRole(uid: string) {
 
 export default function AuthCallbackScreen() {
   const params = useLocalSearchParams<Record<string, string | string[]>>();
+  const exchange = useRef(createAuthExchange());
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   const normalized = useMemo(() => {
@@ -57,13 +59,19 @@ export default function AuthCallbackScreen() {
     let cancelled = false;
 
     const finish = async () => {
+      setErrorMsg(null);
       try {
         if (normalized.error || normalized.error_description) {
           throw new Error(normalized.error_description || normalized.error || 'No se pudo verificar el email.');
         }
 
         const initialUrl = await Linking.getInitialURL();
-        const linkParams = initialUrl ? parseAuthLinkParams(initialUrl) : {};
+        // A warm link must not inherit credentials/type from the cold-start URL.
+        const hasRouteParams = Object.values(normalized).some(Boolean);
+        const linkParams = !hasRouteParams && initialUrl ? parseAuthLinkParams(initialUrl) : {};
+        if (linkParams.error || linkParams.error_description) {
+          throw new Error(linkParams.error_description || linkParams.error);
+        }
 
         const code = normalized.code || linkParams.code || null;
         const accessToken = normalized.access_token || linkParams.access_token || null;
@@ -71,34 +79,41 @@ export default function AuthCallbackScreen() {
         const tokenHash = normalized.token_hash || linkParams.token_hash || null;
         const otpType = normalized.type || linkParams.type || null;
 
-        if (tokenHash && otpType) {
-          const { error } = await supabase.auth.verifyOtp({
-            token_hash: tokenHash,
-            type: otpType as any,
-          });
-          if (error) throw error;
-        } else if (code) {
-          const { error } = await supabase.auth.exchangeCodeForSession(code);
-          if (error) throw error;
-        } else if (accessToken && refreshToken) {
-          const { error } = await supabase.auth.setSession({
-            access_token: accessToken,
-            refresh_token: refreshToken,
-          });
-          if (error) throw error;
-        } else {
-          const { data: currentSession } = await supabase.auth.getSession();
-          if (!currentSession.session) {
-            throw new Error('No se encontró código de verificación en el enlace.');
-          }
-        }
-
-        // Password recovery flow — take user to reset screen, not the app.
         if (otpType === 'recovery') {
           if (cancelled) return;
-          router.replace('/auth/reset-password');
+          router.replace({ pathname: '/auth/reset-password', params: {
+            ...linkParams,
+            ...Object.fromEntries(Object.entries(normalized).filter(([, value]) => value !== undefined)),
+          } });
           return;
         }
+
+        await exchange.current(
+          JSON.stringify([code, accessToken, refreshToken, tokenHash, otpType]),
+          async () => {
+            if (tokenHash && otpType) {
+              const { error } = await supabase.auth.verifyOtp({
+                token_hash: tokenHash,
+                type: otpType as any,
+              });
+              if (error) throw error;
+            } else if (code) {
+              const { error } = await supabase.auth.exchangeCodeForSession(code);
+              if (error) throw error;
+            } else if (accessToken && refreshToken) {
+              const { error } = await supabase.auth.setSession({
+                access_token: accessToken,
+                refresh_token: refreshToken,
+              });
+              if (error) throw error;
+            } else {
+              const { data: currentSession } = await supabase.auth.getSession();
+              if (!currentSession.session) {
+                throw new Error('No se encontró código de verificación en el enlace.');
+              }
+            }
+          },
+        );
 
         const { data: userData } = await supabase.auth.getUser();
         const uid = userData.user?.id;

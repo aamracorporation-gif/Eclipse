@@ -1,7 +1,7 @@
 # Registro y administración — 3 octubre 2026
 
 ## Implementado
-- Android: calendario de nacimiento abre la selección del año; botones Aceptar/Cancelar para asistente y responsable del local.
+- Android: selector de nacimiento con ruedas de día/mes/año y botones Aceptar/Cancelar para asistente y responsable del local.
 - Icono de cierre de sesión de verificación centrado sin el padding interno que lo recortaba.
 - Administradores van al panel, no a la verificación de organizadores. El rol procede de profiles; los metadatos editables del usuario no autorizan vistas administrativas.
 - Navegación administrativa: resumen, usuarios/verificación, eventos, entradas y perfil con últimas 25 acciones.
@@ -33,3 +33,12 @@ No se ha promovido ninguna cuenta real a administrador. Hace falta identificar y
 - Desplegar backend actualizado y compilar una versión nueva con estos cambios.
 - QA visual en dispositivos: selector de año, teclado, icono y navegación de administrador. Las pruebas de código no sustituyen esta revisión.
 - Validación funcional con cuenta administrativa autorizada (aprobar/corregir organizador, gestión de eventos, entradas y auditoría).
+
+## Seguimiento: compilación limpia y enlaces de un solo uso
+- CI #97 falló en TypeScript: `startOnYearSelection` no existe en datetimepicker 8.4.4 instalado por `npm ci`. La copia de node_modules del repositorio no era una prueba fiable de esa API.
+- Se sustituye esa propiedad por `display="spinner"`, compatible con la versión fijada y con selección directa del año.
+- El listener global ahora dirige el enlace a su pantalla; no consume OTP/PKCE en paralelo con la pantalla de callback.
+- Callback comparte el resultado de un intercambio entre repeticiones del efecto, mantiene errores de enlaces caducados y admite un enlace nuevo. Un enlace nuevo no hereda credenciales del arranque anterior.
+- Recovery se deriva a su pantalla antes de consumir sus credenciales.
+- Verificación local tras `npm ci --ignore-scripts`: TypeScript y lint correctos; 110 pruebas app correctas y 1 omitida. Runtime local Node 24; CI utiliza Node 22.
+- No se han cambiado las URLs ni la plantilla alojadas en Supabase. El correo real y la revisión física Android/iOS siguen pendientes.

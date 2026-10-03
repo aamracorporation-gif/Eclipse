@@ -781,8 +781,7 @@ export default function RegisterScreen() {
               <DateTimePicker
                 value={responsibleBirthDate || new Date(1990, 0, 1)}
                 mode="date"
-                display="default"
-                startOnYearSelection
+                display="spinner"
                 positiveButton={{ label: "Aceptar" }}
                 negativeButton={{ label: "Cancelar" }}
                 onChange={onDateChange}
@@ -839,8 +838,7 @@ export default function RegisterScreen() {
               <DateTimePicker
                 value={birthDate || new Date(2000, 0, 1)}
                 mode="date"
-                display="default"
-                startOnYearSelection
+                display="spinner"
                 positiveButton={{ label: "Aceptar" }}
                 negativeButton={{ label: "Cancelar" }}
                 onChange={onDateChange}
