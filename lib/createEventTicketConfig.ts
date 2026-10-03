@@ -15,6 +15,7 @@ export type TicketDraft = {
   generalAccessZone: string;
   generalNumberedSeat: boolean;
   earlyEntryMinutes: string;
+  entryDeadlineMinutes?: string;
   earlyDedicatedLane: boolean;
   backstageMeetGreet: boolean;
   backstageHost: string;
@@ -30,8 +31,9 @@ export function parsePositiveInt(text: string) {
 
 export function parsePositiveNumber(text: string) {
   const raw = String(text || '').trim().replace(',', '.');
+  if (!/^\d+(?:\.\d{1,2})?$/.test(raw)) return null;
   const n = Number(raw);
-  if (!Number.isFinite(n) || n <= 0) return null;
+  if (!Number.isFinite(n) || n < 0) return null;
   return n;
 }
 
@@ -49,6 +51,7 @@ export function createEmptyTicketDraft(): TicketDraft {
     generalAccessZone: '',
     generalNumberedSeat: false,
     earlyEntryMinutes: '',
+    entryDeadlineMinutes: '',
     earlyDedicatedLane: false,
     backstageMeetGreet: false,
     backstageHost: '',
@@ -82,6 +85,10 @@ export function getTicketDraftErrors(ticket: TicketDraft) {
   else if (price > 500000) errors.price = 'El precio máximo por entrada es 500.000€';
   if (quantity === null) errors.quantity = 'Cantidad inválida.';
   else if (quantity > 50000) errors.quantity = 'La capacidad máxima por tipo es 50.000 entradas';
+
+  if (ticket.entryDeadlineMinutes?.trim() && (parsePositiveInt(ticket.entryDeadlineMinutes) === null || Number(ticket.entryDeadlineMinutes) > 1440)) {
+    errors.entryDeadlineMinutes = 'Introduce entre 1 y 1440 minutos desde el inicio del evento.';
+  }
 
   if (ticket.category === 'vip') {
     const groupSize = parsePositiveInt(ticket.vipGroupSize);
@@ -139,6 +146,7 @@ export function serializeTicketMetadata(ticket: TicketDraft) {
     category: ticket.category,
     featured: ticket.featured,
     benefits: ticket.benefits.trim(),
+    entryDeadlineMinutes: ticket.entryDeadlineMinutes?.trim() ? parsePositiveInt(ticket.entryDeadlineMinutes) : null,
   };
 
   if (ticket.category === 'vip') {

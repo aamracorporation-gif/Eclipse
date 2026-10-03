@@ -715,7 +715,7 @@ export function EventProvider({ children }: { children: React.ReactNode }) {
             // upsert inserts a duplicate when the existing row is hidden by RLS policies.
             const upd = await supabase
               .from('event_ticket_types')
-              .update({ name, price, quantity: qty, is_active: true, deleted_at: null })
+              .update({ name, price, quantity: qty, category: t.category, metadata: t.metadata, is_active: true, deleted_at: null })
               .eq('id', ticketId)
               .eq('event_id', id)
               .select('id')
@@ -725,7 +725,7 @@ export function EventProvider({ children }: { children: React.ReactNode }) {
               // Row not found or RLS blocked update — fall back to insert
               const ins2 = await supabase
                 .from('event_ticket_types')
-                .insert({ event_id: id, name, price, quantity: qty, sold: 0, is_active: true })
+                .insert({ event_id: id, name, price, quantity: qty, category: t.category, metadata: t.metadata, sold: 0, is_active: true })
                 .select('id')
                 .maybeSingle();
               if (ins2.error) throw ins2.error;
@@ -733,7 +733,7 @@ export function EventProvider({ children }: { children: React.ReactNode }) {
           } else {
             const ins = await supabase
               .from('event_ticket_types')
-              .insert({ event_id: id, name, price, quantity: qty, sold: 0, is_active: true })
+              .insert({ event_id: id, name, price, quantity: qty, category: t.category, metadata: t.metadata, sold: 0, is_active: true })
               .select('id')
               .maybeSingle();
             if (ins.error) throw ins.error;

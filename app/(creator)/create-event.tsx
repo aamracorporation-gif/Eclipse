@@ -273,16 +273,17 @@ export default function CreateEventScreen() {
             category: (validCats.includes(t.category ?? '') ? t.category : 'general'),
             price: String(t.price ?? 0),
             quantity: String(t.quantity ?? 0),
-            benefits: '',
-            featured: false,
-            vipGroupSize: '',
-            vipFreeBottles: [],
-            generalAccessZone: '',
-            generalNumberedSeat: false,
-            earlyEntryMinutes: '',
-            earlyDedicatedLane: false,
-            backstageMeetGreet: false,
-            backstageHost: '',
+            benefits: t.metadata?.benefits || '',
+            featured: !!t.metadata?.featured,
+            vipGroupSize: t.metadata?.vipGroupSize ? String(t.metadata.vipGroupSize) : '',
+            vipFreeBottles: (t.metadata?.vipBottles || []).map((b: any) => ({ brand: b.brand || '', quantity: String(b.quantity || 1) })),
+            generalAccessZone: t.metadata?.accessZone || '',
+            generalNumberedSeat: !!t.metadata?.numberedSeat,
+            earlyEntryMinutes: t.metadata?.earlyEntryMinutes ? String(t.metadata.earlyEntryMinutes) : '',
+            entryDeadlineMinutes: t.metadata?.entryDeadlineMinutes != null ? String(t.metadata.entryDeadlineMinutes) : '',
+            earlyDedicatedLane: !!t.metadata?.dedicatedLane,
+            backstageMeetGreet: !!t.metadata?.backstageMeetGreet,
+            backstageHost: t.metadata?.backstageHost || '',
           })));
         }
       } catch {
@@ -995,7 +996,7 @@ export default function CreateEventScreen() {
               <View style={styles.half}>
                 <ThemedInput
                   label="Precio (€)"
-                  placeholder="Ej: 30"
+                  placeholder="0 para entrada gratis"
                   value={newTicket.price}
                   onChangeText={(value) => setNewTicket((prev) => ({ ...prev, price: value }))}
                   error={newTicketErrors.price}
@@ -1015,6 +1016,17 @@ export default function CreateEventScreen() {
               </View>
             </View>
 
+            <ThemedInput
+              label="Límite de acceso (minutos desde el inicio, opcional)"
+              placeholder="Ej: 120 = acceso hasta 2 horas después del inicio"
+              value={newTicket.entryDeadlineMinutes || ''}
+              onChangeText={(value) => setNewTicket((prev) => ({ ...prev, entryDeadlineMinutes: value }))}
+              error={newTicketErrors.entryDeadlineMinutes}
+              keyboardType="number-pad"
+            />
+            {!!newTicket.entryDeadlineMinutes && draft.dateTime && (
+              <Text style={styles.metricsText}>Acceso antes de: {new Date(draft.dateTime.getTime() + Number(newTicket.entryDeadlineMinutes) * 60000).toLocaleString('es-ES')}</Text>
+            )}
             <ThemedInput
               label="Beneficios / preferencias"
               placeholder="Ej: Fast lane, copa incluida, zona reservada"

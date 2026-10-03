@@ -1,4 +1,4 @@
-import { TextInput, View, StyleSheet, TextInputProps, Text, StyleProp, ViewStyle, TextStyle } from 'react-native';
+import { TextInput, View, StyleSheet, TextInputProps, Text, StyleProp, ViewStyle, TextStyle, Platform } from 'react-native';
 import { Colors } from '@/constants/Colors';
 import { AlertCircle, CheckCircle2, AppIconComponent } from '@/lib/icons';
 import React, { forwardRef, isValidElement } from 'react';
@@ -42,6 +42,7 @@ export const ThemedInput = forwardRef<TextInput, ThemedInputProps>(({ icon, left
         <TextInput
           ref={ref}
           style={[styles.input, !Icon && styles.noIconInput, !!resolvedRightIcon && styles.inputWithRightIcon, inputStyle]}
+          underlineColorAndroid="transparent"
           placeholderTextColor={Colors.dark.textSecondary}
           accessibilityLabel={accessibilityLabel ?? label}
           accessibilityState={{ disabled: props.editable === false }}
@@ -88,7 +89,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.14,
     shadowRadius: 12,
     shadowOffset: { width: 0, height: 6 },
-    elevation: 4,
+    elevation: Platform.OS === 'android' ? 0 : 4,
   },
   errorBorder: {
     borderColor: Colors.dark.error,
@@ -109,6 +110,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   input: {
+    backgroundColor: 'transparent',
     flex: 1,
     color: Colors.dark.text,
     fontSize: 15,

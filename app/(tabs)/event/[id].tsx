@@ -24,6 +24,7 @@ import { invokeEdgeFunctionStrict } from '@/lib/edgeFunctions';
 import { useAppDialog } from '@/components/ui/AppDialog';
 import { useFocusEffect } from '@react-navigation/native';
 import * as ExpoLinking from 'expo-linking';
+import * as Crypto from 'expo-crypto';
 
 export default function EventDetailScreen() {
   const { id } = useLocalSearchParams();
@@ -43,6 +44,7 @@ export default function EventDetailScreen() {
   const [buyerEmail, setBuyerEmail] = useState('');
   const [quantity, setQuantity] = useState('1');
   const [purchasing, setPurchasing] = useState(false);
+  const freeClaimRef = useRef<{ signature: string; id: string } | null>(null);
   const [vipPurchasing, setVipPurchasing] = useState(false);
   const [selectedTicketType, setSelectedTicketType] = useState<string | null>(null);
   const [selectedVipReservadoId, setSelectedVipReservadoId] = useState<string | null>(null);
@@ -555,7 +557,7 @@ export default function EventDetailScreen() {
 
       // Service fee — integer-cent arithmetic, identical to create-payment-intent-v2
       const _totalPriceCents = Math.round(totalPrice * 100);
-      const _svcFeeCents = Math.max(Math.round((_totalPriceCents * 0.015 + 25) / 0.985), 50);
+      const _svcFeeCents = Number(pricePerTicket) === 0 ? 0 : Math.max(Math.round((_totalPriceCents * 0.015 + 25) / 0.985), 50);
       const serviceFeeForPurchase = _svcFeeCents / 100;
       const grandTotalForPurchase = (_totalPriceCents + _svcFeeCents) / 100;
 
@@ -571,7 +573,17 @@ export default function EventDetailScreen() {
         });
       };
 
-      if (!LAUNCH_FEATURES.walletCredit || !payWithWallet) {
+      if (Number(pricePerTicket) === 0) {
+        const signature = JSON.stringify([event.id, selectedTicketType, qty, buyerName, user.id]);
+        if (freeClaimRef.current?.signature !== signature) freeClaimRef.current = { signature, id: Crypto.randomUUID() };
+        const { data, error } = await supabase.rpc('claim_free_tickets', {
+          p_event_id: event.id, p_ticket_type_id: selectedTicketType,
+          p_quantity: qty, p_buyer_name: buyerName, p_request_id: freeClaimRef.current.id,
+        });
+        if (error) throw error;
+        if (!data?.success) throw new Error('No se pudo obtener la entrada gratuita.');
+        freeClaimRef.current = null;
+      } else if (!LAUNCH_FEATURES.walletCredit || !payWithWallet) {
         const r = await payTicketsWithCard();
         if (!r.paid) return;
       } else {
@@ -901,7 +913,7 @@ export default function EventDetailScreen() {
 
   // Service fee — integer-cent arithmetic, identical to create-payment-intent-v2
   const _discountedCents = Math.round(discountedTotal * 100);
-  const _serviceFeeCents = Math.max(Math.round((_discountedCents * 0.015 + 25) / 0.985), 50);
+  const _serviceFeeCents = Number(currentPrice) === 0 ? 0 : Math.max(Math.round((_discountedCents * 0.015 + 25) / 0.985), 50);
   const estimatedServiceFee = _serviceFeeCents / 100;
   const grandTotal = (_discountedCents + _serviceFeeCents) / 100;
 
@@ -1762,7 +1774,7 @@ export default function EventDetailScreen() {
                       currentAvailable <= 0
                         ? t('event.tickets.sold_out')
                         : user
-                          ? payWithWallet
+                          ? Number(currentPrice) === 0 ? 'Obtener entrada gratis' : payWithWallet
                             ? creditBalance > 0 && creditBalance < grandTotal
                               ? t('event.purchase.pay_split')
                               : t('event.purchase.pay_wallet')

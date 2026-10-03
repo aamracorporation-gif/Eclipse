@@ -926,6 +926,7 @@ export default function TicketsScreen() {
             {/* Divider */}
             <View style={[styles.tcVertDivider, { backgroundColor: `${tierConfig.accent}30` }]} />
 
+            {!!item.entry_deadline && <Text style={{ color: '#fbbf24', fontSize: 12 }}>Acceso antes de {new Date(item.entry_deadline).toLocaleString('es-ES')}</Text>}
             {/* QR */}
             <View style={styles.tcQrWrap}>
               {!isResale ? (
