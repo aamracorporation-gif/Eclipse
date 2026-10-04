@@ -1,5 +1,6 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert } from 'react-native';
-import { useMemo, useState, useEffect, useCallback } from 'react';
+import { useMemo, useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'expo-router';
 import { useAuth } from '@/lib/AuthContext';
 import { supabase } from '@/lib/supabase';
@@ -26,6 +27,7 @@ export default function WorkerSell() {
   const [vipReservados, setVipReservados] = useState<any[]>([]);
   const [vipQty, setVipQty] = useState(0);
   const [selectedVipId, setSelectedVipId] = useState<string | null>(null);
+  const submittingRef = useRef(false);
   const [processing, setProcessing] = useState(false);
   const [lastSaleTickets, setLastSaleTickets] = useState<any[] | null>(null);
 
@@ -334,8 +336,8 @@ export default function WorkerSell() {
 
   // Process Sale
   const processSale = async () => {
-    if (!workerProfile || !selectedEvent) return;
-
+    if (!workerProfile || !selectedEvent || submittingRef.current) return;
+    submittingRef.current = true;
     setProcessing(true);
 
     try {
@@ -346,42 +348,31 @@ export default function WorkerSell() {
         }))
         .filter((item) => item.quantity > 0);
 
-      let allTickets: any[] = [];
-      if (saleItems.length > 0) {
-        const { data: saleResult, error: saleError } = await supabase.rpc('sell_tickets_manual_v2', {
-          p_worker_id: workerProfile.id,
-          p_event_id: selectedEvent.id,
-          p_items: saleItems,
-          p_buyer_name: buyerDetails.name,
-          p_buyer_email: buyerDetails.email,
-          p_buyer_age: parseInt(buyerDetails.age) || null,
-        });
-        if (saleError) throw saleError;
-        if (saleResult?.ticket_ids?.length) {
-          const { data: soldTickets, error: soldTicketsError } = await supabase
-            .from('tickets')
-            .select('*')
-            .in('id', saleResult.ticket_ids);
-          if (soldTicketsError) throw soldTicketsError;
-          allTickets = soldTickets || [];
-        }
-      }
-
-      if (selectedVipId && vipQty > 0) {
-        const { data: vipResult, error: vipError } = await supabase.rpc('sell_vip_manual', {
-          p_worker_id: workerProfile.id,
-          p_vip_reservado_id: selectedVipId,
-          p_quantity: vipQty,
-          p_buyer_name: buyerDetails.name,
-          p_buyer_email: buyerDetails.email,
-          p_buyer_age: parseInt(buyerDetails.age) || 0,
-        });
-        if (vipError) throw vipError;
-        if (vipResult?.ticket_ids?.length) {
-          const { data: vipTickets } = await supabase.from('tickets').select('*').in('id', vipResult.ticket_ids);
-          if (vipTickets?.length) allTickets = [...allTickets, ...vipTickets];
-        }
-      }
+      const payload = {
+        p_worker_id: workerProfile.id, p_event_id: selectedEvent.id, p_items: saleItems,
+        p_vip_id: selectedVipId, p_vip_quantity: vipQty,
+        p_buyer_name: buyerDetails.name.trim(), p_buyer_email: buyerDetails.email.trim(),
+        p_buyer_age: parseInt(buyerDetails.age, 10),
+      };
+      const storageKey = `manual-sale:${workerProfile.id}`;
+      const serialized = JSON.stringify(payload);
+      const saved = await AsyncStorage.getItem(storageKey);
+      const prior = saved ? JSON.parse(saved) : null;
+      // Persist before sending: a lost response or process restart can replay safely.
+      const requestKey = prior?.payload === serialized ? prior.key
+        : `${Date.now()}-${Math.random().toString(36).slice(2)}-${Math.random().toString(36).slice(2)}`;
+      await AsyncStorage.setItem(storageKey, JSON.stringify({ key: requestKey, payload: serialized }));
+      const { data: saleResult, error: saleError } = await supabase.rpc('sell_manual_order', {
+        ...payload, p_request_key: requestKey,
+      });
+      if (saleError) throw saleError;
+      if (!saleResult?.success || !Array.isArray(saleResult.tickets)) throw new Error('Respuesta de venta inválida');
+      const allTickets = saleResult.tickets;
+      setQuantities({});
+      setVipQty(0);
+      setSelectedVipId(null);
+      // The sale is confirmed even if local cleanup fails.
+      await AsyncStorage.removeItem(storageKey).catch(() => {});
 
       setLastSaleTickets(allTickets);
       
@@ -409,6 +400,7 @@ export default function WorkerSell() {
       console.error('Error processing sale:', JSON.stringify(error, null, 2));
       Alert.alert('Error', 'No se pudo registrar la venta: ' + (error.message || 'Error desconocido') + (error.details ? `\n\n${error.details}` : ''));
     } finally {
+      submittingRef.current = false;
       setProcessing(false);
     }
   };

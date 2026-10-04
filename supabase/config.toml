@@ -30,3 +30,6 @@ verify_jwt = true
 
 [functions.auth-redirect]
 verify_jwt = false
+
+[functions.send-ticket-email]
+verify_jwt = true

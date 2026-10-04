@@ -147,7 +147,9 @@ describe('release security regressions', () => {
       'supabase/migrations/20260915122200_authoritative_worker_cash_sales.sql',
     );
 
-    expect(workerSale).toContain("rpc('sell_tickets_manual_v2'");
+    expect(workerSale).toContain("rpc('sell_manual_order'");
+    expect(workerSale).not.toContain("rpc('sell_tickets_manual_v2'");
+    expect(workerSale).not.toContain("rpc('sell_vip_manual'");
     expect(workerSale).not.toContain("from('tickets').insert(ticketsToCreate)");
     expect(saleSql).toContain("permissions ? 'sell'");
     expect(saleSql).toContain('worker_event_assignments');

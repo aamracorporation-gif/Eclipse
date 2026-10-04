@@ -587,15 +587,17 @@ export default function AdminVerificationScreen() {
         p_reason: reason,
       });
       if (error) throw error;
-      if (isSuspended) {
-        const suspensionNote = reason ? `Cuenta suspendida: ${reason}` : 'Cuenta suspendida';
-        const r = await supabase.rpc('admin_set_organizer_verification', {
-          p_user_id: targetUserId,
-          p_status: 'rejected',
-          p_reason: suspensionNote,
-        });
-        if (r.error) throw r.error;
-      }
+      // The RPC updates suspension, verification and audit in one transaction.
+      ++listRequestKeyRef.current;
+      ++globalRequestRef.current;
+      const patchSuspension = (row: OrganizerRow): OrganizerRow => row.id === targetUserId
+        ? { ...row, is_suspended: isSuspended, suspended_reason: reason,
+            ...(isSuspended && row.role === 'organizer' ? {
+              verification_status: 'rejected', verification_rejection_reason: reason || 'Cuenta suspendida',
+            } : {}) }
+        : row;
+      setGlobalMatches(rows => rows.map(patchSuspension));
+      setOrganizers(rows => rows.map(patchSuspension));
       await fetchStats();
       await fetchOrganizers({ reset: true });
       await fetchGlobalMatches();
