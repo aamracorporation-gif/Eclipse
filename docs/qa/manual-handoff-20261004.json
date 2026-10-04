@@ -1,0 +1,2058 @@
+[
+  {
+    "key": "QA-001",
+    "title": "QA-001 · Registro cliente y confirmación",
+    "suite_key": 1,
+    "status": "untested",
+    "required": "Dispositivo iOS/Android, fixtures y recorrido funcional completo.",
+    "steps_reference": "manual-cases-20261004.json:QA-001"
+  },
+  {
+    "key": "QA-002",
+    "title": "QA-002 · Registro organizador",
+    "suite_key": 1,
+    "status": "untested",
+    "required": "Dispositivo iOS/Android, fixtures y recorrido funcional completo.",
+    "steps_reference": "manual-cases-20261004.json:QA-002"
+  },
+  {
+    "key": "QA-003",
+    "title": "QA-003 · Año de nacimiento Android",
+    "suite_key": 1,
+    "status": "untested",
+    "required": "Dispositivo iOS/Android, fixtures y recorrido funcional completo.",
+    "steps_reference": "manual-cases-20261004.json:QA-003"
+  },
+  {
+    "key": "QA-004",
+    "title": "QA-004 · Mayoría de edad exacta",
+    "suite_key": 1,
+    "status": "untested",
+    "required": "Dispositivo iOS/Android, fixtures y recorrido funcional completo.",
+    "steps_reference": "manual-cases-20261004.json:QA-004"
+  },
+  {
+    "key": "QA-005",
+    "title": "QA-005 · Datos inválidos y espacios",
+    "suite_key": 1,
+    "status": "untested",
+    "required": "Dispositivo iOS/Android, fixtures y recorrido funcional completo.",
+    "steps_reference": "manual-cases-20261004.json:QA-005"
+  },
+  {
+    "key": "QA-006",
+    "title": "QA-006 · Email duplicado",
+    "suite_key": 1,
+    "status": "untested",
+    "required": "Dispositivo iOS/Android, fixtures y recorrido funcional completo.",
+    "steps_reference": "manual-cases-20261004.json:QA-006"
+  },
+  {
+    "key": "QA-007",
+    "title": "QA-007 · Consentimientos obligatorios",
+    "suite_key": 1,
+    "status": "untested",
+    "required": "Dispositivo iOS/Android, fixtures y recorrido funcional completo.",
+    "steps_reference": "manual-cases-20261004.json:QA-007"
+  },
+  {
+    "key": "QA-008",
+    "title": "QA-008 · Login válido y rol",
+    "suite_key": 1,
+    "status": "untested",
+    "required": "Dispositivo iOS/Android, fixtures y recorrido funcional completo.",
+    "steps_reference": "manual-cases-20261004.json:QA-008"
+  },
+  {
+    "key": "QA-009",
+    "title": "QA-009 · Login erróneo y sin conexión",
+    "suite_key": 1,
+    "status": "untested",
+    "required": "Dispositivo iOS/Android, fixtures y recorrido funcional completo.",
+    "steps_reference": "manual-cases-20261004.json:QA-009"
+  },
+  {
+    "key": "QA-010",
+    "title": "QA-010 · Cuenta no confirmada",
+    "suite_key": 1,
+    "status": "untested",
+    "required": "Dispositivo iOS/Android, fixtures y recorrido funcional completo.",
+    "steps_reference": "manual-cases-20261004.json:QA-010"
+  },
+  {
+    "key": "QA-011",
+    "title": "QA-011 · Reenvío y enlace caducado",
+    "suite_key": 1,
+    "status": "untested",
+    "required": "Dispositivo iOS/Android, fixtures y recorrido funcional completo.",
+    "steps_reference": "manual-cases-20261004.json:QA-011"
+  },
+  {
+    "key": "QA-012",
+    "title": "QA-012 · Persistencia y cierre de sesión",
+    "suite_key": 1,
+    "status": "untested",
+    "required": "Dispositivo iOS/Android, fixtures y recorrido funcional completo.",
+    "steps_reference": "manual-cases-20261004.json:QA-012"
+  },
+  {
+    "key": "QA-013",
+    "title": "QA-013 · Recuperar contraseña",
+    "suite_key": 1,
+    "status": "untested",
+    "required": "Dispositivo iOS/Android, fixtures y recorrido funcional completo.",
+    "steps_reference": "manual-cases-20261004.json:QA-013"
+  },
+  {
+    "key": "QA-014",
+    "title": "QA-014 · Recuperación inválida",
+    "suite_key": 1,
+    "status": "untested",
+    "required": "Dispositivo iOS/Android, fixtures y recorrido funcional completo.",
+    "steps_reference": "manual-cases-20261004.json:QA-014"
+  },
+  {
+    "key": "QA-015",
+    "title": "QA-015 · Bloqueo antes de Stripe",
+    "suite_key": 2,
+    "status": "untested",
+    "required": "Dispositivo iOS/Android, fixtures y recorrido funcional completo.",
+    "steps_reference": "manual-cases-20261004.json:QA-015"
+  },
+  {
+    "key": "QA-016",
+    "title": "QA-016 · Stripe incompleto",
+    "suite_key": 2,
+    "status": "untested",
+    "required": "Dispositivo iOS/Android, fixtures y recorrido funcional completo.",
+    "steps_reference": "manual-cases-20261004.json:QA-016"
+  },
+  {
+    "key": "QA-017",
+    "title": "QA-017 · Regreso tras completar Stripe",
+    "suite_key": 2,
+    "status": "untested",
+    "required": "Dispositivo iOS/Android, fixtures y recorrido funcional completo.",
+    "steps_reference": "manual-cases-20261004.json:QA-017"
+  },
+  {
+    "key": "QA-018",
+    "title": "QA-018 · Aprobación sin cobros habilitados",
+    "suite_key": 2,
+    "status": "untested",
+    "required": "Dispositivo iOS/Android, fixtures y recorrido funcional completo.",
+    "steps_reference": "manual-cases-20261004.json:QA-018"
+  },
+  {
+    "key": "QA-019",
+    "title": "QA-019 · Enlace Connect vencido",
+    "suite_key": 2,
+    "status": "untested",
+    "required": "Dispositivo iOS/Android, fixtures y recorrido funcional completo.",
+    "steps_reference": "manual-cases-20261004.json:QA-019"
+  },
+  {
+    "key": "QA-020",
+    "title": "QA-020 · Doble toque en conectar",
+    "suite_key": 2,
+    "status": "untested",
+    "required": "Dispositivo iOS/Android, fixtures y recorrido funcional completo.",
+    "steps_reference": "manual-cases-20261004.json:QA-020"
+  },
+  {
+    "key": "QA-021",
+    "title": "QA-021 · Error de secreto o proveedor",
+    "suite_key": 2,
+    "status": "untested",
+    "required": "Dispositivo iOS/Android, fixtures y recorrido funcional completo.",
+    "steps_reference": "manual-cases-20261004.json:QA-021"
+  },
+  {
+    "key": "QA-022",
+    "title": "QA-022 · Cambio de aprobación en vivo",
+    "suite_key": 2,
+    "status": "untested",
+    "required": "Dispositivo iOS/Android, fixtures y recorrido funcional completo.",
+    "steps_reference": "manual-cases-20261004.json:QA-022"
+  },
+  {
+    "key": "QA-023",
+    "title": "QA-023 · Documentos de verificación",
+    "suite_key": 2,
+    "status": "untested",
+    "required": "Dispositivo iOS/Android, fixtures y recorrido funcional completo.",
+    "steps_reference": "manual-cases-20261004.json:QA-023"
+  },
+  {
+    "key": "QA-024",
+    "title": "QA-024 · Subida inválida o interrumpida",
+    "suite_key": 2,
+    "status": "untested",
+    "required": "Dispositivo iOS/Android, fixtures y recorrido funcional completo.",
+    "steps_reference": "manual-cases-20261004.json:QA-024"
+  },
+  {
+    "key": "QA-025",
+    "title": "QA-025 · Corrección documental",
+    "suite_key": 2,
+    "status": "untested",
+    "required": "Dispositivo iOS/Android, fixtures y recorrido funcional completo.",
+    "steps_reference": "manual-cases-20261004.json:QA-025"
+  },
+  {
+    "key": "QA-026",
+    "title": "QA-026 · Desconectar Stripe",
+    "suite_key": 2,
+    "status": "untested",
+    "required": "Dispositivo iOS/Android, fixtures y recorrido funcional completo.",
+    "steps_reference": "manual-cases-20261004.json:QA-026"
+  },
+  {
+    "key": "QA-027",
+    "title": "QA-027 · Admin exento de onboarding",
+    "suite_key": 2,
+    "status": "untested",
+    "required": "Dispositivo iOS/Android, fixtures y recorrido funcional completo.",
+    "steps_reference": "manual-cases-20261004.json:QA-027"
+  },
+  {
+    "key": "QA-028",
+    "title": "QA-028 · Aprobar desde pendientes",
+    "suite_key": 3,
+    "status": "untested",
+    "required": "Dispositivo iOS/Android, fixtures y recorrido funcional completo.",
+    "steps_reference": "manual-cases-20261004.json:QA-028"
+  },
+  {
+    "key": "QA-029",
+    "title": "QA-029 · Aprobar desde búsqueda por correo",
+    "suite_key": 3,
+    "status": "untested",
+    "required": "Dispositivo iOS/Android, fixtures y recorrido funcional completo.",
+    "steps_reference": "manual-cases-20261004.json:QA-029"
+  },
+  {
+    "key": "QA-030",
+    "title": "QA-030 · Búsqueda y respuesta antigua",
+    "suite_key": 3,
+    "status": "untested",
+    "required": "Dispositivo iOS/Android, fixtures y recorrido funcional completo.",
+    "steps_reference": "manual-cases-20261004.json:QA-030"
+  },
+  {
+    "key": "QA-031",
+    "title": "QA-031 · Rechazar y corregir",
+    "suite_key": 3,
+    "status": "untested",
+    "required": "Dispositivo iOS/Android, fixtures y recorrido funcional completo.",
+    "steps_reference": "manual-cases-20261004.json:QA-031"
+  },
+  {
+    "key": "QA-032",
+    "title": "QA-032 · Error de aprobación",
+    "suite_key": 3,
+    "status": "untested",
+    "required": "Dispositivo iOS/Android, fixtures y recorrido funcional completo.",
+    "steps_reference": "manual-cases-20261004.json:QA-032"
+  },
+  {
+    "key": "QA-033",
+    "title": "QA-033 · Filtros y paginación admin",
+    "suite_key": 3,
+    "status": "untested",
+    "required": "Dispositivo iOS/Android, fixtures y recorrido funcional completo.",
+    "steps_reference": "manual-cases-20261004.json:QA-033"
+  },
+  {
+    "key": "QA-034",
+    "title": "QA-034 · Suspender y reactivar",
+    "suite_key": 3,
+    "status": "untested",
+    "required": "Dispositivo iOS/Android, fixtures y recorrido funcional completo.",
+    "steps_reference": "manual-cases-20261004.json:QA-034"
+  },
+  {
+    "key": "QA-035",
+    "title": "QA-035 · Permisos reales admin",
+    "suite_key": 3,
+    "status": "untested",
+    "required": "Dispositivo iOS/Android, fixtures y recorrido funcional completo.",
+    "steps_reference": "manual-cases-20261004.json:QA-035"
+  },
+  {
+    "key": "QA-036",
+    "title": "QA-036 · Documentos privados y caducidad",
+    "suite_key": 3,
+    "status": "untested",
+    "required": "Dispositivo iOS/Android, fixtures y recorrido funcional completo.",
+    "steps_reference": "manual-cases-20261004.json:QA-036"
+  },
+  {
+    "key": "QA-037",
+    "title": "QA-037 · Resumen administrativo",
+    "suite_key": 3,
+    "status": "untested",
+    "required": "Dispositivo iOS/Android, fixtures y recorrido funcional completo.",
+    "steps_reference": "manual-cases-20261004.json:QA-037"
+  },
+  {
+    "key": "QA-038",
+    "title": "QA-038 · Invalidar entrada",
+    "suite_key": 3,
+    "status": "untested",
+    "required": "Dispositivo iOS/Android, fixtures y recorrido funcional completo.",
+    "steps_reference": "manual-cases-20261004.json:QA-038"
+  },
+  {
+    "key": "QA-039",
+    "title": "QA-039 · Perfil y salida de admin",
+    "suite_key": 3,
+    "status": "untested",
+    "required": "Dispositivo iOS/Android, fixtures y recorrido funcional completo.",
+    "steps_reference": "manual-cases-20261004.json:QA-039"
+  },
+  {
+    "key": "QA-040",
+    "title": "QA-040 · Dos administradores",
+    "suite_key": 3,
+    "status": "untested",
+    "required": "Dispositivo iOS/Android, fixtures y recorrido funcional completo.",
+    "steps_reference": "manual-cases-20261004.json:QA-040"
+  },
+  {
+    "key": "QA-041",
+    "title": "QA-041 · Editar perfil",
+    "suite_key": 4,
+    "status": "untested",
+    "required": "Dispositivo iOS/Android, fixtures y recorrido funcional completo.",
+    "steps_reference": "manual-cases-20261004.json:QA-041"
+  },
+  {
+    "key": "QA-042",
+    "title": "QA-042 · Validación del perfil",
+    "suite_key": 4,
+    "status": "untested",
+    "required": "Dispositivo iOS/Android, fixtures y recorrido funcional completo.",
+    "steps_reference": "manual-cases-20261004.json:QA-042"
+  },
+  {
+    "key": "QA-043",
+    "title": "QA-043 · Cancelar edición",
+    "suite_key": 4,
+    "status": "untested",
+    "required": "Dispositivo iOS/Android, fixtures y recorrido funcional completo.",
+    "steps_reference": "manual-cases-20261004.json:QA-043"
+  },
+  {
+    "key": "QA-044",
+    "title": "QA-044 · Cambio de contraseña",
+    "suite_key": 4,
+    "status": "untested",
+    "required": "Dispositivo iOS/Android, fixtures y recorrido funcional completo.",
+    "steps_reference": "manual-cases-20261004.json:QA-044"
+  },
+  {
+    "key": "QA-045",
+    "title": "QA-045 · Idiomas",
+    "suite_key": 4,
+    "status": "untested",
+    "required": "Dispositivo iOS/Android, fixtures y recorrido funcional completo.",
+    "steps_reference": "manual-cases-20261004.json:QA-045"
+  },
+  {
+    "key": "QA-046",
+    "title": "QA-046 · Soporte",
+    "suite_key": 4,
+    "status": "untested",
+    "required": "Dispositivo iOS/Android, fixtures y recorrido funcional completo.",
+    "steps_reference": "manual-cases-20261004.json:QA-046"
+  },
+  {
+    "key": "QA-047",
+    "title": "QA-047 · Preferencias de notificación",
+    "suite_key": 4,
+    "status": "untested",
+    "required": "Dispositivo iOS/Android, fixtures y recorrido funcional completo.",
+    "steps_reference": "manual-cases-20261004.json:QA-047"
+  },
+  {
+    "key": "QA-048",
+    "title": "QA-048 · Eliminar cuenta propia",
+    "suite_key": 4,
+    "status": "untested",
+    "required": "Dispositivo iOS/Android, fixtures y recorrido funcional completo.",
+    "steps_reference": "manual-cases-20261004.json:QA-048"
+  },
+  {
+    "key": "QA-049",
+    "title": "QA-049 · Perfil sin datos opcionales",
+    "suite_key": 4,
+    "status": "untested",
+    "required": "Dispositivo iOS/Android, fixtures y recorrido funcional completo.",
+    "steps_reference": "manual-cases-20261004.json:QA-049"
+  },
+  {
+    "key": "QA-050",
+    "title": "QA-050 · Feed y detalle",
+    "suite_key": 5,
+    "status": "untested",
+    "required": "Dispositivo iOS/Android, fixtures y recorrido funcional completo.",
+    "steps_reference": "manual-cases-20261004.json:QA-050"
+  },
+  {
+    "key": "QA-051",
+    "title": "QA-051 · Búsqueda por ciudad y texto",
+    "suite_key": 5,
+    "status": "untested",
+    "required": "Dispositivo iOS/Android, fixtures y recorrido funcional completo.",
+    "steps_reference": "manual-cases-20261004.json:QA-051"
+  },
+  {
+    "key": "QA-052",
+    "title": "QA-052 · Filtros combinados",
+    "suite_key": 5,
+    "status": "untested",
+    "required": "Dispositivo iOS/Android, fixtures y recorrido funcional completo.",
+    "steps_reference": "manual-cases-20261004.json:QA-052"
+  },
+  {
+    "key": "QA-053",
+    "title": "QA-053 · Paginación y refresco",
+    "suite_key": 5,
+    "status": "untested",
+    "required": "Dispositivo iOS/Android, fixtures y recorrido funcional completo.",
+    "steps_reference": "manual-cases-20261004.json:QA-053"
+  },
+  {
+    "key": "QA-054",
+    "title": "QA-054 · Ubicación denegada",
+    "suite_key": 5,
+    "status": "untested",
+    "required": "Dispositivo iOS/Android, fixtures y recorrido funcional completo.",
+    "steps_reference": "manual-cases-20261004.json:QA-054"
+  },
+  {
+    "key": "QA-055",
+    "title": "QA-055 · Mapa y marcadores",
+    "suite_key": 5,
+    "status": "untested",
+    "required": "Dispositivo iOS/Android, fixtures y recorrido funcional completo.",
+    "steps_reference": "manual-cases-20261004.json:QA-055"
+  },
+  {
+    "key": "QA-056",
+    "title": "QA-056 · Cambio rápido de zona",
+    "suite_key": 5,
+    "status": "untested",
+    "required": "Dispositivo iOS/Android, fixtures y recorrido funcional completo.",
+    "steps_reference": "manual-cases-20261004.json:QA-056"
+  },
+  {
+    "key": "QA-057",
+    "title": "QA-057 · Eventos finalizados",
+    "suite_key": 5,
+    "status": "untested",
+    "required": "Dispositivo iOS/Android, fixtures y recorrido funcional completo.",
+    "steps_reference": "manual-cases-20261004.json:QA-057"
+  },
+  {
+    "key": "QA-058",
+    "title": "QA-058 · Sin conexión y reintento",
+    "suite_key": 5,
+    "status": "untested",
+    "required": "Dispositivo iOS/Android, fixtures y recorrido funcional completo.",
+    "steps_reference": "manual-cases-20261004.json:QA-058"
+  },
+  {
+    "key": "QA-059",
+    "title": "QA-059 · Imagen ausente",
+    "suite_key": 5,
+    "status": "untested",
+    "required": "Dispositivo iOS/Android, fixtures y recorrido funcional completo.",
+    "steps_reference": "manual-cases-20261004.json:QA-059"
+  },
+  {
+    "key": "QA-060",
+    "title": "QA-060 · Detalle completo",
+    "suite_key": 6,
+    "status": "untested",
+    "required": "Dispositivo iOS/Android, fixtures y recorrido funcional completo.",
+    "steps_reference": "manual-cases-20261004.json:QA-060"
+  },
+  {
+    "key": "QA-061",
+    "title": "QA-061 · Compartir con app instalada",
+    "suite_key": 6,
+    "status": "untested",
+    "required": "Dispositivo iOS/Android, fixtures y recorrido funcional completo.",
+    "steps_reference": "manual-cases-20261004.json:QA-061"
+  },
+  {
+    "key": "QA-062",
+    "title": "QA-062 · Compartir sin app",
+    "suite_key": 6,
+    "status": "untested",
+    "required": "Dispositivo iOS/Android, fixtures y recorrido funcional completo.",
+    "steps_reference": "manual-cases-20261004.json:QA-062"
+  },
+  {
+    "key": "QA-063",
+    "title": "QA-063 · Enlace inexistente",
+    "suite_key": 6,
+    "status": "untested",
+    "required": "Dispositivo iOS/Android, fixtures y recorrido funcional completo.",
+    "steps_reference": "manual-cases-20261004.json:QA-063"
+  },
+  {
+    "key": "QA-064",
+    "title": "QA-064 · Actualización en vivo",
+    "suite_key": 6,
+    "status": "untested",
+    "required": "Dispositivo iOS/Android, fixtures y recorrido funcional completo.",
+    "steps_reference": "manual-cases-20261004.json:QA-064"
+  },
+  {
+    "key": "QA-065",
+    "title": "QA-065 · Restricción de edad",
+    "suite_key": 6,
+    "status": "untested",
+    "required": "Dispositivo iOS/Android, fixtures y recorrido funcional completo.",
+    "steps_reference": "manual-cases-20261004.json:QA-065"
+  },
+  {
+    "key": "QA-066",
+    "title": "QA-066 · Plano y contenido largo",
+    "suite_key": 6,
+    "status": "untested",
+    "required": "Dispositivo iOS/Android, fixtures y recorrido funcional completo.",
+    "steps_reference": "manual-cases-20261004.json:QA-066"
+  },
+  {
+    "key": "QA-067",
+    "title": "QA-067 · Calendario de entrada",
+    "suite_key": 6,
+    "status": "untested",
+    "required": "Dispositivo iOS/Android, fixtures y recorrido funcional completo.",
+    "steps_reference": "manual-cases-20261004.json:QA-067"
+  },
+  {
+    "key": "QA-068",
+    "title": "QA-068 · Compra estándar",
+    "suite_key": 7,
+    "status": "untested",
+    "required": "Stripe TEST, pagos/3DS, webhooks reales y/o conciliación. Concurrencia exige sesiones paralelas.",
+    "steps_reference": "manual-cases-20261004.json:QA-068"
+  },
+  {
+    "key": "QA-069",
+    "title": "QA-069 · Compra VIP",
+    "suite_key": 7,
+    "status": "untested",
+    "required": "Stripe TEST, pagos/3DS, webhooks reales y/o conciliación. Concurrencia exige sesiones paralelas.",
+    "steps_reference": "manual-cases-20261004.json:QA-069"
+  },
+  {
+    "key": "QA-070",
+    "title": "QA-070 · Entradas gratuitas",
+    "suite_key": 7,
+    "status": "untested",
+    "required": "Stripe TEST, pagos/3DS, webhooks reales y/o conciliación. Concurrencia exige sesiones paralelas.",
+    "steps_reference": "manual-cases-20261004.json:QA-070"
+  },
+  {
+    "key": "QA-071",
+    "title": "QA-071 · Descuento válido",
+    "suite_key": 7,
+    "status": "untested",
+    "required": "Stripe TEST, pagos/3DS, webhooks reales y/o conciliación. Concurrencia exige sesiones paralelas.",
+    "steps_reference": "manual-cases-20261004.json:QA-071"
+  },
+  {
+    "key": "QA-072",
+    "title": "QA-072 · Descuento inválido",
+    "suite_key": 7,
+    "status": "untested",
+    "required": "Stripe TEST, pagos/3DS, webhooks reales y/o conciliación. Concurrencia exige sesiones paralelas.",
+    "steps_reference": "manual-cases-20261004.json:QA-072"
+  },
+  {
+    "key": "QA-073",
+    "title": "QA-073 · Cantidad y stock",
+    "suite_key": 7,
+    "status": "untested",
+    "required": "Stripe TEST, pagos/3DS, webhooks reales y/o conciliación. Concurrencia exige sesiones paralelas.",
+    "steps_reference": "manual-cases-20261004.json:QA-073"
+  },
+  {
+    "key": "QA-074",
+    "title": "QA-074 · 3DS correcto",
+    "suite_key": 7,
+    "status": "untested",
+    "required": "Stripe TEST, pagos/3DS, webhooks reales y/o conciliación. Concurrencia exige sesiones paralelas.",
+    "steps_reference": "manual-cases-20261004.json:QA-074"
+  },
+  {
+    "key": "QA-075",
+    "title": "QA-075 · 3DS cancelado y tarjeta rechazada",
+    "suite_key": 7,
+    "status": "untested",
+    "required": "Stripe TEST, pagos/3DS, webhooks reales y/o conciliación. Concurrencia exige sesiones paralelas.",
+    "steps_reference": "manual-cases-20261004.json:QA-075"
+  },
+  {
+    "key": "QA-076",
+    "title": "QA-076 · Doble toque pagar",
+    "suite_key": 7,
+    "status": "untested",
+    "required": "Stripe TEST, pagos/3DS, webhooks reales y/o conciliación. Concurrencia exige sesiones paralelas.",
+    "steps_reference": "manual-cases-20261004.json:QA-076"
+  },
+  {
+    "key": "QA-077",
+    "title": "QA-077 · App cerrada tras cobro",
+    "suite_key": 7,
+    "status": "untested",
+    "required": "Stripe TEST, pagos/3DS, webhooks reales y/o conciliación. Concurrencia exige sesiones paralelas.",
+    "steps_reference": "manual-cases-20261004.json:QA-077"
+  },
+  {
+    "key": "QA-078",
+    "title": "QA-078 · Sin stock al confirmar",
+    "suite_key": 7,
+    "status": "untested",
+    "required": "Stripe TEST, pagos/3DS, webhooks reales y/o conciliación. Concurrencia exige sesiones paralelas.",
+    "steps_reference": "manual-cases-20261004.json:QA-078"
+  },
+  {
+    "key": "QA-079",
+    "title": "QA-079 · Precio manipulado",
+    "suite_key": 7,
+    "status": "untested",
+    "required": "Stripe TEST, pagos/3DS, webhooks reales y/o conciliación. Concurrencia exige sesiones paralelas.",
+    "steps_reference": "manual-cases-20261004.json:QA-079"
+  },
+  {
+    "key": "QA-080",
+    "title": "QA-080 · Compra de evento cancelado",
+    "suite_key": 7,
+    "status": "untested",
+    "required": "Stripe TEST, pagos/3DS, webhooks reales y/o conciliación. Concurrencia exige sesiones paralelas.",
+    "steps_reference": "manual-cases-20261004.json:QA-080"
+  },
+  {
+    "key": "QA-081",
+    "title": "QA-081 · Sesión expirada en checkout",
+    "suite_key": 7,
+    "status": "untested",
+    "required": "Stripe TEST, pagos/3DS, webhooks reales y/o conciliación. Concurrencia exige sesiones paralelas.",
+    "steps_reference": "manual-cases-20261004.json:QA-081"
+  },
+  {
+    "key": "QA-082",
+    "title": "QA-082 · Aislamiento entre compradores",
+    "suite_key": 7,
+    "status": "untested",
+    "required": "Stripe TEST, pagos/3DS, webhooks reales y/o conciliación. Concurrencia exige sesiones paralelas.",
+    "steps_reference": "manual-cases-20261004.json:QA-082"
+  },
+  {
+    "key": "QA-083",
+    "title": "QA-083 · Errores de red en confirmación",
+    "suite_key": 7,
+    "status": "untested",
+    "required": "Stripe TEST, pagos/3DS, webhooks reales y/o conciliación. Concurrencia exige sesiones paralelas.",
+    "steps_reference": "manual-cases-20261004.json:QA-083"
+  },
+  {
+    "key": "QA-084",
+    "title": "QA-084 · Webhook duplicado",
+    "suite_key": 8,
+    "status": "untested",
+    "required": "Stripe TEST, pagos/3DS, webhooks reales y/o conciliación. Concurrencia exige sesiones paralelas.",
+    "steps_reference": "manual-cases-20261004.json:QA-084"
+  },
+  {
+    "key": "QA-085",
+    "title": "QA-085 · Webhook fuera de orden",
+    "suite_key": 8,
+    "status": "untested",
+    "required": "Stripe TEST, pagos/3DS, webhooks reales y/o conciliación. Concurrencia exige sesiones paralelas.",
+    "steps_reference": "manual-cases-20261004.json:QA-085"
+  },
+  {
+    "key": "QA-087",
+    "title": "QA-087 · Webhook y confirmación simultáneos",
+    "suite_key": 8,
+    "status": "untested",
+    "required": "Stripe TEST, pagos/3DS, webhooks reales y/o conciliación. Concurrencia exige sesiones paralelas.",
+    "steps_reference": "manual-cases-20261004.json:QA-087"
+  },
+  {
+    "key": "QA-088",
+    "title": "QA-088 · Reembolso de entrega imposible",
+    "suite_key": 8,
+    "status": "untested",
+    "required": "Stripe TEST, pagos/3DS, webhooks reales y/o conciliación. Concurrencia exige sesiones paralelas.",
+    "steps_reference": "manual-cases-20261004.json:QA-088"
+  },
+  {
+    "key": "QA-089",
+    "title": "QA-089 · Reintento de devolución",
+    "suite_key": 8,
+    "status": "untested",
+    "required": "Stripe TEST, pagos/3DS, webhooks reales y/o conciliación. Concurrencia exige sesiones paralelas.",
+    "steps_reference": "manual-cases-20261004.json:QA-089"
+  },
+  {
+    "key": "QA-090",
+    "title": "QA-090 · Conciliación económica",
+    "suite_key": 8,
+    "status": "untested",
+    "required": "Stripe TEST, pagos/3DS, webhooks reales y/o conciliación. Concurrencia exige sesiones paralelas.",
+    "steps_reference": "manual-cases-20261004.json:QA-090"
+  },
+  {
+    "key": "QA-091",
+    "title": "QA-091 · Cambio de cuenta Stripe",
+    "suite_key": 8,
+    "status": "untested",
+    "required": "Stripe TEST, pagos/3DS, webhooks reales y/o conciliación. Concurrencia exige sesiones paralelas.",
+    "steps_reference": "manual-cases-20261004.json:QA-091"
+  },
+  {
+    "key": "QA-092",
+    "title": "QA-092 · Entradas tras compra",
+    "suite_key": 9,
+    "status": "untested",
+    "required": "Dispositivo iOS/Android, fixtures y recorrido funcional completo.",
+    "steps_reference": "manual-cases-20261004.json:QA-092"
+  },
+  {
+    "key": "QA-093",
+    "title": "QA-093 · Filtros e historial",
+    "suite_key": 9,
+    "status": "untested",
+    "required": "Dispositivo iOS/Android, fixtures y recorrido funcional completo.",
+    "steps_reference": "manual-cases-20261004.json:QA-093"
+  },
+  {
+    "key": "QA-094",
+    "title": "QA-094 · Privacidad de entradas",
+    "suite_key": 9,
+    "status": "untested",
+    "required": "Dispositivo iOS/Android, fixtures y recorrido funcional completo.",
+    "steps_reference": "manual-cases-20261004.json:QA-094"
+  },
+  {
+    "key": "QA-095",
+    "title": "QA-095 · PDF y compartir",
+    "suite_key": 9,
+    "status": "untested",
+    "required": "Dispositivo iOS/Android, fixtures y recorrido funcional completo.",
+    "steps_reference": "manual-cases-20261004.json:QA-095"
+  },
+  {
+    "key": "QA-096",
+    "title": "QA-096 · Apple Wallet",
+    "suite_key": 9,
+    "status": "untested",
+    "required": "Dispositivo iOS/Android, fixtures y recorrido funcional completo.",
+    "steps_reference": "manual-cases-20261004.json:QA-096"
+  },
+  {
+    "key": "QA-097",
+    "title": "QA-097 · Google Wallet",
+    "suite_key": 9,
+    "status": "untested",
+    "required": "Dispositivo iOS/Android, fixtures y recorrido funcional completo.",
+    "steps_reference": "manual-cases-20261004.json:QA-097"
+  },
+  {
+    "key": "QA-098",
+    "title": "QA-098 · Cartera digital no disponible",
+    "suite_key": 9,
+    "status": "untested",
+    "required": "Dispositivo iOS/Android, fixtures y recorrido funcional completo.",
+    "steps_reference": "manual-cases-20261004.json:QA-098"
+  },
+  {
+    "key": "QA-099",
+    "title": "QA-099 · Entrada invalidada o utilizada",
+    "suite_key": 9,
+    "status": "untested",
+    "required": "Dispositivo iOS/Android, fixtures y recorrido funcional completo.",
+    "steps_reference": "manual-cases-20261004.json:QA-099"
+  },
+  {
+    "key": "QA-100",
+    "title": "QA-100 · Sin entradas y red caída",
+    "suite_key": 9,
+    "status": "untested",
+    "required": "Dispositivo iOS/Android, fixtures y recorrido funcional completo.",
+    "steps_reference": "manual-cases-20261004.json:QA-100"
+  },
+  {
+    "key": "QA-101",
+    "title": "QA-101 · Cancelar reventa histórica",
+    "suite_key": 9,
+    "status": "untested",
+    "required": "Dispositivo iOS/Android, fixtures y recorrido funcional completo.",
+    "steps_reference": "manual-cases-20261004.json:QA-101"
+  },
+  {
+    "key": "QA-102",
+    "title": "QA-102 · Crear evento completo",
+    "suite_key": 10,
+    "status": "untested",
+    "required": "Dispositivo iOS/Android, fixtures y recorrido funcional completo.",
+    "steps_reference": "manual-cases-20261004.json:QA-102"
+  },
+  {
+    "key": "QA-103",
+    "title": "QA-103 · Validación de evento",
+    "suite_key": 10,
+    "status": "untested",
+    "required": "Dispositivo iOS/Android, fixtures y recorrido funcional completo.",
+    "steps_reference": "manual-cases-20261004.json:QA-103"
+  },
+  {
+    "key": "QA-104",
+    "title": "QA-104 · Fecha y zona horaria",
+    "suite_key": 10,
+    "status": "untested",
+    "required": "Dispositivo iOS/Android, fixtures y recorrido funcional completo.",
+    "steps_reference": "manual-cases-20261004.json:QA-104"
+  },
+  {
+    "key": "QA-105",
+    "title": "QA-105 · Ubicación manual y mapa",
+    "suite_key": 10,
+    "status": "untested",
+    "required": "Dispositivo iOS/Android, fixtures y recorrido funcional completo.",
+    "steps_reference": "manual-cases-20261004.json:QA-105"
+  },
+  {
+    "key": "QA-106",
+    "title": "QA-106 · Portada y plano",
+    "suite_key": 10,
+    "status": "untested",
+    "required": "Dispositivo iOS/Android, fixtures y recorrido funcional completo.",
+    "steps_reference": "manual-cases-20261004.json:QA-106"
+  },
+  {
+    "key": "QA-107",
+    "title": "QA-107 · Tipos de entrada",
+    "suite_key": 10,
+    "status": "untested",
+    "required": "Dispositivo iOS/Android, fixtures y recorrido funcional completo.",
+    "steps_reference": "manual-cases-20261004.json:QA-107"
+  },
+  {
+    "key": "QA-108",
+    "title": "QA-108 · Tipos duplicados",
+    "suite_key": 10,
+    "status": "untested",
+    "required": "Dispositivo iOS/Android, fixtures y recorrido funcional completo.",
+    "steps_reference": "manual-cases-20261004.json:QA-108"
+  },
+  {
+    "key": "QA-109",
+    "title": "QA-109 · Eliminar tipo vendido",
+    "suite_key": 10,
+    "status": "untested",
+    "required": "Dispositivo iOS/Android, fixtures y recorrido funcional completo.",
+    "steps_reference": "manual-cases-20261004.json:QA-109"
+  },
+  {
+    "key": "QA-110",
+    "title": "QA-110 · Editar evento publicado",
+    "suite_key": 10,
+    "status": "untested",
+    "required": "Dispositivo iOS/Android, fixtures y recorrido funcional completo.",
+    "steps_reference": "manual-cases-20261004.json:QA-110"
+  },
+  {
+    "key": "QA-111",
+    "title": "QA-111 · Cancelar o eliminar evento",
+    "suite_key": 10,
+    "status": "untested",
+    "required": "Dispositivo iOS/Android, fixtures y recorrido funcional completo.",
+    "steps_reference": "manual-cases-20261004.json:QA-111"
+  },
+  {
+    "key": "QA-112",
+    "title": "QA-112 · Borrador y reentrada",
+    "suite_key": 10,
+    "status": "untested",
+    "required": "Dispositivo iOS/Android, fixtures y recorrido funcional completo.",
+    "steps_reference": "manual-cases-20261004.json:QA-112"
+  },
+  {
+    "key": "QA-113",
+    "title": "QA-113 · Propiedad del evento",
+    "suite_key": 10,
+    "status": "untested",
+    "required": "Dispositivo iOS/Android, fixtures y recorrido funcional completo.",
+    "steps_reference": "manual-cases-20261004.json:QA-113"
+  },
+  {
+    "key": "QA-114",
+    "title": "QA-114 · API sin onboarding",
+    "suite_key": 10,
+    "status": "untested",
+    "required": "Dispositivo iOS/Android, fixtures y recorrido funcional completo.",
+    "steps_reference": "manual-cases-20261004.json:QA-114"
+  },
+  {
+    "key": "QA-115",
+    "title": "QA-115 · Crear descuento",
+    "suite_key": 11,
+    "status": "untested",
+    "required": "Dispositivo iOS/Android, fixtures y recorrido funcional completo.",
+    "steps_reference": "manual-cases-20261004.json:QA-115"
+  },
+  {
+    "key": "QA-116",
+    "title": "QA-116 · Validar descuento",
+    "suite_key": 11,
+    "status": "untested",
+    "required": "Dispositivo iOS/Android, fixtures y recorrido funcional completo.",
+    "steps_reference": "manual-cases-20261004.json:QA-116"
+  },
+  {
+    "key": "QA-117",
+    "title": "QA-117 · Editar y desactivar descuento",
+    "suite_key": 11,
+    "status": "untested",
+    "required": "Dispositivo iOS/Android, fixtures y recorrido funcional completo.",
+    "steps_reference": "manual-cases-20261004.json:QA-117"
+  },
+  {
+    "key": "QA-118",
+    "title": "QA-118 · Último uso simultáneo",
+    "suite_key": 11,
+    "status": "untested",
+    "required": "Dispositivo iOS/Android, fixtures y recorrido funcional completo.",
+    "steps_reference": "manual-cases-20261004.json:QA-118"
+  },
+  {
+    "key": "QA-119",
+    "title": "QA-119 · Estadísticas por evento",
+    "suite_key": 11,
+    "status": "untested",
+    "required": "Dispositivo iOS/Android, fixtures y recorrido funcional completo.",
+    "steps_reference": "manual-cases-20261004.json:QA-119"
+  },
+  {
+    "key": "QA-120",
+    "title": "QA-120 · Estadísticas globales",
+    "suite_key": 11,
+    "status": "untested",
+    "required": "Dispositivo iOS/Android, fixtures y recorrido funcional completo.",
+    "steps_reference": "manual-cases-20261004.json:QA-120"
+  },
+  {
+    "key": "QA-121",
+    "title": "QA-121 · Sin ventas y fallo de estadísticas",
+    "suite_key": 11,
+    "status": "untested",
+    "required": "Dispositivo iOS/Android, fixtures y recorrido funcional completo.",
+    "steps_reference": "manual-cases-20261004.json:QA-121"
+  },
+  {
+    "key": "QA-122",
+    "title": "QA-122 · Añadir trabajador",
+    "suite_key": 12,
+    "status": "untested",
+    "required": "Dispositivo iOS/Android, fixtures y recorrido funcional completo.",
+    "steps_reference": "manual-cases-20261004.json:QA-122"
+  },
+  {
+    "key": "QA-123",
+    "title": "QA-123 · Editar permisos",
+    "suite_key": 12,
+    "status": "untested",
+    "required": "Dispositivo iOS/Android, fixtures y recorrido funcional completo.",
+    "steps_reference": "manual-cases-20261004.json:QA-123"
+  },
+  {
+    "key": "QA-124",
+    "title": "QA-124 · Revocar trabajador",
+    "suite_key": 12,
+    "status": "untested",
+    "required": "Dispositivo iOS/Android, fixtures y recorrido funcional completo.",
+    "steps_reference": "manual-cases-20261004.json:QA-124"
+  },
+  {
+    "key": "QA-125",
+    "title": "QA-125 · Invitación QR válida",
+    "suite_key": 12,
+    "status": "untested",
+    "required": "Dispositivo iOS/Android, fixtures y recorrido funcional completo.",
+    "steps_reference": "manual-cases-20261004.json:QA-125"
+  },
+  {
+    "key": "QA-126",
+    "title": "QA-126 · Invitación sin sesión",
+    "suite_key": 12,
+    "status": "untested",
+    "required": "Dispositivo iOS/Android, fixtures y recorrido funcional completo.",
+    "steps_reference": "manual-cases-20261004.json:QA-126"
+  },
+  {
+    "key": "QA-127",
+    "title": "QA-127 · Rotar invitación",
+    "suite_key": 12,
+    "status": "untested",
+    "required": "Dispositivo iOS/Android, fixtures y recorrido funcional completo.",
+    "steps_reference": "manual-cases-20261004.json:QA-127"
+  },
+  {
+    "key": "QA-128",
+    "title": "QA-128 · Invitación inválida y duplicada",
+    "suite_key": 12,
+    "status": "untested",
+    "required": "Dispositivo iOS/Android, fixtures y recorrido funcional completo.",
+    "steps_reference": "manual-cases-20261004.json:QA-128"
+  },
+  {
+    "key": "QA-129",
+    "title": "QA-129 · Equipo ajeno",
+    "suite_key": 12,
+    "status": "untested",
+    "required": "Dispositivo iOS/Android, fixtures y recorrido funcional completo.",
+    "steps_reference": "manual-cases-20261004.json:QA-129"
+  },
+  {
+    "key": "QA-130",
+    "title": "QA-130 · Primer acceso válido",
+    "suite_key": 13,
+    "status": "untested",
+    "required": "Cámara y escaneo QR, incluidos accesos simultáneos con dos dispositivos.",
+    "steps_reference": "manual-cases-20261004.json:QA-130"
+  },
+  {
+    "key": "QA-131",
+    "title": "QA-131 · Reutilización QR",
+    "suite_key": 13,
+    "status": "untested",
+    "required": "Cámara y escaneo QR, incluidos accesos simultáneos con dos dispositivos.",
+    "steps_reference": "manual-cases-20261004.json:QA-131"
+  },
+  {
+    "key": "QA-132",
+    "title": "QA-132 · Escaneo simultáneo",
+    "suite_key": 13,
+    "status": "untested",
+    "required": "Cámara y escaneo QR, incluidos accesos simultáneos con dos dispositivos.",
+    "steps_reference": "manual-cases-20261004.json:QA-132"
+  },
+  {
+    "key": "QA-133",
+    "title": "QA-133 · Evento ajeno",
+    "suite_key": 13,
+    "status": "untested",
+    "required": "Cámara y escaneo QR, incluidos accesos simultáneos con dos dispositivos.",
+    "steps_reference": "manual-cases-20261004.json:QA-133"
+  },
+  {
+    "key": "QA-134",
+    "title": "QA-134 · Invalidada, cancelada y QR falso",
+    "suite_key": 13,
+    "status": "untested",
+    "required": "Cámara y escaneo QR, incluidos accesos simultáneos con dos dispositivos.",
+    "steps_reference": "manual-cases-20261004.json:QA-134"
+  },
+  {
+    "key": "QA-135",
+    "title": "QA-135 · Permiso de cámara",
+    "suite_key": 13,
+    "status": "untested",
+    "required": "Cámara y escaneo QR, incluidos accesos simultáneos con dos dispositivos.",
+    "steps_reference": "manual-cases-20261004.json:QA-135"
+  },
+  {
+    "key": "QA-136",
+    "title": "QA-136 · Escaneo sin red",
+    "suite_key": 13,
+    "status": "untested",
+    "required": "Cámara y escaneo QR, incluidos accesos simultáneos con dos dispositivos.",
+    "steps_reference": "manual-cases-20261004.json:QA-136"
+  },
+  {
+    "key": "QA-137",
+    "title": "QA-137 · QR difícil y repetición de frames",
+    "suite_key": 13,
+    "status": "untested",
+    "required": "Cámara y escaneo QR, incluidos accesos simultáneos con dos dispositivos.",
+    "steps_reference": "manual-cases-20261004.json:QA-137"
+  },
+  {
+    "key": "QA-138",
+    "title": "QA-138 · VIP y grupo",
+    "suite_key": 13,
+    "status": "untested",
+    "required": "Cámara y escaneo QR, incluidos accesos simultáneos con dos dispositivos.",
+    "steps_reference": "manual-cases-20261004.json:QA-138"
+  },
+  {
+    "key": "QA-139",
+    "title": "QA-139 · Venta estándar manual",
+    "suite_key": 14,
+    "status": "untested",
+    "required": "Dispositivo iOS/Android, fixtures y recorrido funcional completo.",
+    "steps_reference": "manual-cases-20261004.json:QA-139"
+  },
+  {
+    "key": "QA-140",
+    "title": "QA-140 · Venta VIP manual",
+    "suite_key": 14,
+    "status": "untested",
+    "required": "Dispositivo iOS/Android, fixtures y recorrido funcional completo.",
+    "steps_reference": "manual-cases-20261004.json:QA-140"
+  },
+  {
+    "key": "QA-141",
+    "title": "QA-141 · Venta mixta y fallo parcial",
+    "suite_key": 14,
+    "status": "blocked",
+    "required": "Dispositivo iOS/Android, fixtures y recorrido funcional completo.",
+    "steps_reference": "manual-cases-20261004.json:QA-141"
+  },
+  {
+    "key": "QA-142",
+    "title": "QA-142 · Sin permiso de vender",
+    "suite_key": 14,
+    "status": "blocked",
+    "required": "Dispositivo iOS/Android, fixtures y recorrido funcional completo.",
+    "steps_reference": "manual-cases-20261004.json:QA-142"
+  },
+  {
+    "key": "QA-143",
+    "title": "QA-143 · Stock concurrente manual y online",
+    "suite_key": 14,
+    "status": "untested",
+    "required": "Dispositivo iOS/Android, fixtures y recorrido funcional completo.",
+    "steps_reference": "manual-cases-20261004.json:QA-143"
+  },
+  {
+    "key": "QA-145",
+    "title": "QA-145 · PDF posterior y nueva venta",
+    "suite_key": 14,
+    "status": "untested",
+    "required": "Dispositivo iOS/Android, fixtures y recorrido funcional completo.",
+    "steps_reference": "manual-cases-20261004.json:QA-145"
+  },
+  {
+    "key": "QA-146",
+    "title": "QA-146 · Notificación de compra",
+    "suite_key": 15,
+    "status": "untested",
+    "required": "Permisos y entrega real de notificaciones a dispositivos/buzones QA controlados.",
+    "steps_reference": "manual-cases-20261004.json:QA-146"
+  },
+  {
+    "key": "QA-147",
+    "title": "QA-147 · Edición de evento",
+    "suite_key": 15,
+    "status": "untested",
+    "required": "Permisos y entrega real de notificaciones a dispositivos/buzones QA controlados.",
+    "steps_reference": "manual-cases-20261004.json:QA-147"
+  },
+  {
+    "key": "QA-148",
+    "title": "QA-148 · Leída y todas leídas",
+    "suite_key": 15,
+    "status": "untested",
+    "required": "Permisos y entrega real de notificaciones a dispositivos/buzones QA controlados.",
+    "steps_reference": "manual-cases-20261004.json:QA-148"
+  },
+  {
+    "key": "QA-149",
+    "title": "QA-149 · Abrir desde push",
+    "suite_key": 15,
+    "status": "untested",
+    "required": "Permisos y entrega real de notificaciones a dispositivos/buzones QA controlados.",
+    "steps_reference": "manual-cases-20261004.json:QA-149"
+  },
+  {
+    "key": "QA-150",
+    "title": "QA-150 · Desactivar y revocar permisos",
+    "suite_key": 15,
+    "status": "untested",
+    "required": "Permisos y entrega real de notificaciones a dispositivos/buzones QA controlados.",
+    "steps_reference": "manual-cases-20261004.json:QA-150"
+  },
+  {
+    "key": "QA-151",
+    "title": "QA-151 · Token y cambio de cuenta",
+    "suite_key": 15,
+    "status": "untested",
+    "required": "Permisos y entrega real de notificaciones a dispositivos/buzones QA controlados.",
+    "steps_reference": "manual-cases-20261004.json:QA-151"
+  },
+  {
+    "key": "QA-152",
+    "title": "QA-152 · Fallo y reintento de entrega",
+    "suite_key": 15,
+    "status": "untested",
+    "required": "Permisos y entrega real de notificaciones a dispositivos/buzones QA controlados.",
+    "steps_reference": "manual-cases-20261004.json:QA-152"
+  },
+  {
+    "key": "QA-153",
+    "title": "QA-153 · Escalada de perfil",
+    "suite_key": 16,
+    "status": "untested",
+    "required": "JWT de cuentas QA A/B, permisos/propiedad y flujo positivo completo del proveedor.",
+    "steps_reference": "manual-cases-20261004.json:QA-153"
+  },
+  {
+    "key": "QA-154",
+    "title": "QA-154 · Lectura horizontal",
+    "suite_key": 16,
+    "status": "untested",
+    "required": "JWT de cuentas QA A/B, permisos/propiedad y flujo positivo completo del proveedor.",
+    "steps_reference": "manual-cases-20261004.json:QA-154"
+  },
+  {
+    "key": "QA-155",
+    "title": "QA-155 · Mutación horizontal",
+    "suite_key": 16,
+    "status": "untested",
+    "required": "JWT de cuentas QA A/B, permisos/propiedad y flujo positivo completo del proveedor.",
+    "steps_reference": "manual-cases-20261004.json:QA-155"
+  },
+  {
+    "key": "QA-156",
+    "title": "QA-156 · JWT manipulado y expirado",
+    "suite_key": 16,
+    "status": "untested",
+    "required": "JWT de cuentas QA A/B, permisos/propiedad y flujo positivo completo del proveedor.",
+    "steps_reference": "manual-cases-20261004.json:QA-156"
+  },
+  {
+    "key": "QA-157",
+    "title": "QA-157 · RPC administrativas",
+    "suite_key": 16,
+    "status": "untested",
+    "required": "JWT de cuentas QA A/B, permisos/propiedad y flujo positivo completo del proveedor.",
+    "steps_reference": "manual-cases-20261004.json:QA-157"
+  },
+  {
+    "key": "QA-158",
+    "title": "QA-158 · Despachadores internos",
+    "suite_key": 16,
+    "status": "untested",
+    "required": "JWT de cuentas QA A/B, permisos/propiedad y flujo positivo completo del proveedor.",
+    "steps_reference": "manual-cases-20261004.json:QA-158"
+  },
+  {
+    "key": "QA-159",
+    "title": "QA-159 · Storage documental",
+    "suite_key": 16,
+    "status": "untested",
+    "required": "JWT de cuentas QA A/B, permisos/propiedad y flujo positivo completo del proveedor.",
+    "steps_reference": "manual-cases-20261004.json:QA-159"
+  },
+  {
+    "key": "QA-160",
+    "title": "QA-160 · Secretos en artefacto",
+    "suite_key": 16,
+    "status": "untested",
+    "required": "JWT de cuentas QA A/B, permisos/propiedad y flujo positivo completo del proveedor.",
+    "steps_reference": "manual-cases-20261004.json:QA-160"
+  },
+  {
+    "key": "QA-161",
+    "title": "QA-161 · Inyección y límites",
+    "suite_key": 16,
+    "status": "untested",
+    "required": "JWT de cuentas QA A/B, permisos/propiedad y flujo positivo completo del proveedor.",
+    "steps_reference": "manual-cases-20261004.json:QA-161"
+  },
+  {
+    "key": "QA-162",
+    "title": "QA-162 · Borrado de cuenta ajena",
+    "suite_key": 16,
+    "status": "untested",
+    "required": "JWT de cuentas QA A/B, permisos/propiedad y flujo positivo completo del proveedor.",
+    "steps_reference": "manual-cases-20261004.json:QA-162"
+  },
+  {
+    "key": "QA-163",
+    "title": "QA-163 · Reventa oculta y ruta directa",
+    "suite_key": 17,
+    "status": "untested",
+    "required": "Dispositivo iOS/Android, fixtures y recorrido funcional completo.",
+    "steps_reference": "manual-cases-20261004.json:QA-163"
+  },
+  {
+    "key": "QA-164",
+    "title": "QA-164 · Monedero de saldo oculto",
+    "suite_key": 17,
+    "status": "untested",
+    "required": "Dispositivo iOS/Android, fixtures y recorrido funcional completo.",
+    "steps_reference": "manual-cases-20261004.json:QA-164"
+  },
+  {
+    "key": "QA-165",
+    "title": "QA-165 · Bloqueo servidor de operaciones aplazadas",
+    "suite_key": 17,
+    "status": "untested",
+    "required": "Dispositivo iOS/Android, fixtures y recorrido funcional completo.",
+    "steps_reference": "manual-cases-20261004.json:QA-165"
+  },
+  {
+    "key": "QA-166",
+    "title": "QA-166 · Idempotencia de checkout aplazado antiguo",
+    "suite_key": 17,
+    "status": "untested",
+    "required": "Dispositivo iOS/Android, fixtures y recorrido funcional completo.",
+    "steps_reference": "manual-cases-20261004.json:QA-166"
+  },
+  {
+    "key": "QA-167",
+    "title": "QA-167 · Histórico conservado",
+    "suite_key": 17,
+    "status": "untested",
+    "required": "Dispositivo iOS/Android, fixtures y recorrido funcional completo.",
+    "steps_reference": "manual-cases-20261004.json:QA-167"
+  },
+  {
+    "key": "QA-168",
+    "title": "QA-168 · Wallet digital sigue activo",
+    "suite_key": 17,
+    "status": "untested",
+    "required": "Dispositivo iOS/Android, fixtures y recorrido funcional completo.",
+    "steps_reference": "manual-cases-20261004.json:QA-168"
+  },
+  {
+    "key": "QA-169",
+    "title": "QA-169 · Instalación y actualización",
+    "suite_key": 18,
+    "status": "untested",
+    "required": "Dispositivo iOS/Android, fixtures y recorrido funcional completo.",
+    "steps_reference": "manual-cases-20261004.json:QA-169"
+  },
+  {
+    "key": "QA-170",
+    "title": "QA-170 · Aislamiento staging/producción",
+    "suite_key": 18,
+    "status": "untested",
+    "required": "Dispositivo iOS/Android, fixtures y recorrido funcional completo.",
+    "steps_reference": "manual-cases-20261004.json:QA-170"
+  },
+  {
+    "key": "QA-171",
+    "title": "QA-171 · Deep link sin sesión",
+    "suite_key": 18,
+    "status": "untested",
+    "required": "Dispositivo iOS/Android, fixtures y recorrido funcional completo.",
+    "steps_reference": "manual-cases-20261004.json:QA-171"
+  },
+  {
+    "key": "QA-172",
+    "title": "QA-172 · Ruta desconocida y Atrás",
+    "suite_key": 18,
+    "status": "untested",
+    "required": "Dispositivo iOS/Android, fixtures y recorrido funcional completo.",
+    "steps_reference": "manual-cases-20261004.json:QA-172"
+  },
+  {
+    "key": "QA-173",
+    "title": "QA-173 · Interrupciones del SO",
+    "suite_key": 18,
+    "status": "untested",
+    "required": "Dispositivo iOS/Android, fixtures y recorrido funcional completo.",
+    "steps_reference": "manual-cases-20261004.json:QA-173"
+  },
+  {
+    "key": "QA-174",
+    "title": "QA-174 · Legal",
+    "suite_key": 18,
+    "status": "untested",
+    "required": "Dispositivo iOS/Android, fixtures y recorrido funcional completo.",
+    "steps_reference": "manual-cases-20261004.json:QA-174"
+  },
+  {
+    "key": "QA-175",
+    "title": "QA-175 · Pérdida de red transversal",
+    "suite_key": 18,
+    "status": "untested",
+    "required": "Dispositivo iOS/Android, fixtures y recorrido funcional completo.",
+    "steps_reference": "manual-cases-20261004.json:QA-175"
+  },
+  {
+    "key": "QA-176",
+    "title": "QA-176 · Sesión revocada",
+    "suite_key": 18,
+    "status": "untested",
+    "required": "Dispositivo iOS/Android, fixtures y recorrido funcional completo.",
+    "steps_reference": "manual-cases-20261004.json:QA-176"
+  },
+  {
+    "key": "QA-177",
+    "title": "QA-177 · Accesibilidad",
+    "suite_key": 18,
+    "status": "untested",
+    "required": "Dispositivo iOS/Android, fixtures y recorrido funcional completo.",
+    "steps_reference": "manual-cases-20261004.json:QA-177"
+  },
+  {
+    "key": "QA-178",
+    "title": "QA-178 · Rendimiento de lanzamiento",
+    "suite_key": 18,
+    "status": "untested",
+    "required": "Dispositivo iOS/Android, fixtures y recorrido funcional completo.",
+    "steps_reference": "manual-cases-20261004.json:QA-178"
+  },
+  {
+    "key": "QA-179",
+    "title": "QA-179 · Android · Registro y selector de año",
+    "suite_key": 19,
+    "status": "untested",
+    "required": "Inspección visual y accesibilidad en dispositivos físicos iOS/Android.",
+    "steps_reference": "manual-cases-20261004.json:QA-179"
+  },
+  {
+    "key": "QA-180",
+    "title": "QA-180 · Android · Login y recuperación",
+    "suite_key": 19,
+    "status": "untested",
+    "required": "Inspección visual y accesibilidad en dispositivos físicos iOS/Android.",
+    "steps_reference": "manual-cases-20261004.json:QA-180"
+  },
+  {
+    "key": "QA-181",
+    "title": "QA-181 · Android · Espera de verificación y botón cerrar sesión",
+    "suite_key": 19,
+    "status": "untested",
+    "required": "Inspección visual y accesibilidad en dispositivos físicos iOS/Android.",
+    "steps_reference": "manual-cases-20261004.json:QA-181"
+  },
+  {
+    "key": "QA-182",
+    "title": "QA-182 · Android · Onboarding Stripe y documentos",
+    "suite_key": 19,
+    "status": "untested",
+    "required": "Inspección visual y accesibilidad en dispositivos físicos iOS/Android.",
+    "steps_reference": "manual-cases-20261004.json:QA-182"
+  },
+  {
+    "key": "QA-183",
+    "title": "QA-183 · Android · Inicio y mapa",
+    "suite_key": 19,
+    "status": "untested",
+    "required": "Inspección visual y accesibilidad en dispositivos físicos iOS/Android.",
+    "steps_reference": "manual-cases-20261004.json:QA-183"
+  },
+  {
+    "key": "QA-184",
+    "title": "QA-184 · Android · Detalle y checkout",
+    "suite_key": 19,
+    "status": "untested",
+    "required": "Inspección visual y accesibilidad en dispositivos físicos iOS/Android.",
+    "steps_reference": "manual-cases-20261004.json:QA-184"
+  },
+  {
+    "key": "QA-185",
+    "title": "QA-185 · Android · Mis entradas y QR",
+    "suite_key": 19,
+    "status": "untested",
+    "required": "Inspección visual y accesibilidad en dispositivos físicos iOS/Android.",
+    "steps_reference": "manual-cases-20261004.json:QA-185"
+  },
+  {
+    "key": "QA-186",
+    "title": "QA-186 · Android · Perfil cliente y edición",
+    "suite_key": 19,
+    "status": "untested",
+    "required": "Inspección visual y accesibilidad en dispositivos físicos iOS/Android.",
+    "steps_reference": "manual-cases-20261004.json:QA-186"
+  },
+  {
+    "key": "QA-187",
+    "title": "QA-187 · Android · Perfil organizador",
+    "suite_key": 19,
+    "status": "untested",
+    "required": "Inspección visual y accesibilidad en dispositivos físicos iOS/Android.",
+    "steps_reference": "manual-cases-20261004.json:QA-187"
+  },
+  {
+    "key": "QA-188",
+    "title": "QA-188 · Android · Crear/editar evento",
+    "suite_key": 19,
+    "status": "untested",
+    "required": "Inspección visual y accesibilidad en dispositivos físicos iOS/Android.",
+    "steps_reference": "manual-cases-20261004.json:QA-188"
+  },
+  {
+    "key": "QA-189",
+    "title": "QA-189 · Android · Lista de eventos y estadísticas",
+    "suite_key": 19,
+    "status": "untested",
+    "required": "Inspección visual y accesibilidad en dispositivos físicos iOS/Android.",
+    "steps_reference": "manual-cases-20261004.json:QA-189"
+  },
+  {
+    "key": "QA-190",
+    "title": "QA-190 · Android · Descuentos",
+    "suite_key": 19,
+    "status": "untested",
+    "required": "Inspección visual y accesibilidad en dispositivos físicos iOS/Android.",
+    "steps_reference": "manual-cases-20261004.json:QA-190"
+  },
+  {
+    "key": "QA-191",
+    "title": "QA-191 · Android · Equipo e invitación QR",
+    "suite_key": 19,
+    "status": "untested",
+    "required": "Inspección visual y accesibilidad en dispositivos físicos iOS/Android.",
+    "steps_reference": "manual-cases-20261004.json:QA-191"
+  },
+  {
+    "key": "QA-192",
+    "title": "QA-192 · Android · Escáner organizador",
+    "suite_key": 19,
+    "status": "untested",
+    "required": "Inspección visual y accesibilidad en dispositivos físicos iOS/Android.",
+    "steps_reference": "manual-cases-20261004.json:QA-192"
+  },
+  {
+    "key": "QA-193",
+    "title": "QA-193 · Android · Escáner y venta trabajador",
+    "suite_key": 19,
+    "status": "untested",
+    "required": "Inspección visual y accesibilidad en dispositivos físicos iOS/Android.",
+    "steps_reference": "manual-cases-20261004.json:QA-193"
+  },
+  {
+    "key": "QA-194",
+    "title": "QA-194 · Android · Resumen admin",
+    "suite_key": 19,
+    "status": "untested",
+    "required": "Inspección visual y accesibilidad en dispositivos físicos iOS/Android.",
+    "steps_reference": "manual-cases-20261004.json:QA-194"
+  },
+  {
+    "key": "QA-195",
+    "title": "QA-195 · Android · Aprobaciones admin y búsqueda",
+    "suite_key": 19,
+    "status": "untested",
+    "required": "Inspección visual y accesibilidad en dispositivos físicos iOS/Android.",
+    "steps_reference": "manual-cases-20261004.json:QA-195"
+  },
+  {
+    "key": "QA-196",
+    "title": "QA-196 · Android · Entradas admin",
+    "suite_key": 19,
+    "status": "untested",
+    "required": "Inspección visual y accesibilidad en dispositivos físicos iOS/Android.",
+    "steps_reference": "manual-cases-20261004.json:QA-196"
+  },
+  {
+    "key": "QA-197",
+    "title": "QA-197 · Android · Perfil admin",
+    "suite_key": 19,
+    "status": "untested",
+    "required": "Inspección visual y accesibilidad en dispositivos físicos iOS/Android.",
+    "steps_reference": "manual-cases-20261004.json:QA-197"
+  },
+  {
+    "key": "QA-198",
+    "title": "QA-198 · Android · Notificaciones y legal",
+    "suite_key": 19,
+    "status": "untested",
+    "required": "Inspección visual y accesibilidad en dispositivos físicos iOS/Android.",
+    "steps_reference": "manual-cases-20261004.json:QA-198"
+  },
+  {
+    "key": "QA-199",
+    "title": "QA-199 · iOS · Registro y selector de año",
+    "suite_key": 19,
+    "status": "untested",
+    "required": "Inspección visual y accesibilidad en dispositivos físicos iOS/Android.",
+    "steps_reference": "manual-cases-20261004.json:QA-199"
+  },
+  {
+    "key": "QA-200",
+    "title": "QA-200 · iOS · Login y recuperación",
+    "suite_key": 19,
+    "status": "untested",
+    "required": "Inspección visual y accesibilidad en dispositivos físicos iOS/Android.",
+    "steps_reference": "manual-cases-20261004.json:QA-200"
+  },
+  {
+    "key": "QA-201",
+    "title": "QA-201 · iOS · Espera de verificación y botón cerrar sesión",
+    "suite_key": 19,
+    "status": "untested",
+    "required": "Inspección visual y accesibilidad en dispositivos físicos iOS/Android.",
+    "steps_reference": "manual-cases-20261004.json:QA-201"
+  },
+  {
+    "key": "QA-202",
+    "title": "QA-202 · iOS · Onboarding Stripe y documentos",
+    "suite_key": 19,
+    "status": "untested",
+    "required": "Inspección visual y accesibilidad en dispositivos físicos iOS/Android.",
+    "steps_reference": "manual-cases-20261004.json:QA-202"
+  },
+  {
+    "key": "QA-203",
+    "title": "QA-203 · iOS · Inicio y mapa",
+    "suite_key": 19,
+    "status": "untested",
+    "required": "Inspección visual y accesibilidad en dispositivos físicos iOS/Android.",
+    "steps_reference": "manual-cases-20261004.json:QA-203"
+  },
+  {
+    "key": "QA-204",
+    "title": "QA-204 · iOS · Detalle y checkout",
+    "suite_key": 19,
+    "status": "untested",
+    "required": "Inspección visual y accesibilidad en dispositivos físicos iOS/Android.",
+    "steps_reference": "manual-cases-20261004.json:QA-204"
+  },
+  {
+    "key": "QA-205",
+    "title": "QA-205 · iOS · Mis entradas y QR",
+    "suite_key": 19,
+    "status": "untested",
+    "required": "Inspección visual y accesibilidad en dispositivos físicos iOS/Android.",
+    "steps_reference": "manual-cases-20261004.json:QA-205"
+  },
+  {
+    "key": "QA-206",
+    "title": "QA-206 · iOS · Perfil cliente y edición",
+    "suite_key": 19,
+    "status": "untested",
+    "required": "Inspección visual y accesibilidad en dispositivos físicos iOS/Android.",
+    "steps_reference": "manual-cases-20261004.json:QA-206"
+  },
+  {
+    "key": "QA-207",
+    "title": "QA-207 · iOS · Perfil organizador",
+    "suite_key": 19,
+    "status": "untested",
+    "required": "Inspección visual y accesibilidad en dispositivos físicos iOS/Android.",
+    "steps_reference": "manual-cases-20261004.json:QA-207"
+  },
+  {
+    "key": "QA-208",
+    "title": "QA-208 · iOS · Crear/editar evento",
+    "suite_key": 19,
+    "status": "untested",
+    "required": "Inspección visual y accesibilidad en dispositivos físicos iOS/Android.",
+    "steps_reference": "manual-cases-20261004.json:QA-208"
+  },
+  {
+    "key": "QA-209",
+    "title": "QA-209 · iOS · Lista de eventos y estadísticas",
+    "suite_key": 19,
+    "status": "untested",
+    "required": "Inspección visual y accesibilidad en dispositivos físicos iOS/Android.",
+    "steps_reference": "manual-cases-20261004.json:QA-209"
+  },
+  {
+    "key": "QA-210",
+    "title": "QA-210 · iOS · Descuentos",
+    "suite_key": 19,
+    "status": "untested",
+    "required": "Inspección visual y accesibilidad en dispositivos físicos iOS/Android.",
+    "steps_reference": "manual-cases-20261004.json:QA-210"
+  },
+  {
+    "key": "QA-211",
+    "title": "QA-211 · iOS · Equipo e invitación QR",
+    "suite_key": 19,
+    "status": "untested",
+    "required": "Inspección visual y accesibilidad en dispositivos físicos iOS/Android.",
+    "steps_reference": "manual-cases-20261004.json:QA-211"
+  },
+  {
+    "key": "QA-212",
+    "title": "QA-212 · iOS · Escáner organizador",
+    "suite_key": 19,
+    "status": "untested",
+    "required": "Inspección visual y accesibilidad en dispositivos físicos iOS/Android.",
+    "steps_reference": "manual-cases-20261004.json:QA-212"
+  },
+  {
+    "key": "QA-213",
+    "title": "QA-213 · iOS · Escáner y venta trabajador",
+    "suite_key": 19,
+    "status": "untested",
+    "required": "Inspección visual y accesibilidad en dispositivos físicos iOS/Android.",
+    "steps_reference": "manual-cases-20261004.json:QA-213"
+  },
+  {
+    "key": "QA-214",
+    "title": "QA-214 · iOS · Resumen admin",
+    "suite_key": 19,
+    "status": "untested",
+    "required": "Inspección visual y accesibilidad en dispositivos físicos iOS/Android.",
+    "steps_reference": "manual-cases-20261004.json:QA-214"
+  },
+  {
+    "key": "QA-215",
+    "title": "QA-215 · iOS · Aprobaciones admin y búsqueda",
+    "suite_key": 19,
+    "status": "untested",
+    "required": "Inspección visual y accesibilidad en dispositivos físicos iOS/Android.",
+    "steps_reference": "manual-cases-20261004.json:QA-215"
+  },
+  {
+    "key": "QA-216",
+    "title": "QA-216 · iOS · Entradas admin",
+    "suite_key": 19,
+    "status": "untested",
+    "required": "Inspección visual y accesibilidad en dispositivos físicos iOS/Android.",
+    "steps_reference": "manual-cases-20261004.json:QA-216"
+  },
+  {
+    "key": "QA-217",
+    "title": "QA-217 · iOS · Perfil admin",
+    "suite_key": 19,
+    "status": "untested",
+    "required": "Inspección visual y accesibilidad en dispositivos físicos iOS/Android.",
+    "steps_reference": "manual-cases-20261004.json:QA-217"
+  },
+  {
+    "key": "QA-218",
+    "title": "QA-218 · iOS · Notificaciones y legal",
+    "suite_key": 19,
+    "status": "untested",
+    "required": "Inspección visual y accesibilidad en dispositivos físicos iOS/Android.",
+    "steps_reference": "manual-cases-20261004.json:QA-218"
+  },
+  {
+    "key": "QA-219",
+    "title": "QA-219 · Bloqueo de ruta (creator)/admin-profile",
+    "suite_key": 20,
+    "status": "untested",
+    "required": "Dispositivo iOS/Android, fixtures y recorrido funcional completo.",
+    "steps_reference": "manual-cases-20261004.json:QA-219"
+  },
+  {
+    "key": "QA-220",
+    "title": "QA-220 · Bloqueo de ruta (creator)/admin-tickets",
+    "suite_key": 20,
+    "status": "untested",
+    "required": "Dispositivo iOS/Android, fixtures y recorrido funcional completo.",
+    "steps_reference": "manual-cases-20261004.json:QA-220"
+  },
+  {
+    "key": "QA-221",
+    "title": "QA-221 · Bloqueo de ruta (creator)/admin-verification",
+    "suite_key": 20,
+    "status": "untested",
+    "required": "Dispositivo iOS/Android, fixtures y recorrido funcional completo.",
+    "steps_reference": "manual-cases-20261004.json:QA-221"
+  },
+  {
+    "key": "QA-222",
+    "title": "QA-222 · Bloqueo de ruta (creator)/create-event",
+    "suite_key": 20,
+    "status": "untested",
+    "required": "Dispositivo iOS/Android, fixtures y recorrido funcional completo.",
+    "steps_reference": "manual-cases-20261004.json:QA-222"
+  },
+  {
+    "key": "QA-223",
+    "title": "QA-223 · Bloqueo de ruta (creator)/discount-codes",
+    "suite_key": 20,
+    "status": "untested",
+    "required": "Dispositivo iOS/Android, fixtures y recorrido funcional completo.",
+    "steps_reference": "manual-cases-20261004.json:QA-223"
+  },
+  {
+    "key": "QA-224",
+    "title": "QA-224 · Bloqueo de ruta (creator)/event-discounts",
+    "suite_key": 20,
+    "status": "untested",
+    "required": "Dispositivo iOS/Android, fixtures y recorrido funcional completo.",
+    "steps_reference": "manual-cases-20261004.json:QA-224"
+  },
+  {
+    "key": "QA-225",
+    "title": "QA-225 · Bloqueo de ruta (creator)/event-stats/[id]",
+    "suite_key": 20,
+    "status": "untested",
+    "required": "Dispositivo iOS/Android, fixtures y recorrido funcional completo.",
+    "steps_reference": "manual-cases-20261004.json:QA-225"
+  },
+  {
+    "key": "QA-226",
+    "title": "QA-226 · Bloqueo de ruta (creator)/global-stats",
+    "suite_key": 20,
+    "status": "untested",
+    "required": "Dispositivo iOS/Android, fixtures y recorrido funcional completo.",
+    "steps_reference": "manual-cases-20261004.json:QA-226"
+  },
+  {
+    "key": "QA-227",
+    "title": "QA-227 · Bloqueo de ruta (creator)/index",
+    "suite_key": 20,
+    "status": "untested",
+    "required": "Dispositivo iOS/Android, fixtures y recorrido funcional completo.",
+    "steps_reference": "manual-cases-20261004.json:QA-227"
+  },
+  {
+    "key": "QA-228",
+    "title": "QA-228 · Bloqueo de ruta (creator)/manage-events",
+    "suite_key": 20,
+    "status": "untested",
+    "required": "Dispositivo iOS/Android, fixtures y recorrido funcional completo.",
+    "steps_reference": "manual-cases-20261004.json:QA-228"
+  },
+  {
+    "key": "QA-229",
+    "title": "QA-229 · Bloqueo de ruta (creator)/organizer-profile",
+    "suite_key": 20,
+    "status": "untested",
+    "required": "Dispositivo iOS/Android, fixtures y recorrido funcional completo.",
+    "steps_reference": "manual-cases-20261004.json:QA-229"
+  },
+  {
+    "key": "QA-230",
+    "title": "QA-230 · Bloqueo de ruta (creator)/scan",
+    "suite_key": 20,
+    "status": "untested",
+    "required": "Dispositivo iOS/Android, fixtures y recorrido funcional completo.",
+    "steps_reference": "manual-cases-20261004.json:QA-230"
+  },
+  {
+    "key": "QA-231",
+    "title": "QA-231 · Bloqueo de ruta (creator)/stats",
+    "suite_key": 20,
+    "status": "untested",
+    "required": "Dispositivo iOS/Android, fixtures y recorrido funcional completo.",
+    "steps_reference": "manual-cases-20261004.json:QA-231"
+  },
+  {
+    "key": "QA-232",
+    "title": "QA-232 · Bloqueo de ruta (creator)/worker-qr",
+    "suite_key": 20,
+    "status": "untested",
+    "required": "Dispositivo iOS/Android, fixtures y recorrido funcional completo.",
+    "steps_reference": "manual-cases-20261004.json:QA-232"
+  },
+  {
+    "key": "QA-233",
+    "title": "QA-233 · Bloqueo de ruta (creator)/workers/[id]",
+    "suite_key": 20,
+    "status": "untested",
+    "required": "Dispositivo iOS/Android, fixtures y recorrido funcional completo.",
+    "steps_reference": "manual-cases-20261004.json:QA-233"
+  },
+  {
+    "key": "QA-234",
+    "title": "QA-234 · Bloqueo de ruta (creator)/workers/add",
+    "suite_key": 20,
+    "status": "untested",
+    "required": "Dispositivo iOS/Android, fixtures y recorrido funcional completo.",
+    "steps_reference": "manual-cases-20261004.json:QA-234"
+  },
+  {
+    "key": "QA-235",
+    "title": "QA-235 · Bloqueo de ruta (creator)/workers/index",
+    "suite_key": 20,
+    "status": "untested",
+    "required": "Dispositivo iOS/Android, fixtures y recorrido funcional completo.",
+    "steps_reference": "manual-cases-20261004.json:QA-235"
+  },
+  {
+    "key": "QA-236",
+    "title": "QA-236 · Contrato apple-wallet-generator",
+    "suite_key": 21,
+    "status": "untested",
+    "required": "JWT de cuentas QA A/B, permisos/propiedad y flujo positivo completo del proveedor.",
+    "steps_reference": "manual-cases-20261004.json:QA-236"
+  },
+  {
+    "key": "QA-237",
+    "title": "QA-237 · Contrato auth-redirect",
+    "suite_key": 21,
+    "status": "untested",
+    "required": "JWT de cuentas QA A/B, permisos/propiedad y flujo positivo completo del proveedor.",
+    "steps_reference": "manual-cases-20261004.json:QA-237"
+  },
+  {
+    "key": "QA-238",
+    "title": "QA-238 · Contrato confirm-payment",
+    "suite_key": 21,
+    "status": "untested",
+    "required": "JWT de cuentas QA A/B, permisos/propiedad y flujo positivo completo del proveedor.",
+    "steps_reference": "manual-cases-20261004.json:QA-238"
+  },
+  {
+    "key": "QA-239",
+    "title": "QA-239 · Contrato create-payment-intent",
+    "suite_key": 21,
+    "status": "blocked",
+    "required": "JWT de cuentas QA A/B, permisos/propiedad y flujo positivo completo del proveedor.",
+    "steps_reference": "manual-cases-20261004.json:QA-239"
+  },
+  {
+    "key": "QA-240",
+    "title": "QA-240 · Contrato create-payment-intent-v2",
+    "suite_key": 21,
+    "status": "untested",
+    "required": "JWT de cuentas QA A/B, permisos/propiedad y flujo positivo completo del proveedor.",
+    "steps_reference": "manual-cases-20261004.json:QA-240"
+  },
+  {
+    "key": "QA-241",
+    "title": "QA-241 · Contrato delete-account",
+    "suite_key": 21,
+    "status": "untested",
+    "required": "JWT de cuentas QA A/B, permisos/propiedad y flujo positivo completo del proveedor.",
+    "steps_reference": "manual-cases-20261004.json:QA-241"
+  },
+  {
+    "key": "QA-242",
+    "title": "QA-242 · Contrato dispatch-notifications",
+    "suite_key": 21,
+    "status": "untested",
+    "required": "JWT de cuentas QA A/B, permisos/propiedad y flujo positivo completo del proveedor.",
+    "steps_reference": "manual-cases-20261004.json:QA-242"
+  },
+  {
+    "key": "QA-243",
+    "title": "QA-243 · Contrato event-share",
+    "suite_key": 21,
+    "status": "untested",
+    "required": "JWT de cuentas QA A/B, permisos/propiedad y flujo positivo completo del proveedor.",
+    "steps_reference": "manual-cases-20261004.json:QA-243"
+  },
+  {
+    "key": "QA-244",
+    "title": "QA-244 · Contrato generate-wallet-pass",
+    "suite_key": 21,
+    "status": "untested",
+    "required": "JWT de cuentas QA A/B, permisos/propiedad y flujo positivo completo del proveedor.",
+    "steps_reference": "manual-cases-20261004.json:QA-244"
+  },
+  {
+    "key": "QA-245",
+    "title": "QA-245 · Contrato qa-board",
+    "suite_key": 21,
+    "status": "blocked",
+    "required": "JWT de cuentas QA A/B, permisos/propiedad y flujo positivo completo del proveedor.",
+    "steps_reference": "manual-cases-20261004.json:QA-245"
+  },
+  {
+    "key": "QA-246",
+    "title": "QA-246 · Contrato record-legal-acceptance",
+    "suite_key": 21,
+    "status": "untested",
+    "required": "JWT de cuentas QA A/B, permisos/propiedad y flujo positivo completo del proveedor.",
+    "steps_reference": "manual-cases-20261004.json:QA-246"
+  },
+  {
+    "key": "QA-247",
+    "title": "QA-247 · Contrato register-user-fallback",
+    "suite_key": 21,
+    "status": "blocked",
+    "required": "JWT de cuentas QA A/B, permisos/propiedad y flujo positivo completo del proveedor.",
+    "steps_reference": "manual-cases-20261004.json:QA-247"
+  },
+  {
+    "key": "QA-248",
+    "title": "QA-248 · Contrato send-email-notifications",
+    "suite_key": 21,
+    "status": "untested",
+    "required": "JWT de cuentas QA A/B, permisos/propiedad y flujo positivo completo del proveedor.",
+    "steps_reference": "manual-cases-20261004.json:QA-248"
+  },
+  {
+    "key": "QA-249",
+    "title": "QA-249 · Contrato send-push",
+    "suite_key": 21,
+    "status": "untested",
+    "required": "JWT de cuentas QA A/B, permisos/propiedad y flujo positivo completo del proveedor.",
+    "steps_reference": "manual-cases-20261004.json:QA-249"
+  },
+  {
+    "key": "QA-250",
+    "title": "QA-250 · Contrato send-sms-notifications",
+    "suite_key": 21,
+    "status": "untested",
+    "required": "JWT de cuentas QA A/B, permisos/propiedad y flujo positivo completo del proveedor.",
+    "steps_reference": "manual-cases-20261004.json:QA-250"
+  },
+  {
+    "key": "QA-251",
+    "title": "QA-251 · Contrato send-support-email",
+    "suite_key": 21,
+    "status": "untested",
+    "required": "JWT de cuentas QA A/B, permisos/propiedad y flujo positivo completo del proveedor.",
+    "steps_reference": "manual-cases-20261004.json:QA-251"
+  },
+  {
+    "key": "QA-252",
+    "title": "QA-252 · Contrato send-ticket-email",
+    "suite_key": 21,
+    "status": "blocked",
+    "required": "JWT de cuentas QA A/B, permisos/propiedad y flujo positivo completo del proveedor.",
+    "steps_reference": "manual-cases-20261004.json:QA-252"
+  },
+  {
+    "key": "QA-253",
+    "title": "QA-253 · Contrato stripe-connect-create-account",
+    "suite_key": 21,
+    "status": "untested",
+    "required": "JWT de cuentas QA A/B, permisos/propiedad y flujo positivo completo del proveedor.",
+    "steps_reference": "manual-cases-20261004.json:QA-253"
+  },
+  {
+    "key": "QA-254",
+    "title": "QA-254 · Contrato stripe-connect-delete-account",
+    "suite_key": 21,
+    "status": "untested",
+    "required": "JWT de cuentas QA A/B, permisos/propiedad y flujo positivo completo del proveedor.",
+    "steps_reference": "manual-cases-20261004.json:QA-254"
+  },
+  {
+    "key": "QA-255",
+    "title": "QA-255 · Contrato stripe-connect-onboarding-link",
+    "suite_key": 21,
+    "status": "untested",
+    "required": "JWT de cuentas QA A/B, permisos/propiedad y flujo positivo completo del proveedor.",
+    "steps_reference": "manual-cases-20261004.json:QA-255"
+  },
+  {
+    "key": "QA-256",
+    "title": "QA-256 · Contrato stripe-connect-refresh-status",
+    "suite_key": 21,
+    "status": "untested",
+    "required": "JWT de cuentas QA A/B, permisos/propiedad y flujo positivo completo del proveedor.",
+    "steps_reference": "manual-cases-20261004.json:QA-256"
+  },
+  {
+    "key": "QA-257",
+    "title": "QA-257 · Contrato stripe-get-account-stats",
+    "suite_key": 21,
+    "status": "untested",
+    "required": "JWT de cuentas QA A/B, permisos/propiedad y flujo positivo completo del proveedor.",
+    "steps_reference": "manual-cases-20261004.json:QA-257"
+  },
+  {
+    "key": "QA-258",
+    "title": "QA-258 · Contrato ticket-calendar",
+    "suite_key": 21,
+    "status": "untested",
+    "required": "JWT de cuentas QA A/B, permisos/propiedad y flujo positivo completo del proveedor.",
+    "steps_reference": "manual-cases-20261004.json:QA-258"
+  },
+  {
+    "key": "QA-259",
+    "title": "QA-259 · Contrato upload-organizer-verification-file",
+    "suite_key": 21,
+    "status": "untested",
+    "required": "JWT de cuentas QA A/B, permisos/propiedad y flujo positivo completo del proveedor.",
+    "steps_reference": "manual-cases-20261004.json:QA-259"
+  }
+]

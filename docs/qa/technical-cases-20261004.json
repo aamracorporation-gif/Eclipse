@@ -1,0 +1,64 @@
+[
+  {
+    "key": "AUTO-001",
+    "title": "Regresión Jest app",
+    "observed": "126 passed, 1 skipped; 20 suites passed. La omitida no se considera ejecutada.",
+    "evidence": "jest.txt"
+  },
+  {
+    "key": "AUTO-002",
+    "title": "Regresión Node backend",
+    "observed": "56 passed, 0 failed; ejecución local con dependencias de test instaladas.",
+    "evidence": "backend.txt"
+  },
+  {
+    "key": "AUTO-003",
+    "title": "TypeScript y ESLint",
+    "observed": "Ambos comandos terminaron con código 0. No acredita funcionamiento nativo.",
+    "evidence": "typecheck.txt,lint.txt"
+  },
+  {
+    "key": "AUTO-004",
+    "title": "SQL staging: venta mixta y rollback",
+    "observed": "Fallo VIP después de estándar: cero entradas, stock intacto. Venta válida: dos entradas. Fixture SQL rollback.",
+    "evidence": "staging-atomic-result.json"
+  },
+  {
+    "key": "AUTO-005",
+    "title": "SQL staging: idempotencia venta manual",
+    "observed": "Misma clave/carga devuelve recibo idéntico sin duplicar entradas; clave con carga diferente rechazada. No prueba simultaneidad de conexiones.",
+    "evidence": "staging-atomic-result.json"
+  },
+  {
+    "key": "AUTO-006",
+    "title": "SQL staging: permisos y onboarding",
+    "observed": "RLS rechaza cliente y organizador con Stripe incompleto; organizador listo permitido; sell=false denegado; RPC antiguas revocadas.",
+    "evidence": "staging-atomic-result.json"
+  },
+  {
+    "key": "AUTO-007",
+    "title": "SQL staging: suspensión atómica",
+    "observed": "Una llamada admin_set_user_suspension cambia is_suspended y verification_status=rejected. Fixture revertido. No comprueba render de UI.",
+    "evidence": "staging-atomic-result.json"
+  },
+  {
+    "key": "AUTO-008",
+    "title": "Handler correo: rechazo antes de proveedor",
+    "observed": "4 variantes no privilegiadas reciben403 en handler ejecutado; fetch nunca llamado. Prueba aislada incluida en Jest. No verifica entrega real de correo.",
+    "evidence": "jest.txt"
+  },
+  {
+    "key": "AUTO-009",
+    "title": "HTTP staging: contratos anónimos negativos",
+    "observed": "send-ticket-email401 sin sesión y403 anon; legacy pagos/registro410; qa-board404. Solo respuestas negativas anon, no flujo cliente autenticado ni entrega positiva.",
+    "evidence": "edge-negative-http.json"
+  },
+  {
+    "key": "AUTO-010",
+    "title": "Puerta de release: backend desplegado en revisión aprobada",
+    "expected": "El último despliegue activo de Railway staging usa el commit ab9e191 de la build62.",
+    "observed": "FAILED: último despliegue activo6e8e510b usa b6b9bbb. Configuración apunta a ab9e191 pero no hubo build nueva. Dashboard confirma Limited Access: trial expired; subscription unpaid. Requiere regularizar facturación y desplegar antes de dar por aplicada la protección REST.",
+    "evidence": "backend-deployment-gate.json",
+    "status": "failed"
+  }
+]

@@ -1,0 +1,70 @@
+npm warn Unknown env config "http-proxy". This will stop working in the next major version of npm.
+
+> eclipse-backend@1.0.0 test
+> node --test
+
+✔ JWT válido (organizer) pasa requireRole y expone role normalizado (21.733972ms)
+✔ JWT válido sin rol explícito cae a attendee y bloquea organizer con 403 (8.29328ms)
+✔ JWT expirado devuelve 401 TOKEN_EXPIRED (10.181749ms)
+✔ Firma inválida devuelve 401 INVALID_SIGNATURE (5.290658ms)
+✔ Audiencia inválida devuelve 401 INVALID_AUD (2.843783ms)
+✔ Token malformado devuelve 401 MALFORMED_TOKEN (2.18481ms)
+✔ auth bridge works with Helmet CSP and keeps signup and recovery parameters (57.859633ms)
+✔ server denies incomplete, suspended or wrong-role organizers (1.020697ms)
+✔ middleware fails closed on query errors and only calls next for ready profile (0.462146ms)
+✔ VIP destination refund reverses the transfer and application fee (2.078991ms)
+✔ VIP platform charge has no transfer reversal flags (0.233121ms)
+✔ previous refund is reused without another charge lookup or refund (0.160602ms)
+✔ resale keeps its established idempotency key (0.169996ms)
+✔ primary destination refund reverses transfer and fee with its own idempotency key (0.243717ms)
+✔ primary platform refund does not request a nonexistent transfer reversal (0.180753ms)
+✔ existing primary refund is reused after the idempotency window (0.237848ms)
+✔ a paid resale whose ticket is unavailable is refunded once and marked refunded (2.548648ms)
+✔ a paid VIP with a durable unavailable decision refunds exactly once (0.438531ms)
+✔ a paid primary ticket with a durable rejection refunds once on repeated delivery (0.380112ms)
+✔ primary refund failure remains visible for reconciliation (0.277658ms)
+✔ VIP failed refund remains visible for reconciliation (0.319121ms)
+✔ refund failure retries the Stripe webhook rather than acknowledging an unresolved charge (0.476137ms)
+✔ failed fulfillment outside resale does not issue a refund (0.439301ms)
+✔ a resale database outage does not trigger a refund without a durable decision (2.234651ms)
+✔ a persisted pending refund is resumed after a crash before contacting Stripe (0.289856ms)
+✔ a lost RPC response after ticket transfer does not refund the buyer (1.783015ms)
+✔ Stripe refund failure stays visible for reconciliation (0.25245ms)
+✔ a delayed pending refund event cannot overwrite refund failure (0.208864ms)
+▶ resale settlement database guard
+  ✔ valid purchase transfers once; retry reports the completed purchase (24.385134ms)
+  ✔ second payment for a sold listing becomes a durable refund decision (12.410711ms)
+  ✔ expired event blocks delivery and requests refund (10.286491ms)
+  ✔ used ticket blocks delivery and requests refund (9.457899ms)
+  ✔ changed owner blocks delivery and requests refund (8.908376ms)
+  ✔ changed price blocks delivery and requests refund (9.212664ms)
+  ✔ cancelled event blocks delivery and requests refund (10.505982ms)
+  ✔ retry cannot deliver a ticket after the refund decision, even if the listing recovers (14.01081ms)
+  ✔ unexpected database failure rolls back and leaves payment retryable (15.725233ms)
+  ✔ wrong buyer is rejected and the old function cannot bypass the guard (8.606361ms)
+  ✔ validation revoked blocks card and wallet resale (17.856813ms)
+  ✔ validation expired blocks card and wallet resale (15.913686ms)
+  ✔ validation null blocks card and wallet resale (14.101537ms)
+  ✔ credit purchase preserves real backing and promotional credit separately (23.734895ms)
+  ✔ missing Stripe backing aborts the entire credit transfer (14.067976ms)
+  ✔ promotional credit does not mint a Stripe reserve (16.296332ms)
+  ✔ nullable ticket state cannot bypass credit resale eligibility (13.420362ms)
+  ✔ an unconfirmed original payment cannot enter credit resale (13.843408ms)
+✔ resale settlement database guard (1205.509344ms)
+✔ signup preserves rate limit: {"message":"Email rate limit exceeded"} (3.326179ms)
+✔ signup preserves rate limit: {"status":429,"message":"Too many requests"} (0.313853ms)
+✔ signup preserves rate limit: {"code":"over_email_send_rate_limit","message":"Límite alcanzado"} (0.184127ms)
+✔ signup preserves rate limit: {"code":"over_request_rate_limit","message":"Límite alcanzado"} (0.172039ms)
+✔ signup awaiting confirmation never claims an authenticated session (0.303407ms)
+✔ signup keeps ordinary errors unsuccessful (0.217668ms)
+✔ a processed Stripe event is ignored when delivered twice (0.687696ms)
+✔ a delayed failure cannot undo a fulfilled payment (0.377629ms)
+✔ an out-of-order failure may mark only an unfulfilled payment failed (0.114022ms)
+ℹ tests 56
+ℹ suites 0
+ℹ pass 56
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1378.499406

@@ -1,5 +1,7 @@
 # Eclipse: revisión de flujos y plan manual de lanzamiento
 
+> Actualización posterior: consultar `RELEASE_STATUS_20261004.md` para correcciones aplicadas, build62, resultados ejecutados y bloqueo de despliegue. Este documento conserva el análisis inicial.
+
 Fecha: 2026-10-04. Rama: `codex/release-hardening`, base `b6b9bbbdca896dd690f388047371b0d64d6164ea` más las correcciones de este cambio.
 
 ## Resultado y límites

@@ -1,0 +1,338 @@
+{
+  "technical_cases": {
+    "AUTO-001": 1307,
+    "AUTO-002": 1308,
+    "AUTO-003": 1309,
+    "AUTO-004": 1310,
+    "AUTO-005": 1311,
+    "AUTO-006": 1312,
+    "AUTO-007": 1313,
+    "AUTO-008": 1314,
+    "AUTO-009": 1315,
+    "AUTO-010": 1316
+  },
+  "results": [
+    {
+      "key": "AUTO-001",
+      "status": "passed",
+      "response": {
+        "case_id": 1307,
+        "hash": "46993fe82cceb86b8a59b223a7265392e929149e"
+      }
+    },
+    {
+      "key": "AUTO-002",
+      "status": "passed",
+      "response": {
+        "case_id": 1308,
+        "hash": "3a4c2da80d702d260879756c398628730a5d2222"
+      }
+    },
+    {
+      "key": "AUTO-003",
+      "status": "passed",
+      "response": {
+        "case_id": 1309,
+        "hash": "f7a3152b774a18556f9e317ede1aaf6d9bd968e8"
+      }
+    },
+    {
+      "key": "AUTO-004",
+      "status": "passed",
+      "response": {
+        "case_id": 1310,
+        "hash": "6c48f412c2b2a354251f52e662642e3c0c2aceb9"
+      }
+    },
+    {
+      "key": "AUTO-005",
+      "status": "passed",
+      "response": {
+        "case_id": 1311,
+        "hash": "effb170a19c7dcd1c2f60abaa6434ba598c64f77"
+      }
+    },
+    {
+      "key": "AUTO-006",
+      "status": "passed",
+      "response": {
+        "case_id": 1312,
+        "hash": "b5e0164ced703e587145af055c853621eae54dd1"
+      }
+    },
+    {
+      "key": "AUTO-007",
+      "status": "passed",
+      "response": {
+        "case_id": 1313,
+        "hash": "82a1f57b60c0a541f72239f71491f3bd9ceddc38"
+      }
+    },
+    {
+      "key": "AUTO-008",
+      "status": "passed",
+      "response": {
+        "case_id": 1314,
+        "hash": "f5bc7269da73b050d86fe713261b396ef6c2b75b"
+      }
+    },
+    {
+      "key": "AUTO-009",
+      "status": "passed",
+      "response": {
+        "case_id": 1315,
+        "hash": "35ccb134746f397315370a57aa83e2ac22f285ef"
+      }
+    },
+    {
+      "key": "QA-086",
+      "status": "passed",
+      "response": {
+        "case_id": 1133,
+        "hash": "5a841e7fd34324980187f4c9b8e479a79f551813"
+      }
+    },
+    {
+      "key": "QA-144",
+      "status": "passed",
+      "response": {
+        "case_id": 1191,
+        "hash": "12f4715ff988e39e4146cdc70fb58c620e53b78f"
+      }
+    },
+    {
+      "key": "QA-141",
+      "status": "blocked",
+      "response": {
+        "case_id": 1188,
+        "hash": "393608dac2f27a23a2f93960c350163af056d45c"
+      }
+    },
+    {
+      "key": "QA-142",
+      "status": "blocked",
+      "response": {
+        "case_id": 1189,
+        "hash": "6c31233db81fe9688c055a0c8921170e5030c583"
+      }
+    },
+    {
+      "key": "QA-239",
+      "status": "blocked",
+      "response": {
+        "case_id": 1286,
+        "hash": "b97f90cac35a8be3d248f8cd1349d45bc0be46eb"
+      }
+    },
+    {
+      "key": "QA-245",
+      "status": "blocked",
+      "response": {
+        "case_id": 1292,
+        "hash": "5ed0a242445d71e79619b621cc8ff0481ee77367"
+      }
+    },
+    {
+      "key": "QA-247",
+      "status": "blocked",
+      "response": {
+        "case_id": 1294,
+        "hash": "23cb427566acd12d11ab02a120526da5ce48cdcf"
+      }
+    },
+    {
+      "key": "QA-252",
+      "status": "blocked",
+      "response": {
+        "case_id": 1299,
+        "hash": "d7147d6415c57fd62eb3c96a16198ac05392c90e"
+      }
+    },
+    {
+      "key": "AUTO-010",
+      "status": "failed",
+      "response": {
+        "case_id": 1316,
+        "hash": "d40a76dbc1dc3b2a0e1f59d39ac6eccabbf92caf"
+      }
+    }
+  ],
+  "attachment": [
+    {
+      "filename": "eclipse-qa-evidence-20261004.zip",
+      "extension": "zip",
+      "hash": "573d712aabc823824d99cf74e9a031f6ac144f87",
+      "mime": "application/zip"
+    }
+  ],
+  "technical_run": 10,
+  "manual_run": 11,
+  "verification": {
+    "technical": {
+      "id": 10,
+      "title": "Regresión técnica ejecutada · ab9e191 · iOS 62 · 2026-10-04",
+      "status": 1,
+      "status_text": "passed",
+      "stats": {
+        "total": 9,
+        "statuses": {
+          "passed": 9
+        },
+        "untested": 0,
+        "passed": 9,
+        "failed": 0,
+        "blocked": 0,
+        "skipped": 0,
+        "retest": 0,
+        "in_progress": 0,
+        "invalid": 0
+      }
+    },
+    "manual": {
+      "id": 11,
+      "title": "iOS 1.0.0 (62) · regresión de lanzamiento y entrega manual",
+      "status": 0,
+      "status_text": "in_progress",
+      "stats": {
+        "total": 259,
+        "statuses": {
+          "untested": 251,
+          "passed": 2,
+          "blocked": 6
+        },
+        "untested": 251,
+        "passed": 2,
+        "failed": 0,
+        "blocked": 6,
+        "skipped": 0,
+        "retest": 0,
+        "in_progress": 0,
+        "invalid": 0
+      }
+    },
+    "gate": {
+      "id": 12,
+      "title": "Puerta de despliegue · backend staging · build62",
+      "status": 3,
+      "status_text": "failed",
+      "stats": {
+        "total": 1,
+        "statuses": {
+          "failed": 1
+        },
+        "untested": 0,
+        "passed": 0,
+        "failed": 1,
+        "blocked": 0,
+        "skipped": 0,
+        "retest": 0,
+        "in_progress": 0,
+        "invalid": 0
+      }
+    }
+  },
+  "gate_attachment": [
+    {
+      "filename": "backend-deployment-gate.json",
+      "extension": "json",
+      "hash": "519c9dd7cfa1d317406e1c82918818b19eefe4a7",
+      "mime": "application/json"
+    }
+  ],
+  "deployment_gate_run": 12,
+  "attachment_verification": [
+    {
+      "case_id": 1307,
+      "status": "passed",
+      "attachment_count": 1
+    },
+    {
+      "case_id": 1308,
+      "status": "passed",
+      "attachment_count": 1
+    },
+    {
+      "case_id": 1309,
+      "status": "passed",
+      "attachment_count": 1
+    },
+    {
+      "case_id": 1310,
+      "status": "passed",
+      "attachment_count": 1
+    },
+    {
+      "case_id": 1311,
+      "status": "passed",
+      "attachment_count": 1
+    },
+    {
+      "case_id": 1312,
+      "status": "passed",
+      "attachment_count": 1
+    },
+    {
+      "case_id": 1313,
+      "status": "passed",
+      "attachment_count": 1
+    },
+    {
+      "case_id": 1314,
+      "status": "passed",
+      "attachment_count": 1
+    },
+    {
+      "case_id": 1315,
+      "status": "passed",
+      "attachment_count": 1
+    },
+    {
+      "case_id": 1133,
+      "status": "passed",
+      "attachment_count": 1
+    },
+    {
+      "case_id": 1191,
+      "status": "passed",
+      "attachment_count": 1
+    },
+    {
+      "case_id": 1188,
+      "status": "blocked",
+      "attachment_count": 1
+    },
+    {
+      "case_id": 1189,
+      "status": "blocked",
+      "attachment_count": 1
+    },
+    {
+      "case_id": 1286,
+      "status": "blocked",
+      "attachment_count": 1
+    },
+    {
+      "case_id": 1292,
+      "status": "blocked",
+      "attachment_count": 1
+    },
+    {
+      "case_id": 1294,
+      "status": "blocked",
+      "attachment_count": 1
+    },
+    {
+      "case_id": 1299,
+      "status": "blocked",
+      "attachment_count": 1
+    },
+    {
+      "case_id": 1316,
+      "status": "failed",
+      "attachment_count": 1
+    }
+  ],
+  "project": "ECLIPSE",
+  "date": "2026-10-04",
+  "commit": "ab9e191193e9735fd64d053a4e5e0790c5abfc60"
+}

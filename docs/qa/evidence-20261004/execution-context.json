@@ -1,0 +1,14 @@
+{
+  "commit": "ab9e191193e9735fd64d053a4e5e0790c5abfc60",
+  "date": "2026-10-04",
+  "ios_version": "1.0.0 (62)",
+  "build_id": "78cb9976-3332-41d9-aa59-0b22fd57cb40",
+  "submission_id": "f3b942b9-4609-439a-82ec-86ffe45383f6",
+  "submission_status": "Succeeded",
+  "ci_run": 101,
+  "ci_conclusion": "success",
+  "supabase_environment": "staging",
+  "native_device_tested": false,
+  "backend_live_commit_at_http_test": "b6b9bbbdca896dd690f388047371b0d64d6164ea",
+  "webhook_fixture_ledger_rows_after_invalid_request": 0
+}

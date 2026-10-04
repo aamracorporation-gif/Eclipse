@@ -1,0 +1,54 @@
+{
+  "at": "2026-10-04T21:35:59.039255+00:00",
+  "scope": "negative anonymous and anon-role only; no authenticated customer or positive provider flow",
+  "requests": [
+    {
+      "function": "send-ticket-email",
+      "auth": "none",
+      "status": 401,
+      "body": "{\"code\":\"UNAUTHORIZED_NO_AUTH_HEADER\",\"message\":\"Missing authorization header\"}"
+    },
+    {
+      "function": "send-ticket-email",
+      "auth": "anon",
+      "status": 403,
+      "body": "{\"ok\":false,\"error\":\"Forbidden\"}"
+    },
+    {
+      "function": "create-payment-intent",
+      "auth": "none",
+      "status": 410,
+      "body": "{\"ok\":false,\"error\":\"Endpoint retired; use create-payment-intent-v2\"}"
+    },
+    {
+      "function": "create-payment-intent",
+      "auth": "anon",
+      "status": 410,
+      "body": "{\"ok\":false,\"error\":\"Endpoint retired; use create-payment-intent-v2\"}"
+    },
+    {
+      "function": "register-user-fallback",
+      "auth": "none",
+      "status": 410,
+      "body": "{\"ok\":false,\"error\":\"Endpoint retired\"}"
+    },
+    {
+      "function": "register-user-fallback",
+      "auth": "anon",
+      "status": 410,
+      "body": "{\"ok\":false,\"error\":\"Endpoint retired\"}"
+    },
+    {
+      "function": "qa-board",
+      "auth": "none",
+      "status": 404,
+      "body": "{\"code\":\"NOT_FOUND\",\"message\":\"Requested function was not found\"}"
+    },
+    {
+      "function": "qa-board",
+      "auth": "anon",
+      "status": 404,
+      "body": "{\"code\":\"NOT_FOUND\",\"message\":\"Requested function was not found\"}"
+    }
+  ]
+}

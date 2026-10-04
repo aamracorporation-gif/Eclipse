@@ -1,0 +1,1 @@
+PASS: invalid signature returns 400; zero database/provider calls. Local handler execution ab9e191. Live staging also returned400; ledger fixture event count0.

@@ -1,0 +1,31 @@
+npm warn Unknown env config "http-proxy". This will stop working in the next major version of npm.
+
+> bolt-expo-starter@1.0.0 test
+> jest --runInBand --coverage=false
+
+PASS __tests__/releaseSecurityRegression.test.ts
+PASS __tests__/partyMapMarkers.test.ts
+PASS __tests__/ticketEmailAuthorization.test.ts
+PASS __tests__/mapClusterStress.test.ts
+PASS __tests__/notificationPreferencesRoleFilter.test.ts
+PASS __tests__/launchCheckoutEdge.test.ts
+PASS __tests__/i18n.test.ts
+PASS __tests__/eventPagination.test.ts
+PASS __tests__/whitespaceInputNormalization.test.ts
+PASS __tests__/authExchange.test.ts
+PASS __tests__/notificationSchema.test.ts
+PASS __tests__/freeTickets.test.ts
+PASS __tests__/creatorAccess.test.ts
+PASS __tests__/eventRetention72h.test.ts
+PASS __tests__/homeCitySearch.test.ts
+PASS __tests__/paymentFulfillment.test.ts
+PASS __tests__/launchPolicy.test.ts
+PASS __tests__/authDeepLinks.test.ts
+PASS __tests__/authRedirect.test.ts
+PASS __tests__/createEventTicketConfig.test.ts
+
+Test Suites: 1 skipped, 20 passed, 20 of 21 total
+Tests:       1 skipped, 126 passed, 127 total
+Snapshots:   0 total
+Time:        3.366 s
+Ran all test suites.
