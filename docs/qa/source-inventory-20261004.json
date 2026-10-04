@@ -1,0 +1,746 @@
+[
+  {
+    "path": "app/(auth)/_layout.tsx",
+    "lines": 10,
+    "operations": []
+  },
+  {
+    "path": "app/(auth)/login.tsx",
+    "lines": 389,
+    "operations": []
+  },
+  {
+    "path": "app/(auth)/register.tsx",
+    "lines": 1192,
+    "operations": [
+      "record-legal-acceptance"
+    ]
+  },
+  {
+    "path": "app/(creator)/_layout.tsx",
+    "lines": 222,
+    "operations": []
+  },
+  {
+    "path": "app/(creator)/admin-profile.tsx",
+    "lines": 86,
+    "operations": []
+  },
+  {
+    "path": "app/(creator)/admin-tickets.tsx",
+    "lines": 349,
+    "operations": [
+      "admin_invalidate_ticket"
+    ]
+  },
+  {
+    "path": "app/(creator)/admin-verification.tsx",
+    "lines": 1248,
+    "operations": [
+      "admin_set_organizer_verification",
+      "admin_set_user_suspension"
+    ]
+  },
+  {
+    "path": "app/(creator)/create-event.tsx",
+    "lines": 1609,
+    "operations": []
+  },
+  {
+    "path": "app/(creator)/discount-codes.tsx",
+    "lines": 464,
+    "operations": []
+  },
+  {
+    "path": "app/(creator)/event-discounts.tsx",
+    "lines": 617,
+    "operations": []
+  },
+  {
+    "path": "app/(creator)/event-stats/[id].tsx",
+    "lines": 673,
+    "operations": []
+  },
+  {
+    "path": "app/(creator)/global-stats.tsx",
+    "lines": 207,
+    "operations": []
+  },
+  {
+    "path": "app/(creator)/index.tsx",
+    "lines": 1165,
+    "operations": [
+      "admin_launch_overview"
+    ]
+  },
+  {
+    "path": "app/(creator)/manage-events.tsx",
+    "lines": 618,
+    "operations": []
+  },
+  {
+    "path": "app/(creator)/organizer-profile.tsx",
+    "lines": 1202,
+    "operations": [
+      "delete-account",
+      "send-support-email"
+    ]
+  },
+  {
+    "path": "app/(creator)/scan.tsx",
+    "lines": 855,
+    "operations": [
+      "validate_ticket_qr_v3"
+    ]
+  },
+  {
+    "path": "app/(creator)/stats.tsx",
+    "lines": 724,
+    "operations": []
+  },
+  {
+    "path": "app/(creator)/verification.tsx",
+    "lines": 731,
+    "operations": []
+  },
+  {
+    "path": "app/(creator)/worker-qr.tsx",
+    "lines": 273,
+    "operations": [
+      "regenerate_worker_invite_token"
+    ]
+  },
+  {
+    "path": "app/(creator)/workers/[id].tsx",
+    "lines": 412,
+    "operations": []
+  },
+  {
+    "path": "app/(creator)/workers/_layout.tsx",
+    "lines": 11,
+    "operations": []
+  },
+  {
+    "path": "app/(creator)/workers/add.tsx",
+    "lines": 271,
+    "operations": []
+  },
+  {
+    "path": "app/(creator)/workers/index.tsx",
+    "lines": 356,
+    "operations": []
+  },
+  {
+    "path": "app/(tabs)/_layout.tsx",
+    "lines": 103,
+    "operations": []
+  },
+  {
+    "path": "app/(tabs)/event/[id].tsx",
+    "lines": 2741,
+    "operations": [
+      "claim_free_tickets",
+      "validate_discount_code"
+    ]
+  },
+  {
+    "path": "app/(tabs)/index.tsx",
+    "lines": 913,
+    "operations": []
+  },
+  {
+    "path": "app/(tabs)/join-worker.tsx",
+    "lines": 272,
+    "operations": [
+      "join_event_as_worker"
+    ]
+  },
+  {
+    "path": "app/(tabs)/party-map.tsx",
+    "lines": 994,
+    "operations": []
+  },
+  {
+    "path": "app/(tabs)/profile.tsx",
+    "lines": 3725,
+    "operations": [
+      "cancel_resale_listing_secure",
+      "delete-account",
+      "send-support-email"
+    ]
+  },
+  {
+    "path": "app/(tabs)/resale.tsx",
+    "lines": 1145,
+    "operations": []
+  },
+  {
+    "path": "app/(tabs)/tickets.tsx",
+    "lines": 1645,
+    "operations": [
+      "mark_ticket_wallet_added"
+    ]
+  },
+  {
+    "path": "app/(worker)/_layout.tsx",
+    "lines": 41,
+    "operations": []
+  },
+  {
+    "path": "app/(worker)/index.tsx",
+    "lines": 542,
+    "operations": []
+  },
+  {
+    "path": "app/(worker)/scan.tsx",
+    "lines": 764,
+    "operations": [
+      "validate_ticket_worker_v2"
+    ]
+  },
+  {
+    "path": "app/(worker)/sell.tsx",
+    "lines": 844,
+    "operations": [
+      "sell_tickets_manual_v2",
+      "sell_vip_manual"
+    ]
+  },
+  {
+    "path": "app/+not-found.tsx",
+    "lines": 95,
+    "operations": []
+  },
+  {
+    "path": "app/_layout.tsx",
+    "lines": 582,
+    "operations": [
+      "dispatch-notifications"
+    ]
+  },
+  {
+    "path": "app/auth/callback.tsx",
+    "lines": 177,
+    "operations": []
+  },
+  {
+    "path": "app/auth/reset-password.tsx",
+    "lines": 260,
+    "operations": []
+  },
+  {
+    "path": "app/auth-required.tsx",
+    "lines": 20,
+    "operations": []
+  },
+  {
+    "path": "app/evento/[eventId]/[token].tsx",
+    "lines": 197,
+    "operations": []
+  },
+  {
+    "path": "app/evento/[token].tsx",
+    "lines": 206,
+    "operations": []
+  },
+  {
+    "path": "app/index.tsx",
+    "lines": 50,
+    "operations": []
+  },
+  {
+    "path": "app/legal/aviso-legal.tsx",
+    "lines": 7,
+    "operations": []
+  },
+  {
+    "path": "app/legal/index.tsx",
+    "lines": 99,
+    "operations": []
+  },
+  {
+    "path": "app/legal/privacidad.tsx",
+    "lines": 7,
+    "operations": []
+  },
+  {
+    "path": "app/legal/terminos.tsx",
+    "lines": 7,
+    "operations": []
+  },
+  {
+    "path": "app/my-resales.tsx",
+    "lines": 483,
+    "operations": [
+      "cancel_resale_listing_secure"
+    ]
+  },
+  {
+    "path": "app/notification-preferences.tsx",
+    "lines": 232,
+    "operations": []
+  },
+  {
+    "path": "app/notifications.tsx",
+    "lines": 373,
+    "operations": []
+  },
+  {
+    "path": "app/stripe/success.tsx",
+    "lines": 34,
+    "operations": []
+  },
+  {
+    "path": "app/verified.tsx",
+    "lines": 39,
+    "operations": []
+  },
+  {
+    "path": "app/wallet.tsx",
+    "lines": 222,
+    "operations": []
+  },
+  {
+    "path": "lib/AuthContext.tsx",
+    "lines": 262,
+    "operations": []
+  },
+  {
+    "path": "lib/EventContext.tsx",
+    "lines": 813,
+    "operations": []
+  },
+  {
+    "path": "lib/FilterContext.tsx",
+    "lines": 31,
+    "operations": []
+  },
+  {
+    "path": "lib/I18nContext.tsx",
+    "lines": 49,
+    "operations": []
+  },
+  {
+    "path": "lib/NotificationContext.tsx",
+    "lines": 173,
+    "operations": [
+      "mark_all_notifications_read"
+    ]
+  },
+  {
+    "path": "lib/WalletContext.tsx",
+    "lines": 292,
+    "operations": [
+      "buy_resale_ticket_with_credito",
+      "buy_ticket_with_credito_v2",
+      "buy_vip_with_credito",
+      "cancel_resale_listing_secure",
+      "create_resale_listing_secure"
+    ]
+  },
+  {
+    "path": "lib/authDeepLinks.ts",
+    "lines": 37,
+    "operations": []
+  },
+  {
+    "path": "lib/authExchange.ts",
+    "lines": 13,
+    "operations": []
+  },
+  {
+    "path": "lib/authRedirect.ts",
+    "lines": 17,
+    "operations": []
+  },
+  {
+    "path": "lib/createEventTicketConfig.ts",
+    "lines": 188,
+    "operations": []
+  },
+  {
+    "path": "lib/creatorAccess.ts",
+    "lines": 14,
+    "operations": []
+  },
+  {
+    "path": "lib/edgeFunctions.ts",
+    "lines": 93,
+    "operations": []
+  },
+  {
+    "path": "lib/errorHelpers.ts",
+    "lines": 64,
+    "operations": []
+  },
+  {
+    "path": "lib/i18n.ts",
+    "lines": 4,
+    "operations": []
+  },
+  {
+    "path": "lib/icons.tsx",
+    "lines": 106,
+    "operations": []
+  },
+  {
+    "path": "lib/launchFeatures.ts",
+    "lines": 1,
+    "operations": []
+  },
+  {
+    "path": "lib/locationPickerHtml.ts",
+    "lines": 75,
+    "operations": []
+  },
+  {
+    "path": "lib/notificationSchema.ts",
+    "lines": 42,
+    "operations": []
+  },
+  {
+    "path": "lib/notifications.ts",
+    "lines": 109,
+    "operations": [
+      "upsert_user_push_token"
+    ]
+  },
+  {
+    "path": "lib/passkite.ts",
+    "lines": 96,
+    "operations": []
+  },
+  {
+    "path": "lib/payments/StripeProvider.tsx",
+    "lines": 43,
+    "operations": []
+  },
+  {
+    "path": "lib/payments/StripeProvider.web.tsx",
+    "lines": 6,
+    "operations": []
+  },
+  {
+    "path": "lib/payments/api.ts",
+    "lines": 374,
+    "operations": []
+  },
+  {
+    "path": "lib/payments/types.ts",
+    "lines": 81,
+    "operations": []
+  },
+  {
+    "path": "lib/payments/waitForFulfillment.ts",
+    "lines": 27,
+    "operations": []
+  },
+  {
+    "path": "lib/responsive.ts",
+    "lines": 31,
+    "operations": []
+  },
+  {
+    "path": "lib/storage.ts",
+    "lines": 308,
+    "operations": []
+  },
+  {
+    "path": "lib/supabase.ts",
+    "lines": 116,
+    "operations": []
+  },
+  {
+    "path": "lib/supabaseClient.ts",
+    "lines": 174,
+    "operations": []
+  },
+  {
+    "path": "lib/validators.ts",
+    "lines": 219,
+    "operations": []
+  },
+  {
+    "path": "lib/venueGeocoding.ts",
+    "lines": 19,
+    "operations": []
+  },
+  {
+    "path": "backend/src/app.js",
+    "lines": 610,
+    "operations": []
+  },
+  {
+    "path": "backend/src/config/env.js",
+    "lines": 51,
+    "operations": []
+  },
+  {
+    "path": "backend/src/controllers/authController.js",
+    "lines": 79,
+    "operations": []
+  },
+  {
+    "path": "backend/src/controllers/eventController.js",
+    "lines": 67,
+    "operations": []
+  },
+  {
+    "path": "backend/src/controllers/organizerController.js",
+    "lines": 16,
+    "operations": [
+      "admin_purge_user_data"
+    ]
+  },
+  {
+    "path": "backend/src/controllers/paymentController.js",
+    "lines": 24,
+    "operations": []
+  },
+  {
+    "path": "backend/src/controllers/stripeController.js",
+    "lines": 28,
+    "operations": []
+  },
+  {
+    "path": "backend/src/controllers/testController.js",
+    "lines": 6,
+    "operations": []
+  },
+  {
+    "path": "backend/src/index.js",
+    "lines": 8,
+    "operations": []
+  },
+  {
+    "path": "backend/src/middlewares/auth.js",
+    "lines": 167,
+    "operations": []
+  },
+  {
+    "path": "backend/src/middlewares/errorHandler.js",
+    "lines": 19,
+    "operations": []
+  },
+  {
+    "path": "backend/src/routes/authRoutes.js",
+    "lines": 9,
+    "operations": []
+  },
+  {
+    "path": "backend/src/routes/eventRoutes.js",
+    "lines": 12,
+    "operations": []
+  },
+  {
+    "path": "backend/src/routes/organizerRoutes.js",
+    "lines": 10,
+    "operations": []
+  },
+  {
+    "path": "backend/src/routes/paymentRoutes.js",
+    "lines": 9,
+    "operations": []
+  },
+  {
+    "path": "backend/src/routes/stripeRoutes.js",
+    "lines": 11,
+    "operations": []
+  },
+  {
+    "path": "backend/src/routes/stripeWebhookRoutes.js",
+    "lines": 13,
+    "operations": []
+  },
+  {
+    "path": "backend/src/routes/testRoutes.js",
+    "lines": 9,
+    "operations": []
+  },
+  {
+    "path": "backend/src/services/eventService.js",
+    "lines": 104,
+    "operations": []
+  },
+  {
+    "path": "backend/src/services/paymentService.js",
+    "lines": 260,
+    "operations": [
+      "fulfill_payment_for_user"
+    ]
+  },
+  {
+    "path": "backend/src/services/refundUnavailablePurchase.js",
+    "lines": 22,
+    "operations": []
+  },
+  {
+    "path": "backend/src/services/stripe/stripeClient.js",
+    "lines": 48,
+    "operations": []
+  },
+  {
+    "path": "backend/src/services/stripeService.js",
+    "lines": 209,
+    "operations": []
+  },
+  {
+    "path": "backend/src/services/supabaseService.js",
+    "lines": 74,
+    "operations": []
+  },
+  {
+    "path": "backend/src/services/userService.js",
+    "lines": 58,
+    "operations": []
+  },
+  {
+    "path": "backend/src/services/webhookPolicy.js",
+    "lines": 11,
+    "operations": []
+  },
+  {
+    "path": "backend/src/services/webhookProcessor.js",
+    "lines": 95,
+    "operations": [
+      "claim_stripe_webhook_event"
+    ]
+  },
+  {
+    "path": "backend/src/utils/asyncHandler.js",
+    "lines": 7,
+    "operations": []
+  },
+  {
+    "path": "supabase/functions/_shared/launchPolicy.ts",
+    "lines": 22,
+    "operations": []
+  },
+  {
+    "path": "supabase/functions/apple-wallet-generator/bundledAssets.ts",
+    "lines": 11,
+    "operations": []
+  },
+  {
+    "path": "supabase/functions/apple-wallet-generator/index.ts",
+    "lines": 686,
+    "operations": []
+  },
+  {
+    "path": "supabase/functions/auth-redirect/index.ts",
+    "lines": 95,
+    "operations": []
+  },
+  {
+    "path": "supabase/functions/confirm-payment/index.ts",
+    "lines": 49,
+    "operations": []
+  },
+  {
+    "path": "supabase/functions/create-payment-intent/index.ts",
+    "lines": 15,
+    "operations": []
+  },
+  {
+    "path": "supabase/functions/create-payment-intent-v2/index.ts",
+    "lines": 818,
+    "operations": []
+  },
+  {
+    "path": "supabase/functions/delete-account/index.ts",
+    "lines": 119,
+    "operations": [
+      "admin_purge_user_data"
+    ]
+  },
+  {
+    "path": "supabase/functions/dispatch-notifications/index.ts",
+    "lines": 89,
+    "operations": []
+  },
+  {
+    "path": "supabase/functions/event-share/index.ts",
+    "lines": 377,
+    "operations": []
+  },
+  {
+    "path": "supabase/functions/generate-wallet-pass/index.ts",
+    "lines": 322,
+    "operations": []
+  },
+  {
+    "path": "supabase/functions/qa-board/index.ts",
+    "lines": 13,
+    "operations": []
+  },
+  {
+    "path": "supabase/functions/record-legal-acceptance/index.ts",
+    "lines": 87,
+    "operations": []
+  },
+  {
+    "path": "supabase/functions/register-user-fallback/index.ts",
+    "lines": 22,
+    "operations": []
+  },
+  {
+    "path": "supabase/functions/send-email-notifications/index.ts",
+    "lines": 213,
+    "operations": []
+  },
+  {
+    "path": "supabase/functions/send-push/index.ts",
+    "lines": 467,
+    "operations": []
+  },
+  {
+    "path": "supabase/functions/send-sms-notifications/index.ts",
+    "lines": 158,
+    "operations": []
+  },
+  {
+    "path": "supabase/functions/send-support-email/index.ts",
+    "lines": 83,
+    "operations": []
+  },
+  {
+    "path": "supabase/functions/send-ticket-email/index.ts",
+    "lines": 43,
+    "operations": []
+  },
+  {
+    "path": "supabase/functions/stripe-connect-create-account/index.ts",
+    "lines": 185,
+    "operations": []
+  },
+  {
+    "path": "supabase/functions/stripe-connect-delete-account/index.ts",
+    "lines": 79,
+    "operations": []
+  },
+  {
+    "path": "supabase/functions/stripe-connect-onboarding-link/index.ts",
+    "lines": 128,
+    "operations": []
+  },
+  {
+    "path": "supabase/functions/stripe-connect-refresh-status/index.ts",
+    "lines": 102,
+    "operations": []
+  },
+  {
+    "path": "supabase/functions/stripe-get-account-stats/index.ts",
+    "lines": 85,
+    "operations": []
+  },
+  {
+    "path": "supabase/functions/ticket-calendar/index.ts",
+    "lines": 117,
+    "operations": []
+  },
+  {
+    "path": "supabase/functions/upload-organizer-verification-file/index.ts",
+    "lines": 172,
+    "operations": []
+  }
+]
