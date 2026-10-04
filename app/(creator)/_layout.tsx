@@ -1,6 +1,6 @@
 import { Stack, Tabs, Redirect, useSegments } from 'expo-router';
 import { useAuth } from '@/lib/AuthContext';
-import { View, Text } from 'react-native';
+import { AppState, View, Text } from 'react-native';
 import { Colors } from '@/constants/Colors';
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
@@ -8,6 +8,7 @@ import { DiscoLoader } from '@/components/ui/DiscoLoader';
 import { Calendar, QrCode, TrendingUp, User } from '@/lib/icons';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { canAccessOrganizerPanel, CreatorAccessProfile } from '@/lib/creatorAccess';
 import { theme } from '@/theme/styles';
 
 export default function CreatorLayout() {
@@ -16,55 +17,50 @@ export default function CreatorLayout() {
   const { t } = useTranslation();
   const insets = useSafeAreaInsets();
   const [checkingRole, setCheckingRole] = useState(true);
-  const [profileRole, setProfileRole] = useState<string | null>(null);
-  const [verificationStatus, setVerificationStatus] = useState<'pending_verification' | 'verified' | 'rejected' | 'needs_correction' | null>(null);
+  const [profile, setProfile] = useState<CreatorAccessProfile | null>(null);
+  const profileRole = profile?.role;
   useEffect(() => {
     if (!user?.id) {
-      setProfileRole(null);
-      setVerificationStatus(null);
+      setProfile(null);
       setCheckingRole(false);
       return;
     }
-
     let cancelled = false;
-    let channel: any = null;
-    (async () => {
-      setCheckingRole(true);
+    let request = 0;
+    setCheckingRole(true);
+    setProfile(null);
+    const refresh = async () => {
+      const current = ++request;
       try {
-        const { data, error } = await supabase.from('profiles').select('role, verification_status').eq('id', user.id).maybeSingle();
+        const { data, error } = await supabase.from('profiles')
+          .select('role, verification_status, stripe_account_id, stripe_onboarding_completed, stripe_charges_enabled, is_suspended')
+          .eq('id', user.id).maybeSingle();
         if (error) throw error;
-        if (!cancelled) {
-          setProfileRole((data?.role as any) ?? null);
-          setVerificationStatus((data?.verification_status as any) ?? null);
-        }
+        if (!cancelled && current === request) setProfile(data);
       } catch {
-        if (!cancelled) {
-          setProfileRole(null);
-          setVerificationStatus(null);
-        }
+        if (!cancelled && current === request) setProfile(null);
       } finally {
-        if (!cancelled) setCheckingRole(false);
+        if (!cancelled && current === request) setCheckingRole(false);
       }
-    })();
-
-    channel = supabase
-      .channel(`creator-layout-profile-${user.id}`)
-      .on(
-        'postgres_changes',
+    };
+    void refresh();
+    const channel = supabase.channel(`creator-layout-profile-${user.id}`)
+      .on('postgres_changes',
         { event: 'UPDATE', schema: 'public', table: 'profiles', filter: `id=eq.${user.id}` },
-        (payload) => {
-          if (cancelled) return;
-          const nextRole = (payload.new as any)?.role ?? null;
-          const nextStatus = (payload.new as any)?.verification_status ?? null;
-          setProfileRole(nextRole);
-          setVerificationStatus(nextStatus);
-        }
-      )
+        () => { void refresh(); })
       .subscribe();
-
+    const subscription = AppState.addEventListener('change', state => {
+      if (state === 'active') void refresh();
+    });
+    // Recover changes when Realtime is unavailable (including browser onboarding).
+    const timer = setInterval(() => {
+      if (AppState.currentState === 'active') void refresh();
+    }, 15000);
     return () => {
       cancelled = true;
-      if (channel) supabase.removeChannel(channel);
+      clearInterval(timer);
+      subscription.remove();
+      void supabase.removeChannel(channel);
     };
   }, [user?.id]);
 
@@ -87,12 +83,12 @@ export default function CreatorLayout() {
     );
   }
 
-  if (profileRole !== 'organizer' && profileRole !== 'admin') {
+  if (profile?.is_suspended || (profileRole !== 'organizer' && profileRole !== 'admin')) {
     return <Redirect href="/(tabs)" />;
   }
 
   const inVerification = (segments as readonly string[])[1] === 'verification';
-  if (profileRole === 'organizer' && verificationStatus !== 'verified' && !inVerification) {
+  if (profileRole === 'organizer' && !canAccessOrganizerPanel(profile) && !inVerification) {
     return <Redirect href="/(creator)/verification" />;
   }
 
@@ -100,9 +96,9 @@ export default function CreatorLayout() {
   if (profileRole !== 'admin' && adminOnlyRoutes.includes((segments as readonly string[])[1])) {
     return <Redirect href="/(creator)" />;
   }
-  if (profileRole === 'admin' && inVerification) return <Redirect href="/(creator)" />;
+  if ((profileRole === 'admin' || canAccessOrganizerPanel(profile)) && inVerification) return <Redirect href="/(creator)" />;
 
-  const isVerifiedOrganizer = profileRole === 'organizer' && verificationStatus === 'verified';
+  const isVerifiedOrganizer = canAccessOrganizerPanel(profile);
 
   if (profileRole === 'admin') {
     return (

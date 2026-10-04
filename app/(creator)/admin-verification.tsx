@@ -347,12 +347,14 @@ export default function AdminVerificationScreen() {
       pageRef.current = nextPage;
       setOrganizers((prev) => (opts.reset ? rows : [...prev, ...rows]));
     } catch (e: any) {
+      if (requestKey !== listRequestKeyRef.current) return;
       if (opts.reset) {
         setOrganizers([]);
         setTotalCount(null);
       }
       Alert.alert('Error', e?.message ? `No se pudieron cargar los perfiles.\n\n${e.message}` : 'No se pudieron cargar los perfiles.');
     } finally {
+      if (requestKey !== listRequestKeyRef.current) return;
       if (opts.reset) {
         setLoadingList(false);
       } else {
@@ -457,7 +459,9 @@ export default function AdminVerificationScreen() {
     }
   }, [isAdminDb]);
 
+  const globalRequestRef = useRef(0);
   const fetchGlobalMatches = useCallback(async () => {
+    const requestKey = ++globalRequestRef.current;
     if (!isAdmin) return;
     const raw = (searchDebounced || '').trim();
     const looksLikeEmail = raw.includes('@');
@@ -485,11 +489,12 @@ export default function AdminVerificationScreen() {
         .order(orderColumn, { ascending: false })
         .limit(12);
       if (error) throw error;
+      if (requestKey !== globalRequestRef.current) return;
       setGlobalMatches((data ?? []) as any);
     } catch {
-      setGlobalMatches([]);
+      if (requestKey === globalRequestRef.current) setGlobalMatches([]);
     } finally {
-      setGlobalLoading(false);
+      if (requestKey === globalRequestRef.current) setGlobalLoading(false);
     }
   }, [isAdmin, searchDebounced]);
 
@@ -502,6 +507,18 @@ export default function AdminVerificationScreen() {
     if (checkingAdmin || !isAdmin) return;
     fetchAuditLogs();
   }, [checkingAdmin, fetchAuditLogs, isAdmin]);
+
+  const applyConfirmedReview = (id: string, status: OrganizerRow['verification_status'], reason: string | null) => {
+    // Invalidate reads started before the successful mutation.
+    ++listRequestKeyRef.current;
+    ++globalRequestRef.current;
+    const patch = (row: OrganizerRow): OrganizerRow => row.id === id
+      ? { ...row, verification_status: status, verification_rejection_reason: reason }
+      : row;
+    setGlobalMatches(rows => rows.map(patch));
+    setOrganizers(rows => rows.map(patch).filter(row => row.id !== id ||
+      activeFilter === 'all' || activeFilter === 'suspended' || activeFilter === status));
+  };
 
   const approve = async (targetUserId: string) => {
     if (!isAdminDb) {
@@ -516,8 +533,10 @@ export default function AdminVerificationScreen() {
         p_reason: null,
       });
       if (error) throw error;
+      applyConfirmedReview(targetUserId, 'verified', null);
       await fetchStats();
       await fetchOrganizers({ reset: true });
+      await fetchGlobalMatches();
       await fetchAuditLogs();
     } catch {
       Alert.alert('Error', 'No se pudo aprobar al organizador.');
@@ -540,10 +559,12 @@ export default function AdminVerificationScreen() {
         p_reason: reviewReason?.trim() || null,
       });
       if (error) throw error;
+      applyConfirmedReview(reviewUserId, reviewMode, reviewReason?.trim() || null);
       setReviewUserId(null);
       setReviewReason('');
       await fetchStats();
       await fetchOrganizers({ reset: true });
+      await fetchGlobalMatches();
       await fetchAuditLogs();
     } catch (e: any) {
       const msg = (e?.message || e?.details || e?.hint || '').toString().trim();
@@ -577,6 +598,7 @@ export default function AdminVerificationScreen() {
       }
       await fetchStats();
       await fetchOrganizers({ reset: true });
+      await fetchGlobalMatches();
       await fetchAuditLogs();
     } catch (e: any) {
       const msg = (e?.message || e?.details || e?.hint || '').toString().trim();

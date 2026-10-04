@@ -1,4 +1,4 @@
-import { View, Text, StyleSheet, TouchableOpacity, Image, Alert, Linking, Modal, ScrollView } from 'react-native';
+import { AppState, View, Text, StyleSheet, TouchableOpacity, Image, Alert, Linking, Modal, ScrollView } from 'react-native';
 import { useEffect, useMemo, useState, useCallback } from 'react';
 import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -128,7 +128,11 @@ export default function OrganizerVerificationScreen() {
         .select('user_id, business_license_path, tax_id_path, venue_photo_path')
         .eq('user_id', userId)
         .maybeSingle();
-      if (docsError) throw docsError;
+      if (docsError) {
+        // A document read failure must not undo the authoritative approval state.
+        setDocs(null);
+        return;
+      }
       setDocs(docsData ?? null);
     } catch {
       setDocs(null);
@@ -271,6 +275,14 @@ export default function OrganizerVerificationScreen() {
     if (stripeStatus.stripe_onboarding_completed) return;
     refreshStripe();
   }, [refreshStripe, stripeStatus.stripe_account_id, stripeStatus.stripe_onboarding_completed, userId, verificationStatus]);
+
+  useEffect(() => {
+    if (verificationStatus !== 'verified' || !stripeStatus.stripe_account_id) return;
+    const subscription = AppState.addEventListener('change', state => {
+      if (state === 'active') void refreshStripe();
+    });
+    return () => subscription.remove();
+  }, [refreshStripe, stripeStatus.stripe_account_id, verificationStatus]);
 
   const pickBusinessDoc = async (kind: 'business_license' | 'tax_id') => {
     if (!canUpload) {
