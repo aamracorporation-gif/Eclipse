@@ -39,10 +39,12 @@ jobs:
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
           SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
-      - name: Deploy authenticated payment functions
+      - name: Deploy authenticated payment and Wallet functions
         run: |
           supabase functions deploy create-payment-intent-v2
           supabase functions deploy confirm-payment
+          supabase functions deploy apple-wallet-generator
+          supabase functions deploy generate-wallet-pass
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
       - name: Smoke test health

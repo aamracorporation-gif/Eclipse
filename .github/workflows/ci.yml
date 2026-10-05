@@ -32,6 +32,11 @@ jobs:
       - run: npm run typecheck
       - run: npm run lint
       - run: npm test -- --runInBand
+      - name: Validate Wallet signing and authorization with fixture credentials
+        run: |
+          export WALLET_TEST_DEPS="$(mktemp -d "$RUNNER_TEMP/eclipse-wallet.XXXXXX")"
+          npm install --prefix "$WALLET_TEST_DEPS" --ignore-scripts --no-audit --no-fund passkit-generator@3.1.10 jose@5.9.6
+          node scripts/qa/wallet-pass-regression.cjs
       - name: Validate Expo web bundle
         run: npm run build:web
       - name: Backend dependencies and tests
@@ -51,4 +56,3 @@ jobs:
       - uses: gitleaks/gitleaks-action@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-

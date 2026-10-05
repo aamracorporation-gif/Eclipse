@@ -2,6 +2,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 import { PKPass } from "https://esm.sh/passkit-generator@3.1.10";
 import forge from "https://esm.sh/node-forge@1.4.0";
 import { Buffer } from "node:buffer";
+import { normalizeWalletPem } from "../_shared/walletPem.ts";
 import {
   BUNDLED_FOOTER_PNG_BASE64,
   BUNDLED_ICON_PNG_BASE64,
@@ -27,26 +28,26 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
   }
+  if (req.method !== "POST") {
+    return new Response(JSON.stringify({ error: "Método no permitido" }), { status: 405, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+  }
 
   try {
-    const tryDecodeBase64Text = (value: string) => {
-      try {
-        const cleaned = String(value || "").replace(/\s+/g, "");
-        if (!cleaned || cleaned.includes("-----BEGIN")) return String(value || "");
-        if (!/^[A-Za-z0-9+/=]+$/.test(cleaned) || cleaned.length % 4 !== 0) return String(value || "");
-        return new TextDecoder().decode(Uint8Array.from(atob(cleaned), (c) => c.charCodeAt(0)));
-      } catch {
-        return String(value || "");
-      }
-    };
-
-    const normalizePem = (value: string) =>
-      tryDecodeBase64Text(String(value || ""))
-        .replace(/^\uFEFF/, "")
-        .replace(/\r\n/g, "\n")
-        .replace(/\\n/g, "\n")
-        .replace(/^"+|"+$/g, "")
-        .trim();
+    // Authenticate before parsing signing credentials or disclosing configuration errors.
+    const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
+    const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY")!;
+    const authHeader = req.headers.get("Authorization");
+    if (!authHeader) {
+      return new Response(JSON.stringify({ error: "No Authorization header" }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+    const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+      global: { headers: { Authorization: authHeader } },
+    });
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    if (authError || !user) {
+      return new Response(JSON.stringify({ error: "Invalid session" }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+    const normalizePem = normalizeWalletPem;
 
     const wrapPemBody = (body: string) =>
       body.match(/.{1,64}/g)?.join("\n") || body;
@@ -69,8 +70,6 @@ Deno.serve(async (req) => {
     };
 
     // 2. Validación de Secretos (Entorno)
-    const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
-    const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY")!;
     const RAW_APPLE_PASS_TYPE_ID = String(Deno.env.get("APPLE_PASS_TYPE_ID") || "").trim();
     const RAW_APPLE_TEAM_ID = String(Deno.env.get("APPLE_TEAM_ID") || "").trim();
     const WWDR_CERT = rebuildPemBlock(
@@ -97,7 +96,7 @@ Deno.serve(async (req) => {
 
     if (!WWDR_CERT || !SIGNER_CERT || !SIGNER_KEY) {
       console.error("[ERROR] Certificados Apple no configurados en secretos de Supabase.");
-      throw new Error("Missing Apple Certificates in Environment Variables.");
+      return new Response(JSON.stringify({ error: "Apple Wallet no está configurado en este entorno: faltan certificados de firma.", code: "WALLET_NOT_CONFIGURED" }), { status: 503, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
     const pemSummary = (name: string, value: string) => ({
       name,
@@ -138,7 +137,12 @@ Deno.serve(async (req) => {
     )?.value;
 
     try {
-      forge.pki.privateKeyFromPem(SIGNER_KEY);
+      if (KEY_PASSWORD) {
+        const decryptedKey = forge.pki.decryptRsaPrivateKey(SIGNER_KEY, KEY_PASSWORD);
+        if (!decryptedKey) throw new Error("La contraseña no permite abrir la clave de firma.");
+      } else {
+        forge.pki.privateKeyFromPem(SIGNER_KEY);
+      }
     } catch (e: any) {
       console.error("[PEM] PASS KEY INVALID:", String(e?.message || e));
       throw new Error(`APPLE_PASS_KEY inválido: ${String(e?.message || e)}`);
@@ -181,23 +185,6 @@ Deno.serve(async (req) => {
       for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
       return out;
     };
-
-    // 3. Validación de JWT (Sesión del Usuario)
-    const authHeader = req.headers.get("Authorization");
-    if (!authHeader) {
-      console.error("[ERROR] No se recibió header de Authorization.");
-      return new Response(JSON.stringify({ error: "No Authorization header" }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
-    }
-
-    const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-      global: { headers: { Authorization: authHeader } },
-    });
-
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
-    if (authError || !user) {
-      console.error("[ERROR] Sesión de usuario inválida o expirada:", authError);
-      return new Response(JSON.stringify({ error: "Invalid session" }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
-    }
 
     // 4. Parámetros del Request
     let ticket_id;
@@ -306,8 +293,8 @@ Deno.serve(async (req) => {
       signerCert: SIGNER_CERT,
       signerKey: SIGNER_KEY,
     };
-    if (KEY_PASSWORD.trim()) {
-      certificates.signerKeyPassphrase = KEY_PASSWORD.trim();
+    if (KEY_PASSWORD) {
+      certificates.signerKeyPassphrase = KEY_PASSWORD;
     }
 
     const eventDate = new Date(ticket.events.event_date);
@@ -359,7 +346,7 @@ Deno.serve(async (req) => {
       ? ticketTypeMetadata.vipBottles
           .map((item) => {
             if (!item || typeof item !== "object") return null;
-            const label = nonEmpty((item as Record<string, unknown>).label);
+            const label = nonEmpty((item as Record<string, unknown>).brand) || nonEmpty((item as Record<string, unknown>).label);
             const quantity = parsePositiveNumber((item as Record<string, unknown>).quantity);
             if (!label || !quantity) return null;
             return `${label} x${quantity}`;
@@ -516,7 +503,7 @@ Deno.serve(async (req) => {
     const pushBackField = (key: string, label: string, value: unknown) => {
       const v = nonEmpty(value);
       if (!v) return;
-      backFields.push({ key, label, value: v });
+      backFields.push({ key: `back_${key}`, label, value: v });
     };
 
     // ══════════════════════════════════════════════════════════════════════════

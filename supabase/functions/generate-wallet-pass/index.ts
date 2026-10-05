@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 import { SignJWT, importPKCS8 } from "https://esm.sh/jose@5.9.6";
+import { normalizeWalletPem } from "../_shared/walletPem.ts";
 
 async function getServiceAccountToken(saEmail: string, privateKeyPem: string): Promise<string> {
   const key = await importPKCS8(privateKeyPem, "RS256");
@@ -41,6 +42,7 @@ function jsonResponse(body: any, status = 200) {
 serve(async (req) => {
   // Manejo de CORS
   if (req.method === "OPTIONS") return jsonResponse({ ok: true });
+  if (req.method !== "POST") return jsonResponse({ ok: false, error: "Método no permitido" }, 405);
 
   try {
     const SUPABASE_URL = Deno.env.get("SUPABASE_URL");
@@ -62,6 +64,9 @@ serve(async (req) => {
     const { ticket_id, platform } = body;
     if (!ticket_id || !platform) {
       return jsonResponse({ ok: false, error: "Falta ticket_id o platform en el body" }, 400);
+    }
+    if (platform !== "ios" && platform !== "android") {
+      return jsonResponse({ ok: false, error: "Plataforma no válida" }, 400);
     }
 
     // 2. Verificar Autenticación del usuario
@@ -136,9 +141,9 @@ serve(async (req) => {
       );
     }
 
-    const GOOGLE_WALLET_ISSUER_ID = Deno.env.get("GOOGLE_WALLET_ISSUER_ID");
-    const GOOGLE_WALLET_CLASS_ID = Deno.env.get("GOOGLE_WALLET_CLASS_ID");
-    const GOOGLE_WALLET_SERVICE_ACCOUNT_EMAIL = Deno.env.get("GOOGLE_WALLET_SERVICE_ACCOUNT_EMAIL");
+    const GOOGLE_WALLET_ISSUER_ID = Deno.env.get("GOOGLE_WALLET_ISSUER_ID")?.trim();
+    const GOOGLE_WALLET_CLASS_ID = Deno.env.get("GOOGLE_WALLET_CLASS_ID")?.trim();
+    const GOOGLE_WALLET_SERVICE_ACCOUNT_EMAIL = Deno.env.get("GOOGLE_WALLET_SERVICE_ACCOUNT_EMAIL")?.trim();
     const GOOGLE_WALLET_PRIVATE_KEY = Deno.env.get("GOOGLE_WALLET_PRIVATE_KEY");
 
     if (!GOOGLE_WALLET_ISSUER_ID || !GOOGLE_WALLET_CLASS_ID || !GOOGLE_WALLET_SERVICE_ACCOUNT_EMAIL || !GOOGLE_WALLET_PRIVATE_KEY) {
@@ -149,7 +154,7 @@ serve(async (req) => {
           error:
             "Google Wallet no está configurado (faltan GOOGLE_WALLET_ISSUER_ID / GOOGLE_WALLET_CLASS_ID / GOOGLE_WALLET_SERVICE_ACCOUNT_EMAIL / GOOGLE_WALLET_PRIVATE_KEY).",
         },
-        500,
+        503,
       );
     }
 
@@ -222,7 +227,7 @@ serve(async (req) => {
     const vipGroupSize   = parsePositiveNumber(ticketTypeMetadata.vipGroupSize);
     const bottleSummary  = Array.isArray(ticketTypeMetadata.vipBottles)
       ? ticketTypeMetadata.vipBottles.map((item: any) => {
-          const label = nonEmpty(item?.label); const qty = parsePositiveNumber(item?.quantity);
+          const label = nonEmpty(item?.brand) || nonEmpty(item?.label); const qty = parsePositiveNumber(item?.quantity);
           return label && qty ? `${label} x${qty}` : null;
         }).filter(Boolean).join(" • ") || null
       : null;
@@ -295,7 +300,7 @@ serve(async (req) => {
       };
     }
 
-    const privateKeyPem = GOOGLE_WALLET_PRIVATE_KEY.replace(/\\n/g, "\n");
+    const privateKeyPem = normalizeWalletPem(GOOGLE_WALLET_PRIVATE_KEY);
     const key = await importPKCS8(privateKeyPem, "RS256");
     const nowSeconds = Math.floor(Date.now() / 1000);
     const jwt = await new SignJWT({
