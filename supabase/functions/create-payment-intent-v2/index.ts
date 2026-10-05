@@ -655,10 +655,15 @@ Deno.serve(async (req) => {
       const vipOriginalCents = Math.round(basePrice * 100);
       if (!Number.isFinite(vipOriginalCents) || vipOriginalCents <= 0) return jsonResponse({ ok: false, error: "Invalid price" });
 
-      const vipEclipseRateBps = getEclipseNetRateBps();
-      const vipEclipseRate = vipEclipseRateBps / 10000;
+      // One checkout purchases one complete reservado, regardless of guest capacity.
+      // VIP pricing is independent from the normal-ticket commission setting.
+      const vipEclipseRateBps = 500;
+      const vipCommissionCapCents = 2500;
       const vipStripePassthroughCents = computeStripePassthroughCents(vipOriginalCents);
-      const vipEclipseCommissionCents = Math.round(vipOriginalCents * vipEclipseRate);
+      const vipEclipseCommissionCents = Math.min(
+        Math.round(vipOriginalCents * vipEclipseRateBps / 10000),
+        vipCommissionCapCents,
+      );
       const vipApplicationFeeAmountCents = vipEclipseCommissionCents + vipStripePassthroughCents;
 
       const creditDebitRaw = body?.credit_debit_eur ?? body?.wallet_debit_eur;
@@ -718,6 +723,8 @@ Deno.serve(async (req) => {
         "metadata[original_total_cents]": String(vipOriginalCents),
         "metadata[service_fee_cents]": String(vipStripePassthroughCents),
         "metadata[eclipse_commission_cents]": String(vipEclipseCommissionCents),
+        "metadata[commission_policy]": "vip_5pct_cap25_v1",
+        "metadata[commission_cap_cents]": String(vipCommissionCapCents),
         "metadata[credit_debit_cents]": String(creditDebitCents),
       };
       if (hasConnect) {
@@ -769,6 +776,8 @@ Deno.serve(async (req) => {
         original_total_cents: vipOriginalCents,
         service_fee_cents: vipStripePassthroughCents,
         eclipse_commission_cents: vipEclipseCommissionCents,
+        commission_policy: "vip_5pct_cap25_v1",
+        commission_cap_cents: vipCommissionCapCents,
         credit_debit_cents: creditDebitCents,
         event_title: String(eventRow.title || ""),
         vip_name: String(vip.name || ""),
@@ -815,4 +824,3 @@ Deno.serve(async (req) => {
     return jsonResponse({ ok: false, error: `create-payment-intent: ${e?.message || "Internal error"}` });
   }
 });
-
