@@ -2,16 +2,9 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 import { PKPass } from "https://esm.sh/passkit-generator@3.1.10";
 import forge from "https://esm.sh/node-forge@1.4.0";
 import { Buffer } from "node:buffer";
+import { WALLET_THEMES, walletTier, walletDate, walletRgb } from "../_shared/walletDesign.ts";
 import { normalizeWalletPem } from "../_shared/walletPem.ts";
-import {
-  BUNDLED_FOOTER_PNG_BASE64,
-  BUNDLED_ICON_PNG_BASE64,
-  BUNDLED_LOGO_PNG_BASE64,
-  BUNDLED_STRIP_PNG_BASE64_GENERAL,
-  BUNDLED_STRIP_PNG_BASE64_VIP,
-  BUNDLED_STRIP_PNG_BASE64_BACKSTAGE,
-  BUNDLED_STRIP_PNG_BASE64_FASTLANE,
-} from "./bundledAssets.ts";
+import { WALLET_ASSETS } from "./bundledAssets.ts";
 
 // Headers CORS requeridos para Expo/React Native
 const corsHeaders = {
@@ -88,8 +81,6 @@ Deno.serve(async (req) => {
       "-----END PRIVATE KEY-----",
     );
     const KEY_PASSWORD = Deno.env.get("APPLE_PASS_KEY_PASSWORD") || "";
-    const PASS_ICON_PNG_BASE64 = String(Deno.env.get("PASS_ICON_PNG_BASE64") || "").trim();
-    const PASS_LOGO_PNG_BASE64 = String(Deno.env.get("PASS_LOGO_PNG_BASE64") || "").trim();
     const PASS_STRIP_PNG_BASE64_VIP = String(Deno.env.get("PASS_STRIP_PNG_BASE64_VIP") || "").trim();
     const PASS_STRIP_PNG_BASE64_PREMIUM = String(Deno.env.get("PASS_STRIP_PNG_BASE64_PREMIUM") || "").trim();
     const PASS_STRIP_PNG_BASE64_GOLD = String(Deno.env.get("PASS_STRIP_PNG_BASE64_GOLD") || "").trim();
@@ -236,16 +227,6 @@ Deno.serve(async (req) => {
     }
 
     // 6. Configuración de Passkit
-    const iconPng = decodeBase64ToUint8Array(PASS_ICON_PNG_BASE64 || BUNDLED_ICON_PNG_BASE64);
-    if (!iconPng || iconPng.length === 0) {
-      console.error("[ERROR] No se encontró icon.png ni por secret ni empaquetado en el módulo.");
-      throw new Error("Missing PASS_ICON_PNG_BASE64 and bundled icon.png.");
-    }
-
-    const logoPng = decodeBase64ToUint8Array(PASS_LOGO_PNG_BASE64 || BUNDLED_LOGO_PNG_BASE64);
-    const effectiveLogoPng = logoPng || iconPng;
-    const footerPng = decodeBase64ToUint8Array(BUNDLED_FOOTER_PNG_BASE64 || BUNDLED_LOGO_PNG_BASE64 || BUNDLED_ICON_PNG_BASE64);
-
     const ticketTypeObj = Array.isArray((ticket as any).event_ticket_types)
       ? (ticket as any).event_ticket_types[0]
       : (ticket as any).event_ticket_types;
@@ -261,32 +242,6 @@ Deno.serve(async (req) => {
         : rawCategory.includes("vip")
           ? "vip"
           : "premium";
-
-    const categorySource = `${rawCategory} ${(ticket.events?.title || "")} ${(ticketTypeObj?.name || "")}`.toLowerCase();
-    const eventStyle =
-      /(conference|summit|corporate|business|forum|networking|expo)/.test(categorySource)
-        ? "corporate"
-        : /(sport|match|game|league|cup|stadium|football|soccer|basket|tennis|padel|ufc|formula|f1)/.test(categorySource)
-          ? "sports"
-          : /(museum|gallery|exhibition|art|installation|editorial)/.test(categorySource)
-            ? "art"
-            : /(concert|music|festival|dj|tour|live|party|show|amapiano)/.test(categorySource)
-              ? "music"
-              : "default";
-
-    const eventTypeLabel =
-      eventStyle === "music"
-        ? "CONCERT"
-        : eventStyle === "sports"
-          ? "SPORT"
-          : eventStyle === "corporate"
-            ? "CONFERENCE"
-            : eventStyle === "art"
-              ? "EXHIBITION"
-              : "EVENT";
-
-
-    // (files + log built below, after stripPng and palette are declared)
 
     const certificates: Record<string, string> = {
       wwdr: WWDR_CERT,
@@ -309,17 +264,10 @@ Deno.serve(async (req) => {
     const eventYear = eventDate && Number.isFinite(eventDate.getTime())
       ? String(eventDate.getFullYear())
       : "2026";
-    const dateDisplay = eventDate && Number.isFinite(eventDate.getTime())
-      ? eventDate
-          .toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })
-          .replace(/\./g, "")
-          .toUpperCase()
-      : "TBA";
-    const timeDisplay = eventDate && Number.isFinite(eventDate.getTime())
-      ? eventDate.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })
-      : "TBA";
+    const dateDisplay = walletDate(eventDate);
+    const timeDisplay = walletDate(eventDate, true);
 
-    const venueName = String(ticket.events?.venues?.name || "Venue to be announced");
+    const venueName = String(ticket.events?.venues?.name || "Local por confirmar");
     const venueAddress = String(ticket.events?.venues?.address || "").trim();
     const venueLat = Number.parseFloat(String(ticket.events?.venues?.latitude ?? ""));
     const venueLng = Number.parseFloat(String(ticket.events?.venues?.longitude ?? ""));
@@ -354,92 +302,24 @@ Deno.serve(async (req) => {
           .filter(Boolean)
           .join(" • ")
       : null;
-    const tierLabel =
-      tier === "vip" ? "VIP" : tier === "gold" ? "FOUNDERS" : "PREMIUM";
-    const editionLabel = Boolean(ticketTypeMetadata.featured) ? "SIGNATURE" : tierLabel;
-    const ticketTypeName = nonEmpty(ticketTypeObj?.name) || `${tierLabel} ACCESS`;
+    const ticketTypeName = nonEmpty(ticketTypeObj?.name) || WALLET_THEMES[walletTier(rawCategory, ticketTypeObj?.name)].label;
 
-    // ── Ticket-type detection ─────────────────────────────────────────────────
-    // Priority: FASTLANE > BACKSTAGE (gold) > VIP > GENERAL
-    // ticketTypeName is now available for name-based detection.
-    const ticketNameLower = ticketTypeName.toLowerCase();
-    const isFastlane  = ticketNameLower.includes("fast") || ticketNameLower.includes("lane") || ticketNameLower.includes("express");
-    const isBackstage = tier === "gold" || ticketNameLower.includes("backstage") || ticketNameLower.includes("back stage");
-    const isVipTier   = tier === "vip"  || ticketNameLower.includes("vip");
-
-    const passVisualTier =
-      isFastlane  ? "fastlane"  :
-      isBackstage ? "backstage" :
-      isVipTier   ? "vip"       :
-                    "general";
-
-    // ── Palette — background matches strip bleed color exactly ───────────────
-    const palette =
-      passVisualTier === "fastlane"
-        ? { name: "fastlane",  backgroundColor: "rgb(0,0,4)",   foregroundColor: "rgb(255,255,255)", labelColor: "rgb(255,255,255)"  }
-        : passVisualTier === "backstage"
-          ? { name: "backstage", backgroundColor: "rgb(5,2,0)",  foregroundColor: "rgb(255,255,255)", labelColor: "rgb(255,115,25)"   }
-          : passVisualTier === "vip"
-            ? { name: "vip",     backgroundColor: "rgb(8,5,0)",  foregroundColor: "rgb(255,255,255)", labelColor: "rgb(255,205,0)"    }
-            : { name: "general", backgroundColor: "rgb(0,5,16)", foregroundColor: "rgb(255,255,255)", labelColor: "rgb(0,220,255)"    };
-
-    // ── Strip art selection ───────────────────────────────────────────────────
-    // Each ticket type gets a completely different visual concept.
-    // general   → bioluminescent deep ocean  (cyan, mysterious)
-    // vip       → liquid gold droplets       (amber, luxury)
-    // backstage → lava field cracks          (orange-red, exclusive)
-    // fastlane  → chromatic light break      (full spectrum, speed)
-    const bundledStripBase64 =
-      passVisualTier === "fastlane"  ? BUNDLED_STRIP_PNG_BASE64_FASTLANE  :
-      passVisualTier === "backstage" ? BUNDLED_STRIP_PNG_BASE64_BACKSTAGE :
-      passVisualTier === "vip"       ? BUNDLED_STRIP_PNG_BASE64_VIP       :
-                                       BUNDLED_STRIP_PNG_BASE64_GENERAL;
-    const stripPng = decodeBase64ToUint8Array(
-      bundledStripBase64 || BUNDLED_LOGO_PNG_BASE64 || BUNDLED_ICON_PNG_BASE64,
-    );
-
-    const iconBuffer = Buffer.from(iconPng);
-    const logoBuffer = Buffer.from(effectiveLogoPng);
-    const footerBuffer = Buffer.from(footerPng);
-    const files: Record<string, Buffer> = {
-      "icon.png": iconBuffer,
-      "icon@2x.png": iconBuffer,
-      "icon@3x.png": iconBuffer,
-      "logo.png": logoBuffer,
-      "logo@2x.png": logoBuffer,
-      "logo@3x.png": logoBuffer,
-      "footer.png": footerBuffer,
-      "footer@2x.png": footerBuffer,
-      "footer@3x.png": footerBuffer,
-    };
-    if (stripPng && stripPng.length > 0) {
-      const stripBuffer = Buffer.from(stripPng);
-      files["strip.png"] = stripBuffer;
-      files["strip@2x.png"] = stripBuffer;
-      files["strip@3x.png"] = stripBuffer;
+    const passVisualTier = walletTier(rawCategory, ticketTypeObj?.name);
+    const theme = WALLET_THEMES[passVisualTier];
+    const palette = { backgroundColor: walletRgb(theme.background), foregroundColor: walletRgb(theme.foreground), labelColor: walletRgb(theme.accent) };
+    const files: Record<string, Buffer> = {};
+    for (const scale of [1, 2, 3]) {
+      const suffix = scale === 1 ? "" : `@${scale}x`;
+      for (const name of ["icon", "logo"]) {
+        files[`${name}${suffix}.png`] = Buffer.from(decodeBase64ToUint8Array(WALLET_ASSETS[`${name}${suffix}.png`]));
+      }
+      files[`strip${suffix}.png`] = Buffer.from(decodeBase64ToUint8Array(WALLET_ASSETS[`strip_${passVisualTier}${suffix}.png`]));
     }
-    const accessZone =
-      nonEmpty(ticketTypeMetadata.accessZone) ||
-      (tier === "vip"
-        ? "PREMIUM LOUNGE"
-        : tier === "gold"
-          ? "BACKSTAGE SALON"
-          : "MAIN FLOOR");
     const entryLeadMinutes =
       parsePositiveNumber(ticketTypeMetadata.earlyEntryMinutes) ||
-      (tier === "gold" ? 60 : tier === "vip" ? 45 : 30);
-    const entryDisplay =
-      eventDate && Number.isFinite(eventDate.getTime())
-        ? new Date(eventDate.getTime() - entryLeadMinutes * 60 * 1000).toLocaleTimeString("en-GB", {
-            hour: "2-digit",
-            minute: "2-digit",
-          })
-        : "TBA";
-    const dedicatedLane = ticketTypeMetadata.dedicatedLane === true
-      ? "PRIORITY LANE"
-      : tier === "vip" || tier === "gold"
-        ? "VIP PRIORITY"
-        : null;
+      0;
+    const entryDisplay = walletDate(new Date(eventDate.getTime() - entryLeadMinutes * 60 * 1000), true);
+    const dedicatedLane = ticketTypeMetadata.dedicatedLane === true ? "Acceso prioritario" : null;
     const entryDate =
       eventDate && Number.isFinite(eventDate.getTime())
         ? new Date(eventDate.getTime() - entryLeadMinutes * 60 * 1000)
@@ -451,54 +331,28 @@ Deno.serve(async (req) => {
     // ══════════════════════════════════════════════════════════════════════════
 
     const passIdDisplay   = `ECL-${eventYear}-${ticket.id.slice(0,6).toUpperCase()}`;
-    const holderName      = nonEmpty(ticket.buyer_name) || nonEmpty(user.email) || "ECLIPSE MEMBER";
+    const holderName      = nonEmpty(ticket.buyer_name) || nonEmpty(user.email) || "Titular de la entrada";
     const benefits        = nonEmpty(ticketTypeMetadata.benefits);
     const vipGroupSize    = parsePositiveNumber(ticketTypeMetadata.vipGroupSize);
     const backstageHost   = nonEmpty(ticketTypeMetadata.backstageHost);
-    const gateDisplay     = nonEmpty(ticketTypeMetadata.gate) || (dedicatedLane ? "VIP" : "MAIN");
-    const sectionDisplay  = nonEmpty(ticketTypeMetadata.section)
-      || (tier==="gold" ? "BACKSTAGE" : tier==="vip" ? "VIP FLOOR" : "FLOOR");
-    const seatDisplay     = nonEmpty(ticketTypeMetadata.seat) || (!ticket.ticket_type_id ? "OPEN" : "GENERAL");
+    const gateDisplay     = nonEmpty(ticketTypeMetadata.gate);
+    const sectionDisplay  = nonEmpty(ticketTypeMetadata.section) || nonEmpty(ticketTypeMetadata.accessZone);
+    const seatDisplay     = nonEmpty(ticketTypeMetadata.seat);
     const ticketCodeDisplay = passIdDisplay;
     const dateTimeDisplay   = `${dateDisplay} · ${timeDisplay}`;
 
-    // "FRI 20 JUN" — compact, uppercase, scannable at a glance
-    const shortDateDisplay = eventDate && Number.isFinite(eventDate.getTime())
-      ? (() => {
-          const day = eventDate.toLocaleDateString("en-GB", { weekday: "short" }).toUpperCase();
-          const num = String(eventDate.getDate()).padStart(2,"0");
-          const mon = eventDate.toLocaleDateString("en-GB", { month: "short" }).toUpperCase();
-          return `${day} ${num} ${mon}`;
-        })()
-      : "TBA";
-
+    // Compact date in the launch market timezone.
+    const shortDateDisplay = walletDate(eventDate);
     const expirationDate = eventDate && Number.isFinite(eventDate.getTime())
       ? new Date(eventDate.getTime() + 8 * 60 * 60 * 1000).toISOString()
       : undefined;
 
     // ── Tier badge for header field ─────────────────────────────────────────
     // Shown right of the ECLIPSE logo — first thing security sees at the gate.
-    const tierBadge =
-      passVisualTier === "fastlane"  ? "⚡ FASTLANE"  :
-      passVisualTier === "backstage" ? "✦ BACKSTAGE" :
-      passVisualTier === "vip"       ? "★ VIP"       :
-                                       "◇ GENERAL";
-
-    // ── Access label (short, for auxiliary field) ────────────────────────────
-    const accessLabel =
-      passVisualTier === "fastlane"  ? "FASTLANE"  :
-      passVisualTier === "backstage" ? "BACKSTAGE" :
-      passVisualTier === "vip"       ? "VIP"       :
-                                       "GENERAL";
-
-    // ── Primary label = event category (small, in accent/labelColor) ────────
-    // This is the key Apple design trick: the label doubles as a category badge
-    // rendered in the accent color just above the large event name.
-    const categoryLabel = eventTypeLabel;   // "CONCERT" / "SPORT" / "EXHIBITION" etc.
-
-    // ── Venue: truncate at 26 chars for secondary field ─────────────────────
-    const venueShort = venueName.length > 26 ? venueName.slice(0,24) + "…" : venueName;
-
+    const tierBadge = theme.label;
+    const accessLabel = theme.label;
+    const categoryLabel = ticketTypeObj?.name || theme.label;
+    const venueShort = venueName;
     const backFields: any[] = [];
     const pushBackField = (key: string, label: string, value: unknown) => {
       const v = nonEmpty(value);
@@ -506,33 +360,6 @@ Deno.serve(async (req) => {
       backFields.push({ key: `back_${key}`, label, value: v });
     };
 
-    // ══════════════════════════════════════════════════════════════════════════
-    // PASS.JSON — World-class Apple Wallet layout
-    //
-    // Visual hierarchy (what the user sees front-to-back):
-    //
-    // ┌──────────────────────────────────────────┐
-    // │  [ECLIPSE logo]          ✦ LEGENDARY     │  ← header (tier badge)
-    // │══════════ STRIP ART (generative) ════════│
-    // │  CONCERT                                 │  ← primary label (category)
-    // │  TRAVIS SCOTT — CIRCUS MAXIMUS TOUR      │  ← primary value (large bold)
-    // ├──────────────────────────────────────────┤
-    // │  VENUE                      DATE         │  ← secondary
-    // │  Estadio Bernabéu       FRI 20 JUN       │
-    // ├──────────────────────────────────────────┤
-    // │  SECTION          GATE      ENTRY        │  ← auxiliary
-    // │  VIP FLOOR        MAIN      21:00        │
-    // ╞══════════════ QR CODE ══════════════════╡
-    // └──────────────────────────────────────────┘
-    //
-    // Key decisions:
-    // • Header = tier badge (what security needs at a glance)
-    // • Primary label = category (context, rendered in accent color)
-    // • Primary value = event name — the SINGLE most important fact
-    // • Secondary = VENUE + DATE — where/when (navigation-critical)
-    // • Auxiliary = SECTION + GATE + ENTRY — seat-finding info
-    // • QR = PKBarcodeFormatQR — fastest scanning, cleanest appearance
-    // ══════════════════════════════════════════════════════════════════════════
     const passJson = {
       formatVersion:      1,
       passTypeIdentifier: APPLE_PASS_TYPE_ID,
@@ -552,7 +379,7 @@ Deno.serve(async (req) => {
         locations: [{
           latitude:     venueLat,
           longitude:    venueLng,
-          relevantText: `${title} · Your ECLIPSE pass — scan at entry`,
+          relevantText: `${title} · Muestra tu entrada en el acceso`,
         }],
       } : {}),
       barcode:  { ...barcode, altText: ticketCodeDisplay },
@@ -563,8 +390,8 @@ Deno.serve(async (req) => {
         // Shows tier badge — security sees this first at the gate.
         headerFields: [
           { key:  "tier",
-            label: "",
-            value: tierBadge,
+            label: tierBadge,
+            value: shortDateDisplay,
             textAlignment: "PKTextAlignmentRight" },
         ],
 
@@ -574,7 +401,7 @@ Deno.serve(async (req) => {
         primaryFields: [
           { key:   "eventName",
             label: categoryLabel,
-            value: title.toUpperCase(),
+            value: title,
             textAlignment: "PKTextAlignmentLeft" },
         ],
 
@@ -583,12 +410,12 @@ Deno.serve(async (req) => {
         // DATE  right — confirms the day
         secondaryFields: [
           { key:   "venue",
-            label: "VENUE",
+            label: "LOCAL",
             value: venueShort,
             textAlignment: "PKTextAlignmentLeft" },
           { key:   "date",
-            label: "DATE",
-            value: shortDateDisplay,
+            label: "HORA",
+            value: walletDate(eventDate, true),
             textAlignment: "PKTextAlignmentRight" },
         ],
 
@@ -597,18 +424,9 @@ Deno.serve(async (req) => {
         // GATE    — which entrance to use
         // ENTRY   — what time doors open for your tier
         auxiliaryFields: [
-          { key:   "section",
-            label: "SECTION",
-            value: sectionDisplay,
-            textAlignment: "PKTextAlignmentLeft" },
-          { key:   "gate",
-            label: "GATE",
-            value: gateDisplay,
-            textAlignment: "PKTextAlignmentCenter" },
-          { key:   "entry",
-            label: "ENTRY",
-            value: entryDisplay,
-            textAlignment: "PKTextAlignmentRight" },
+          { key: "holder", label: "TITULAR", value: holderName, textAlignment: "PKTextAlignmentLeft" },
+          ...(vipGroupSize ? [{ key: "group", label: "GRUPO", value: `${vipGroupSize} personas`, textAlignment: "PKTextAlignmentRight" }] :
+            [{ key: "access", label: "ENTRADA", value: ticketTypeObj?.name || theme.label, textAlignment: "PKTextAlignmentRight" }]),
         ],
 
         backFields,
@@ -616,28 +434,24 @@ Deno.serve(async (req) => {
     };
 
     // ── BACK FIELDS (flip side — complete information) ─────────────────────
-    pushBackField("holder",     "TICKET HOLDER",       holderName.toUpperCase());
-    pushBackField("passId",     "PASS ID",             ticketCodeDisplay);
-    pushBackField("tier",       "ACCESS TIER",         tierBadge);
-    pushBackField("access",     "ACCESS TYPE",         (ticketTypeName || accessLabel).toUpperCase());
-    pushBackField("section",    "SECTION",             sectionDisplay);
-    pushBackField("seat",       "SEAT",                seatDisplay);
-    pushBackField("gate",       "ENTRY GATE",          gateDisplay);
-    pushBackField("entry",      "DOORS OPEN",          entryDisplay);
-    pushBackField("showtime",   "SHOW STARTS",         timeDisplay);
-    pushBackField("datetime",   "DATE & TIME",         dateTimeDisplay);
-    pushBackField("venue",      "VENUE",               venueName);
-    pushBackField("address",    "ADDRESS",             venueAddress);
-    pushBackField("lane",       "PRIORITY LANE",       dedicatedLane);
-    pushBackField("benefits",   "INCLUDED",            benefits);
-    pushBackField("groupSize",  "GROUP SIZE",          vipGroupSize ? `${vipGroupSize} guests` : null);
-    pushBackField("bottles",    "TABLE SERVICE",       bottleSummary);
-    pushBackField("host",       "YOUR HOST",           backstageHost);
-    pushBackField("terms",      "TERMS & CONDITIONS",
-      "This pass is non-transferable and non-refundable. Valid only for the " +
-      "date, venue, and access tier shown. Must be presented at entry. " +
-      "ECLIPSE reserves the right to refuse admission.");
-    pushBackField("support",    "SUPPORT",             "help@eclipse.app");
+    pushBackField("holder",     "TITULAR",       holderName.toUpperCase());
+    pushBackField("passId",     "REFERENCIA",             ticketCodeDisplay);
+    pushBackField("tier",       "CATEGORÍA",         tierBadge);
+    pushBackField("access",     "TIPO DE ENTRADA",         (ticketTypeName || accessLabel).toUpperCase());
+    pushBackField("section",    "ZONA",             sectionDisplay);
+    pushBackField("seat",       "ASIENTO",                seatDisplay);
+    pushBackField("gate",       "PUERTA",          gateDisplay);
+    pushBackField("entry",      "HORA DE ACCESO",          entryDisplay);
+    pushBackField("showtime",   "INICIO",         timeDisplay);
+    pushBackField("datetime",   "FECHA Y HORA · MADRID",         dateTimeDisplay);
+    pushBackField("venue",      "LOCAL",               venueName);
+    pushBackField("address",    "DIRECCIÓN",             venueAddress);
+    pushBackField("lane",       "ACCESO PRIORITARIO",       dedicatedLane);
+    pushBackField("benefits",   "INCLUYE",            benefits);
+    pushBackField("groupSize",  "GRUPO",          vipGroupSize ? `${vipGroupSize} personas` : null);
+    pushBackField("bottles",    "BOTELLAS",       bottleSummary);
+    pushBackField("host",       "ANFITRIÓN",           backstageHost);
+    pushBackField("terms", "INFORMACIÓN", "Presenta el QR en el acceso. Consulta las condiciones de tu compra y los detalles actualizados en Eclipse. No compartas el código de tu entrada.");
     const pass = new PKPass(
       {
         ...files,

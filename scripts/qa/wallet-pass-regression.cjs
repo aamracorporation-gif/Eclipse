@@ -52,6 +52,8 @@ const shared = loadModule(path.join(root, 'supabase/functions/_shared/walletPem.
 const assets = loadModule(path.join(root, 'supabase/functions/apple-wallet-generator/bundledAssets.ts'), {});
 async function invoke(platform, options = {}) {
   let handler;
+  let passData;
+  let passFiles;
   const env = { ...baseEnv, ...options.env };
   const filters = {};
   const client = {
@@ -71,6 +73,7 @@ async function invoke(platform, options = {}) {
     'https://esm.sh/passkit-generator@3.1.10': { PKPass: class extends PKPass {
       constructor(files, certificates) {
         const content = JSON.parse(files['pass.json'].toString('utf8'));
+        passData = content; passFiles = files;
         const style = content.eventTicket || content.generic;
         const fields = Object.values(style).filter(Array.isArray).flat();
         assert.equal(new Set(fields.map(field => field.key)).size, fields.length, 'Apple field keys must be unique across front and back');
@@ -80,7 +83,7 @@ async function invoke(platform, options = {}) {
     'https://esm.sh/node-forge@1.4.0': forge,
     'https://esm.sh/jose@5.9.6': jose,
     'https://deno.land/std@0.168.0/http/server.ts': { serve: fn => { handler = fn; } },
-    'node:buffer': { Buffer }, './bundledAssets.ts': assets, '../_shared/walletPem.ts': shared,
+    'node:buffer': { Buffer }, './bundledAssets.ts': assets, '../_shared/walletPem.ts': shared, '../_shared/walletDesign.ts': loadModule(path.join(root, 'supabase/functions/_shared/walletDesign.ts'), {}),
   };
   const dir = platform === 'ios' ? 'apple-wallet-generator' : 'generate-wallet-pass';
   loadModule(path.join(root, 'supabase/functions', dir, 'index.ts'), imports, { Deno: { env: { get: name => env[name] }, serve: fn => { handler = fn; } } });
@@ -89,7 +92,7 @@ async function invoke(platform, options = {}) {
     method, headers: { ...(options.noAuth ? {} : { Authorization: 'Bearer fixture' }), 'Content-Type': 'application/json' },
     ...(method === 'POST' ? { body: JSON.stringify({ ticket_id: ticket.id, platform }) } : {}),
   }));
-  return { status: response.status, body: await response.json() };
+  return { status: response.status, body: await response.json(), passData, passFiles };
 }
 let passed = 0;
 async function check(name, fn) { await fn(); passed++; console.log('PASS ' + name); }
@@ -125,5 +128,31 @@ async function check(name, fn) { await fn(); passed++; console.log('PASS ' + nam
     });
   }
   await check('Google missing configuration -> explicit503', async () => assert.equal((await invoke('android', { env: { GOOGLE_WALLET_PRIVATE_KEY: '' } })).status, 503));
+  for (const tier of ['general', 'vip', 'backstage', 'fastlane']) {
+    await check('Presentation and access accuracy: ' + tier, async () => {
+      ticket.event_ticket_types = { id: 'type-fixture', name: tier, category: tier, metadata: {} };
+      ticket.events.event_date = '2026-10-09T22:30:00Z'; // Saturday in Madrid, not Friday.
+      ticket.events.title = 'Eclipse Weekend · Una noche extraordinaria en Sevilla';
+      const ios = await invoke('ios'); assert.equal(ios.status, 200, JSON.stringify(ios.body));
+      const fields = ios.passData.eventTicket;
+      assert.equal(fields.secondaryFields[1].value, '00:30');
+      assert.ok(fields.headerFields[0].value.includes('10'));
+      assert.equal(fields.primaryFields[0].value, ticket.events.title);
+      assert.equal(ios.passData.barcodes[0].message, ticket.qr_token);
+      assert.ok(!fields.backFields.some(f => ['back_gate','back_lane','back_section','back_seat'].includes(f.key)));
+      for (const scale of [1,2,3]) {
+        const png = ios.passFiles['strip' + (scale === 1 ? '' : '@' + scale + 'x') + '.png'];
+        assert.equal(png.readUInt32BE(16),375*scale); assert.equal(png.readUInt32BE(20),98*scale);
+      }
+      const android = await invoke('android'); assert.equal(android.status,200);
+      const verified = await jose.jwtVerify(android.body.url.split('/').pop(),crypto.createPublicKey(pkcs8));
+      const obj = verified.payload.payload.genericObjects[0];
+      assert.equal(obj.textModulesData.find(f=>f.id==='show').body,'00:30');
+      assert.equal(obj.textModulesData.find(f=>f.id==='entry').body,'00:30');
+      assert.ok(obj.heroImage.sourceUri.uri.endsWith('google_'+tier+'.png'));
+      assert.ok(!obj.textModulesData.some(f=>['gate','section','lane'].includes(f.id)));
+      assert.equal(verified.payload.payload.genericClasses[0].classTemplateInfo.cardTemplateOverride.cardRowTemplateInfos.length,2);
+    });
+  }
   console.log(`TOTAL ${passed} passed; real signing libraries, fixture credentials, no provider calls. Does not validate Apple trust chain or device installation.`);
 })().catch(error => { console.error(error); process.exitCode = 1; });
