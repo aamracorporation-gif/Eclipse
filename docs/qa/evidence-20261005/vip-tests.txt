@@ -1,0 +1,20 @@
+npm warn Unknown env config "http-proxy". This will stop working in the next major version of npm.
+PASS __tests__/vipCommission.test.ts
+  ✓ VIP 150 EUR retains exactly 750 cents, including cap/rounding boundaries (22 ms)
+  ✓ VIP 200 EUR retains exactly 1000 cents, including cap/rounding boundaries (3 ms)
+  ✓ VIP 201 EUR retains exactly 1005 cents, including cap/rounding boundaries (2 ms)
+  ✓ VIP 300 EUR retains exactly 1500 cents, including cap/rounding boundaries (3 ms)
+  ✓ VIP 499.99 EUR retains exactly 2500 cents, including cap/rounding boundaries (2 ms)
+  ✓ VIP 500 EUR retains exactly 2500 cents, including cap/rounding boundaries (2 ms)
+  ✓ VIP 500.01 EUR retains exactly 2500 cents, including cap/rounding boundaries (3 ms)
+  ✓ VIP 1000 EUR retains exactly 2500 cents, including cap/rounding boundaries (2 ms)
+  ✓ VIP 10000 EUR retains exactly 2500 cents, including cap/rounding boundaries (2 ms)
+  ✓ VIP ignores normal-ticket tariff and guest count (2 ms)
+  ✓ normal tickets retain the configured uncapped tariff (2 ms)
+  ✓ retries reuse the original payment without repricing or creating a new transaction (7 ms)
+
+Test Suites: 1 passed, 1 total
+Tests:       12 passed, 12 total
+Snapshots:   0 total
+Time:        0.668 s, estimated 1 s
+Ran all test suites matching /__tests__\/vipCommission.test.ts/i.
