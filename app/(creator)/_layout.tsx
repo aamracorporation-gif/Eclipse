@@ -113,7 +113,7 @@ export default function CreatorLayout() {
         <Tabs.Screen name="admin-tickets" options={{ title: 'Entradas', tabBarIcon: ({ color, size }) => <QrCode color={color} size={size} /> }} />
         <Tabs.Screen name="admin-profile" options={{ title: 'Perfil', tabBarIcon: ({ color, size }) => <User color={color} size={size} /> }} />
         {['create-event', 'workers', 'verification', 'scan', 'stats', 'global-stats', 'event-stats/[id]',
-          'event-discounts', 'discount-codes', 'worker-qr', 'organizer-profile'].map(name => (
+          'event-discounts', 'discount-codes', 'worker-qr', 'organizer-profile', 'box-office'].map(name => (
           <Tabs.Screen key={name} name={name} options={{ href: null }} />
         ))}
       </Tabs>
@@ -186,6 +186,7 @@ export default function CreatorLayout() {
 
         <Tabs.Screen name="create-event" options={{ href: null }} />
         <Tabs.Screen name="workers" options={{ href: null }} />
+        <Tabs.Screen name="box-office" options={{ href: null }} />
         <Tabs.Screen name="verification" options={{ href: null }} />
         <Tabs.Screen name="admin-verification" options={{ href: null }} />
         <Tabs.Screen name="global-stats" options={{ href: null }} />
@@ -209,6 +210,7 @@ export default function CreatorLayout() {
       <Stack.Screen name="create-event" />
       <Stack.Screen name="manage-events" />
       <Stack.Screen name="workers" />
+      <Stack.Screen name="box-office" />
       <Stack.Screen name="verification" />
       <Stack.Screen name="admin-verification" />
       <Stack.Screen name="scan" />

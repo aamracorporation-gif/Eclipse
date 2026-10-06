@@ -15,10 +15,12 @@ import * as Print from 'expo-print';
 import * as MailComposer from 'expo-mail-composer';
 import QRCodeSVG from 'qrcode-svg';
 import * as Sharing from 'expo-sharing';
+import { useBoxOfficeAccess } from '@/hooks/useBoxOfficeAccess';
 // import * as MailComposer from 'expo-mail-composer';
 
 export default function WorkerSell() {
   const { workerProfile } = useAuth();
+  const boxOffice = useBoxOfficeAccess(workerProfile?.organizer_id);
   const router = useRouter();
   const [events, setEvents] = useState<any[]>([]);
   const [selectedEvent, setSelectedEvent] = useState<any>(null);
@@ -97,26 +99,9 @@ export default function WorkerSell() {
       if (error) throw error;
 
       if (data && data.length > 0) {
-        const { data: ticketsRows } = await supabase
-          .from('tickets')
-          .select('ticket_type_id, quantity, status, ticket_status')
-          .eq('event_id', event.id);
-
-        const soldByType = new Map<string, number>();
-        for (const row of (ticketsRows || []) as any[]) {
-          if (row?.status === 'cancelled' || row?.ticket_status === 'invalidated') continue;
-          const tid = row?.ticket_type_id ? String(row.ticket_type_id) : null;
-          if (!tid) continue;
-          soldByType.set(tid, (soldByType.get(tid) || 0) + (Number(row?.quantity) || 1));
-        }
-
         const activeTypes = (data as any[]).filter((t) => !t?.deleted_at && (t?.is_active ?? true));
-        setTicketTypes(
-          activeTypes.map((t: any) => ({
-            ...t,
-            sold: soldByType.get(String(t.id)) ?? Number(t.sold || 0),
-          }))
-        );
+        // Inventory counts sale units. A four-person pack is still one sold unit.
+        setTicketTypes(activeTypes);
         const initialQty: any = {};
         data.forEach((t: any) => (initialQty[t.id] = 0));
         setQuantities(initialQty);
@@ -153,19 +138,17 @@ export default function WorkerSell() {
   const fetchAssignedEvents = useCallback(async () => {
     if (!workerProfile) return;
     try {
-      const { data, error } = await supabase
-        .from('events')
-        .select(`
-          id, title, event_date, poster_url, age_restriction,
-          venues (name)
-        `)
-        .eq('creator_id', workerProfile.organizer_id)
-        // Show only future or today's events
-        .gte('event_date', new Date().toISOString())
-        .order('event_date', { ascending: true });
+      const { data: assignments, error } = await supabase
+        .from('worker_event_assignments')
+        .select('events!inner (id,title,event_date,end_datetime,poster_url,age_restriction,creator_id,venues(name))')
+        .eq('worker_id', workerProfile.id).eq('status', 'active')
+        .eq('events.creator_id', workerProfile.organizer_id);
 
       if (error) throw error;
 
+      const data = (assignments || []).map((a: any) => a.events).filter((event: any) => event &&
+        new Date(event.end_datetime || new Date(new Date(event.event_date).getTime() + 5*3600000)).getTime() > Date.now())
+        .sort((a: any,b: any) => String(a.event_date).localeCompare(String(b.event_date)));
       if (data) {
         setEvents(data);
         if (data.length > 0) {
@@ -201,6 +184,10 @@ export default function WorkerSell() {
   };
 
   const handleSale = async () => {
+    if (!boxOffice.can_sell) {
+      Alert.alert('Venta no disponible', 'El organizador debe tener Taquilla Premium activa y autorizarte para vender. Puedes seguir escaneando entradas.');
+      return;
+    }
     const total = calculateTotal();
     setSubmitAttempted(true);
     touch('buyer.name');
@@ -416,7 +403,7 @@ export default function WorkerSell() {
           <TouchableOpacity onPress={safeBack} style={styles.backButton}>
             <ChevronLeft size={24} color="white" />
           </TouchableOpacity>
-          <Text style={styles.title}>Venta Manual</Text>
+          <Text style={styles.title}>Vender en taquilla</Text>
           <View style={{ width: 24 }} />
         </View>
 

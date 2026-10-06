@@ -33,3 +33,10 @@ verify_jwt = false
 
 [functions.send-ticket-email]
 verify_jwt = true
+
+[functions.box-office-billing]
+verify_jwt = true
+
+# Stripe authenticates this endpoint with its timestamped webhook signature.
+[functions.box-office-webhook]
+verify_jwt = false

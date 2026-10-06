@@ -855,7 +855,7 @@
     },
     "purchase": {
       "title": "Acheter",
-      "subtitle_tickets_vip": "Billets et VIP",
+      "subtitle_tickets_vip": "Billets et tables réservées",
       "subtitle_tickets": "Billets",
       "sign_in_to_buy": "Connectez-vous pour acheter",
       "tab_tickets": "Billets",
@@ -890,7 +890,11 @@
       "available": "Disponible",
       "people": "{{count}} personnes",
       "bottles": "{{count}} bouteilles",
+      "bottles_one": "{{count}} bouteille",
+      "bottles_other": "{{count}} bouteilles",
       "bottles_included": "{{count}} bouteilles incluses",
+      "bottles_included_one": "{{count}} bouteille incluse",
+      "bottles_included_other": "{{count}} bouteilles incluses",
       "extra_bottle": "Bouteille extra {{price}}",
       "not_available": "Cette table VIP n'est plus disponible.",
       "load_failed": "Impossible de charger les tables VIP."

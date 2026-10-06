@@ -954,6 +954,7 @@ export default function EventDetailScreen() {
   const selectedVip = event.reservados_vip?.find((v) => v.id === selectedVipReservadoId) ?? null;
   const vipAvailable = selectedVip ? (selectedVip.quantity_available ?? 0) : 0;
   const vipSaleUnavailable = selectedVip ? offerUnavailableReason({...selectedVip,category:'table',quantity:vipAvailable,sold:0,event_date:event.event_date},1) : null;
+  const vipServiceFee = selectedVip ? Math.max(Math.round((Math.round(selectedVip.base_price * 100) * .015 + 25) / .985), 50) / 100 : 0;
   const formatEuro = (value: any): string => {
     if (value === null || value === undefined) return '—';
     const n = typeof value === 'number' ? value : Number(value);
@@ -1371,7 +1372,7 @@ export default function EventDetailScreen() {
                         )}
                       </View>
                       <View style={styles.vipCheckoutRight}>
-                        <Text style={styles.vipCheckoutLabel}>{t('event.purchase.total')}</Text>
+                        <Text style={styles.vipCheckoutLabel}>Mesa completa</Text>
                         <Text style={styles.vipCheckoutPrice}>{selectedVip ? formatEuro(selectedVip.base_price) : '—'}</Text>
                         {!!selectedVip && (
                           <View style={[styles.vipCheckoutStatusPill, vipAvailable > 0 ? null : styles.vipCheckoutStatusPillSoldOut]}>
@@ -1403,6 +1404,15 @@ export default function EventDetailScreen() {
                     )}
                   </View>
 
+                  <View style={styles.inputsContainer}>
+                    <ThemedInput label="Nombre del titular" placeholder="Nombre y apellidos" value={buyerName} onChangeText={setBuyerName} icon={UserIcon} editable={!!user && vipAvailable > 0} style={styles.purchaseInput}/>
+                    <ThemedInput label="Correo para recibir la entrada" placeholder="tu@email.com" value={buyerEmail} onChangeText={setBuyerEmail} icon={Mail} keyboardType="email-address" autoCapitalize="none" editable={!!user && vipAvailable > 0} style={styles.purchaseInput}/>
+                  </View>
+                  {!!selectedVip && <View style={{gap:8,paddingVertical:16}}>
+                    <View style={{flexDirection:'row',justifyContent:'space-between'}}><Text style={{color:'#BDAECF',fontSize:12}}>Mesa para {selectedVip.capacity_people} personas</Text><Text style={{color:'#BDAECF',fontSize:12}}>{formatEuro(selectedVip.base_price)}</Text></View>
+                    <View style={{flexDirection:'row',justifyContent:'space-between'}}><Text style={{color:'#BDAECF',fontSize:12}}>Tasa de servicio</Text><Text style={{color:'#BDAECF',fontSize:12}}>{formatEuro(vipServiceFee)}</Text></View>
+                    <View style={styles.totalContainer}><Text style={styles.totalLabel}>Total</Text><Text style={styles.totalAmount}>{formatEuro(selectedVip.base_price + vipServiceFee)}</Text></View>
+                  </View>}
                   {LAUNCH_FEATURES.walletCredit && user && !!selectedVip && (
                     <View style={[styles.walletPayContainer, styles.walletPayContainerVip]}>
                       <View style={styles.walletPayHeader}>
@@ -1514,7 +1524,7 @@ export default function EventDetailScreen() {
                              style={StyleSheet.absoluteFill}
                            />
                            <View style={styles.ticketTypeTopRow}>
-                             <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                             <View style={{ flex: 1, minWidth: 0, gap: 8, alignItems: 'flex-start' }}>
                                <View style={[styles.ticketCatBadge, { backgroundColor: catColor + '22', borderColor: catColor + '55' }]}>
                                  <Text style={[styles.ticketCatBadgeText, { color: catColor }]}>{catLabel}</Text>
                                </View>
@@ -1552,7 +1562,7 @@ export default function EventDetailScreen() {
 
                            <View style={{gap:5,paddingTop:8}}>
                              {!!meta.salePhase&&<Text style={{fontSize:11,color:'#BDABD8'}}>{meta.salePhase}</Text>}
-                             {Number(meta.includedDrinks)>0&&<Text style={{fontSize:12,color:'#D9CFE5'}}>{meta.includedDrinks} consumiciones por persona</Text>}
+                             {Number(meta.includedDrinks)>0&&<Text style={{fontSize:12,color:'#D9CFE5'}}>{meta.includedDrinks} {Number(meta.includedDrinks)===1?'consumición':'consumiciones'} por persona</Text>}
                              {Number(meta.admissionsPerUnit)>1&&<Text style={{fontSize:12,color:'#D9CFE5'}}>Acceso conjunto de {meta.admissionsPerUnit} personas por pack</Text>}
                              {!!meta.entryDeadlineMinutes&&<Text style={{fontSize:12,color:'#DEC49B'}}>Acceso antes de {new Date(new Date(event.event_date).getTime()+Number(meta.entryDeadlineMinutes)*60000).toLocaleString('es-ES')}</Text>}
                              {!!unavailable&&<Text style={{fontSize:12,color:'#C0B5CA'}}>{unavailable}</Text>}
@@ -1642,6 +1652,7 @@ export default function EventDetailScreen() {
 
                   <View style={styles.inputsContainer}>
                     <ThemedInput
+                      label="Nombre del titular"
                       placeholder={t('event.tickets.full_name_placeholder')}
                       value={buyerName}
                       onChangeText={setBuyerName}
@@ -1651,6 +1662,7 @@ export default function EventDetailScreen() {
                     />
 
                     <ThemedInput
+                      label="Correo para recibir la entrada"
                       placeholder={t('event.tickets.email_placeholder')}
                       value={buyerEmail}
                       onChangeText={setBuyerEmail}
@@ -1662,7 +1674,7 @@ export default function EventDetailScreen() {
                     />
 
                     <View style={styles.stepperRow}>
-                      <Text style={styles.stepperLabel}>{t('event.tickets.quantity')}</Text>
+                      <Text style={styles.stepperLabel}>{Number(selectedType?.metadata?.admissionsPerUnit)>1 ? 'Número de packs' : t('event.tickets.quantity')}</Text>
                       <View style={styles.stepper}>
                         <TouchableOpacity
                           style={[styles.stepperButton, (safeQty <= minOrder || currentAvailable <= 0) && styles.stepperButtonDisabled]}
@@ -1685,6 +1697,7 @@ export default function EventDetailScreen() {
                         </TouchableOpacity>
                       </View>
                     </View>
+                    {Number(selectedType?.metadata?.admissionsPerUnit)>1 && <Text style={{color:'#C7B5DC',fontSize:12}}>Acceso para {safeQty * Number(selectedType?.metadata?.admissionsPerUnit)} personas en total. Cada pack entra junto con su QR.</Text>}
                   </View>
 
                   {/* Discount code field */}

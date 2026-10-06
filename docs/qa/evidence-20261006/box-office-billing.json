@@ -1,0 +1,34 @@
+{
+  "environment": "staging",
+  "amount": 5000,
+  "currency": "eur",
+  "interval": "month",
+  "checkout": "cs_test_a134jut2Ca7jT2XolJ7vU4BHvQfYKDhsYUpFJ82wY9J0YQD963LrK4o0P2",
+  "subscription": "sub_1UNahvQX94Oeeb3vpgZ0teR7",
+  "invoice": "in_1UNahuQX94Oeeb3vEWswQflH",
+  "invoiceStatus": "paid",
+  "paidThrough": "2026-11-06T15:55:10+00:00",
+  "cancelAtPeriodEnd": true,
+  "retainsPaidAccess": true,
+  "unsignedWebhook": 400,
+  "concurrentCheckout": "same session",
+  "clientBillingWrites": "rejected",
+  "liveCharges": 0,
+  "sqlRegression": "passed",
+  "unitTests": 16,
+  "fullSuiteBeforeFinalCancelAtCase": {
+    "passed": 160,
+    "skipped": 1
+  },
+  "qaAccountSuspended": true,
+  "qaSessionsRevoked": true,
+  "localQaCredentialsRemoved": true,
+  "browserPreview": {
+    "individual": true,
+    "groupPack": true,
+    "table": true,
+    "premium": true,
+    "fixtureData": true
+  },
+  "physicalDeviceReturnVerified": false
+}

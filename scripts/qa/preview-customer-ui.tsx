@@ -1,0 +1,19 @@
+// @ts-nocheck Standalone visual harness; purchases are disabled.
+import React,{useState} from 'react';
+import {createRoot} from 'react-dom/client';
+import {DemoPurchase} from './.preview-purchase';
+import {BoxOfficePlanCard} from '@/components/BoxOfficePlanCard';
+const event={event_date:'2026-12-12T22:30:00Z',ticket_price:20,available_tickets:120,
+ event_ticket_types:[
+ {id:'general',name:'Entrada + consumición',category:'general',price:20,quantity:100,sold:28,metadata:{includedDrinks:1,benefits:'Acceso a la pista principal y una consumición.',salePhase:'Segundo tramo',minPerOrder:1,maxPerOrder:6}},
+ {id:'group',name:'La noche, en grupo',category:'group',price:68,quantity:15,sold:6,metadata:{admissionsPerUnit:4,includedDrinks:1,benefits:'Un pack para cuatro. Entráis juntos y cada persona tiene una consumición.',minPerOrder:1,maxPerOrder:2}},
+ {id:'free',name:'Lista Eclipse',category:'free',price:0,quantity:40,sold:12,metadata:{entryDeadlineMinutes:60,benefits:'Invitación válida hasta las 00:30. Después de esa hora no permite acceder.',minPerOrder:1,maxPerOrder:2}},
+ ],reservados_vip:[{id:'mesa',name:'Mesa Eclipse',description:'Tu reservado junto a la pista. Acceso para todo el grupo y una botella a elegir.',base_price:300,capacity_people:6,included_bottles:1,quantity_available:4,extra_bottle_price:null}]};
+function Preview(){
+ const [view,setView]=useState('tickets'),[active,setActive]=useState(false),[notice,setNotice]=useState('');
+ return <main><header><span>E C L I P S E</span><span>LA NOCHE EMPIEZA AQUÍ</span></header><nav aria-label="Previsualizaciones">{[['tickets','Compra de entradas'],['vip','Reservados de mesa'],['premium','Taquilla Premium']].map(([key,label])=><button key={key} aria-pressed={view===key} onClick={()=>{setView(key);setNotice('');}}>{label}</button>)}</nav>
+ {view==='premium'?<div className="premium"><div className="caption">VISTA DEL ORGANIZADOR</div><BoxOfficePlanCard access={{enabled:active,can_sell:active,status:active?'active':'inactive',paid_through:active?'2026-11-06T18:00:00Z':null,cancel_at_period_end:false}} onSubscribe={()=>setNotice('En la app se abre Stripe para contratar Taquilla Premium por 50 €/mes. Esta previsualización no cobra ni activa una suscripción.')} onManage={()=>setNotice('En la app se abre la gestión de pagos, facturas y cancelación de tu suscripción.')}/><p role="status" className="demoNotice">{notice}</p><button onClick={()=>setActive(!active)}>{active?'Ver antes de activar':'Ver estado de suscripción activa'}</button><p className="note">Simulación visual. Sin suscripción, el trabajador ve el escáner. Con suscripción y permiso del organizador, también ve «Vender en taquilla».</p></div>:
+ <div className="layout"><section><div className="caption">ASÍ LO VE TU CLIENTE</div><div className="phone"><div className="hero"><small>12 DIC · MÁLAGA · +18</small><h1>Eclipse<br/>After Dark.</h1><p>Sala Eclipse · Apertura 23:30</p></div><DemoPurchase key={view} event={event} initialTab={view}/></div><p className="note">Pantalla de compra extraída de la app. Evento y disponibilidad de ejemplo; pagos desactivados en esta vista.</p></section><aside className="editorial"><div className="caption">DE LA ELECCIÓN A LA ENTRADA</div><h2>Elige cómo<br/>vivir la noche.</h2><p>Entrada con consumición, un pack para tu grupo o una mesa completa. Las condiciones y el precio se muestran antes del pago.</p><div className="step"><span>01</span>Selecciona tu acceso y revisa qué incluye.</div><div className="step"><span>02</span>Indica cantidad, nombre y correo.</div><div className="step"><span>03</span>Revisa el total y continúa al pago seguro.</div><p className="note">Prueba los tipos de entrada, cambia la cantidad o pasa a «Reservados de mesa».</p></aside></div>}
+ </main>;
+}
+createRoot(document.getElementById('root')!).render(<Preview/>);
