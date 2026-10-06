@@ -1,0 +1,87 @@
+name: TestFlight dependency repair
+
+# Temporary, branch-scoped maintenance job. Never deploys or submits an app.
+on:
+  push:
+    branches: [codex/testflight-ci-audit-20261006]
+    paths: [.github/workflows/repair-testflight-dependencies.yml]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: testflight-dependency-repair
+  cancel-in-progress: false
+
+jobs:
+  repair-and-verify:
+    if: github.repository == 'aamracorporation-gif/Eclipse' && github.ref == 'refs/heads/codex/testflight-ci-audit-20261006'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Refresh only the two affected dependency trees
+        run: |
+          npm update proxy-addr shell-quote --package-lock-only --ignore-scripts --no-audit --no-fund
+          npm --prefix backend update proxy-addr --package-lock-only --ignore-scripts --no-audit --no-fund
+          git diff --exit-code -- package.json backend/package.json
+          git diff --stat -- package-lock.json backend/package-lock.json
+      - name: Reproducible root installation
+        run: npm ci
+      - name: Reproducible backend installation
+        run: npm --prefix backend ci
+      - name: Verify critical vulnerability regressions
+        run: node --test scripts/tests/dependencySecurity.test.cjs
+      - name: Validate release environment guards
+        run: node --test scripts/tests/buildEnvironment.test.cjs scripts/tests/stagingServices.test.cjs
+      - name: Audit root production dependencies without weakening the gate
+        run: npm audit --omit=dev --audit-level=critical
+      - name: Audit backend production dependencies
+        run: npm --prefix backend audit --omit=dev --audit-level=critical
+      - name: Validate Expo dependency alignment
+        run: npx expo install --check
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Lint
+        run: npm run lint
+      - name: App tests
+        run: npm test -- --runInBand
+      - name: Wallet regression with fixture credentials only
+        run: |
+          export WALLET_TEST_DEPS="$(mktemp -d "$RUNNER_TEMP/eclipse-wallet.XXXXXX")"
+          npm install --prefix "$WALLET_TEST_DEPS" --ignore-scripts --no-audit --no-fund passkit-generator@3.1.10 jose@5.9.6
+          node scripts/qa/wallet-pass-regression.cjs
+      - name: Expo web bundle
+        run: npm run build:web
+      - name: Backend tests
+        run: npm --prefix backend test
+      - name: Retain candidate lockfiles for review
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: testflight-dependency-candidate
+          path: |
+            package-lock.json
+            backend/package-lock.json
+          retention-days: 7
+      - name: Commit verified lockfiles to repair branch only
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          test "$GITHUB_REF_NAME" = 'codex/testflight-ci-audit-20261006'
+          test "$(git ls-remote origin "refs/heads/$GITHUB_REF_NAME" | cut -f1)" = "$GITHUB_SHA"
+          unexpected="$(git diff --name-only | grep -Ev '^(package-lock\.json|backend/package-lock\.json)$' || true)"
+          test -z "$unexpected"
+          git add -- package-lock.json backend/package-lock.json
+          if git diff --cached --quiet; then exit 0; fi
+          git -c user.name='github-actions[bot]' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' commit -m 'fix(deps): refresh critical proxy-addr and shell-quote lock entries'
+          auth="$(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)"
+          git -c "http.https://github.com/.extraheader=AUTHORIZATION: basic $auth" push origin "HEAD:refs/heads/$GITHUB_REF_NAME"
