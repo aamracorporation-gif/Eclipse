@@ -1,0 +1,159 @@
+{
+  "project": "uhondxttdpvywvkyqlkk",
+  "tested_at": "2026-10-06T13:43:02.034Z",
+  "results": [
+    {
+      "province": "Almería",
+      "category": "general",
+      "payment_intent_id": "pi_3UNYbsQX94Oeeb3v5T6dCE3Q",
+      "transaction_id": "3a28020b-1354-4a04-b06d-7533c0adb268",
+      "event_id": "9c7ea14a-1deb-4771-a98f-497ef1c527b1",
+      "confirmation": {
+        "id": "pi_3UNYbsQX94Oeeb3v5T6dCE3Q",
+        "status": "succeeded",
+        "livemode": false
+      },
+      "fulfillment": {
+        "fulfilled": true,
+        "kind": "event_ticket",
+        "status": "fulfilled"
+      }
+    },
+    {
+      "province": "Cádiz",
+      "category": "vip",
+      "payment_intent_id": "pi_3UNYbuQX94Oeeb3v178JfmF8",
+      "transaction_id": "9195aaf7-c4fc-401c-bdec-b7fc9b519060",
+      "event_id": "4b55bdd5-1315-43cf-a43c-b66703d5f6f7",
+      "confirmation": {
+        "id": "pi_3UNYbuQX94Oeeb3v178JfmF8",
+        "status": "succeeded",
+        "livemode": false
+      },
+      "fulfillment": {
+        "fulfilled": true,
+        "kind": "event_ticket",
+        "status": "fulfilled"
+      }
+    },
+    {
+      "province": "Córdoba",
+      "category": "backstage",
+      "payment_intent_id": "pi_3UNYbwQX94Oeeb3v1bEifk1Z",
+      "transaction_id": "00341c63-9abc-4e69-912b-9057e4bc92ac",
+      "event_id": "8ce8fa02-d2ae-404d-a3d8-93ea161db704",
+      "confirmation": {
+        "id": "pi_3UNYbwQX94Oeeb3v1bEifk1Z",
+        "status": "succeeded",
+        "livemode": false
+      },
+      "fulfillment": {
+        "fulfilled": true,
+        "kind": "event_ticket",
+        "status": "fulfilled"
+      }
+    },
+    {
+      "province": "Granada",
+      "category": "fast_lane",
+      "payment_intent_id": "pi_3UNYbyQX94Oeeb3v25B18PY2",
+      "transaction_id": "89142f33-1a3c-405e-8713-322f8b5df34c",
+      "event_id": "292e2efd-bb6f-43f3-81b1-7f9718821e3f",
+      "confirmation": {
+        "id": "pi_3UNYbyQX94Oeeb3v25B18PY2",
+        "status": "succeeded",
+        "livemode": false
+      },
+      "fulfillment": {
+        "fulfilled": true,
+        "kind": "event_ticket",
+        "status": "fulfilled"
+      }
+    },
+    {
+      "province": "Huelva",
+      "category": "general",
+      "payment_intent_id": "pi_3UNYbzQX94Oeeb3v0Gq5BQXn",
+      "transaction_id": "ffe09f20-6ae8-4e1f-a1cd-50ecf10ee604",
+      "event_id": "31725323-2dae-4971-8581-bd4923f9c8f6",
+      "confirmation": {
+        "id": "pi_3UNYbzQX94Oeeb3v0Gq5BQXn",
+        "status": "succeeded",
+        "livemode": false
+      },
+      "fulfillment": {
+        "fulfilled": true,
+        "kind": "event_ticket",
+        "status": "fulfilled"
+      }
+    },
+    {
+      "province": "Jaén",
+      "category": "vip",
+      "payment_intent_id": "pi_3UNYc1QX94Oeeb3v3DAk8GOP",
+      "transaction_id": "60c879e6-83d7-498d-a39a-439cd42928cd",
+      "event_id": "e7642841-d0bc-4579-83bf-67a0a5464bc3",
+      "confirmation": {
+        "id": "pi_3UNYc1QX94Oeeb3v3DAk8GOP",
+        "status": "succeeded",
+        "livemode": false
+      },
+      "fulfillment": {
+        "fulfilled": true,
+        "kind": "event_ticket",
+        "status": "fulfilled"
+      }
+    },
+    {
+      "province": "Málaga",
+      "category": "backstage",
+      "payment_intent_id": "pi_3UNYc3QX94Oeeb3v26AMIstM",
+      "transaction_id": "5c2dbe25-0caa-412e-bea7-d25c6f06e689",
+      "event_id": "eba8e1f9-6fa7-4740-a524-87897e3e0068",
+      "confirmation": {
+        "id": "pi_3UNYc3QX94Oeeb3v26AMIstM",
+        "status": "succeeded",
+        "livemode": false
+      },
+      "fulfillment": {
+        "fulfilled": true,
+        "kind": "event_ticket",
+        "status": "fulfilled"
+      }
+    },
+    {
+      "province": "Sevilla",
+      "category": "fast_lane",
+      "payment_intent_id": "pi_3UNYc5QX94Oeeb3v40UidIER",
+      "transaction_id": "1e336f12-de8e-4e8d-95f4-6a8b94eaf40e",
+      "event_id": "b14e6bd4-ef3a-4d43-917a-0b615471c176",
+      "confirmation": {
+        "id": "pi_3UNYc5QX94Oeeb3v40UidIER",
+        "status": "succeeded",
+        "livemode": false
+      },
+      "fulfillment": {
+        "fulfilled": true,
+        "kind": "event_ticket",
+        "status": "fulfilled"
+      }
+    },
+    {
+      "province": "Sevilla",
+      "category": "vip_table",
+      "payment_intent_id": "pi_3UNYc7QX94Oeeb3v566MAaIl",
+      "transaction_id": "6ebe1858-a2fd-4c40-84f3-28188e6ef4d0",
+      "event_id": "b14e6bd4-ef3a-4d43-917a-0b615471c176",
+      "confirmation": {
+        "id": "pi_3UNYc7QX94Oeeb3v566MAaIl",
+        "status": "succeeded",
+        "livemode": false
+      },
+      "fulfillment": {
+        "fulfilled": true,
+        "kind": "vip_table",
+        "status": "fulfilled"
+      }
+    }
+  ]
+}
