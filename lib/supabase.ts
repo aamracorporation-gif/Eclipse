@@ -51,6 +51,7 @@ export type VipReservado = {
 };
 
 export type Event = {
+  end_datetime?: string | null;
   id: string;
   venue_id: string;
   creator_id?: string;
@@ -94,6 +95,8 @@ export type Event = {
 };
 
 export type Ticket = {
+  product_snapshot?: { kind: string; category: string; name: string; metadata: Record<string, any> };
+  ticket_type?: string | null;
   entry_deadline?: string | null;
   id: string;
   event_id: string;

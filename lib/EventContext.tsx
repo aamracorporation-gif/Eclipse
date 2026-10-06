@@ -42,6 +42,7 @@ export type AppEvent = {
     verification_status?: 'pending_verification' | 'verified' | 'rejected' | null;
   };
   ticketTypes: TicketType[];
+  vipTables?: Record<string, any>[];
   venues?: {
     latitude: number;
     longitude: number;
@@ -503,28 +504,14 @@ export function EventProvider({ children }: { children: React.ReactNode }) {
 
       if (eventError) throw eventError;
 
-      // 3. Create Ticket Types
-      if (newEvent.ticketTypes && newEvent.ticketTypes.length > 0) {
-        const ticketTypesToInsert = newEvent.ticketTypes.map(t => ({
-          event_id: eventData.id,
-          name: t.name,
-          price: t.price,
-          quantity: t.quantity,
-          sold: 0,
-          category: (t as any).category || null,
-          metadata: (t as any).metadata || {},
-        }));
-
-        const { error: ticketsError } = await supabase
-          .from('event_ticket_types')
-          .insert(ticketTypesToInsert);
-
-        if (ticketsError) {
-          console.error('Error creating ticket types:', ticketsError);
-          throw ticketsError;
-        }
+      const { error: catalogError } = await supabase.rpc('save_event_catalog', {
+        p_event_id:eventData.id,p_tickets:newEvent.ticketTypes||[],p_tables:newEvent.vipTables||[],
+      });
+      if(catalogError) {
+        // No catalogue write survives a failure. Remove only the event just created.
+        await supabase.from('events').delete().eq('id',eventData.id).eq('creator_id',newEvent.creatorId);
+        throw catalogError;
       }
-
       // 4. Update local state
       await fetchEvents();
       return eventData.id;
@@ -536,9 +523,6 @@ export function EventProvider({ children }: { children: React.ReactNode }) {
 
   const updateEvent = async (id: string, updates: Partial<AppEvent>, expectedUpdatedAt?: string | null) => {
     try {
-      const isUuid = (value: string) =>
-        /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
-
       // Map updates to DB schema
       const dbUpdates: any = {};
       if (updates.title !== undefined) dbUpdates.title = updates.title;
@@ -549,18 +533,9 @@ export function EventProvider({ children }: { children: React.ReactNode }) {
         const built = buildEventDateUtc(updates.date, updates.time);
         dbUpdates.event_date = built.toISOString();
       }
-      if (Array.isArray(updates.ticketTypes) && updates.ticketTypes.length > 0) {
-        const minPrice = Math.min(...updates.ticketTypes.map((t) => Number(t.price) || 0));
-        dbUpdates.ticket_price = Number.isFinite(minPrice) ? minPrice : 0;
-        const totalQty = updates.ticketTypes.reduce((acc, t) => acc + (Number(t.quantity) || 0), 0);
-        const totalSold = updates.ticketTypes.reduce((acc, t) => acc + (Number(t.sold) || 0), 0);
-        dbUpdates.available_tickets = Math.max(totalQty - totalSold, 0);
-        dbUpdates.sold_tickets = Math.max(totalSold, 0);
-      } else {
-        if (updates.price !== undefined) {
-          const price = parseFloat(String(updates.price));
-          if (Number.isFinite(price)) dbUpdates.ticket_price = price;
-        }
+      // Catalog totals are computed atomically from current sold stock by save_event_catalog.
+      if (!Array.isArray(updates.ticketTypes)) {
+        if (updates.price !== undefined) dbUpdates.ticket_price = Number(updates.price);
         if (updates.capacity !== undefined) dbUpdates.available_tickets = updates.capacity;
       }
       if (updates.dressCode !== undefined) dbUpdates.dress_code = updates.dressCode;
@@ -650,119 +625,10 @@ export function EventProvider({ children }: { children: React.ReactNode }) {
       }
 
       if (Array.isArray(updates.ticketTypes)) {
-        const desired = updates.ticketTypes;
-
-        const { data: existingTypes, error: existingErr } = await supabase
-          .from('event_ticket_types')
-          .select('id, sold')
-          .eq('event_id', id);
-        if (existingErr) throw existingErr;
-
-        const keepIds = new Set(desired.filter((t) => isUuid(String(t.id))).map((t) => String(t.id)));
-
-        for (const row of existingTypes || []) {
-          const rowId = String((row as any).id || '');
-          const sold = Number((row as any).sold || 0);
-          if (!keepIds.has(rowId) && sold <= 0) {
-            // Try hard DELETE first (sold=0 means no tickets issued, safe to remove).
-            // Falls back to soft-delete in case of FK constraints or other DB restrictions.
-            const hardDel = await supabase
-              .from('event_ticket_types')
-              .delete()
-              .eq('id', rowId)
-              .eq('event_id', id)
-              .select('id')
-              .maybeSingle();
-            if (hardDel.error) {
-              // Hard delete failed (FK constraint or RLS) — soft-delete instead
-              const softDel = await supabase
-                .from('event_ticket_types')
-                .update({ is_active: false, deleted_at: new Date().toISOString() })
-                .eq('id', rowId)
-                .eq('event_id', id);
-              if (softDel.error) throw softDel.error;
-            }
-          } else if (!keepIds.has(rowId) && sold > 0) {
-            // Has sold tickets — can't delete, just mark inactive so it's hidden
-            const softDel = await supabase
-              .from('event_ticket_types')
-              .update({ is_active: false, deleted_at: new Date().toISOString() })
-              .eq('id', rowId)
-              .eq('event_id', id);
-            if (softDel.error) throw softDel.error;
-          }
-        }
-
-        const seen = new Set<string>();
-        for (const t of desired) {
-          const ticketId = String((t as any).id || '');
-          const name = String((t as any).name || '').trim();
-          const price = Number((t as any).price || 0);
-          const qtyRaw = Number((t as any).quantity || 0);
-          const sold = Number((t as any).sold || 0);
-          const qty = Math.max(qtyRaw, sold, 0);
-
-          if (!name) continue;
-
-          const key = `${name.toLowerCase()}|${Number.isFinite(price) ? price.toFixed(2) : String(price)}`;
-          if (seen.has(key)) {
-            throw new Error('No se permiten tipos de entrada duplicados (mismo nombre y precio).');
-          }
-          seen.add(key);
-
-          if (isUuid(ticketId)) {
-            // Explicit UPDATE — avoids the PostgreSQL RLS conflict-detection bug where
-            // upsert inserts a duplicate when the existing row is hidden by RLS policies.
-            const upd = await supabase
-              .from('event_ticket_types')
-              .update({ name, price, quantity: qty, category: t.category, metadata: t.metadata, is_active: true, deleted_at: null })
-              .eq('id', ticketId)
-              .eq('event_id', id)
-              .select('id')
-              .maybeSingle();
-            if (upd.error) throw upd.error;
-            if (!upd.data?.id) {
-              // Row not found or RLS blocked update — fall back to insert
-              const ins2 = await supabase
-                .from('event_ticket_types')
-                .insert({ event_id: id, name, price, quantity: qty, category: t.category, metadata: t.metadata, sold: 0, is_active: true })
-                .select('id')
-                .maybeSingle();
-              if (ins2.error) throw ins2.error;
-            }
-          } else {
-            const ins = await supabase
-              .from('event_ticket_types')
-              .insert({ event_id: id, name, price, quantity: qty, category: t.category, metadata: t.metadata, sold: 0, is_active: true })
-              .select('id')
-              .maybeSingle();
-            if (ins.error) throw ins.error;
-            if (!ins.data?.id) throw new Error('No se pudo añadir un tipo de entrada (permisos/RLS).');
-          }
-        }
-
-        const { data: typesAfter, error: typesAfterErr } = await supabase
-          .from('event_ticket_types')
-          .select('price, quantity, sold, is_active, deleted_at')
-          .eq('event_id', id);
-        if (typesAfterErr) throw typesAfterErr;
-
-        const activeTypes = (typesAfter || []).filter((t: any) => !t?.deleted_at && (t?.is_active ?? true));
-        const totalQty = (activeTypes || []).reduce((acc, t) => acc + (Number((t as any).quantity) || 0), 0);
-        const totalSold = (activeTypes || []).reduce((acc, t) => acc + (Number((t as any).sold) || 0), 0);
-        const minPrice = (activeTypes || []).length
-          ? Math.min(...(activeTypes || []).map((t) => Number((t as any).price) || 0))
-          : 0;
-
-        const { error: syncErr } = await supabase
-          .from('events')
-          .update({
-            ticket_price: Number.isFinite(minPrice) ? minPrice : 0,
-            sold_tickets: Math.max(totalSold, 0),
-            available_tickets: Math.max(totalQty - totalSold, 0),
-          })
-          .eq('id', id);
-        if (syncErr) throw syncErr;
+        const { error: catalogError } = await supabase.rpc('save_event_catalog', {
+          p_event_id:id,p_tickets:updates.ticketTypes,p_tables:updates.vipTables??null,
+        });
+        if(catalogError)throw catalogError;
       }
 
       await fetchEvents();

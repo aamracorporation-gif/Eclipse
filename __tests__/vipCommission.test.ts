@@ -2,6 +2,7 @@
 import * as fs from 'node:fs';
 import * as vm from 'node:vm';
 import * as ts from 'typescript';
+import { offerUnavailableReason } from '../supabase/functions/_shared/ticketProduct';
 
 // Execute the real Edge handler; only external Auth, DB and Stripe are fixtures.
 const sourcePath = process.env.VIP_EDGE_TEST_SOURCE || 'supabase/functions/create-payment-intent-v2/index.ts';
@@ -46,7 +47,7 @@ async function checkout(price: number, options: { kind?: string; rate?: string; 
     throw new Error('Unexpected fixture request: ' + url);
   });
   vm.runInNewContext(compiled, {
-    exports: {}, require: () => ({ checkoutUnavailableReason: () => null }),
+    exports: {}, require: () => ({ checkoutUnavailableReason: () => null, offerUnavailableReason }),
     Deno: { env: { get: (name: string) => env[name] }, serve: (fn: any) => { handler = fn; } },
     fetch, Response, URLSearchParams, console,
   });

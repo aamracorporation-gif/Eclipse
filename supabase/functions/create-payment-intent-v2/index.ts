@@ -1,4 +1,5 @@
 import { checkoutUnavailableReason } from '../_shared/launchPolicy.ts';
+import { offerUnavailableReason } from '../_shared/ticketProduct.ts';
 type Json = Record<string, unknown>;
 
 const corsHeaders = {
@@ -267,18 +268,28 @@ Deno.serve(async (req) => {
       const ev = await restGet(
         SUPABASE_URL,
         SUPABASE_SERVICE_ROLE_KEY,
-        `events?id=eq.${encodeURIComponent(eventId)}&select=id,title,creator_id,ticket_price,available_tickets,event_ticket_types(id,price,quantity,sold)`,
+        `events?id=eq.${encodeURIComponent(eventId)}&select=id,title,creator_id,ticket_price,available_tickets,is_cancelled,status,event_date,end_datetime,event_ticket_types(id,name,category,metadata,price,quantity,sold,is_active,deleted_at)`,
       );
       if (!ev.ok || !Array.isArray(ev.json) || ev.json.length === 0) return jsonResponse({ ok: false, error: "Event not found" });
       const eventRow = ev.json[0];
+      if (eventRow.is_cancelled || eventRow.status === 'cancelled' || (eventRow.end_datetime ? Date.parse(eventRow.end_datetime) : Date.parse(eventRow.event_date) + 5 * 3600000) <= Date.now()) {
+        return jsonResponse({ ok: false, error: 'El evento no está disponible.' });
+      }
 
       if (Number(eventRow.available_tickets ?? 0) < quantity) return jsonResponse({ ok: false, error: "Not enough tickets available" });
 
       let price = Number(eventRow.ticket_price ?? 0);
+      let productSnapshot: Record<string, unknown> = { kind: 'admission', category: 'general', name: 'Entrada general', metadata: {} };
+      if (!ticketTypeId && Array.isArray(eventRow.event_ticket_types) && eventRow.event_ticket_types.length) {
+        return jsonResponse({ ok: false, error: 'Selecciona una oferta de entrada disponible.' });
+      }
       if (ticketTypeId) {
         const types = Array.isArray(eventRow.event_ticket_types) ? eventRow.event_ticket_types : [];
         const selected = types.find((t: any) => String(t.id) === ticketTypeId);
         if (!selected) return jsonResponse({ ok: false, error: "Ticket type not found" });
+        const unavailable = offerUnavailableReason({ ...selected, event_date: eventRow.event_date }, quantity);
+        if (unavailable) return jsonResponse({ ok: false, error: unavailable });
+        productSnapshot = { kind: 'admission', category: selected.category || 'general', name: selected.name, metadata: selected.metadata || {} };
         const available = Number(selected.quantity ?? 0) - Number(selected.sold ?? 0);
         if (available < quantity) return jsonResponse({ ok: false, error: "Ticket type sold out" });
         price = Number(selected.price ?? price);
@@ -435,6 +446,7 @@ Deno.serve(async (req) => {
 
       const metadata = {
         event_id: eventId,
+        product_snapshot: productSnapshot,
         ticket_type_id: ticketTypeId ?? "",
         quantity,
         buyer_name: buyerName,
@@ -627,10 +639,12 @@ Deno.serve(async (req) => {
       const vipRes = await restGet(
         SUPABASE_URL,
         SUPABASE_SERVICE_ROLE_KEY,
-        `reservados_vip?id=eq.${encodeURIComponent(vipId)}&select=id,event_id,base_price,quantity_available,capacity_people,name,is_active,deleted_at`,
+        `reservados_vip?id=eq.${encodeURIComponent(vipId)}&select=id,event_id,base_price,quantity_available,capacity_people,name,description,included_bottles,metadata,is_active,deleted_at`,
       );
       if (!vipRes.ok || !Array.isArray(vipRes.json) || vipRes.json.length === 0) return jsonResponse({ ok: false, error: "VIP not found" });
       const vip = vipRes.json[0];
+      const tableUnavailable = offerUnavailableReason({ ...vip, category: 'table', quantity: vip.quantity_available, sold: 0 }, 1);
+      if (tableUnavailable) return jsonResponse({ ok: false, error: tableUnavailable });
 
       if (vip.is_active !== true || vip.deleted_at || Number(vip.quantity_available ?? 0) < 1) return jsonResponse({ ok: false, error: "VIP sold out" });
 
@@ -644,6 +658,8 @@ Deno.serve(async (req) => {
       );
       if (!ev.ok || !Array.isArray(ev.json) || ev.json.length === 0) return jsonResponse({ ok: false, error: "Event not found" });
       const eventRow = ev.json[0];
+      const tableAccessUnavailable = offerUnavailableReason({ ...vip, category: "table", event_date: eventRow.event_date, quantity: vip.quantity_available, sold: 0 }, 1);
+      if (tableAccessUnavailable) return jsonResponse({ ok:false, error:tableAccessUnavailable });
       const vipEventEnd = eventRow.end_datetime
         ? new Date(eventRow.end_datetime).getTime()
         : new Date(eventRow.event_date).getTime() + 5 * 60 * 60 * 1000;
@@ -769,6 +785,7 @@ Deno.serve(async (req) => {
 
       const metadata = {
         event_id: eventId,
+        product_snapshot: { kind: 'vip_table', category: 'vip_table', name: vip.name || 'Reservado de mesa VIP', metadata: { ...(vip.metadata || {}), vipGroupSize: vip.capacity_people, benefits: vip.description || '', vipBottles: vip.metadata?.vipBottles || (vip.included_bottles > 0 ? [{ brand: 'Botella incluida', quantity: vip.included_bottles }] : []) } },
         vip_reservado_id: vipId,
         reference_id: vipId,
         buyer_name: buyerName,

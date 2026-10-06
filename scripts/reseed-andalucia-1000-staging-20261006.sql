@@ -30,7 +30,7 @@ with ranked_venues as (
  (venue_id,title,description,event_date,end_datetime,ticket_price,available_tickets,sold_tickets,capacity,creator_id,dress_code,age_restriction,theme,event_type,status,allow_resale,access_policy,access_requirements,lineup)
  select id, '[PRUEBA] '||concept||' · '||city||' · '||province||' #'||lpad(n::text,3,'0'),
  'BATCH:ECLIPSE_QA_ANDALUCIA_1000_20261006 | Provincia: '||province||' | Municipio: '||city||'. Fiesta ficticia para probar Eclipse. No es una convocatoria real; no acudir a esta ubicación. Entradas habilitadas para compras en el entorno de pruebas.',
- starts_at,starts_at+interval '6 hours',price,300,0,324,'6f076642-d53c-47e5-b881-b1a4ca245ce0',
+ starts_at,starts_at+interval '6 hours',price,250,0,274,'6f076642-d53c-47e5-b881-b1a4ca245ce0',
  (array['Casual','Elegante','Creativo'])[((n-1)%3)+1],18,music,'party','scheduled',false,
  'Evento sintético de staging. Acceso no real.','Solo para pruebas de la aplicación.','Eclipse QA — sesión ficticia'
  from fixtures returning id,ticket_price
@@ -40,7 +40,6 @@ with ranked_venues as (
  jsonb_build_object('qa_batch','ECLIPSE_QA_ANDALUCIA_1000_20261006','synthetic',true)
  from inserted e cross join (values
  ('General — PRUEBA','general',0,200),
- ('VIP — PRUEBA','vip',35,50),
  ('Backstage — PRUEBA','backstage',60,25),
  ('Fast Lane — PRUEBA','fast_lane',12,25)
  ) t(name,category,extra,stock) returning id
@@ -49,8 +48,8 @@ insert into public.reservados_vip(event_id,name,description,base_price,capacity_
 select id,'Mesa VIP — PRUEBA','Reservado ficticio para probar la compra en Eclipse.',ticket_price*6+90,6,1,60,4,true from inserted;
 do $verify$
 begin
- if (select count(*) from public.events)<>1000 or (select count(*) from public.event_ticket_types)<>4000 or (select count(*) from public.reservados_vip)<>1000 then raise exception 'Seed count mismatch'; end if;
- if exists(select 1 from public.events where creator_id is distinct from '6f076642-d53c-47e5-b881-b1a4ca245ce0'::uuid or event_date<=now() or ticket_price<=0 or available_tickets<>300) then raise exception 'Invalid purchasable event'; end if;
+ if (select count(*) from public.events)<>1000 or (select count(*) from public.event_ticket_types)<>3000 or (select count(*) from public.reservados_vip)<>1000 then raise exception 'Seed count mismatch'; end if;
+ if exists(select 1 from public.events where creator_id is distinct from '6f076642-d53c-47e5-b881-b1a4ca245ce0'::uuid or event_date<=now() or ticket_price<=0 or available_tickets<>250) then raise exception 'Invalid purchasable event'; end if;
  if (select count(*) from public.payment_transactions)<>4 then raise exception 'Payment history changed'; end if;
  if (select count(*) from public.notifications)<>7 then raise exception 'Unexpected notification'; end if;
 end $verify$;

@@ -28,6 +28,9 @@ backend/.env.*
 GoogleService-Info.plist
 google-services.json
 dist/
+dist-staging/
+docs/qa/sales-preview/
+scripts/qa/.preview-card.tsx
 android_backup/
 
 # OS / editor

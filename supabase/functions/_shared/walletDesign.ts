@@ -22,4 +22,4 @@ export function walletRgb(hex: string): string {
   return `rgb(${[1,3,5].map(i => parseInt(hex.slice(i,i+2),16)).join(',')})`;
 }
 // Immutable public artwork, contains no ticket data or credentials.
-export const WALLET_ART_BASE = 'https://raw.githubusercontent.com/aamracorporation-gif/Eclipse/39426435f4d26cd47f72a473dd3d31c96f10787c/assets/wallet-pass';
+export const WALLET_ART_BASE = 'https://raw.githubusercontent.com/aamracorporation-gif/Eclipse/fb7b7370ae890f73810302532293f9f5c8105ccc/assets/wallet-pass';

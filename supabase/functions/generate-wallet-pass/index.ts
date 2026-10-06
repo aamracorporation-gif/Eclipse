@@ -1,3 +1,4 @@
+import { resolveTicketProduct } from '../_shared/ticketProduct.ts';
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 import { SignJWT, importPKCS8 } from "https://esm.sh/jose@5.9.6";
@@ -100,6 +101,9 @@ serve(async (req) => {
         buyer_name,
         ticket_type,
         ticket_type_id,
+        entry_deadline,
+        wallet_added,
+        product_snapshot,
         event_ticket_types (
           id,
           name,
@@ -184,28 +188,25 @@ serve(async (req) => {
     const ticketTypeObj = Array.isArray((ticket as any).event_ticket_types)
       ? (ticket as any).event_ticket_types[0]
       : (ticket as any).event_ticket_types;
-    const rawCategory = String(
-      ticketTypeObj?.category || (ticket as any).ticket_type || ticketTypeObj?.name || ""
-    ).trim().toLowerCase();
+    const product = resolveTicketProduct(ticket);
+    const rawCategory = product.category;
 
     const tier =
       rawCategory.includes("backstage") || rawCategory.includes("founder") ? "gold"
       : rawCategory.includes("vip") ? "vip"
       : "general";
 
-    const ticketTypeName = nonEmpty(ticketTypeObj?.name) || WALLET_THEMES[walletTier(rawCategory, ticketTypeObj?.name)].label;
+    const ticketTypeName = product.name;
     const ticketNameLower = ticketTypeName.toLowerCase();
     const isFastlane  = ticketNameLower.includes("fast") || ticketNameLower.includes("lane") || ticketNameLower.includes("express");
     const isBackstage = tier === "gold" || ticketNameLower.includes("backstage");
     const isVipTier   = tier === "vip"  || ticketNameLower.includes("vip");
-    const passVisualTier = walletTier(rawCategory, ticketTypeObj?.name);
+    const passVisualTier = product.visual;
     const theme = WALLET_THEMES[passVisualTier];
     const bgColor = theme.background;
     const tierBadge = theme.label;
     // ── Metadata ──────────────────────────────────────────────────────────────
-    const ticketTypeMetadata =
-      ticketTypeObj?.metadata && typeof ticketTypeObj.metadata === "object"
-        ? ticketTypeObj.metadata as Record<string, unknown> : {};
+    const ticketTypeMetadata = product.metadata;
 
     const holderName     = nonEmpty((ticket as any).buyer_name) || "Titular de la entrada";
     const gateDisplay    = nonEmpty(ticketTypeMetadata.gate);
@@ -213,7 +214,7 @@ serve(async (req) => {
     const benefits       = nonEmpty(ticketTypeMetadata.benefits);
     const dedicatedLane  = ticketTypeMetadata.dedicatedLane === true ? "ACCESO PRIORITARIO" : null;
     const backstageHost  = nonEmpty(ticketTypeMetadata.backstageHost);
-    const vipGroupSize   = parsePositiveNumber(ticketTypeMetadata.vipGroupSize);
+    const vipGroupSize   = parsePositiveNumber(ticketTypeMetadata.vipGroupSize) || (Number(ticket.quantity)>1 ? Number(ticket.quantity) : null);
     const bottleSummary  = Array.isArray(ticketTypeMetadata.vipBottles)
       ? ticketTypeMetadata.vipBottles.map((item: any) => {
           const label = nonEmpty(item?.brand) || nonEmpty(item?.label); const qty = parsePositiveNumber(item?.quantity);
@@ -262,6 +263,7 @@ serve(async (req) => {
         { id: "show",    header: "INICIO",  body: timeDisplay },
         ...(sectionDisplay ? [{ id: "section", header: "ZONA", body: sectionDisplay }] : []),
         ...(gateDisplay ? [{ id: "gate", header: "PUERTA", body: gateDisplay }] : []),
+        ...(ticket.entry_deadline ? [{id:"deadline",header:"ACCESO ANTES DE",body:`${walletDate(new Date(ticket.entry_deadline))} · ${walletDate(new Date(ticket.entry_deadline),true)}`}] : []),
         { id: "entry",   header: "HORA DE ACCESO",        body: entryDisplay },
         { id: "pass_id", header: "REFERENCIA",      body: passIdDisplay },
         { id: "holder",  header: "TITULAR", body: holderName },
@@ -289,6 +291,27 @@ serve(async (req) => {
     const privateKeyPem = normalizeWalletPem(GOOGLE_WALLET_PRIVATE_KEY);
     const key = await importPKCS8(privateKeyPem, "RS256");
     const nowSeconds = Math.floor(Date.now() / 1000);
+    // A Save JWT does not refresh an existing object. Patch only presentation
+    // fields, after ticket ownership and validity have been checked above.
+    if (ticket.wallet_added) {
+      const assertion = await new SignJWT({scope:'https://www.googleapis.com/auth/wallet_object.issuer'})
+        .setProtectedHeader({alg:'RS256'}).setIssuer(GOOGLE_WALLET_SERVICE_ACCOUNT_EMAIL)
+        .setAudience('https://oauth2.googleapis.com/token').setIssuedAt(nowSeconds)
+        .setExpirationTime(nowSeconds+300).sign(key);
+      const tokenResponse = await fetch('https://oauth2.googleapis.com/token', {
+        method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},
+        body:new URLSearchParams({grant_type:'urn:ietf:params:oauth:grant-type:jwt-bearer',assertion}),
+      });
+      if (!tokenResponse.ok) return jsonResponse({ok:false,error:'Google Wallet no permite actualizar el pase en este momento.'},503);
+      const {access_token} = await tokenResponse.json();
+      if (!access_token) return jsonResponse({ok:false,error:'Google Wallet no ha autorizado la actualización.'},503);
+      const {hexBackgroundColor,cardTitle,header,subheader,textModulesData,logo,heroImage} = genericObject;
+      const updated = await fetch(`https://walletobjects.googleapis.com/walletobjects/v1/genericobject/${encodeURIComponent(objectId)}`, {
+        method:'PATCH',headers:{Authorization:`Bearer ${access_token}`,'Content-Type':'application/json'},
+        body:JSON.stringify({hexBackgroundColor,cardTitle,header,subheader,textModulesData,logo,heroImage}),
+      });
+      if (!updated.ok && updated.status!==404) return jsonResponse({ok:false,error:'Google Wallet no ha aceptado la actualización del pase. Revisa los permisos del emisor.'},503);
+    }
     const jwt = await new SignJWT({
       typ: "savetowallet",
       iat: nowSeconds,

@@ -1,3 +1,6 @@
+import { buildTicketDocument } from '@/lib/ticketDocument';
+import { WALLET_THEMES } from '@/supabase/functions/_shared/walletDesign';
+import { resolveTicketProduct } from '@/supabase/functions/_shared/ticketProduct';
 import { LAUNCH_FEATURES } from '@/lib/launchFeatures';
 import { View, Text, StyleSheet, FlatList, Image, TouchableOpacity, RefreshControl, Platform, Modal, KeyboardAvoidingView, Animated, Easing, Alert } from 'react-native';
 import { useState, useEffect, useCallback, useRef } from 'react';
@@ -29,6 +32,7 @@ import { useAppDialog } from '@/components/ui/AppDialog';
 import Constants from 'expo-constants';
 
 type ExtendedTicket = Ticket & { 
+  short_code?: string;
   status?: string;
   wallet_added?: boolean;
   wallet_pass_id?: string | null;
@@ -51,9 +55,9 @@ export default function TicketsScreen() {
   const emptyPulse = useRef(new Animated.Value(0)).current;
   const emptyEnter = useRef(new Animated.Value(0)).current;
   const emptyDrift = useRef(new Animated.Value(0)).current;
-  const shimmer = useRef(new Animated.Value(0)).current;
+
   const localeTag = language === 'en' ? 'en-US' : language === 'fr' ? 'fr-FR' : 'es-ES';
-  
+
   // Resale Modal State
   const [sellModalVisible, setSellModalVisible] = useState(false);
   const [selectedTicket, setSelectedTicket] = useState<ExtendedTicket | null>(null);
@@ -126,15 +130,6 @@ export default function TicketsScreen() {
       driftAnim.stop();
     };
   }, [emptyDrift, emptyEnter, emptyFloat, emptyPulse, loading, tickets.length]);
-
-  useEffect(() => {
-    Animated.loop(
-      Animated.sequence([
-        Animated.timing(shimmer, { toValue: 1, duration: 2800, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
-        Animated.timing(shimmer, { toValue: 0, duration: 2800, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
-      ])
-    ).start();
-  }, [shimmer]);
 
   const refreshTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -576,131 +571,7 @@ export default function TicketsScreen() {
     }
 
     try {
-      // Helper to get organizer name safely
-      const organizerProfile = Array.isArray(ticket.events?.profiles) 
-        ? ticket.events?.profiles[0] 
-        : (ticket.events?.profiles as any);
-        
-      const organizerName = organizerProfile?.club_name || organizerProfile?.full_name || 'Organizador';
-      const dateTimeText = ticket.events?.event_date
-        ? `${new Date(ticket.events.event_date).toLocaleDateString(localeTag, { year: 'numeric', month: 'long', day: 'numeric' })} ${new Date(ticket.events.event_date).toLocaleTimeString(localeTag, { hour: '2-digit', minute: '2-digit' })}`
-        : 'N/A';
-      const qrValue = encodeURIComponent(String(ticket.qr_token || ticket.qr_code || ''));
-
-      const html = `
-        <html>
-          <head>
-            <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no" />
-            <style>
-              body { font-family: 'Helvetica', sans-serif; padding: 20px; background-color: #f4f4f4; -webkit-print-color-adjust: exact; }
-              .ticket { 
-                border: 1px solid #ddd; 
-                background: white;
-                padding: 0; 
-                border-radius: 16px; 
-                max-width: 600px; 
-                margin: 0 auto; 
-                overflow: hidden;
-                box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-              }
-              .header { 
-                background-color: #000; 
-                color: #fff; 
-                padding: 24px; 
-                text-align: center;
-              }
-              .title { 
-                font-size: 28px; 
-                font-weight: bold; 
-                margin: 0;
-                text-transform: uppercase;
-                letter-spacing: 1px;
-              }
-              .poster {
-                width: 100%;
-                height: 200px;
-                object-fit: cover;
-                background-color: #eee;
-              }
-              .info-container {
-                padding: 24px;
-              }
-              .info-row {
-                margin-bottom: 16px;
-                border-bottom: 1px dashed #eee;
-                padding-bottom: 16px;
-              }
-              .info-label {
-                font-size: 12px;
-                color: #666;
-                text-transform: uppercase;
-                letter-spacing: 0.5px;
-                margin-bottom: 4px;
-              }
-              .info-value {
-                font-size: 18px;
-                font-weight: bold;
-                color: #000;
-              }
-              .qr-section { 
-                background-color: #f9f9f9;
-                padding: 30px;
-                text-align: center;
-                border-top: 1px solid #eee;
-              }
-              .footer { 
-                font-size: 10px; 
-                color: #999; 
-                text-align: center;
-                padding: 16px;
-                background: #fff;
-              }
-            </style>
-          </head>
-          <body>
-            <div class="ticket">
-              <div class="header">
-                <div class="title">${ticket.events?.title || t('tickets_pdf.ticket_title')}</div>
-              </div>
-              ${ticket.events?.poster_url ? `<img src="${ticket.events.poster_url}" class="poster" />` : ''}
-              <div class="info-container">
-                <div class="info-row">
-                  <div class="info-label">${t('tickets_pdf.organizer')}</div>
-                  <div class="info-value">${organizerName}</div>
-                </div>
-                <div class="info-row">
-                  <div class="info-label">${t('tickets_pdf.event')}</div>
-                  <div class="info-value">${ticket.events?.title}</div>
-                </div>
-                <div class="info-row">
-                  <div class="info-label">${t('tickets_pdf.date_time')}</div>
-                  <div class="info-value">${dateTimeText}</div>
-                </div>
-                <div class="info-row">
-                  <div class="info-label">${t('tickets_pdf.location')}</div>
-                  <div class="info-value">${ticket.events?.venues?.name || t('tickets_pdf.location_tbd')}</div>
-                </div>
-                <div class="info-row">
-                  <div class="info-label">${t('tickets_pdf.holder')}</div>
-                  <div class="info-value">${ticket.buyer_name || t('tickets_pdf.guest')}</div>
-                </div>
-                <div class="info-row">
-                  <div class="info-label">${t('tickets_pdf.ticket_id')}</div>
-                  <div class="info-value">#${ticket.id.slice(0, 8).toUpperCase()}</div>
-                </div>
-              </div>
-            </div>
-            
-            <div class="qr-section">
-              <div class="qr-container">
-                <img src="https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${qrValue}" style="width: 200px; height: 200px;" />
-              </div>
-              ${(ticket as any).short_code ? `<div style="margin-top:12px;font-size:11px;color:#999;text-transform:uppercase;letter-spacing:0.5px;">Código de entrada</div><div style="font-size:22px;font-weight:bold;color:#000;letter-spacing:4px;margin-top:2px;">${(ticket as any).short_code}</div>` : ''}
-              <div class="qr-help">${t('tickets_pdf.present_code')}</div>
-            </div>
-        </body>
-      </html>
-    `;
+      const html = buildTicketDocument(ticket);
 
       if (Platform.OS === 'web') {
         const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
@@ -731,63 +602,25 @@ export default function TicketsScreen() {
     const eventDate = item.events?.event_date ? new Date(item.events.event_date) : null;
     const eventId = item.events?.id;
     // ── Proper ticket-type detection ──────────────────────────────────────────
-    // event_ticket_types lives under events (not directly on tickets)
-    const ticketTypeRecord = item.ticket_type_id
-      ? ((item.events as any)?.event_ticket_types ?? []).find((t: any) => t.id === item.ticket_type_id)
-      : null;
-    const ticketTypeName: string = ticketTypeRecord?.name ?? '';
-    const ticketCategory: string = (ticketTypeRecord?.category ?? '').toLowerCase();
-    const nameLower = ticketTypeName.toLowerCase();
-    const isFastlane  = nameLower.includes('fast') || nameLower.includes('lane') || nameLower.includes('express') || ticketCategory.includes('fast');
-    const isBackstage = ticketCategory.includes('gold') || ticketCategory.includes('backstage') || nameLower.includes('backstage') || nameLower.includes('back stage');
-    const isVipTier   = ticketCategory.includes('vip') || nameLower.includes('vip');
-    const visualTier  = isFastlane ? 'fastlane' : isBackstage ? 'backstage' : isVipTier ? 'vip' : 'general';
+    const product = resolveTicketProduct(item);
+    const ticketTypeName = product.name;
+    const visualTier = product.visual;
 
-    // ── Per-tier visual config ────────────────────────────────────────────────
-    const tierConfig = {
-      general: {
-        label: '◇ GENERAL',
-        accent: '#00DCFF',
-        labelColor: '#00DCFF',
-        grad: ['#001830', '#000C18', '#000508'] as const,
-        spotGrad: ['#00DCFF25', '#00DCFF00'] as const,
-        borderColor: 'rgba(0,220,255,0.18)',
-      },
-      vip: {
-        label: '★ VIP',
-        accent: '#FFCD00',
-        labelColor: '#FFCD00',
-        grad: ['#1A1100', '#0D0900', '#050300'] as const,
-        spotGrad: ['#FFCD0040', '#FFCD0000'] as const,
-        borderColor: 'rgba(255,205,0,0.28)',
-      },
-      backstage: {
-        label: '✦ BACKSTAGE',
-        accent: '#FF7319',
-        labelColor: '#FF7319',
-        grad: ['#1C0800', '#0D0400', '#050200'] as const,
-        spotGrad: ['#FF731940', '#FF731900'] as const,
-        borderColor: 'rgba(255,115,25,0.28)',
-      },
-      fastlane: {
-        label: '⚡ FASTLANE',
-        accent: '#A855F7',
-        labelColor: '#D8B4FE',
-        grad: ['#0D0020', '#060010', '#020005'] as const,
-        spotGrad: ['#A855F740', '#A855F700'] as const,
-        borderColor: 'rgba(168,85,247,0.28)',
-      },
+    const theme = WALLET_THEMES[visualTier];
+    const tierConfig = {...theme,label:product.kind==='vip_table'?'MESA VIP':product.visual==='vip'?'ACCESO':theme.label,labelColor:theme.accent};
+    const artwork = {
+      general: require('@/assets/wallet-pass/card_general.png'), vip: require('@/assets/wallet-pass/card_vip.png'),
+      backstage: require('@/assets/wallet-pass/card_backstage.png'), fastlane: require('@/assets/wallet-pass/card_fastlane.png'),
     }[visualTier];
-
+    const inclusions = [product.metadata.benefits, ...(product.metadata.vipBottles||[]).map((b:any)=>b.quantity+' × '+(b.brand||b.label)), product.metadata.accessZone].filter(Boolean).join(' · ');
     const shortDate = eventDate
       ? `${eventDate.toLocaleDateString(localeTag, { weekday: 'short' })} · ${eventDate.getDate()} ${eventDate.toLocaleDateString(localeTag, { month: 'short' })}`
       : '—';
     const time = eventDate ? eventDate.toLocaleTimeString(localeTag, { hour: '2-digit', minute: '2-digit' }) : '—';
     const sectionLabel = (ticketTypeName || tierConfig.label.replace(/^[^\s]+\s/, '')).replace(/^Premium · /, '');
-    const seatLabel = `${(item as any).quantity ?? 1}P`;
+    const people = Number(product.metadata.vipGroupSize || item.quantity || 1);
+    const seatLabel = `${people} ${people===1?"persona":"personas"}`;
 
-    // Single shared shimmer translateX — runs on native thread, zero JS cost
-    const shimmerX = shimmer.interpolate({ inputRange: [0, 1], outputRange: [-420, 420] });
 
     return (
       <View style={styles.ticketContainer}>
@@ -799,61 +632,14 @@ export default function TicketsScreen() {
             onPress={() => { if (eventId) router.push(`/(tabs)/event/${eventId}`); }}
             style={styles.tcPoster}>
 
-            {/* Base tier gradient */}
-            <LinearGradient colors={[...tierConfig.grad]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />
-
-            {/* Poster at 75% — visible, the hero */}
-            {item.events?.poster_url
-              ? <Image source={{ uri: item.events.poster_url }} style={[StyleSheet.absoluteFill, { opacity: 0.75 }]} resizeMode="cover" />
-              : <LinearGradient colors={[tierConfig.grad[0], tierConfig.grad[1], tierConfig.grad[2]]} style={StyleSheet.absoluteFill} />
-            }
-
-            {/* Tier colour tint — makes photo feel "owned" by the tier */}
-            <LinearGradient
-              colors={[`${tierConfig.accent}3A`, 'transparent', `${tierConfig.grad[2]}BB`]}
-              locations={[0, 0.55, 1]} start={{ x: 0.1, y: 0 }} end={{ x: 0.9, y: 1 }}
-              style={[StyleSheet.absoluteFill, { opacity: 0.55 }]} />
-
-            {/* Tier glow from a corner — unique per tier */}
-            <LinearGradient
-              colors={[`${tierConfig.accent}60`, `${tierConfig.accent}15`, 'transparent']}
-              start={
-                visualTier === 'vip'       ? { x: 1, y: 0 } :
-                visualTier === 'backstage' ? { x: 0, y: 1 } :
-                visualTier === 'fastlane'  ? { x: 1, y: 0.5 } :
-                                             { x: 0, y: 0.5 }}
-              end={{ x: 0.4, y: 0.4 }}
-              style={StyleSheet.absoluteFill} />
-
-            {/* Single smooth shimmer sweep — all tiers, native thread only */}
-            <Animated.View pointerEvents="none"
-              style={[StyleSheet.absoluteFill, { transform: [{ translateX: shimmerX }, { rotate: '-18deg' }] }]}>
-              <LinearGradient
-                colors={['transparent', `${tierConfig.accent}28`, `${tierConfig.accent}12`, 'transparent']}
-                start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
-                style={{ flex: 1, width: 200 }} />
-            </Animated.View>
-
-            {/* Top scrim — badge legibility */}
-            <LinearGradient colors={['rgba(0,0,0,0.60)', 'rgba(0,0,0,0.10)', 'transparent']}
-              start={{ x: 0, y: 0 }} end={{ x: 0, y: 1 }}
-              style={[StyleSheet.absoluteFill, { height: 80 }]} />
-
-            {/* Bottom scrim — text legibility */}
-            <LinearGradient
-              colors={['transparent', 'rgba(0,0,0,0.15)', 'rgba(0,0,0,0.70)', 'rgba(0,0,0,0.97)']}
-              locations={[0, 0.40, 0.70, 1]} start={{ x: 0, y: 0 }} end={{ x: 0, y: 1 }}
-              style={StyleSheet.absoluteFill} />
-
-            {/* Tier accent bar — left edge, full height */}
-            <View style={[styles.tcAccentBar, { backgroundColor: tierConfig.accent }]} />
-
-            {/* ── Badge top-left ── */}
-            <View style={[styles.tcBadge, { backgroundColor: `${tierConfig.accent}22`, borderColor: `${tierConfig.accent}88` }]}>
-              <View style={[styles.tcBadgeDot, { backgroundColor: tierConfig.accent }]} />
-              <Text style={[styles.tcBadgeText, { color: tierConfig.labelColor }]}>{tierConfig.label}</Text>
+            <Image source={artwork} style={{position:'absolute',top:0,left:0,right:0,height:180,width:'100%'}} resizeMode="cover" />
+            <View style={{position:'absolute',top:0,left:0,right:0,paddingHorizontal:20,paddingVertical:12,backgroundColor:theme.accent,flexDirection:'row',justifyContent:'space-between',alignItems:'center'}}>
+              <Text style={{color:'#17101E',fontSize:11,fontWeight:'900',letterSpacing:3}}>E C L I P S E</Text>
+              <Text style={{color:'#17101E',fontSize:10,fontWeight:'800',letterSpacing:1}}>{tierConfig.label}</Text>
             </View>
-
+            <View style={{position:'absolute',top:153,left:20,paddingHorizontal:10,paddingVertical:6,backgroundColor:'#14101F',borderWidth:1,borderColor:theme.accent,borderRadius:4}}>
+              <Text style={{color:theme.accent,fontSize:10,fontWeight:'700',letterSpacing:1}}>{product.metadata.salePhase||'NIGHT ACCESS'} / {(item.short_code||item.id.slice(0,6)).toUpperCase()}</Text>
+            </View>
             {/* ── Status stamp top-right ── */}
             {(isResale || isUsed) && (
               <View style={[styles.tcStamp, isUsed ? styles.tcStampUsed : styles.tcStampResale]}>
@@ -889,17 +675,6 @@ export default function TicketsScreen() {
             <View style={[styles.tcNotch, styles.tcNotchR, { borderColor: tierConfig.accent + '30', backgroundColor: Colors.dark.background }]} />
           </View>
 
-          {/* ══ PERFORATED TEAR LINE ══════════════════════════════════ */}
-          <View style={[styles.tcTearRow, { backgroundColor: '#0A0A10' }]}>
-            <View style={[styles.tcTearCircle, styles.tcTearCircleLeft, { borderColor: `${tierConfig.accent}30` }]} />
-            <View style={styles.tcTearDashes}>
-              {Array.from({ length: 22 }).map((_, i) => (
-                <View key={i} style={[styles.tcTearDash, { backgroundColor: `${tierConfig.accent}45` }]} />
-              ))}
-            </View>
-            <View style={[styles.tcTearCircle, styles.tcTearCircleRight, { borderColor: `${tierConfig.accent}30` }]} />
-          </View>
-
           {/* ══ LOWER BODY ════════════════════════════════════════════ */}
           <View style={[styles.tcBody, { backgroundColor: '#07070F' }]}>
             {/* Left accent bar continued */}
@@ -912,7 +687,7 @@ export default function TicketsScreen() {
                 <Text style={styles.tcFieldValue}>{sectionLabel || 'GENERAL'}</Text>
               </View>
               <View style={styles.tcField}>
-                <Text style={[styles.tcFieldLabel, { color: tierConfig.accent }]}>CANTIDAD</Text>
+                <Text style={[styles.tcFieldLabel, { color: tierConfig.accent }]}>PERSONAS</Text>
                 <Text style={styles.tcFieldValue}>{seatLabel}</Text>
               </View>
               {(item as any).short_code ? (
@@ -948,7 +723,8 @@ export default function TicketsScreen() {
             </View>
           </View>
 
-            {!!item.entry_deadline && <Text style={{ color: '#fbbf24', fontSize: 12 }}>Acceso antes de {new Date(item.entry_deadline).toLocaleString('es-ES')}</Text>}
+          {!!inclusions && <View style={{paddingHorizontal:20,paddingBottom:15}}><Text style={{color:theme.accent,fontSize:9,letterSpacing:1.5,fontWeight:'700',marginBottom:6}}>INCLUIDO EN TU ACCESO</Text><Text style={{color:'#D8D0E1',fontSize:12,lineHeight:19}}>{inclusions}</Text></View>}
+            {!!item.entry_deadline && <Text style={{ color: '#E6CFAD', fontSize: 12, paddingHorizontal:20, paddingBottom:14 }}>Acceso antes de {new Date(item.entry_deadline).toLocaleString('es-ES')}</Text>}
 
           {/* ══ ACTION ROW ════════════════════════════════════════════ */}
           {/* Avisos de restricciones */}
@@ -976,12 +752,12 @@ export default function TicketsScreen() {
             {!isUsed && !isResale && (
               <TouchableOpacity
                 style={[styles.tcActionBtn, item.wallet_added && { borderColor: `${Colors.dark.success}60`, backgroundColor: `${Colors.dark.success}0D` }]}
-                onPress={() => !item.wallet_added && void handleAddToWallet(item)}
-                disabled={!!item.wallet_added || addingToWallet === item.id}
+                onPress={() => void handleAddToWallet(item)}
+                disabled={addingToWallet === item.id}
               >
                 <CreditCard size={13} color={item.wallet_added ? Colors.dark.success : '#6b7280'} />
                 <Text style={[styles.tcActionBtnTxt, item.wallet_added && { color: Colors.dark.success }]} numberOfLines={1}>
-                  {item.wallet_added ? '✓ Cartera' : addingToWallet === item.id ? '...' : t('tickets.add_to_wallet')}
+                  {item.wallet_added ? 'Actualizar pass' : addingToWallet === item.id ? '...' : t('tickets.add_to_wallet')}
                 </Text>
               </TouchableOpacity>
             )}
@@ -1267,7 +1043,7 @@ const styles = StyleSheet.create({
     borderRadius: 22,
     overflow: 'hidden',
     shadowOffset: { width: 0, height: 14 },
-    shadowOpacity: 0.75,
+    shadowOpacity: 0.18,
     shadowRadius: 28,
     elevation: 16,
     backgroundColor: '#07070F',
@@ -1275,7 +1051,7 @@ const styles = StyleSheet.create({
 
   // Poster
   tcPoster: {
-    height: 310,
+    minHeight: 302,
     overflow: 'hidden',
     backgroundColor: '#07070F',
   },
@@ -1341,11 +1117,11 @@ const styles = StyleSheet.create({
     zIndex: 5,
   },
   tcEventName: {
-    fontSize: 22,
+    fontSize: 27,
     fontWeight: '800',
     color: '#FFFFFF',
-    letterSpacing: -0.4,
-    lineHeight: 27,
+    letterSpacing: -0.9,
+    lineHeight: 31,
     textShadowColor: 'rgba(0,0,0,0.8)',
     textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 6,
@@ -1642,4 +1418,3 @@ const styles = StyleSheet.create({
     width: '100%',
   },
 });
-

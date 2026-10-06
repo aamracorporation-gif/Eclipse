@@ -54,6 +54,7 @@ async function invoke(platform, options = {}) {
   let handler;
   let passData;
   let passFiles;
+  const providerCalls=[];
   const env = { ...baseEnv, ...options.env };
   const filters = {};
   const client = {
@@ -69,6 +70,7 @@ async function invoke(platform, options = {}) {
     },
   };
   const imports = {
+    '../_shared/ticketProduct.ts': loadModule(path.join(root, 'supabase/functions/_shared/ticketProduct.ts'), {}),
     'https://esm.sh/@supabase/supabase-js@2.49.1': { createClient: () => client },
     'https://esm.sh/passkit-generator@3.1.10': { PKPass: class extends PKPass {
       constructor(files, certificates) {
@@ -86,13 +88,18 @@ async function invoke(platform, options = {}) {
     'node:buffer': { Buffer }, './bundledAssets.ts': assets, '../_shared/walletPem.ts': shared, '../_shared/walletDesign.ts': loadModule(path.join(root, 'supabase/functions/_shared/walletDesign.ts'), {}),
   };
   const dir = platform === 'ios' ? 'apple-wallet-generator' : 'generate-wallet-pass';
-  loadModule(path.join(root, 'supabase/functions', dir, 'index.ts'), imports, { Deno: { env: { get: name => env[name] }, serve: fn => { handler = fn; } } });
+  loadModule(path.join(root, 'supabase/functions', dir, 'index.ts'), imports, { fetch:async (url,init)=>{
+    providerCalls.push({url,init});
+    if(url==='https://oauth2.googleapis.com/token')return new Response(JSON.stringify({access_token:'fixture-token'}));
+    if(url.startsWith('https://walletobjects.googleapis.com/walletobjects/v1/genericobject/'))return new Response('{}',{status:options.googleDenied?403:200});
+    throw Error('Unexpected provider endpoint');
+  },Deno: { env: { get: name => env[name] }, serve: fn => { handler = fn; } } });
   const method = options.method || 'POST';
   const response = await handler(new Request('https://fixture.invalid/wallet', {
     method, headers: { ...(options.noAuth ? {} : { Authorization: 'Bearer fixture' }), 'Content-Type': 'application/json' },
     ...(method === 'POST' ? { body: JSON.stringify({ ticket_id: ticket.id, platform }) } : {}),
   }));
-  return { status: response.status, body: await response.json(), passData, passFiles };
+  return { status: response.status, body: await response.json(), passData, passFiles,providerCalls };
 }
 let passed = 0;
 async function check(name, fn) { await fn(); passed++; console.log('PASS ' + name); }
@@ -128,6 +135,30 @@ async function check(name, fn) { await fn(); passed++; console.log('PASS ' + nam
     });
   }
   await check('Google missing configuration -> explicit503', async () => assert.equal((await invoke('android', { env: { GOOGLE_WALLET_PRIVATE_KEY: '' } })).status, 503));
+  await check('Google existing pass receives a presentation-only PATCH', async()=>{
+    ticket.wallet_added=true;
+    const result=await invoke('android');assert.equal(result.status,200);
+    const call=result.providerCalls[1];assert.equal(call.init.method,'PATCH');
+    const patched=JSON.parse(call.init.body);assert.ok(patched.heroImage);assert.ok(patched.textModulesData);
+    assert.ok(!('barcode' in patched));assert.ok(!('state' in patched));delete ticket.wallet_added;
+  });
+  await check('Google denied update does not claim success',async()=>{
+    ticket.wallet_added=true;assert.equal((await invoke('android',{googleDenied:true})).status,503);delete ticket.wallet_added;
+  });
+  await check('Purchased table without admission relation stays a table on both Wallets', async () => {
+    const previous = ticket.event_ticket_types;
+    ticket.event_ticket_types = null;
+    ticket.product_snapshot = {kind:'vip_table', category:'vip_table', name:'Mesa Eclipse', metadata:{vipGroupSize:6, vipBottles:[{brand:'Incluida',quantity:1}]}};
+    const ios = await invoke('ios'); assert.equal(ios.status,200);
+    assert.equal(ios.passData.eventTicket.headerFields[0].label, 'MESA VIP');
+    assert.ok(ios.passData.eventTicket.auxiliaryFields.some(f=>f.value==='6 personas'));
+    const android = await invoke('android'); assert.equal(android.status,200);
+    const verified = await jose.jwtVerify(android.body.url.split('/').pop(),crypto.createPublicKey(pkcs8));
+    const obj = verified.payload.payload.genericObjects[0];
+    assert.equal(obj.textModulesData.find(f=>f.id==='access').body,'MESA ECLIPSE');
+    assert.equal(obj.textModulesData.find(f=>f.id==='group').body,'6 personas');
+    ticket.event_ticket_types = previous; delete ticket.product_snapshot;
+  });
   for (const tier of ['general', 'vip', 'backstage', 'fastlane']) {
     await check('Presentation and access accuracy: ' + tier, async () => {
       ticket.event_ticket_types = { id: 'type-fixture', name: tier, category: tier, metadata: {} };

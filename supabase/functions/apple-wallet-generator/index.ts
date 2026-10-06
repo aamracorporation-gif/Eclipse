@@ -1,3 +1,4 @@
+import { resolveTicketProduct } from '../_shared/ticketProduct.ts';
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 import { PKPass } from "https://esm.sh/passkit-generator@3.1.10";
 import forge from "https://esm.sh/node-forge@1.4.0";
@@ -205,6 +206,8 @@ Deno.serve(async (req) => {
         user_id,
         ticket_type,
         ticket_type_id,
+        entry_deadline,
+        product_snapshot,
         event_ticket_types (
           id,
           name,
@@ -230,11 +233,8 @@ Deno.serve(async (req) => {
     const ticketTypeObj = Array.isArray((ticket as any).event_ticket_types)
       ? (ticket as any).event_ticket_types[0]
       : (ticket as any).event_ticket_types;
-    const rawCategory = String(
-      ticketTypeObj?.category || (ticket as any).ticket_type || ticketTypeObj?.name || "",
-    )
-      .trim()
-      .toLowerCase();
+    const product = resolveTicketProduct(ticket);
+    const rawCategory = product.category;
 
     const tier =
       rawCategory.includes("backstage") || rawCategory.includes("founder")
@@ -257,10 +257,7 @@ Deno.serve(async (req) => {
 
     const title = String(ticket.events?.title || "ECLIPSE").trim();
     const titleDisplay = title.toUpperCase();
-    const ticketTypeMetadata =
-      ticketTypeObj?.metadata && typeof ticketTypeObj.metadata === "object"
-        ? ticketTypeObj.metadata as Record<string, unknown>
-        : {};
+    const ticketTypeMetadata = product.metadata;
     const eventYear = eventDate && Number.isFinite(eventDate.getTime())
       ? String(eventDate.getFullYear())
       : "2026";
@@ -302,9 +299,9 @@ Deno.serve(async (req) => {
           .filter(Boolean)
           .join(" • ")
       : null;
-    const ticketTypeName = nonEmpty(ticketTypeObj?.name) || WALLET_THEMES[walletTier(rawCategory, ticketTypeObj?.name)].label;
+    const ticketTypeName = product.name;
 
-    const passVisualTier = walletTier(rawCategory, ticketTypeObj?.name);
+    const passVisualTier = product.visual;
     const theme = WALLET_THEMES[passVisualTier];
     const palette = { backgroundColor: walletRgb(theme.background), foregroundColor: walletRgb(theme.foreground), labelColor: walletRgb(theme.accent) };
     const files: Record<string, Buffer> = {};
@@ -333,7 +330,7 @@ Deno.serve(async (req) => {
     const passIdDisplay   = `ECL-${eventYear}-${ticket.id.slice(0,6).toUpperCase()}`;
     const holderName      = nonEmpty(ticket.buyer_name) || nonEmpty(user.email) || "Titular de la entrada";
     const benefits        = nonEmpty(ticketTypeMetadata.benefits);
-    const vipGroupSize    = parsePositiveNumber(ticketTypeMetadata.vipGroupSize);
+    const vipGroupSize    = parsePositiveNumber(ticketTypeMetadata.vipGroupSize) || (Number(ticket.quantity)>1 ? Number(ticket.quantity) : null);
     const backstageHost   = nonEmpty(ticketTypeMetadata.backstageHost);
     const gateDisplay     = nonEmpty(ticketTypeMetadata.gate);
     const sectionDisplay  = nonEmpty(ticketTypeMetadata.section) || nonEmpty(ticketTypeMetadata.accessZone);
@@ -351,7 +348,7 @@ Deno.serve(async (req) => {
     // Shown right of the ECLIPSE logo — first thing security sees at the gate.
     const tierBadge = theme.label;
     const accessLabel = theme.label;
-    const categoryLabel = ticketTypeObj?.name || theme.label;
+    const categoryLabel = product.name;
     const venueShort = venueName;
     const backFields: any[] = [];
     const pushBackField = (key: string, label: string, value: unknown) => {
@@ -431,6 +428,7 @@ Deno.serve(async (req) => {
     pushBackField("section",    "ZONA",             sectionDisplay);
     pushBackField("seat",       "ASIENTO",                seatDisplay);
     pushBackField("gate",       "PUERTA",          gateDisplay);
+    if (ticket.entry_deadline) pushBackField("deadline", "ACCESO ANTES DE", `${walletDate(new Date(ticket.entry_deadline))} · ${walletDate(new Date(ticket.entry_deadline),true)}`);
     pushBackField("entry",      "HORA DE ACCESO",          entryDisplay);
     pushBackField("showtime",   "INICIO",         timeDisplay);
     pushBackField("datetime",   "FECHA Y HORA · MADRID",         dateTimeDisplay);

@@ -446,6 +446,8 @@ export default function WorkerScanScreen() {
 
                     <Text style={styles.detailLabel}>Tipo:</Text>
                     <Text style={styles.detailValue}>{result.ticket_type || 'General'}</Text>
+                    <Text style={styles.detailLabel}>Personas incluidas:</Text>
+                    <Text style={styles.detailValue}>{result.quantity || 1}</Text>
 
                     {result.scanned_at && (
                       <Text style={styles.scannedAtText}>

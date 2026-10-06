@@ -1,0 +1,3 @@
+const http=require('node:http'),fs=require('node:fs'),path=require('node:path');
+const base=path.resolve('docs/qa/sales-preview');
+http.createServer((req,res)=>{const filename=path.resolve(base,'.'+decodeURIComponent(req.url.split('?')[0]==='/'?'/index.html':req.url.split('?')[0]));if(!filename.startsWith(base+path.sep)){res.writeHead(403);return res.end();}try{const b=fs.readFileSync(filename);res.setHeader('Content-Type',({'.html':'text/html; charset=utf-8','.js':'application/javascript','.png':'image/png','.ttf':'font/ttf'})[path.extname(filename)]||'application/octet-stream');res.end(b);}catch{res.writeHead(404);res.end();}}).listen(8765,'127.0.0.1',()=>console.log('Eclipse preview: http://127.0.0.1:8765'));

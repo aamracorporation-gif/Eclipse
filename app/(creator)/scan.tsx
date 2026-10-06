@@ -13,6 +13,9 @@ import { AlertTriangle, Check, ChevronDown, QrCode, Users, X } from '@/lib/icons
 import { useEvents } from '@/lib/EventContext';
 
 type ValidationResult = {
+  ticket_type?: string;
+  quantity?: number;
+  attendee_name?: string;
   valid?: boolean;
   message?: string;
   event?: string;
@@ -326,8 +329,8 @@ export default function ScanScreen() {
     const s = String(v ?? '').trim();
     return s.length ? s : emptyText;
   };
-  const eventText = pickText((result as any)?.ticket?.event ?? (result as any)?.event);
-  const holderText = pickText((result as any)?.ticket?.owner ?? (result as any)?.owner);
+  const eventText = pickText((result as any)?.ticket?.event ?? (result as any)?.event ?? selectedEvent?.title);
+  const holderText = pickText((result as any)?.ticket?.owner ?? (result as any)?.owner ?? result?.attendee_name);
   const dateText = (() => {
     const raw = String((result as any)?.ticket?.date ?? (result as any)?.date ?? '').trim();
     if (!raw.length) return emptyText;
@@ -543,6 +546,7 @@ export default function ScanScreen() {
             <Text style={ui.modalBody}>{String(result?.message || t('creator.scan.not_recognized', { defaultValue: 'Código no reconocido.' }))}</Text>
 
             <View style={ui.detailBox} accessibilityRole="summary" accessibilityLabel={t('creator.scan.labels.event', { defaultValue: 'Detalles' })}>
+              {result?.valid && <View style={ui.detailRow}><Text style={ui.detailLabel}>Acceso</Text><Text style={ui.detailValue}>{result.ticket_type || 'Entrada'} · {result.quantity || 1} personas</Text></View>}
               <View style={ui.detailRow}>
                 <Text style={ui.detailLabel}>{t('creator.scan.labels.event', { defaultValue: 'Evento' })}</Text>
                 <Text style={ui.detailValue} numberOfLines={1}>{eventText}</Text>

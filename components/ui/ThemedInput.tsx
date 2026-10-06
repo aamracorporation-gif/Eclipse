@@ -112,6 +112,7 @@ const styles = StyleSheet.create({
   input: {
     backgroundColor: 'transparent',
     flex: 1,
+    minWidth: 0,
     color: Colors.dark.text,
     fontSize: 15,
     minHeight: theme.components.input.minHeight,
