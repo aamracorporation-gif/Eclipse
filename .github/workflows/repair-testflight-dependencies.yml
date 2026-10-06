@@ -1,6 +1,7 @@
 name: TestFlight dependency repair
 
 # Temporary, branch-scoped maintenance job. Never deploys or submits an app.
+# Recheck clean-checkout route and visual-QA generation before committing locks.
 on:
   push:
     branches: [codex/testflight-ci-audit-20261006]
