@@ -1,3 +1,4 @@
+import { discountScopeLabel, type DiscountScope } from '@/supabase/functions/_shared/discountPolicy';
 import {
   View, Text, StyleSheet, FlatList, TouchableOpacity,
   Alert, ActivityIndicator, Switch, Modal,
@@ -11,6 +12,9 @@ import { useAuth } from '@/lib/AuthContext';
 import { useCallback, useEffect, useState } from 'react';
 
 type DiscountCode = {
+  applicability?: DiscountScope;
+  ticket_type_ids?: string[];
+  vip_reservado_ids?: string[];
   id: string;
   code: string;
   discount_type: 'percentage' | 'fixed';
@@ -220,6 +224,7 @@ export default function DiscountCodesScreen() {
           <Text style={styles.discountValue}>{formatDiscount(item)}</Text>
         </View>
 
+        <Text style={{color:'#BDAECF',fontSize:12,marginBottom:10}}>{discountScopeLabel(item)}</Text>
         <View style={styles.cardStats}>
           <Text style={styles.statText}>
             Usos: <Text style={styles.statVal}>{item.uses_count}{item.max_uses ? `/${item.max_uses}` : ''}</Text>

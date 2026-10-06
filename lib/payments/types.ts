@@ -13,6 +13,7 @@ export type CreatePaymentIntentRequest =
       buyer_email?: string;
       credit_debit_eur?: number;
       discount_code_id?: string;
+      discount_expected_cents?: number;
     }
   | {
       idempotency_key?: string;
@@ -23,6 +24,8 @@ export type CreatePaymentIntentRequest =
       idempotency_key?: string;
       kind: 'vip_table';
       reference_id: string;
+      discount_code_id?: string;
+      discount_expected_cents?: number;
       credit_debit_eur?: number;
       buyer_name?: string;
       buyer_email?: string;
