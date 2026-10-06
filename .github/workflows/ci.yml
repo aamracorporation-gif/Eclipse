@@ -42,6 +42,10 @@ jobs:
       - name: Backend dependencies and tests
         working-directory: backend
         run: npm ci && npm test
+      - name: Audit backend production dependencies
+        run: npm --prefix backend audit --omit=dev --audit-level=critical
+      - name: Critical dependency security regressions
+        run: node --test scripts/tests/dependencySecurity.test.cjs
 
   secret-scan:
     runs-on: ubuntu-latest
