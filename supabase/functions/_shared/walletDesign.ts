@@ -1,9 +1,9 @@
 /** Shared presentation only; ticket authorization and QR payloads stay in the handlers. */
 export const WALLET_THEMES = {
-  general: { label: 'GENERAL', background: '#111020', foreground: '#FFFFFF', accent: '#BDA9FF' },
-  vip: { label: 'VIP', background: '#19150F', foreground: '#FFFFFF', accent: '#E8C58B' },
-  backstage: { label: 'BACKSTAGE', background: '#17101C', foreground: '#FFFFFF', accent: '#EAA9DE' },
-  fastlane: { label: 'FASTLANE', background: '#0C1B20', foreground: '#FFFFFF', accent: '#D8F36A' },
+  general: { label: 'ENTRADA', background: '#111020', foreground: '#FFFFFF', accent: '#CCBAF4' },
+  vip: { label: 'MESA VIP', background: '#19150F', foreground: '#FFFFFF', accent: '#E6CFAD' },
+  backstage: { label: 'BACKSTAGE', background: '#17101C', foreground: '#FFFFFF', accent: '#E7B7D0' },
+  fastlane: { label: 'PRIORITARIO', background: '#0C1B20', foreground: '#FFFFFF', accent: '#ACE0D6' },
 };
 export function walletTier(category: unknown, name: unknown): keyof typeof WALLET_THEMES {
   const text = `${category || ''} ${name || ''}`.toLowerCase();
