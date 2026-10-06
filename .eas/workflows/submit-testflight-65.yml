@@ -1,6 +1,6 @@
 # One-off submission of the existing Eclipse iOS 1.0.0 (65) binary.
 # No build job, version increment, OTA update, production deployment or App Review.
-# Uses the project's existing Expo GitHub connection and stored Apple credentials.
+# Standard EAS Submit uploads to App Store Connect/TestFlight only.
 name: Submit Eclipse iOS build 65 to TestFlight
 
 on:
@@ -37,11 +37,10 @@ jobs:
     name: Upload only Eclipse iOS build 65 to TestFlight
     needs: [find_build_65]
     if: ${{ needs.find_build_65.outputs.build_id && needs.find_build_65.outputs.app_build_version == '65' && needs.find_build_65.outputs.app_identifier == 'com.achraf.eclipse' }}
-    type: testflight
+    type: submit
     environment: preview
     env:
       ECLIPSE_BUILD_ENV: staging
     params:
       build_id: ${{ needs.find_build_65.outputs.build_id }}
       profile: testflight
-      submit_beta_review: false
