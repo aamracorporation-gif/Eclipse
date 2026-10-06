@@ -1,7 +1,7 @@
 name: TestFlight dependency repair
 
 # Temporary, branch-scoped maintenance job. Never deploys or submits an app.
-# Recheck clean-checkout route and visual-QA generation before committing locks.
+# Only dependency locks and the generated Wallet asset map may be committed.
 on:
   push:
     branches: [codex/testflight-ci-audit-20261006]
@@ -37,6 +37,11 @@ jobs:
           git diff --stat -- package-lock.json backend/package-lock.json
       - name: Reproducible root installation
         run: npm ci
+      - name: Synchronize embedded images with checked-in artwork
+        run: |
+          node scripts/sync-wallet-assets.cjs --write
+          node scripts/sync-wallet-assets.cjs --check
+          git diff --exit-code -- assets/wallet-pass
       - name: Reproducible backend installation
         run: npm --prefix backend ci
       - name: Verify critical vulnerability regressions
@@ -64,7 +69,7 @@ jobs:
         run: npm run build:web
       - name: Backend tests
         run: npm --prefix backend test
-      - name: Retain candidate lockfiles for review
+      - name: Retain candidate files for review
         if: always()
         uses: actions/upload-artifact@v4
         with:
@@ -72,17 +77,18 @@ jobs:
           path: |
             package-lock.json
             backend/package-lock.json
+            supabase/functions/apple-wallet-generator/bundledAssets.ts
           retention-days: 7
-      - name: Commit verified lockfiles to repair branch only
+      - name: Commit verified generated files to repair branch only
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           test "$GITHUB_REF_NAME" = 'codex/testflight-ci-audit-20261006'
           test "$(git ls-remote origin "refs/heads/$GITHUB_REF_NAME" | cut -f1)" = "$GITHUB_SHA"
-          unexpected="$(git diff --name-only | grep -Ev '^(package-lock\.json|backend/package-lock\.json)$' || true)"
+          unexpected="$(git diff --name-only | grep -Ev '^(package-lock\.json|backend/package-lock\.json|supabase/functions/apple-wallet-generator/bundledAssets\.ts)$' || true)"
           test -z "$unexpected"
-          git add -- package-lock.json backend/package-lock.json
+          git add -- package-lock.json backend/package-lock.json supabase/functions/apple-wallet-generator/bundledAssets.ts
           if git diff --cached --quiet; then exit 0; fi
-          git -c user.name='github-actions[bot]' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' commit -m 'fix(deps): refresh critical proxy-addr and shell-quote lock entries'
+          git -c user.name='github-actions[bot]' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' commit -m 'fix(release): refresh critical dependencies and synchronize embedded Wallet artwork'
           auth="$(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)"
           git -c "http.https://github.com/.extraheader=AUTHORIZATION: basic $auth" push origin "HEAD:refs/heads/$GITHUB_REF_NAME"
