@@ -1,3 +1,5 @@
+import { DiscountCodeField, type AppliedDiscount } from '@/components/DiscountCodeField';
+import { calculateDiscountCents, discountSelectionKey } from '@/supabase/functions/_shared/discountPolicy';
 import { offerUnavailableReason } from '@/supabase/functions/_shared/ticketProduct';
 import { OFFER_CATEGORIES } from '@/lib/createEventTicketConfig';
 import { LAUNCH_FEATURES } from '@/lib/launchFeatures';
@@ -9,7 +11,7 @@ import { useAuth } from '@/lib/AuthContext';
 import { useEvents } from '@/lib/EventContext';
 import { useCredit } from '@/lib/WalletContext';
 import { getErrorMessage } from '@/lib/errorHelpers';
-import { MapPin, Calendar, Ticket, ArrowLeft, User as UserIcon, Shirt, Users, Music, PartyPopper, Clock, Euro, Image as ImageIcon, X, CreditCard, Minus, Plus, Sparkles, Wallet, Share2, Mail, Tag } from '@/lib/icons';
+import { MapPin, Calendar, Ticket, ArrowLeft, User as UserIcon, Shirt, Users, Music, PartyPopper, Clock, Euro, Image as ImageIcon, X, CreditCard, Minus, Plus, Sparkles, Wallet, Share2, Mail } from '@/lib/icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Colors } from '@/constants/Colors';
@@ -54,11 +56,9 @@ export default function EventDetailScreen() {
   const [showVenuePlan, setShowVenuePlan] = useState(false);
   const [payWithWallet, setPayWithWallet] = useState(false);
   const [payVipWithWallet, setPayVipWithWallet] = useState(false);
-  const [discountCode, setDiscountCode] = useState('');
   const [checkingCode, setCheckingCode] = useState(false);
-  const [appliedDiscount, setAppliedDiscount] = useState<{
-    id: string; type: 'percentage' | 'fixed'; value: number; label: string;
-  } | null>(null);
+  const [discountCandidate, setAppliedDiscount] = useState<AppliedDiscount | null>(null);
+  const [vipDiscountCandidate, setVipAppliedDiscount] = useState<AppliedDiscount | null>(null);
   const [purchaseSuccess, setPurchaseSuccess] = useState<{ title: string; message: string; variant?: 'default' | 'vip' } | null>(null);
   const { horizontalPadding, maxContentWidth, scaleFont } = useResponsive();
   const { language } = useI18n();
@@ -92,6 +92,14 @@ export default function EventDetailScreen() {
   };
 
   const eventId = Array.isArray(id) ? id[0] : id;
+  const ticketDiscountKey = discountSelectionKey(eventId || '', 'event_ticket', selectedTicketType, parseInt(quantity) || 1);
+  const vipDiscountKey = discountSelectionKey(eventId || '', 'vip_table', selectedVipReservadoId, 1);
+  const appliedDiscount = discountCandidate?.selectionKey === ticketDiscountKey ? discountCandidate : null;
+  const vipAppliedDiscount = vipDiscountCandidate?.selectionKey === vipDiscountKey ? vipDiscountCandidate : null;
+  const discountedPrice = (price: number, discount: AppliedDiscount | null) => {
+    const cents = Math.round(price * 100);
+    return (cents - calculateDiscountCents(cents, discount ? {discount_type:discount.type, discount_value:discount.value} : null)) / 100;
+  };
 
   const safeBack = () => {
     const canGoBack = (router as any)?.canGoBack?.();
@@ -108,11 +116,11 @@ export default function EventDetailScreen() {
   );
 
   useEffect(() => {
+    setVipAppliedDiscount(null);
     setSelectedTicketType(null);
     setSelectedVipReservadoId(null);
     setPurchaseTab('tickets');
     setAppliedDiscount(null);
-    setDiscountCode('');
   }, [eventId]);
 
   useEffect(() => {
@@ -530,11 +538,7 @@ export default function EventDetailScreen() {
 
       const pricePerTicket = selectedType ? selectedType.price : event.ticket_price;
       const baseTotal = pricePerTicket * qty;
-      const totalPrice = appliedDiscount
-        ? appliedDiscount.type === 'percentage'
-          ? Math.max(0, baseTotal * (1 - appliedDiscount.value / 100))
-          : Math.max(0, baseTotal - appliedDiscount.value)
-        : baseTotal;
+      const totalPrice = discountedPrice(baseTotal, appliedDiscount);
 
       const payTicketsWithCard = async (creditDebitEur?: number) => {
         const result = await present({
@@ -544,7 +548,7 @@ export default function EventDetailScreen() {
           quantity: qty,
           buyer_name: buyerName,
           buyer_email: buyerEmail || user.email || '',
-          ...(appliedDiscount ? { discount_code_id: appliedDiscount.id } : {}),
+          ...(appliedDiscount ? { discount_code_id: appliedDiscount.id, discount_expected_cents: Math.round((baseTotal - totalPrice) * 100) } : {}),
           ...(typeof creditDebitEur === 'number' && Number.isFinite(creditDebitEur) && creditDebitEur > 0
             ? { credit_debit_eur: creditDebitEur }
             : {}),
@@ -630,8 +634,7 @@ export default function EventDetailScreen() {
       await fetchEvent();
 
       setAppliedDiscount(null);
-      setDiscountCode('');
-
+  
       const msg =
         qty === 1
           ? t('event.purchase.success_one', { tickets: t('tickets.my_tickets') })
@@ -703,12 +706,14 @@ export default function EventDetailScreen() {
       return;
     }
 
+    if (checkingCode || vipPurchasing || stripeLoading) return;
     setVipPurchasing(true);
     try {
       if (payVipWithWallet && creditLoading) {
         showDialog({ title: 'Cartera', message: 'Estamos cargando tu saldo. Espera un momento y vuelve a intentarlo.' });
         return;
       }
+      if (vipAppliedDiscount && LAUNCH_FEATURES.walletCredit && payVipWithWallet) throw new Error('Para aplicar este descuento, selecciona el pago con tarjeta.');
       if (LAUNCH_FEATURES.walletCredit && payVipWithWallet) {
         const vipServiceFee = Math.round(((vip.base_price * 0.015 + 0.25) / 0.985) * 100) / 100;
         const vipGrandTotal = vip.base_price + vipServiceFee;
@@ -723,7 +728,7 @@ export default function EventDetailScreen() {
             p_service_fee: vipServiceFee,
           });
         } else if (walletDebit <= 0) {
-          const result = await present({ kind: 'vip_table', reference_id: vip.id, buyer_name: buyerName, buyer_email: buyerEmail || user.email || '' });
+          const result = await present({ kind: 'vip_table', reference_id: vip.id, buyer_name: buyerName, buyer_email: buyerEmail || user.email || '', ...(vipAppliedDiscount ? { discount_code_id: vipAppliedDiscount.id, discount_expected_cents: Math.round((Number(vip.base_price) - discountedPrice(Number(vip.base_price), vipAppliedDiscount)) * 100) } : {}) });
           if (result.status === 'canceled') return;
           if (result.status === 'pending') {
             showDialog({ title: 'Compra pendiente', message: result.message });
@@ -749,6 +754,7 @@ export default function EventDetailScreen() {
           const result = await present({
             kind: 'vip_table',
             reference_id: vip.id,
+            ...(vipAppliedDiscount ? { discount_code_id: vipAppliedDiscount.id, discount_expected_cents: Math.round((Number(vip.base_price) - discountedPrice(Number(vip.base_price), vipAppliedDiscount)) * 100) } : {}),
             credit_debit_eur: walletDebit,
             buyer_name: buyerName,
             buyer_email: buyerEmail || user.email || '',
@@ -764,7 +770,7 @@ export default function EventDetailScreen() {
           await refreshCredit();
         }
       } else {
-        const result = await present({ kind: 'vip_table', reference_id: vip.id, buyer_name: buyerName, buyer_email: buyerEmail || user.email || '' });
+        const result = await present({ kind: 'vip_table', reference_id: vip.id, buyer_name: buyerName, buyer_email: buyerEmail || user.email || '', ...(vipAppliedDiscount ? { discount_code_id: vipAppliedDiscount.id, discount_expected_cents: Math.round((Number(vip.base_price) - discountedPrice(Number(vip.base_price), vipAppliedDiscount)) * 100) } : {}) });
         if (result.status === 'canceled') return;
           if (result.status === 'pending') {
             showDialog({ title: 'Compra pendiente', message: result.message });
@@ -777,6 +783,7 @@ export default function EventDetailScreen() {
 
       await refreshEvents();
       await fetchEvent();
+      setVipAppliedDiscount(null);
       setPurchaseSuccess({
         title: '¡VIP confirmado!',
         message: 'Tu reservado VIP se ha comprado correctamente.',
@@ -913,11 +920,7 @@ export default function EventDetailScreen() {
   const safeQty = Math.max(minOrder, Math.min(maxOrder, parseInt(quantity || String(minOrder)) || minOrder));
   const saleUnavailable = selectedType ? offerUnavailableReason({ ...selectedType, event_date:event.event_date }, safeQty) : null;
   const total = currentPrice * safeQty;
-  const discountedTotal = appliedDiscount
-    ? appliedDiscount.type === 'percentage'
-      ? Math.max(0, total * (1 - appliedDiscount.value / 100))
-      : Math.max(0, total - appliedDiscount.value)
-    : total;
+  const discountedTotal = discountedPrice(total, appliedDiscount);
   const discountSaving = total - discountedTotal;
 
   // Service fee — integer-cent arithmetic, identical to create-payment-intent-v2
@@ -926,35 +929,13 @@ export default function EventDetailScreen() {
   const estimatedServiceFee = _serviceFeeCents / 100;
   const grandTotal = (_discountedCents + _serviceFeeCents) / 100;
 
-  const applyDiscountCode = async () => {
-    const code = discountCode.trim();
-    if (!code || !event) return;
-    setCheckingCode(true);
-    try {
-      const { data, error } = await supabase.rpc('validate_discount_code', {
-        p_code: code,
-        p_event_id: event.id,
-        p_quantity: safeQty,
-      });
-      if (error) throw error;
-      const row = Array.isArray(data) ? data[0] : data;
-      if (!row) throw new Error('Código no válido');
-      const label = row.discount_type === 'percentage'
-        ? `${row.discount_value}% de descuento`
-        : `${Number(row.discount_value).toFixed(2)} € de descuento`;
-      setAppliedDiscount({ id: row.id, type: row.discount_type, value: row.discount_value, label });
-    } catch (e: any) {
-      Alert.alert('Código inválido', e?.message || 'Este código no es válido para este evento');
-      setAppliedDiscount(null);
-    } finally {
-      setCheckingCode(false);
-    }
-  };
   const hasVip = !!(event.reservados_vip && event.reservados_vip.length > 0);
   const selectedVip = event.reservados_vip?.find((v) => v.id === selectedVipReservadoId) ?? null;
   const vipAvailable = selectedVip ? (selectedVip.quantity_available ?? 0) : 0;
   const vipSaleUnavailable = selectedVip ? offerUnavailableReason({...selectedVip,category:'table',quantity:vipAvailable,sold:0,event_date:event.event_date},1) : null;
-  const vipServiceFee = selectedVip ? Math.max(Math.round((Math.round(selectedVip.base_price * 100) * .015 + 25) / .985), 50) / 100 : 0;
+  const vipDiscountedTotal = selectedVip ? discountedPrice(Number(selectedVip.base_price), vipAppliedDiscount) : 0;
+  const vipSaving = selectedVip ? Number(selectedVip.base_price) - vipDiscountedTotal : 0;
+  const vipServiceFee = selectedVip ? Math.max(Math.round((Math.round(vipDiscountedTotal * 100) * .015 + 25) / .985), 50) / 100 : 0;
   const formatEuro = (value: any): string => {
     if (value === null || value === undefined) return '—';
     const n = typeof value === 'number' ? value : Number(value);
@@ -1408,10 +1389,15 @@ export default function EventDetailScreen() {
                     <ThemedInput label="Nombre del titular" placeholder="Nombre y apellidos" value={buyerName} onChangeText={setBuyerName} icon={UserIcon} editable={!!user && vipAvailable > 0} style={styles.purchaseInput}/>
                     <ThemedInput label="Correo para recibir la entrada" placeholder="tu@email.com" value={buyerEmail} onChangeText={setBuyerEmail} icon={Mail} keyboardType="email-address" autoCapitalize="none" editable={!!user && vipAvailable > 0} style={styles.purchaseInput}/>
                   </View>
+                  {user && !!selectedVip && vipAvailable > 0 && <DiscountCodeField
+                    eventId={event.id} kind="vip_table" productId={selectedVip.id} quantity={1}
+                    value={vipAppliedDiscount} onChange={setVipAppliedDiscount} onCheckingChange={setCheckingCode}
+                    disabled={vipPurchasing || stripeLoading}/>}
                   {!!selectedVip && <View style={{gap:8,paddingVertical:16}}>
                     <View style={{flexDirection:'row',justifyContent:'space-between'}}><Text style={{color:'#BDAECF',fontSize:12}}>Mesa para {selectedVip.capacity_people} personas</Text><Text style={{color:'#BDAECF',fontSize:12}}>{formatEuro(selectedVip.base_price)}</Text></View>
+                    {vipAppliedDiscount && <View style={{flexDirection:'row',justifyContent:'space-between'}}><Text style={{color:'#86EFAC',fontSize:12}}>Descuento en la mesa</Text><Text style={{color:'#86EFAC',fontSize:12}}>−{formatEuro(vipSaving)}</Text></View>}
                     <View style={{flexDirection:'row',justifyContent:'space-between'}}><Text style={{color:'#BDAECF',fontSize:12}}>Tasa de servicio</Text><Text style={{color:'#BDAECF',fontSize:12}}>{formatEuro(vipServiceFee)}</Text></View>
-                    <View style={styles.totalContainer}><Text style={styles.totalLabel}>Total</Text><Text style={styles.totalAmount}>{formatEuro(selectedVip.base_price + vipServiceFee)}</Text></View>
+                    <View style={styles.totalContainer}><Text style={styles.totalLabel}>Total</Text><Text style={styles.totalAmount}>{formatEuro(vipDiscountedTotal + vipServiceFee)}</Text></View>
                   </View>}
                   {LAUNCH_FEATURES.walletCredit && user && !!selectedVip && (
                     <View style={[styles.walletPayContainer, styles.walletPayContainerVip]}>
@@ -1459,6 +1445,7 @@ export default function EventDetailScreen() {
                     loading={vipPurchasing || stripeLoading}
                     disabled={
                       vipPurchasing ||
+                      checkingCode ||
                       stripeLoading ||
                       !selectedVipReservadoId ||
                       vipAvailable <= 0 || !!vipSaleUnavailable
@@ -1700,49 +1687,10 @@ export default function EventDetailScreen() {
                     {Number(selectedType?.metadata?.admissionsPerUnit)>1 && <Text style={{color:'#C7B5DC',fontSize:12}}>Acceso para {safeQty * Number(selectedType?.metadata?.admissionsPerUnit)} personas en total. Cada pack entra junto con su QR.</Text>}
                   </View>
 
-                  {/* Discount code field */}
-                  {user && currentAvailable > 0 && (
-                    <View style={styles.discountRow}>
-                      {appliedDiscount ? (
-                        <View style={styles.discountApplied}>
-                          <View style={styles.discountAppliedLeft}>
-                            <Tag size={14} color="#22c55e" />
-                            <Text style={styles.discountAppliedText}>{appliedDiscount.label}</Text>
-                          </View>
-                          <TouchableOpacity
-                            onPress={() => { setAppliedDiscount(null); setDiscountCode(''); }}
-                            style={styles.discountRemoveBtn}
-                            activeOpacity={0.7}
-                          >
-                            <Text style={styles.discountRemoveText}>✕</Text>
-                          </TouchableOpacity>
-                        </View>
-                      ) : (
-                        <View style={styles.discountInputRow}>
-                          <TextInput
-                            style={styles.discountInput}
-                            placeholder="Código de descuento"
-                            placeholderTextColor="rgba(255,255,255,0.3)"
-                            value={discountCode}
-                            onChangeText={(v) => setDiscountCode(v.toUpperCase())}
-                            autoCapitalize="characters"
-                            autoCorrect={false}
-                            returnKeyType="done"
-                            onSubmitEditing={applyDiscountCode}
-                          />
-                          <TouchableOpacity
-                            style={[styles.discountApplyBtn, (!discountCode.trim() || checkingCode) && { opacity: 0.5 }]}
-                            onPress={applyDiscountCode}
-                            disabled={!discountCode.trim() || checkingCode}
-                            activeOpacity={0.8}
-                          >
-                            <Text style={styles.discountApplyText}>
-                              {checkingCode ? '...' : 'Aplicar'}
-                            </Text>
-                          </TouchableOpacity>
-                        </View>
-                      )}
-                    </View>
+                  {user && currentAvailable > 0 && Number(currentPrice) > 0 && (
+                    <DiscountCodeField eventId={event.id} kind="event_ticket" productId={selectedTicketType}
+                      quantity={safeQty} value={appliedDiscount} onChange={setAppliedDiscount} onCheckingChange={setCheckingCode}
+                      disabled={purchasing || stripeLoading}/>
                   )}
 
                   {LAUNCH_FEATURES.walletCredit && user && (
@@ -1816,7 +1764,7 @@ export default function EventDetailScreen() {
                     }
                     onPress={handlePurchase}
                     loading={purchasing || stripeLoading}
-                    disabled={purchasing || stripeLoading || currentAvailable <= 0 || !!saleUnavailable || (payWithWallet && creditLoading)}
+                    disabled={purchasing || stripeLoading || checkingCode || currentAvailable <= 0 || !!saleUnavailable || (payWithWallet && creditLoading)}
                     style={[styles.confirmButton, currentAvailable <= 0 && { opacity: 0.5 }]}
                     variant={user ? 'secondary' : 'primary'}
                   />

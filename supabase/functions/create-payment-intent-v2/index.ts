@@ -1,3 +1,4 @@
+import { calculateDiscountCents, discountError, type DiscountProductKind } from '../_shared/discountPolicy.ts';
 import { checkoutUnavailableReason } from '../_shared/launchPolicy.ts';
 import { offerUnavailableReason } from '../_shared/ticketProduct.ts';
 type Json = Record<string, unknown>;
@@ -257,6 +258,23 @@ Deno.serve(async (req) => {
       });
     }
 
+    const discountCodeId = body?.discount_code_id ? String(body.discount_code_id) : null;
+    const resolveDiscount = async (eventId: string, productKind: DiscountProductKind, productId: string | null, quantity: number, subtotalCents: number) => {
+      if (!discountCodeId) return 0;
+      const result = await restGet(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY,
+        `discount_codes?id=eq.${encodeURIComponent(discountCodeId)}&select=id,event_id,discount_type,discount_value,max_uses,uses_count,min_tickets,valid_from,valid_until,is_active,applicability,ticket_type_ids,vip_reservado_ids`);
+      if (!result.ok) throw new Error('No se pudo validar el descuento. No se ha iniciado el cobro.');
+      const rule = Array.isArray(result.json) ? result.json[0] : null;
+      const error = discountError(rule, eventId, productKind, productId, quantity);
+      if (error) throw new Error(error);
+      const amount = calculateDiscountCents(subtotalCents, rule);
+      if (body.discount_expected_cents !== undefined &&
+        (!Number.isSafeInteger(body.discount_expected_cents) || body.discount_expected_cents !== amount)) {
+        throw new Error('El descuento o el precio ha cambiado. Quita el código y vuelve a aplicarlo antes de pagar.');
+      }
+      return amount;
+    };
+
     const requireOrganizerConnect = (Deno.env.get("REQUIRE_ORGANIZER_STRIPE_CONNECT") ?? "").trim().toLowerCase() === "true";
 
     if (kind === "event_ticket") {
@@ -298,31 +316,7 @@ Deno.serve(async (req) => {
       const originalTotalCents = Math.round(price * 100) * quantity;
       if (!Number.isFinite(originalTotalCents) || originalTotalCents <= 0) return jsonResponse({ ok: false, error: "Invalid price" });
 
-      // --- Discount code (server-side validation) ---
-      const discountCodeId = body?.discount_code_id ? String(body.discount_code_id) : null;
-      let discountAmountCents = 0;
-      if (discountCodeId) {
-        const dcRes = await restGet(
-          SUPABASE_URL,
-          SUPABASE_SERVICE_ROLE_KEY,
-          `discount_codes?id=eq.${encodeURIComponent(discountCodeId)}&select=id,event_id,discount_type,discount_value,max_uses,uses_count,valid_from,valid_until,is_active`,
-        );
-        const dcRow = Array.isArray(dcRes.json) && dcRes.json.length > 0 ? dcRes.json[0] : null;
-        if (!dcRow) return jsonResponse({ ok: false, error: "Discount code not found" });
-        if (String(dcRow.event_id) !== eventId) return jsonResponse({ ok: false, error: "Discount code not valid for this event" });
-        if (!dcRow.is_active) return jsonResponse({ ok: false, error: "Discount code is inactive" });
-        const now = new Date().toISOString();
-        if (dcRow.valid_until && String(dcRow.valid_until) < now) return jsonResponse({ ok: false, error: "Discount code has expired" });
-        if (dcRow.valid_from && String(dcRow.valid_from) > now) return jsonResponse({ ok: false, error: "Discount code is not yet active" });
-        if (dcRow.max_uses !== null && Number(dcRow.uses_count ?? 0) >= Number(dcRow.max_uses)) {
-          return jsonResponse({ ok: false, error: "Discount code has reached its usage limit" });
-        }
-        if (String(dcRow.discount_type) === "percentage") {
-          discountAmountCents = Math.round(originalTotalCents * (Number(dcRow.discount_value) / 100));
-        } else {
-          discountAmountCents = Math.min(Math.round(Number(dcRow.discount_value) * 100), originalTotalCents);
-        }
-      }
+      const discountAmountCents = await resolveDiscount(eventId, 'event_ticket', ticketTypeId, quantity, originalTotalCents);
       const discountedTotalCents = originalTotalCents - discountAmountCents;
       if (discountedTotalCents < 0) return jsonResponse({ ok: false, error: "Invalid discount" });
 
@@ -671,13 +665,16 @@ Deno.serve(async (req) => {
       const vipOriginalCents = Math.round(basePrice * 100);
       if (!Number.isFinite(vipOriginalCents) || vipOriginalCents <= 0) return jsonResponse({ ok: false, error: "Invalid price" });
 
+      const vipDiscountCents = await resolveDiscount(eventId, 'vip_table', vipId, 1, vipOriginalCents);
+      const vipDiscountedCents = vipOriginalCents - vipDiscountCents;
+
       // One checkout purchases one complete reservado, regardless of guest capacity.
       // VIP pricing is independent from the normal-ticket commission setting.
       const vipEclipseRateBps = 500;
       const vipCommissionCapCents = 2500;
-      const vipStripePassthroughCents = computeStripePassthroughCents(vipOriginalCents);
+      const vipStripePassthroughCents = computeStripePassthroughCents(vipDiscountedCents);
       const vipEclipseCommissionCents = Math.min(
-        Math.round(vipOriginalCents * vipEclipseRateBps / 10000),
+        Math.round(vipDiscountedCents * vipEclipseRateBps / 10000),
         vipCommissionCapCents,
       );
       const vipApplicationFeeAmountCents = vipEclipseCommissionCents + vipStripePassthroughCents;
@@ -690,10 +687,10 @@ Deno.serve(async (req) => {
         if (Number.isFinite(n)) creditDebitCents = Math.round(n * 100);
       }
       if (!Number.isFinite(creditDebitCents) || creditDebitCents < 0) creditDebitCents = 0;
-      const vipMaxCreditCents = vipOriginalCents - vipEclipseCommissionCents;
+      const vipMaxCreditCents = vipDiscountedCents - vipEclipseCommissionCents;
       if (creditDebitCents > vipMaxCreditCents) creditDebitCents = vipMaxCreditCents;
 
-      const amountCents = vipOriginalCents + vipStripePassthroughCents - creditDebitCents;
+      const amountCents = vipDiscountedCents + vipStripePassthroughCents - creditDebitCents;
       if (!Number.isFinite(amountCents) || amountCents <= 0) return jsonResponse({ ok: false, error: "Invalid price" });
 
       const organizerId = eventRow.creator_id ? String(eventRow.creator_id) : "";
@@ -737,6 +734,9 @@ Deno.serve(async (req) => {
         "metadata[reference_id]": vipId,
         "metadata[vip_reservado_id]": vipId,
         "metadata[original_total_cents]": String(vipOriginalCents),
+        "metadata[discount_amount_cents]": String(vipDiscountCents),
+        "metadata[discounted_total_cents]": String(vipDiscountedCents),
+        ...(discountCodeId ? { "metadata[discount_code_id]": discountCodeId } : {}),
         "metadata[service_fee_cents]": String(vipStripePassthroughCents),
         "metadata[eclipse_commission_cents]": String(vipEclipseCommissionCents),
         "metadata[commission_policy]": "vip_5pct_cap25_v1",
@@ -791,6 +791,10 @@ Deno.serve(async (req) => {
         buyer_name: buyerName,
         buyer_email: buyerEmail,
         original_total_cents: vipOriginalCents,
+        discount_amount_cents: vipDiscountCents,
+        discounted_total_cents: vipDiscountedCents,
+        discount_code_id: discountCodeId ?? '',
+        quantity: 1,
         service_fee_cents: vipStripePassthroughCents,
         eclipse_commission_cents: vipEclipseCommissionCents,
         commission_policy: "vip_5pct_cap25_v1",
@@ -827,7 +831,7 @@ Deno.serve(async (req) => {
         client_secret: intent.client_secret,
         payment_intent_id: intent.id,
         amount_cents: intent.amount,
-        ticket_amount_cents: vipOriginalCents,
+        ticket_amount_cents: vipDiscountedCents,
         service_fee_cents: vipStripePassthroughCents,
         currency: intent.currency,
         transaction_id: String(txInsert.json[0]?.id || ""),

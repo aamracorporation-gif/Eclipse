@@ -1,3 +1,5 @@
+import { DiscountScopePicker } from '@/components/DiscountScopePicker';
+import { discountScopeLabel, type DiscountScope } from '@/supabase/functions/_shared/discountPolicy';
 import {
   View, Text, StyleSheet, FlatList, TouchableOpacity,
   TextInput, Alert, ActivityIndicator, Switch,
@@ -15,6 +17,9 @@ import { useCallback, useEffect, useState } from 'react';
 import DateTimePicker from '@react-native-community/datetimepicker';
 
 type DiscountCode = {
+  applicability?: DiscountScope;
+  ticket_type_ids?: string[];
+  vip_reservado_ids?: string[];
   id: string;
   code: string;
   discount_type: 'percentage' | 'fixed';
@@ -45,6 +50,11 @@ export default function EventDiscountsScreen() {
   const [loading, setLoading] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [scope, setScope] = useState<DiscountScope>('tickets');
+  const [ticketIds, setTicketIds] = useState<string[]>([]);
+  const [vipIds, setVipIds] = useState<string[]>([]);
+  const [scopeReady, setScopeReady] = useState(true);
 
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [uses, setUses] = useState<Record<string, CodeUse[]>>({});
@@ -107,28 +117,54 @@ export default function EventDiscountsScreen() {
     setFormCode(''); setFormType('percentage'); setFormValue('');
     setFormMaxUses(''); setFormMinTickets('1'); setFormValidUntil(null);
     setTempDate(new Date());
+    setEditingId(null); setScope('tickets'); setTicketIds([]); setVipIds([]); setScopeReady(true);
+  };
+
+  const editCode = (item: DiscountCode) => {
+    setEditingId(item.id); setFormCode(item.code); setFormType(item.discount_type);
+    setFormValue(String(item.discount_value)); setFormMaxUses(item.max_uses == null ? '' : String(item.max_uses));
+    setFormMinTickets(String(item.min_tickets)); setFormValidUntil(item.valid_until ? new Date(item.valid_until) : null);
+    setScope(item.applicability ?? 'tickets'); setTicketIds(item.ticket_type_ids ?? []); setVipIds(item.vip_reservado_ids ?? []);
+    setScopeReady(item.applicability !== 'selected'); setShowForm(true);
   };
 
   const handleSave = async () => {
+    if (saving || !user || !event_id) return;
+    if (!scopeReady || (scope === 'selected' && !ticketIds.length && !vipIds.length)) {
+      Alert.alert('Selecciona productos', 'Escoge al menos una entrada o mesa VIP válida.'); return;
+    }
+    if (!/^\d+$/.test(formMinTickets.trim()) || Number(formMinTickets) < 1 || Number(formMinTickets) > 20) {
+      Alert.alert('Cantidad no válida', 'El mínimo debe ser un número entero entre 1 y 20.'); return;
+    }
+    if (formMaxUses.trim() && (!/^\d+$/.test(formMaxUses.trim()) || !Number.isSafeInteger(Number(formMaxUses)) || Number(formMaxUses) < 1 || Number(formMaxUses) > 2147483647)) {
+      Alert.alert('Límite no válido', 'Los usos máximos deben ser un número entero positivo.'); return;
+    }
+    if (scope === 'vip_tables' && Number(formMinTickets) !== 1) {
+      Alert.alert('Mínimo para mesas VIP', 'Se compra una mesa por operación, independientemente de las personas. Usa un mínimo de 1.'); return;
+    }
     const code = formCode.trim().toUpperCase();
     if (!code) { Alert.alert('Error', 'Introduce un código'); return; }
-    const val = parseFloat(formValue);
-    if (isNaN(val) || val <= 0) { Alert.alert('Error', 'Introduce un descuento válido'); return; }
+    const val = Number(formValue.trim().replace(',', '.'));
+    if (!Number.isFinite(val) || val <= 0) { Alert.alert('Error', 'Introduce un descuento válido'); return; }
     if (formType === 'percentage' && val > 100) { Alert.alert('Error', 'El porcentaje no puede superar el 100%'); return; }
 
     setSaving(true);
     try {
-      const { error } = await supabase.from('discount_codes').insert({
+      const payload = {
         event_id,
-        creator_id: user!.id,
         code,
         discount_type: formType,
         discount_value: val,
         max_uses: formMaxUses.trim() ? parseInt(formMaxUses) : null,
         min_tickets: parseInt(formMinTickets) || 1,
         valid_until: formValidUntil ? formValidUntil.toISOString() : null,
-        is_active: true,
-      });
+        applicability: scope,
+        ticket_type_ids: scope === 'selected' ? ticketIds : [],
+        vip_reservado_ids: scope === 'selected' ? vipIds : [],
+      };
+      const { error } = editingId
+        ? await supabase.from('discount_codes').update(payload).eq('id', editingId).eq('event_id', event_id).select('id').single()
+        : await supabase.from('discount_codes').insert({ ...payload, creator_id: user.id, is_active: true }).select('id').single();
       if (error) throw error;
       resetForm();
       setShowForm(false);
@@ -222,6 +258,9 @@ export default function EventDiscountsScreen() {
             <Text style={styles.codeText}>{item.code}</Text>
           </View>
           <View style={styles.cardHeaderRight}>
+            <TouchableOpacity accessibilityRole="button" accessibilityLabel={`Editar código ${item.code}`} onPress={() => editCode(item)} style={{padding:10}}>
+              <Text style={{color:'#C8ADF8',fontSize:12,fontWeight:'700'}}>Editar</Text>
+            </TouchableOpacity>
             <Switch
               value={item.is_active}
               onValueChange={() => toggleActive(item)}
@@ -244,6 +283,7 @@ export default function EventDiscountsScreen() {
           <Text style={styles.discountValue}>{formatDiscount(item)}</Text>
         </View>
 
+        <Text style={{color:'#BDAECF',fontSize:12,marginBottom:10}}>{discountScopeLabel(item)}</Text>
         <View style={styles.cardStats}>
           <Text style={styles.statText}>
             Usos: <Text style={styles.statVal}>{item.uses_count}{item.max_uses ? `/${item.max_uses}` : ''}</Text>
@@ -349,7 +389,7 @@ export default function EventDiscountsScreen() {
               showsVerticalScrollIndicator={false}
             >
               <View style={styles.formHeader}>
-                <Text style={styles.formTitle}>Nuevo código</Text>
+                <Text style={styles.formTitle}>{editingId ? 'Editar código' : 'Nuevo código'}</Text>
                 <TouchableOpacity onPress={() => { setShowForm(false); resetForm(); }} activeOpacity={0.7}>
                   <X size={20} color="rgba(255,255,255,0.5)" />
                 </TouchableOpacity>
@@ -365,6 +405,9 @@ export default function EventDiscountsScreen() {
                 autoCapitalize="characters"
                 autoCorrect={false}
               />
+
+              <DiscountScopePicker eventId={event_id} scope={scope} ticketIds={ticketIds} vipIds={vipIds}
+                disabled={saving} onScope={setScope} onTickets={setTicketIds} onVips={setVipIds} onReady={setScopeReady}/>
 
               <Text style={styles.fieldLabel}>Tipo de descuento</Text>
               <View style={styles.typeRow}>
@@ -410,7 +453,8 @@ export default function EventDiscountsScreen() {
                 keyboardType="number-pad"
               />
 
-              <Text style={styles.fieldLabel}>Mínimo de entradas</Text>
+              <Text style={styles.fieldLabel}>Mínimo de unidades por compra</Text>
+              <Text style={{color:'#AA9BB7',fontSize:12,lineHeight:18}}>Una entrada, un pack o una mesa completa cuenta como una unidad. El descuento fijo se resta una vez por compra. No incluye la tasa de servicio.</Text>
               <TextInput
                 style={styles.input}
                 placeholder="1"
@@ -445,9 +489,9 @@ export default function EventDiscountsScreen() {
               {renderDatePicker()}
 
               <ThemedButton
-                title={saving ? 'Guardando...' : 'Crear código'}
+                title={saving ? 'Guardando...' : editingId ? 'Guardar cambios' : 'Crear código'}
                 onPress={handleSave}
-                disabled={saving}
+                disabled={saving || !scopeReady}
                 style={{ marginTop: 8, height: 52, borderRadius: 14 }}
               />
             </ScrollView>
