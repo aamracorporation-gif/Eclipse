@@ -1,0 +1,42 @@
+[
+  {
+    "asset": "google_general.png",
+    "status": 200,
+    "contentType": "image/png",
+    "bytes": 1028411,
+    "sha256": "970a2cba15571bf99a8a40c27cc78a453fe7256ebcaa23a63f85a20c3c56dc48",
+    "matchesReviewedFile": true
+  },
+  {
+    "asset": "google_vip.png",
+    "status": 200,
+    "contentType": "image/png",
+    "bytes": 999938,
+    "sha256": "a500749de21047718c1533c2a02de947bceb5f6fb6ba48349ce39d88674cd1a3",
+    "matchesReviewedFile": true
+  },
+  {
+    "asset": "google_backstage.png",
+    "status": 200,
+    "contentType": "image/png",
+    "bytes": 1059140,
+    "sha256": "ad8e73c26f24384ae548166bc11b4eb85af060b8d5cdb0ee249eb57f5230bada",
+    "matchesReviewedFile": true
+  },
+  {
+    "asset": "google_fastlane.png",
+    "status": 200,
+    "contentType": "image/png",
+    "bytes": 979250,
+    "sha256": "7ea11b7a2eba7d33556f7f9cdb24f9bdab3a8c6d85b81e9a89ac6235dedc742a",
+    "matchesReviewedFile": true
+  },
+  {
+    "function": "apple-wallet-generator",
+    "unauthenticatedStatus": 401
+  },
+  {
+    "function": "generate-wallet-pass",
+    "unauthenticatedStatus": 401
+  }
+]

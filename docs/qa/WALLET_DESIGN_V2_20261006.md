@@ -39,6 +39,8 @@ Estas composiciones usan los PNG finales y datos ficticios; no son capturas del 
 
 ## Regenerar
 
+Desplegado en Eclipse Staging: Apple versión 4 y Google versión 7, ambas activas y con verificación JWT. Se comprobó que los cuatro PNG públicos devuelven HTTP 200 y coinciden byte a byte con los revisados, y que ambos endpoints rechazan llamadas sin sesión (401). El código recuperado del despliegue de Google coincide con la revisión guardada. La lectura posterior del código de Apple no pudo completarse por un error interno del conector; el despliegue y la consulta de estado sí confirman su versión activa. Evidencias: `wallet-v2-live-check.json` y `wallet-v2-deployment.json` en la misma carpeta de evidencias.
+
 Desde la raíz del repositorio, con las dependencias de desarrollo instaladas:
 
 ```sh
@@ -48,4 +50,3 @@ WALLET_TEST_DEPS=/ruta/al/prefijo-de-dependencias node scripts/qa/wallet-pass-re
 ```
 
 El prefijo de pruebas requiere passkit-generator@3.1.10, jose@5.9.6 y node-forge@1.4.0. La generación usa @napi-rs/canvas@1.0.0 y las fuentes incluidas en el repositorio.
-
