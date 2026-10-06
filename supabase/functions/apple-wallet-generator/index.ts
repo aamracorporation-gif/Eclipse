@@ -395,23 +395,16 @@ Deno.serve(async (req) => {
             textAlignment: "PKTextAlignmentRight" },
         ],
 
-        // ── PRIMARY ── (largest text on the pass)
-        // label = category (in accent/labelColor — acts as a visual badge)
-        // value = event name ALL CAPS — bold, confident, iconic
-        primaryFields: [
+        // Keep the illustrated strip unobstructed. The event remains native,
+        // accessible and available on Apple Watch, which omits strip artwork.
+        primaryFields: [],
+
+        // ── SECONDARY ── (two columns, medium weight)
+        // Event and time sit on the solid background below the artwork.
+        secondaryFields: [
           { key:   "eventName",
             label: categoryLabel,
             value: title,
-            textAlignment: "PKTextAlignmentLeft" },
-        ],
-
-        // ── SECONDARY ── (two columns, medium weight)
-        // VENUE left — tells you where to go
-        // DATE  right — confirms the day
-        secondaryFields: [
-          { key:   "venue",
-            label: "LOCAL",
-            value: venueShort,
             textAlignment: "PKTextAlignmentLeft" },
           { key:   "date",
             label: "HORA",
@@ -419,14 +412,11 @@ Deno.serve(async (req) => {
             textAlignment: "PKTextAlignmentRight" },
         ],
 
-        // ── AUXILIARY ── (three small columns)
-        // SECTION — helps you navigate the venue
-        // GATE    — which entrance to use
-        // ENTRY   — what time doors open for your tier
+        // Venue, holder and optional group remain native, never painted in art.
         auxiliaryFields: [
+          { key: "venue", label: "LOCAL", value: venueShort, textAlignment: "PKTextAlignmentLeft" },
           { key: "holder", label: "TITULAR", value: holderName, textAlignment: "PKTextAlignmentLeft" },
-          ...(vipGroupSize ? [{ key: "group", label: "GRUPO", value: `${vipGroupSize} personas`, textAlignment: "PKTextAlignmentRight" }] :
-            [{ key: "access", label: "ENTRADA", value: ticketTypeObj?.name || theme.label, textAlignment: "PKTextAlignmentRight" }]),
+          ...(vipGroupSize ? [{ key: "group", label: "GRUPO", value: `${vipGroupSize} personas`, textAlignment: "PKTextAlignmentRight" }] : []),
         ],
 
         backFields,

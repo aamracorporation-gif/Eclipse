@@ -3,7 +3,7 @@ export const WALLET_THEMES = {
   general: { label: 'GENERAL', background: '#111020', foreground: '#FFFFFF', accent: '#BDA9FF' },
   vip: { label: 'VIP', background: '#19150F', foreground: '#FFFFFF', accent: '#E8C58B' },
   backstage: { label: 'BACKSTAGE', background: '#17101C', foreground: '#FFFFFF', accent: '#EAA9DE' },
-  fastlane: { label: 'FASTLANE', background: '#0C1B20', foreground: '#FFFFFF', accent: '#91E4D5' },
+  fastlane: { label: 'FASTLANE', background: '#0C1B20', foreground: '#FFFFFF', accent: '#D8F36A' },
 };
 export function walletTier(category: unknown, name: unknown): keyof typeof WALLET_THEMES {
   const text = `${category || ''} ${name || ''}`.toLowerCase();
@@ -22,4 +22,4 @@ export function walletRgb(hex: string): string {
   return `rgb(${[1,3,5].map(i => parseInt(hex.slice(i,i+2),16)).join(',')})`;
 }
 // Immutable public artwork, contains no ticket data or credentials.
-export const WALLET_ART_BASE = 'https://raw.githubusercontent.com/aamracorporation-gif/Eclipse/61766adc874f421594a818c47d1dbe9758baf348/assets/wallet-pass';
+export const WALLET_ART_BASE = 'https://raw.githubusercontent.com/aamracorporation-gif/Eclipse/39426435f4d26cd47f72a473dd3d31c96f10787c/assets/wallet-pass';

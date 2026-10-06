@@ -1,33 +1,58 @@
-// Deterministic Eclipse artwork. Native Wallet fields carry all ticket information.
-import { createCanvas, GlobalFonts } from '@napi-rs/canvas';
-import { writeFileSync, mkdirSync } from 'node:fs';
+// Reproducible platform exports of the checked-in Eclipse sculptural artwork.
+// The original PNGs are immutable inputs; this script never calls an image API.
+import { createCanvas, GlobalFonts, loadImage } from '@napi-rs/canvas';
+import { writeFileSync, mkdirSync, readFileSync } from 'node:fs';
+import ts from 'typescript';
 import { resolve } from 'node:path';
 GlobalFonts.registerFromPath('assets/wallet-pass/fonts/DejaVuSans.ttf', 'Wallet Sans');
 GlobalFonts.registerFromPath('assets/wallet-pass/fonts/DejaVuSans-Bold.ttf', 'Wallet Sans');
 const out = resolve('assets/wallet-pass');
 mkdirSync(out, { recursive: true });
-const themes = { general: ['#111020','#BDA9FF'], vip: ['#19150F','#E8C58B'], backstage: ['#17101C','#EAA9DE'], fastlane: ['#0C1B20','#91E4D5'] };
+const { outputText } = ts.transpileModule(readFileSync('supabase/functions/_shared/walletDesign.ts','utf8'), { compilerOptions: { module: ts.ModuleKind.ESNext } });
+const { WALLET_THEMES: themes } = await import(`data:text/javascript;base64,${Buffer.from(outputText).toString('base64')}`);
+const originals = Object.fromEntries(await Promise.all(Object.keys(themes).map(async tier => [tier, await loadImage(`${out}/artwork-v2/${tier}.png`)])));
 const bundle = {};
 function save(c, name) { const b=c.toBuffer('image/png'); writeFileSync(`${out}/${name}`,b); return b.toString('base64'); }
-function art(w,h,tier) {
- const c=createCanvas(w,h), x=c.getContext('2d'); const [bg,accent]=themes[tier];
+function art(w,h,tier,platform) {
+ const c=createCanvas(w,h), x=c.getContext('2d'); const {background:bg,accent,label}=themes[tier];
+ const source=originals[tier];
  x.fillStyle=bg; x.fillRect(0,0,w,h);
- const cx=w*.82,cy=h*.45,r=h*.69;
- const glow=x.createRadialGradient(cx,cy,r*.7,cx,cy,r*1.65);
- glow.addColorStop(0,accent+'65');glow.addColorStop(.6,accent+'18');glow.addColorStop(1,accent+'00');
- x.fillStyle=glow;x.fillRect(0,0,w,h);
- for(let i=0;i<7;i++){ x.beginPath();x.ellipse(cx,cy,r*(1+i*.09),r*(.48+i*.035),-.45,0,Math.PI*2);x.strokeStyle=accent+(i===0?'B0':'25');x.lineWidth=Math.max(1,w/750);x.stroke(); }
- const sphere=x.createLinearGradient(cx-r,cy-r,cx+r,cy+r);sphere.addColorStop(0,accent);sphere.addColorStop(.18,bg);sphere.addColorStop(1,'#08090F');
- x.beginPath();x.arc(cx,cy,r*.78,0,Math.PI*2);x.fillStyle=sphere;x.fill();
- x.strokeStyle=accent+'AA';x.lineWidth=w/600;x.beginPath();x.arc(cx,cy,r*.78,Math.PI*.9,Math.PI*1.65);x.stroke();
- // Keep the text zone dark even when Wallet wraps a long event title.
- const fade=x.createLinearGradient(0,0,w,0);fade.addColorStop(0,bg);fade.addColorStop(.50,bg+'F5');fade.addColorStop(.8,bg+'50');fade.addColorStop(1,bg+'20');x.fillStyle=fade;x.fillRect(0,0,w,h);
+ x.imageSmoothingEnabled=true; x.imageSmoothingQuality='high';
+ if(platform==='google') {
+  // 1032:812 composition, with ~20dp vertical breathing room. No baked text.
+  // Crop the deliberately empty left edge, not the sculpture's silhouette.
+  const sh=source.height, sw=source.width*.84, sx=source.width-sw;
+  const scale=Math.min(w/sw,(h-w*.11)/sh);
+  const dw=sw*scale,dh=sh*scale;
+  x.drawImage(source,sx,0,sw,sh,(w-dw)/2,(h-dh)/2,dw,dh);
+  const fade=x.createLinearGradient(0,0,0,h);
+  fade.addColorStop(0,bg);fade.addColorStop(.11,bg+'00');fade.addColorStop(.85,bg+'00');fade.addColorStop(1,bg);
+  x.fillStyle=fade; x.fillRect(0,0,w,h);
+ } else {
+  // Apple event-ticket strip: a wide editorial wordmark and a macro sculpture.
+  // Ticket data stays in native fields BELOW the strip, including the category.
+  const sw=source.width*.80, sh=source.height*.90;
+  const dh=h*1.32, dw=sw/sh*dh;
+  x.drawImage(source,source.width-sw,source.height*.035,sw,sh,w-dw,-h*.16,dw,dh);
+  const fade=x.createLinearGradient(0,0,w,0);
+  fade.addColorStop(0,bg);fade.addColorStop(.43,bg);fade.addColorStop(.67,bg+'00');fade.addColorStop(1,bg+'00');
+  x.fillStyle=fade;x.fillRect(0,0,w,h);
+  x.save();
+  const size=h*.78;
+  x.font=`900 ${size}px "Wallet Sans"`;
+  const maxWidth=w*(tier==='vip'?.34:.60);
+  const squeeze=Math.min(.76,maxWidth/x.measureText(label).width);
+  x.translate(w*.035,h*.80);x.scale(squeeze,1);
+  x.fillStyle=accent;x.fillText(label,0,0);
+  x.restore();
+  x.fillStyle=accent+'65';x.fillRect(w*.04,h*.90,w*.22,Math.max(1,h*.008));
+ }
  return c;
 }
 function mark(x,s,accent='#D7C9FF'){x.strokeStyle=accent;x.lineWidth=s*.085;x.beginPath();x.arc(s*.5,s*.5,s*.30,.35,5.8);x.stroke();x.fillStyle='#FFFFFF';x.beginPath();x.arc(s*.77,s*.27,s*.065,0,Math.PI*2);x.fill();}
 for(const tier of Object.keys(themes)){
- for(let scale=1;scale<=3;scale++){const suffix=scale===1?'':`@${scale}x`;bundle[`strip_${tier}${suffix}.png`]=save(art(375*scale,98*scale,tier),`strip_${tier}${suffix}.png`);}
- save(art(1032,336,tier),`google_${tier}.png`);
+ for(let scale=1;scale<=3;scale++){const suffix=scale===1?'':`@${scale}x`;bundle[`strip_${tier}${suffix}.png`]=save(art(375*scale,98*scale,tier,'apple'),`strip_${tier}${suffix}.png`);}
+ save(art(1032,812,tier,'google'),`google_${tier}.png`);
 }
 for(let scale=1;scale<=3;scale++){
  const suffix=scale===1?'':`@${scale}x`;

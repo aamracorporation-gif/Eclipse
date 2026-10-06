@@ -137,12 +137,16 @@ async function check(name, fn) { await fn(); passed++; console.log('PASS ' + nam
       const fields = ios.passData.eventTicket;
       assert.equal(fields.secondaryFields[1].value, '00:30');
       assert.ok(fields.headerFields[0].value.includes('10'));
-      assert.equal(fields.primaryFields[0].value, ticket.events.title);
+      assert.equal(fields.primaryFields.length, 0, 'Artwork must not be covered by a native primary field');
+      assert.equal(fields.secondaryFields[0].value, ticket.events.title);
+      assert.ok(fields.auxiliaryFields.some(f=>f.key==='venue' && f.value==='QA Venue'));
+      assert.ok(fields.auxiliaryFields.some(f=>f.key==='holder' && f.value==='QA Fixture'));
       assert.equal(ios.passData.barcodes[0].message, ticket.qr_token);
       assert.ok(!fields.backFields.some(f => ['back_gate','back_lane','back_section','back_seat'].includes(f.key)));
       for (const scale of [1,2,3]) {
         const png = ios.passFiles['strip' + (scale === 1 ? '' : '@' + scale + 'x') + '.png'];
         assert.equal(png.readUInt32BE(16),375*scale); assert.equal(png.readUInt32BE(20),98*scale);
+        assert.deepEqual(png, fs.readFileSync(path.join(root,'assets/wallet-pass',`strip_${tier}${scale===1?'':'@'+scale+'x'}.png`)), 'Bundle must use the reviewed artwork');
       }
       const android = await invoke('android'); assert.equal(android.status,200);
       const verified = await jose.jwtVerify(android.body.url.split('/').pop(),crypto.createPublicKey(pkcs8));
@@ -150,6 +154,8 @@ async function check(name, fn) { await fn(); passed++; console.log('PASS ' + nam
       assert.equal(obj.textModulesData.find(f=>f.id==='show').body,'00:30');
       assert.equal(obj.textModulesData.find(f=>f.id==='entry').body,'00:30');
       assert.ok(obj.heroImage.sourceUri.uri.endsWith('google_'+tier+'.png'));
+      const hero = fs.readFileSync(path.join(root,'assets/wallet-pass',`google_${tier}.png`));
+      assert.equal(hero.readUInt32BE(16),1032);assert.equal(hero.readUInt32BE(20),812);
       assert.ok(!obj.textModulesData.some(f=>['gate','section','lane'].includes(f.id)));
       assert.equal(verified.payload.payload.genericClasses[0].classTemplateInfo.cardTemplateOverride.cardRowTemplateInfos.length,2);
     });
