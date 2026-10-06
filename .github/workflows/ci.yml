@@ -32,6 +32,8 @@ jobs:
       - run: npm run typecheck
       - run: npm run lint
       - run: npm test -- --runInBand
+      - name: Check embedded Wallet artwork
+        run: node scripts/sync-wallet-assets.cjs --check
       - name: Validate Wallet signing and authorization with fixture credentials
         run: |
           export WALLET_TEST_DEPS="$(mktemp -d "$RUNNER_TEMP/eclipse-wallet.XXXXXX")"
@@ -42,6 +44,10 @@ jobs:
       - name: Backend dependencies and tests
         working-directory: backend
         run: npm ci && npm test
+      - name: Audit backend production dependencies
+        run: npm --prefix backend audit --omit=dev --audit-level=critical
+      - name: Critical dependency security regressions
+        run: node --test scripts/tests/dependencySecurity.test.cjs
 
   secret-scan:
     runs-on: ubuntu-latest

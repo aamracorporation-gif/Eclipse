@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       platform:
-        description: Platform to build
+        description: Platform to build (TestFlight requires ios)
         required: true
         default: all
         type: choice
@@ -19,6 +19,7 @@ on:
         type: choice
         options:
           - preview
+          - testflight
           - production
 
 concurrency:
@@ -28,10 +29,22 @@ concurrency:
 jobs:
   validate-and-build:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     environment: ${{ inputs.profile == 'production' && 'production' || 'staging' }}
     permissions:
       contents: read
+    env:
+      BUILD_PLATFORM: ${{ inputs.platform }}
+      BUILD_PROFILE: ${{ inputs.profile }}
     steps:
+      - name: Validate selected build target
+        run: |
+          case "$BUILD_PLATFORM" in all|android|ios) ;; *) exit 1 ;; esac
+          case "$BUILD_PROFILE" in preview|testflight|production) ;; *) exit 1 ;; esac
+          if [ "$BUILD_PROFILE" = testflight ] && [ "$BUILD_PLATFORM" != ios ]; then
+            echo '::error::Select ios for the TestFlight profile.'
+            exit 1
+          fi
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
@@ -39,12 +52,28 @@ jobs:
           cache: npm
       - name: Install dependencies
         run: npm ci
+      - name: Audit production dependencies
+        run: npm audit --omit=dev --audit-level=critical
+      - name: Validate release environment guards
+        run: node --test scripts/tests/buildEnvironment.test.cjs scripts/tests/stagingServices.test.cjs
+      - name: Validate Expo dependency alignment
+        run: npx expo install --check
       - name: Run release gates
         run: npm run ci:check
+      - name: Backend and dependency security gates
+        run: |
+          npm --prefix backend ci
+          npm --prefix backend audit --omit=dev --audit-level=critical
+          node --test scripts/tests/dependencySecurity.test.cjs
+          npm --prefix backend test
       - name: Configure EAS
         uses: expo/expo-github-action@v8
         with:
           eas-version: 18.0.1
           token: ${{ secrets.EXPO_TOKEN }}
       - name: Queue signed build
-        run: eas build --platform "${{ inputs.platform }}" --profile "${{ inputs.profile }}" --non-interactive --no-wait
+        run: eas build --platform "$BUILD_PLATFORM" --profile "$BUILD_PROFILE" --non-interactive --no-wait
+      - name: Record build scope
+        run: |
+          echo 'A build has been queued; this does not confirm successful compilation or submission to Apple.' >> "$GITHUB_STEP_SUMMARY"
+          echo "Source commit: $GITHUB_SHA; profile: $BUILD_PROFILE; platform: $BUILD_PLATFORM" >> "$GITHUB_STEP_SUMMARY"
