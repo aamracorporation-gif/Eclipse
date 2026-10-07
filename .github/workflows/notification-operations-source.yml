@@ -1,0 +1,46 @@
+name: Notification operations source
+on:
+  push:
+    branches: [codex/notifications-operations-v2]
+    paths: [.github/workflows/notification-operations-source.yml]
+permissions:
+  contents: read
+jobs:
+  source:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Archive source without credentials or dependencies
+        run: |
+          python3 - <<'PY'
+          import subprocess, zipfile, pathlib
+          roots={'app','components','lib','hooks','constants','supabase','backend','__tests__','tests','scripts','plugins','patches','docs','.github'}
+          files=subprocess.check_output(['git','ls-files','-z']).decode().split('\0')
+          with zipfile.ZipFile('/tmp/notification-source.zip','w',zipfile.ZIP_DEFLATED) as z:
+            for name in files:
+              if not name: continue
+              p=pathlib.Path(name)
+              if p.is_symlink() or 'node_modules' in p.parts or p.name.startswith('.env'): continue
+              if len(p.parts)>1 and p.parts[0] not in roots: continue
+              if p.suffix.lower() not in {'.ts','.tsx','.js','.cjs','.mjs','.json','.sql','.toml','.md','.patch','.yml','.yaml'}: continue
+              if 'service-account' in p.name.lower() or 'serviceaccount' in p.name.lower(): continue
+              z.write(p,name)
+          PY
+      - name: Read Supabase changelog and discover CLI migration command
+        run: |
+          curl --fail --silent --show-error https://supabase.com/changelog.md -o /tmp/supabase-changelog.md
+          npx --yes supabase@2.120.0 --version
+          npx --yes supabase@2.120.0 migration new --help
+          npx --yes supabase@2.120.0 migration new notification_operations_v2
+          cp "$(find supabase/migrations -name '*_notification_operations_v2.sql')" /tmp/
+      - uses: actions/upload-artifact@v4
+        with:
+          name: notification-source
+          path: |
+            /tmp/notification-source.zip
+            /tmp/supabase-changelog.md
+            /tmp/*_notification_operations_v2.sql
+          retention-days: 1
