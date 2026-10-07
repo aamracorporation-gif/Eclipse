@@ -57,12 +57,14 @@ jobs:
               p.parent.mkdir(parents=True,exist_ok=True)
               p.write_text(e['content'],encoding='utf-8')
             assert hashlib.sha256(p.read_bytes()).hexdigest() == e['after'], e['path']
-          temporary = parts + ['.github/workflows/notification-migration-scaffold.yml','.github/workflows/notification-core-transfer.yml']
-          for name in temporary: pathlib.Path(name).unlink()
-          subprocess.run(['git','add','--',*sorted(paths),*temporary],check=True)
+          # GITHUB_TOKEN cannot write workflows. Those changes use the authorized connector separately.
+          subprocess.run(['git','restore','--','.github/workflows/ci.yml'],check=True)
+          paths.remove('.github/workflows/ci.yml')
+          for name in parts: pathlib.Path(name).unlink()
+          subprocess.run(['git','add','--',*sorted(paths),*parts],check=True)
           staged=set(subprocess.check_output(['git','diff','--cached','--name-only'],text=True).splitlines())
-          assert staged == paths | set(temporary), staged
-          print('Verified 18 scoped source files; removed temporary transfer files. Full PR CI still required.')
+          assert staged == paths | set(parts), staged
+          print('Verified and staged 17 scoped source files. Workflow cleanup and full PR CI remain required.')
           PY
       - name: Commit candidate only to isolated branch
         env:
