@@ -150,45 +150,45 @@ begin
 end $$;
 
 create function notification_private.capture_stock() returns trigger language plpgsql security definer set search_path='' as $$
-declare kind text; item jsonb; previous jsonb; remaining integer; before_remaining integer; total integer; before_total integer;
+declare v_kind text; item jsonb; previous jsonb; remaining integer; before_remaining integer; total integer; before_total integer;
  active boolean; before_active boolean; band integer; before_band integer; previous_state notification_private.stock_state%rowtype; next_revision bigint;
  ev uuid; product uuid; organizer uuid; event_title text; label text; heading text; message text; channels text[];
 begin
  if not notification_private.operations_active() then if tg_op='DELETE' then return old; else return new; end if; end if;
- kind:=case when tg_table_name='reservados_vip' then 'vip_table' else 'admission' end;
+ v_kind:=case when tg_table_name='reservados_vip' then 'vip_table' else 'admission' end;
  if tg_op='DELETE' then
-  update notification_private.stock_state set active=false,revision=stock_state.revision+1,updated_at=now() where product_kind=kind and product_id=old.id;
+  update notification_private.stock_state set active=false,revision=stock_state.revision+1,updated_at=now() where product_kind=v_kind and product_id=old.id;
   return old;
  end if;
  item:=to_jsonb(new); previous:=case when tg_op='INSERT' then item else to_jsonb(old) end;
  ev:=notification_private.as_uuid(item->>'event_id'); product:=notification_private.as_uuid(item->>'id');
- remaining:=case when kind='vip_table' then coalesce((item->>'quantity_available')::integer,0) else coalesce((item->>'quantity')::integer,0)-coalesce((item->>'sold')::integer,0) end;
- before_remaining:=case when kind='vip_table' then coalesce((previous->>'quantity_available')::integer,0) else coalesce((previous->>'quantity')::integer,0)-coalesce((previous->>'sold')::integer,0) end;
+ remaining:=case when v_kind='vip_table' then coalesce((item->>'quantity_available')::integer,0) else coalesce((item->>'quantity')::integer,0)-coalesce((item->>'sold')::integer,0) end;
+ before_remaining:=case when v_kind='vip_table' then coalesce((previous->>'quantity_available')::integer,0) else coalesce((previous->>'quantity')::integer,0)-coalesce((previous->>'sold')::integer,0) end;
  total:=coalesce((item->>'quantity')::integer,0); before_total:=coalesce((previous->>'quantity')::integer,0);
  active:=coalesce((item->>'is_active')::boolean,false) and item->>'deleted_at' is null;
  before_active:=coalesce((previous->>'is_active')::boolean,false) and previous->>'deleted_at' is null;
- band:=notification_private.stock_band(kind,remaining,total); before_band:=notification_private.stock_band(kind,before_remaining,before_total);
- select * into previous_state from notification_private.stock_state where product_kind=kind and product_id=product for update;
+ band:=notification_private.stock_band(v_kind,remaining,total); before_band:=notification_private.stock_band(v_kind,before_remaining,before_total);
+ select * into previous_state from notification_private.stock_state where product_kind=v_kind and product_id=product for update;
  next_revision:=coalesce(previous_state.revision,0)+case when band is distinct from coalesce(previous_state.band,before_band)
   or band is distinct from before_band or active is distinct from coalesce(previous_state.active,before_active) or (previous_state.event_id is not null and previous_state.event_id<>ev) then 1 else 0 end;
  insert into notification_private.stock_state(product_kind,product_id,event_id,band,revision,available,active)
- values(kind,product,ev,band,next_revision,greatest(remaining,0),active)
+ values(v_kind,product,ev,band,next_revision,greatest(remaining,0),active)
  on conflict(product_kind,product_id) do update set event_id=excluded.event_id,band=excluded.band,revision=excluded.revision,available=excluded.available,active=excluded.active,updated_at=now();
  -- No notification for creating/relabeling an offer or merely increasing/replenishing inventory.
  if tg_op='INSERT' or not active or not before_active or remaining>=before_remaining or band>=before_band or band=100 then return new; end if;
  select e.creator_id,e.title into organizer,event_title from public.events e where e.id=ev and not coalesce(e.is_cancelled,false) and coalesce(e.status,'') not in ('cancelled','deleted')
  and coalesce(e.end_datetime,e.event_date+interval '5 hours')>now();
  if organizer is null or not notification_private.role_active(organizer,'organizer') then return new; end if;
- label:=coalesce(nullif(item->>'name',''),case when kind='vip_table' then 'Mesa VIP' else 'Entrada' end);
- heading:=case when band=0 then 'Producto agotado' when kind='vip_table' and band=1 then 'Última mesa disponible' when kind='vip_table' then 'Últimas mesas disponibles' else 'Quedan pocas entradas' end;
+ label:=coalesce(nullif(item->>'name',''),case when v_kind='vip_table' then 'Mesa VIP' else 'Entrada' end);
+ heading:=case when band=0 then 'Producto agotado' when v_kind='vip_table' and band=1 then 'Última mesa disponible' when v_kind='vip_table' then 'Últimas mesas disponibles' else 'Quedan pocas entradas' end;
  message:=coalesce(event_title,'Tu evento')||' · '||label||': '||case when band=0 then 'ya no quedan unidades disponibles.'
- when kind='vip_table' and band=1 then 'queda una mesa disponible.' when kind='vip_table' then 'quedan dos mesas disponibles.'
+ when v_kind='vip_table' and band=1 then 'queda una mesa disponible.' when v_kind='vip_table' then 'quedan dos mesas disponibles.'
  else 'queda como máximo el '||band||'% del cupo configurado.' end||' Revisa el inventario actual en tu panel.';
  channels:=array['push'];
  if exists(select 1 from notification_private.outbox o where o.user_id=organizer and o.kind='organizer.stock_alert' and o.data->>'product_id'=product::text
-  and o.data->>'product_kind'=kind and o.data->>'band'=band::text and o.created_at>now()-interval '1 hour' and 'push'=any(o.channels)) then channels:='{}'; end if;
- perform notification_private.emit(organizer,'organizer','organizer.stock_alert','stock:'||kind||':'||product||':'||next_revision,heading,message,
- jsonb_build_object('event_id',ev,'destination','organizer','product_id',product,'product_kind',kind,'band',band,'stock_revision',next_revision),'operation',
+  and o.data->>'product_kind'=v_kind and o.data->>'band'=band::text and o.created_at>now()-interval '1 hour' and 'push'=any(o.channels)) then channels:='{}'; end if;
+ perform notification_private.emit(organizer,'organizer','organizer.stock_alert','stock:'||v_kind||':'||product||':'||next_revision,heading,message,
+ jsonb_build_object('event_id',ev,'destination','organizer','product_id',product,'product_kind',v_kind,'band',band,'stock_revision',next_revision),'operation',
  case when band=0 then 'high' else 'normal' end,channels,now()+interval '6 hours');
  return new;
 end $$;
