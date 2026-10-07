@@ -1,0 +1,53 @@
+name: Notification core regression
+on:
+  pull_request:
+    paths:
+      - 'supabase/migrations/*notification_core_v2.sql'
+      - 'supabase/functions/dispatch-notifications-v2/**'
+      - 'supabase/functions/_shared/notificationDelivery.ts'
+      - 'tests/notifications/**'
+      - 'scripts/tests/notificationDelivery.test.cjs'
+      - '.github/workflows/notifications-v2.yml'
+permissions:
+  contents: read
+jobs:
+  database:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    services:
+      postgres:
+        image: postgres:17@sha256:2d2b8998d31037bf721cfdf764d76ba74171b4fab3431b7f72c27c56ddbdf9e3
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: notifications_test
+          PGUSER: postgres
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd pg_isready --health-interval 5s
+          --health-timeout 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Disposable database only, never a Supabase project
+        env:
+          PGPASSWORD: postgres
+        run: |
+          psql -h localhost -U postgres -d notifications_test -v ON_ERROR_STOP=1 -f tests/notifications/fixture.sql
+          psql -h localhost -U postgres -d notifications_test -v ON_ERROR_STOP=1 -f supabase/migrations/20261007205841_notification_core_v2.sql
+          psql -h localhost -U postgres -d notifications_test -v ON_ERROR_STOP=1 -f tests/notifications/regression.sql
+          python3 tests/notifications/concurrency.py
+  delivery:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Mocked providers, no real messages
+        run: node --test scripts/tests/notificationDelivery.test.cjs

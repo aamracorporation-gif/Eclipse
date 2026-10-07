@@ -1,173 +1,75 @@
-import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
-import { supabase } from './supabase';
-import { useAuth } from './AuthContext';
-import { normalizeNotificationRow, type NotificationModel } from './notificationSchema';
-import { registerForPushNotifications } from '@/lib/notifications';
-import { AppState } from 'react-native';
+import React, {createContext,useCallback,useContext,useEffect,useRef,useState} from 'react';
+import {AppState,Platform} from 'react-native';
+import * as ExpoNotifications from 'expo-notifications';
+import {supabase} from './supabase';
+import {useAuth} from './AuthContext';
+import {normalizeNotificationRow,type NotificationModel} from './notificationSchema';
+import {registerForPushNotifications} from './notifications';
+import {NOTIFICATION_ROLES,type NotificationRole} from './notificationNavigation';
 
-export type Notification = {
-  id: string;
-  user_id: string;
-  role?: 'attendee' | 'organizer' | 'staff' | 'admin';
-  title?: string;
-  type: string;
-  message?: string;
-  body?: string;
-  priority?: 'low' | 'normal' | 'high';
-  status?: 'pending' | 'sent' | 'failed' | 'blocked' | 'read';
-  data?: Record<string, unknown> | null;
-  read: boolean;
-  created_at: string;
-};
-
-type NotificationContextType = {
-  notifications: Notification[];
-  unreadCount: number;
-  loading: boolean;
-  fetchNotifications: () => Promise<void>;
-  markAsRead: (id: string) => Promise<void>;
-  markAllAsRead: () => Promise<void>;
-  deleteNotification: (id: string) => Promise<void>;
-  deleteAllNotifications: () => Promise<void>;
-};
-
-const NotificationContext = createContext<NotificationContextType | undefined>(undefined);
-
-export function NotificationProvider({ children }: { children: React.ReactNode }) {
-  const { user } = useAuth();
-  const [notifications, setNotifications] = useState<Notification[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  const unreadCount = notifications.filter(n => !n.read).length;
-
-  const normalize = (row: any): NotificationModel => normalizeNotificationRow(row);
-
-  const fetchNotifications = useCallback(async () => {
-    if (!user) return;
-    try {
-      const { data, error } = await supabase
-        .from('notifications')
-        .select('*')
-        .eq('user_id', user.id)
-        .order('created_at', { ascending: false });
-
-      if (error) throw error;
-      setNotifications((data || []).map(normalize) as any);
-    } catch (error) {
-      console.error('Error fetching notifications:', error);
-    } finally {
-      setLoading(false);
-    }
-  }, [user]);
-
-  const markAsRead = async (id: string) => {
-    try {
-      const now = new Date().toISOString();
-      const { error } = await supabase
-        .from('notifications')
-        .update({ read: true, read_at: now, status: 'read' })
-        .eq('id', id);
-
-      if (error) throw error;
-      setNotifications(prev => prev.map(n => n.id === id ? { ...n, read: true } : n));
-    } catch (error) {
-      console.error('Error marking notification as read:', error);
-    }
-  };
-
-  const markAllAsRead = async () => {
-    if (!user) return;
-    try {
-      const { error } = await supabase.rpc('mark_all_notifications_read', { p_user_id: user.id });
-      if (error) throw error;
-      setNotifications(prev => prev.map(n => ({ ...n, read: true })));
-    } catch (error) {
-      console.error('Error marking all notifications as read:', error);
-    }
-  };
-
-  const deleteNotification = async (id: string) => {
-    if (!user) return;
-    try {
-      const { error } = await supabase.from('notifications').delete().eq('id', id).eq('user_id', user.id);
-      if (error) throw error;
-      setNotifications((prev) => prev.filter((n) => n.id !== id));
-    } catch (error) {
-      console.error('Error deleting notification:', error);
-    }
-  };
-
-  const deleteAllNotifications = async () => {
-    if (!user) return;
-    try {
-      const { error } = await supabase.from('notifications').delete().eq('user_id', user.id);
-      if (error) throw error;
-      setNotifications([]);
-    } catch (error) {
-      console.error('Error deleting all notifications:', error);
-    }
-  };
-
-  useEffect(() => {
-    if (!user) {
-      setNotifications([]);
-      setLoading(false);
-      return;
-    }
-
-    registerForPushNotifications(user.id).catch(() => {});
-    const sub = AppState.addEventListener('change', (state) => {
-      if (state === 'active') {
-        registerForPushNotifications(user.id).catch(() => {});
-      }
-    });
-
-    fetchNotifications();
-
-    // Subscribe to real-time notifications
-    const channel = supabase
-      .channel(`user-notifications-${user.id}`)
-      .on(
-        'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'notifications',
-          filter: `user_id=eq.${user.id}`,
-        },
-        (payload) => {
-          const newNotification = normalize(payload.new as any) as any;
-          setNotifications(prev => [newNotification, ...prev]);
-        }
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-      sub.remove();
-    };
-  }, [user, fetchNotifications]);
-
-  return (
-    <NotificationContext.Provider value={{
-      notifications,
-      unreadCount,
-      loading,
-      fetchNotifications,
-      markAsRead,
-      markAllAsRead,
-      deleteNotification,
-      deleteAllNotifications,
-    }}>
-      {children}
-    </NotificationContext.Provider>
-  );
+export type Notification=NotificationModel;
+type Filter='all'|'unread'|'important';
+type Snapshot={scope:string;items:Notification[];unread:number;roles:NotificationRole[];hasMore:boolean};
+type Context={notifications:Notification[];unreadCount:number;loading:boolean;error:string|null;hasMore:boolean;roles:NotificationRole[];
+ selectedRole:NotificationRole|null;setSelectedRole:(role:NotificationRole|null)=>void;filter:Filter;setFilter:(filter:Filter)=>void;
+ showArchived:boolean;setShowArchived:(value:boolean)=>void;fetchNotifications:()=>Promise<void>;loadMore:()=>Promise<void>;
+ markAsRead:(id:string)=>Promise<void>;markAllAsRead:()=>Promise<void>;deleteNotification:(id:string)=>Promise<void>;
+ deleteAllNotifications:()=>Promise<void>;restoreNotification:(id:string)=>Promise<void>};
+const NotificationContext=createContext<Context|undefined>(undefined);
+export function NotificationProvider({children}:{children:React.ReactNode}) {
+ const {user}=useAuth();const uid=user?.id??'';
+ const [selectedRole,setSelectedRole]=useState<NotificationRole|null>(null);
+ const [filter,setFilter]=useState<Filter>('all');const [showArchived,setShowArchived]=useState(false);
+ useEffect(()=>{setSelectedRole(null);setFilter('all');setShowArchived(false);},[uid]);
+ const scope=`${uid}:${selectedRole??'all'}:${filter}:${showArchived}`;
+ const active=useRef(scope);active.current=scope;
+ const sequence=useRef(0),busy=useRef(false),snapshotRef=useRef<Snapshot|null>(null);
+ const [snapshot,setSnapshot]=useState<Snapshot|null>(null),[loading,setLoading]=useState(false),[failure,setFailure]=useState<{scope:string;message:string}|null>(null);
+ const fetchPage=useCallback(async(append=false)=>{
+  if(!uid)return;
+  if(append&&busy.current)return;
+  const current=snapshotRef.current?.scope===scope?snapshotRef.current:null;
+  if(append&&!current?.hasMore)return;
+  const tail=append?current?.items.at(-1):undefined;
+  const call=++sequence.current;busy.current=true;setLoading(true);setFailure(null);
+  try {
+   const {data,error}=await supabase.rpc('notification_inbox_v2',{p_role:selectedRole,p_archived:showArchived,p_filter:filter,p_limit:50,p_before:tail?.created_at??null,p_before_id:tail?.id??null});
+   if(error)throw error;
+   if(active.current!==scope||sequence.current!==call)return;
+   const rows=(Array.isArray(data?.items)?data.items:[]).map(normalizeNotificationRow).filter((n:Notification)=>n.user_id===uid);
+   const items=append?[...(current?.items??[]),...rows]:rows;
+   const next:Snapshot={scope,items:[...new Map<string,Notification>(items.map((n:Notification)=>[n.id,n])).values()],unread:Number(data?.unread_count)||0,
+    roles:NOTIFICATION_ROLES.filter(r=>data?.roles?.includes(r)),hasMore:rows.length===50};
+   snapshotRef.current=next;setSnapshot(next);
+  }catch{
+   if(active.current===scope&&sequence.current===call){snapshotRef.current=null;setSnapshot(null);setFailure({scope,message:'No se pudieron cargar las notificaciones. Comprueba la conexión y reintenta.'});}
+  }finally{if(sequence.current===call){busy.current=false;setLoading(false);}}
+ },[uid,scope,selectedRole,showArchived,filter]);
+ const fetchNotifications=useCallback(()=>fetchPage(false),[fetchPage]);
+ const loadMore=useCallback(()=>fetchPage(true),[fetchPage]);
+ const action=useCallback(async(kind:string,ids:string[]|null=null)=>{
+  if(!uid)return;
+  const {error}=await supabase.rpc('notification_inbox_action_v2',{p_action:kind,p_ids:ids,p_role:selectedRole,p_expected_user:uid});
+  if(error)throw new Error('No se pudo guardar el cambio. Vuelve a intentarlo.');
+  if(active.current===scope)await fetchNotifications();
+ },[uid,scope,selectedRole,fetchNotifications]);
+ useEffect(()=>{
+  if(!uid){sequence.current++;snapshotRef.current=null;setSnapshot(null);setFailure(null);busy.current=false;setLoading(false);return;}
+  void fetchNotifications();
+  let timer:ReturnType<typeof setTimeout>|undefined;
+  const refresh=()=>{if(timer)clearTimeout(timer);timer=setTimeout(()=>void fetchNotifications(),250);};
+  const channel=supabase.channel(`notification-inbox-v2-${uid}`).on('postgres_changes',{event:'*',schema:'public',table:'notifications',filter:`user_id=eq.${uid}`},refresh).subscribe();
+  const foreground=AppState.addEventListener('change',state=>{if(state==='active'){void fetchNotifications();void registerForPushNotifications(uid).catch(()=>{});}});
+  void registerForPushNotifications(uid).catch(()=>{});
+  return()=>{if(timer)clearTimeout(timer);void supabase.removeChannel(channel);foreground.remove();sequence.current++;busy.current=false;};
+ },[uid,fetchNotifications]);
+ const visible=snapshot?.scope===scope?snapshot:null;
+ const unreadCount=visible?.unread??0;
+ useEffect(()=>{if(Platform.OS!=='web')void ExpoNotifications.setBadgeCountAsync(unreadCount).catch(()=>{});},[unreadCount,uid]);
+ return <NotificationContext.Provider value={{notifications:visible?.items??[],unreadCount,roles:visible?.roles??[],hasMore:visible?.hasMore??false,
+ loading:!!uid&&(loading||(!visible&&failure?.scope!==scope)),error:failure?.scope===scope?failure.message:null,
+ selectedRole,setSelectedRole,filter,setFilter,showArchived,setShowArchived,fetchNotifications,loadMore,
+ markAsRead:id=>action('read',[id]),markAllAsRead:()=>action('read'),deleteNotification:id=>action('archive',[id]),
+ deleteAllNotifications:()=>action('archive'),restoreNotification:id=>action('unarchive',[id])}}>{children}</NotificationContext.Provider>;
 }
-
-export function useNotifications() {
-  const context = useContext(NotificationContext);
-  if (context === undefined) {
-    throw new Error('useNotifications must be used within a NotificationProvider');
-  }
-  return context;
-}
+export function useNotifications(){const value=useContext(NotificationContext);if(!value)throw new Error('useNotifications must be used within a NotificationProvider');return value;}
