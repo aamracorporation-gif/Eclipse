@@ -1,5 +1,5 @@
 /** Transactional v2 delivery. Dependencies are injectable; never log recipients, payloads or provider bodies. */
-export type Rpc = (name: string, args?: Record<string, unknown>) => Promise<{ data: any; error: unknown }>;
+export type Rpc = (name: string, args?: Record<string, unknown>) => PromiseLike<{ data: any; error: unknown }>;
 export type Environment = (name: string) => string | undefined;
 export type Delivery = {
   id: string; notification_id: string; channel: 'push' | 'email'; to: string; project_id?: string;

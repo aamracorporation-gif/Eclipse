@@ -27,3 +27,8 @@ create function public.fixture_legacy_fanout() returns trigger language plpgsql 
 create trigger legacy_delivery after insert on public.notifications for each row execute function public.fixture_legacy_fanout();
 grant usage on schema public to authenticated,anon,service_role;
 grant all on all tables in schema public to service_role;
+
+-- Effective Eclipse Staging ticket vocabularies, audited 2026-10-07.
+alter table public.tickets add check(status in ('valid','resale','used','cancelled'));
+alter table public.tickets add check(ticket_status in ('active','used','reselling','sold','invalidated'));
+alter table public.tickets add check(validation_status in ('valid','used','expired','revoked'));

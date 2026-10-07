@@ -2,11 +2,12 @@ name: Notification core regression
 on:
   pull_request:
     paths:
-      - 'supabase/migrations/*notification_core_v2.sql'
+      - 'supabase/migrations/*notification_core_v2*.sql'
       - 'supabase/functions/dispatch-notifications-v2/**'
       - 'supabase/functions/_shared/notificationDelivery.ts'
       - 'tests/notifications/**'
       - 'scripts/tests/notificationDelivery.test.cjs'
+      - 'scripts/tests/notificationTypes.test.cjs'
       - '.github/workflows/notifications-v2.yml'
 permissions:
   contents: read
@@ -35,7 +36,9 @@ jobs:
         run: |
           psql -h localhost -U postgres -d notifications_test -v ON_ERROR_STOP=1 -f tests/notifications/fixture.sql
           psql -h localhost -U postgres -d notifications_test -v ON_ERROR_STOP=1 -f supabase/migrations/20261007205841_notification_core_v2.sql
+          psql -h localhost -U postgres -d notifications_test -v ON_ERROR_STOP=1 -f supabase/migrations/20261007215119_notification_core_v2_hardening.sql
           psql -h localhost -U postgres -d notifications_test -v ON_ERROR_STOP=1 -f tests/notifications/regression.sql
+          psql -h localhost -U postgres -d notifications_test -v ON_ERROR_STOP=1 -f tests/notifications/hardening.sql
           python3 tests/notifications/concurrency.py
   delivery:
     runs-on: ubuntu-latest
@@ -50,7 +53,7 @@ jobs:
           cache: npm
       - run: npm ci
       - name: Mocked providers, no real messages
-        run: node --test scripts/tests/notificationDelivery.test.cjs
+        run: node --test scripts/tests/notificationDelivery.test.cjs scripts/tests/notificationTypes.test.cjs
   reviewed-source:
     needs: [database, delivery]
     runs-on: ubuntu-latest
