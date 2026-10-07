@@ -1,0 +1,75 @@
+name: Notification core source transfer
+on:
+  push:
+    branches: [codex/notifications-core-v1]
+    paths: [.github/workflows/notification-core-transfer.yml]
+permissions:
+  contents: read
+jobs:
+  persist:
+    if: github.repository == 'aamracorporation-gif/Eclipse' && github.ref == 'refs/heads/codex/notifications-core-v1'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Verify manifest and persist only scoped source files
+        run: |
+          python3 - <<'PY'
+          import base64, hashlib, json, lzma, pathlib, subprocess
+          paths = {
+            'supabase/migrations/20261007194601_notification_core_v1.sql',
+            'supabase/functions/_shared/notificationDelivery.ts',
+            'supabase/functions/dispatch-core-notifications/index.ts',
+            'scripts/tests/notificationDelivery.test.cjs',
+            'scripts/tests/notificationClient.test.cjs',
+            'backend/test/notificationCoreSql.test.js',
+            'lib/notificationRouting.ts','lib/notifications.ts','lib/NotificationContext.tsx',
+            'lib/notificationSchema.ts','lib/AuthContext.tsx','lib/EventContext.tsx',
+            'app/_layout.tsx','app/notifications.tsx','app/notification-preferences.tsx',
+            'supabase/config.toml','.github/workflows/ci.yml','docs/NOTIFICATION_CORE_V1_ROLLOUT.md'
+          }
+          parts = [f'.notification-core-part-{n}.txt' for n in range(1,4)]
+          raw = base64.b64decode(''.join(pathlib.Path(p).read_text().strip() for p in parts), validate=True)
+          assert hashlib.sha256(raw).hexdigest() == '6697f228f3d01aaf6dea8b476b24f0ec89a73b1dd4a791589a4854ad5c39a090'
+          decoded = lzma.decompress(raw, memlimit=128*1024*1024)
+          assert len(decoded) < 300000
+          entries = json.loads(decoded)
+          assert len(entries) == 18 and {e['path'] for e in entries} == paths
+          for e in entries:
+            p = pathlib.Path(e['path'])
+            assert not p.is_symlink() and not any(x.is_symlink() for x in p.parents)
+            if e['before'] is None:
+              assert not p.exists(), e['path']
+            else:
+              actual = subprocess.check_output(['git','hash-object','--',str(p)],text=True).strip()
+              assert actual == e['before'], (e['path'], actual)
+          for e in entries:
+            p = pathlib.Path(e['path'])
+            if 'patch' in e:
+              stats = subprocess.check_output(['git','apply','--numstat'], input=e['patch'], text=True)
+              assert len(stats.strip().splitlines()) == 1 and stats.strip().split('\t')[-1] == str(p)
+              subprocess.run(['git','apply','--whitespace=nowarn'], input=e['patch'], text=True, check=True)
+            else:
+              p.parent.mkdir(parents=True,exist_ok=True)
+              p.write_text(e['content'],encoding='utf-8')
+            assert hashlib.sha256(p.read_bytes()).hexdigest() == e['after'], e['path']
+          temporary = parts + ['.github/workflows/notification-migration-scaffold.yml','.github/workflows/notification-core-transfer.yml']
+          for name in temporary: pathlib.Path(name).unlink()
+          subprocess.run(['git','add','--',*sorted(paths),*temporary],check=True)
+          staged=set(subprocess.check_output(['git','diff','--cached','--name-only'],text=True).splitlines())
+          assert staged == paths | set(temporary), staged
+          print('Verified 18 scoped source files; removed temporary transfer files. Full PR CI still required.')
+          PY
+      - name: Commit candidate only to isolated branch
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          test "$GITHUB_REF_NAME" = 'codex/notifications-core-v1'
+          test "$(git ls-remote origin "refs/heads/$GITHUB_REF_NAME" | cut -f1)" = "$GITHUB_SHA"
+          git -c user.name='github-actions[bot]' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' commit -m 'feat: add transactional notification core and owner-scoped mobile inbox'
+          auth="$(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)"
+          git -c "http.https://github.com/.extraheader=AUTHORIZATION: basic $auth" push origin "HEAD:refs/heads/$GITHUB_REF_NAME"
