@@ -51,3 +51,38 @@ jobs:
       - run: npm ci
       - name: Mocked providers, no real messages
         run: node --test scripts/tests/notificationDelivery.test.cjs
+  reviewed-source:
+    needs: [database, delivery]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Package tracked source only, excluding dependencies and environment files
+        run: |
+          python3 - <<'PY'
+          import hashlib, json, pathlib, subprocess, zipfile
+          roots = {'app','lib','components','hooks','contexts','constants','types','supabase','scripts','tests','__tests__','docs','backend','patches','.github'}
+          paths = subprocess.check_output(['git','ls-files','-z']).decode().split('\0')
+          manifest = {'commit': subprocess.check_output(['git','rev-parse','HEAD']).decode().strip(), 'files': {}}
+          with zipfile.ZipFile('notification-reviewed-source.zip','w',zipfile.ZIP_DEFLATED) as archive:
+              for name in sorted(filter(None, paths)):
+                  p = pathlib.Path(name)
+                  if p.is_symlink() or not p.is_file():
+                      continue
+                  if any(x in {'node_modules','.git','.expo','.temp'} or x.startswith('.env') for x in p.parts):
+                      continue
+                  if p.parts[0] not in roots and not (len(p.parts)==1 and p.suffix in {'.json','.js','.cjs','.mjs','.ts'}):
+                      continue
+                  data=p.read_bytes()
+                  archive.writestr(name,data)
+                  manifest['files'][name]=hashlib.sha256(data).hexdigest()
+              archive.writestr('SOURCE_MANIFEST.json',json.dumps(manifest,indent=2))
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: notification-reviewed-source
+          path: notification-reviewed-source.zip
+          retention-days: 7
+          if-no-files-found: error
