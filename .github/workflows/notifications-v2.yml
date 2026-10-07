@@ -3,8 +3,12 @@ on:
   pull_request:
     paths:
       - 'supabase/migrations/*notification_core_v2*.sql'
+      - 'supabase/migrations/*notification_operations_v2.sql'
+      - 'scripts/tests/notificationOperations.test.cjs'
+      - 'lib/notificationHealth.ts'
       - 'supabase/functions/dispatch-notifications-v2/**'
       - 'supabase/functions/_shared/notificationDelivery.ts'
+      - 'supabase/functions/_shared/notificationWorkerHealth.ts'
       - 'tests/notifications/**'
       - 'scripts/tests/notificationDelivery.test.cjs'
       - 'scripts/tests/notificationTypes.test.cjs'
@@ -39,7 +43,13 @@ jobs:
           psql -h localhost -U postgres -d notifications_test -v ON_ERROR_STOP=1 -f supabase/migrations/20261007215119_notification_core_v2_hardening.sql
           psql -h localhost -U postgres -d notifications_test -v ON_ERROR_STOP=1 -f tests/notifications/regression.sql
           psql -h localhost -U postgres -d notifications_test -v ON_ERROR_STOP=1 -f tests/notifications/hardening.sql
+          psql -h localhost -U postgres -d notifications_test -v ON_ERROR_STOP=1 -f tests/notifications/operations-fixture.sql
+          psql -h localhost -U postgres -d notifications_test -v ON_ERROR_STOP=1 -f supabase/migrations/20261007224744_notification_operations_v2.sql
+          psql -h localhost -U postgres -d notifications_test -v ON_ERROR_STOP=1 -f tests/notifications/operations.sql
+          psql -h localhost -U postgres -d notifications_test -v ON_ERROR_STOP=1 -f tests/notifications/regression.sql
+          psql -h localhost -U postgres -d notifications_test -v ON_ERROR_STOP=1 -f tests/notifications/hardening.sql
           python3 tests/notifications/concurrency.py
+          python3 tests/notifications/operations-concurrency.py
   delivery:
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -53,7 +63,7 @@ jobs:
           cache: npm
       - run: npm ci
       - name: Mocked providers, no real messages
-        run: node --test scripts/tests/notificationDelivery.test.cjs scripts/tests/notificationTypes.test.cjs
+        run: node --test scripts/tests/notificationDelivery.test.cjs scripts/tests/notificationTypes.test.cjs scripts/tests/notificationOperations.test.cjs
   reviewed-source:
     needs: [database, delivery]
     runs-on: ubuntu-latest

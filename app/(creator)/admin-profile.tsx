@@ -58,6 +58,7 @@ export default function AdminProfile() {
           <Text style={styles.text}>Reventa: {LAUNCH_FEATURES.resale ? 'activada' : 'desactivada'}</Text>
           <Text style={styles.text}>Monedero: {LAUNCH_FEATURES.walletCredit ? 'activado' : 'desactivado'}</Text>
         </GlassView>
+        <ThemedButton title="Estado de notificaciones" onPress={() => router.push('/notification-health')} />
         <Text style={styles.heading}>Actividad administrativa reciente</Text>
         <Text style={styles.muted}>Últimas 25 acciones registradas. Cada revisión queda vinculada a la cuenta que la realiza.</Text>
         {error ? <Text accessibilityRole="alert" style={styles.error}>{error}</Text> : null}

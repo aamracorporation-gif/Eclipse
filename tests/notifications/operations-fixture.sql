@@ -1,0 +1,3 @@
+-- Disposable PostgreSQL fixture only; never run on Supabase.
+create table public.event_ticket_types(id uuid primary key default gen_random_uuid(),event_id uuid references public.events(id),name text default 'Admission',price numeric default 10,quantity integer default 100,sold integer default 0,is_active boolean default true,deleted_at timestamptz,category text default 'general',metadata jsonb default '{}');
+create table public.reservados_vip(id uuid primary key default gen_random_uuid(),event_id uuid references public.events(id),name text default 'VIP table',base_price numeric default 100,capacity_people integer default 6,quantity_available integer default 10,is_active boolean default true,deleted_at timestamptz,metadata jsonb default '{}');
