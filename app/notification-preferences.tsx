@@ -4,27 +4,16 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { ArrowLeft, LogIn } from '@/lib/icons';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Colors } from '@/constants/Colors';
 import { GlassView } from '@/components/ui/GlassView';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/lib/AuthContext';
 import { DiscoLoader } from '@/components/ui/DiscoLoader';
-import { useTranslation } from 'react-i18next';
 import { AuthRequiredScreen } from '@/components/ui/AuthRequiredScreen';
+import { registerForPushNotifications } from '@/lib/notifications';
 
-type Settings = {
-  user_id: string;
-  role?: string | null;
-  event_reminders?: boolean | null;
-  purchase_updates?: boolean | null;
-  resale_updates?: boolean | null;
-  stock_alerts?: boolean | null;
-  realtime_sales?: boolean | null;
-  daily_summary?: boolean | null;
-  stock_threshold_alerts?: boolean | null;
-};
-
+type Settings = Record<string, unknown> & { user_id: string };
 const ORGANIZER_ONLY_KEYS = ['stock_alerts', 'realtime_sales', 'daily_summary', 'stock_threshold_alerts'] as const;
 const COMMON_KEYS = (['purchase_updates', 'event_reminders', 'resale_updates'] as const).filter(key => key !== 'resale_updates' || LAUNCH_FEATURES.resale);
 type PreferenceKey = (typeof ORGANIZER_ONLY_KEYS)[number] | (typeof COMMON_KEYS)[number];
@@ -35,173 +24,110 @@ export function __test_getVisiblePreferenceKeys(role: string | null | undefined)
   return [...COMMON_KEYS];
 }
 
+
+const coreItems = [
+  { key: 'push_enabled', label: 'Avisos en el teléfono', desc: 'Requiere permiso del sistema y registrar este dispositivo.' },
+  { key: 'email_enabled', label: 'Correo electrónico', desc: 'Comunicaciones a tu correo verificado; no activa publicidad.' },
+  { key: 'purchase_updates', label: 'Compras y reembolsos', desc: 'Confirmaciones de entradas, mesas VIP y estado de devoluciones.' },
+  { key: 'important_updates', label: 'Cambios importantes', desc: 'Cancelaciones, horarios, ubicación y condiciones de acceso.' },
+  { key: 'quiet_hours_enabled', label: 'Silenciar de 00:00 a 11:00', desc: 'Hora de Europe/Madrid. Solo push; tus confirmaciones de compra siguen siendo inmediatas. Sin excepción nocturna automática.' },
+];
 export default function NotificationPreferencesScreen() {
   const router = useRouter();
   const { user } = useAuth();
-  const { t } = useTranslation();
-  const [loading, setLoading] = useState(true);
-  const [savingKey, setSavingKey] = useState<string | null>(null);
+  const uid = user?.id ?? null;
+  const identity = useRef({ uid, epoch: 0 });
+  if (identity.current.uid !== uid) identity.current = { uid, epoch: identity.current.epoch + 1 };
   const [settings, setSettings] = useState<Settings | null>(null);
-  const [profileRole, setProfileRole] = useState<string | null>(null);
-
-  const userId = user?.id || null;
-  const isOrganizer = profileRole === 'organizer';
-
+  const [role, setRole] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
+  const [reload, setReload] = useState(0);
+  const busy = useRef(false);
   useEffect(() => {
-    let mounted = true;
-    (async () => {
-      if (!userId) {
-        setLoading(false);
-        return;
-      }
-      try {
-        const [settingsRes, profileRes] = await Promise.all([
-          supabase.from('notification_settings').select('*').eq('user_id', userId).maybeSingle(),
-          supabase.from('profiles').select('role').eq('id', userId).maybeSingle(),
-        ]);
-
-        if (settingsRes.error) throw settingsRes.error;
-        const inferredRole =
-          (profileRes.data as any)?.role ??
-          (settingsRes.data as any)?.role ??
-          (user as any)?.user_metadata?.role ??
-          null;
-        const nextRole = String(inferredRole || '').toLowerCase() || null;
-        if (mounted) setProfileRole(nextRole);
-
-        if (!mounted) return;
-        if (settingsRes.data) {
-          setSettings(settingsRes.data as any);
-        } else {
-          const defaults: Settings = nextRole === 'organizer'
-            ? {
-                user_id: userId,
-                role: 'organizer',
-                event_reminders: true,
-                purchase_updates: true,
-                resale_updates: true,
-                stock_alerts: true,
-                realtime_sales: true,
-                daily_summary: true,
-                stock_threshold_alerts: true,
-              }
-            : {
-                user_id: userId,
-                role: nextRole,
-                event_reminders: true,
-                purchase_updates: true,
-                resale_updates: true,
-              };
-          const up = await supabase.from('notification_settings').upsert(defaults, { onConflict: 'user_id' }).select('*').single();
-          if (up.error) throw up.error;
-          setSettings(up.data as any);
-        }
-      } catch {
-        if (mounted) setSettings(null);
-      } finally {
-        if (mounted) setLoading(false);
-      }
-    })();
-    return () => {
-      mounted = false;
-    };
-  }, [user, userId]);
-
-  const items = useMemo(() => {
-    const visible = __test_getVisiblePreferenceKeys(profileRole);
-    const all = {
-      purchase_updates: { label: t('notification_preferences.items.purchase.label'), desc: t('notification_preferences.items.purchase.desc') },
-      event_reminders: { label: t('notification_preferences.items.reminders.label'), desc: t('notification_preferences.items.reminders.desc') },
-      resale_updates: { label: t('notification_preferences.items.resale.label'), desc: t('notification_preferences.items.resale.desc') },
-      stock_alerts: { label: t('notification_preferences.items.stock.label'), desc: t('notification_preferences.items.stock.desc') },
-      realtime_sales: { label: t('notification_preferences.items.realtime_sales.label'), desc: t('notification_preferences.items.realtime_sales.desc') },
-      daily_summary: { label: t('notification_preferences.items.daily_summary.label'), desc: t('notification_preferences.items.daily_summary.desc') },
-      stock_threshold_alerts: { label: t('notification_preferences.items.thresholds.label'), desc: t('notification_preferences.items.thresholds.desc') },
-    } as const;
-    return visible.map((key) => ({ key, ...all[key] })) as { key: PreferenceKey; label: string; desc: string }[];
-  }, [profileRole, t]);
-
-  const updateSetting = async (key: SettingsKey, value: boolean) => {
-    if (!userId) return;
-    if (!isOrganizer && (ORGANIZER_ONLY_KEYS as readonly string[]).includes(key)) return;
-    setSavingKey(key);
+    let active = true;
+    setSettings(null); setError(''); setNotice(''); setLoading(!!uid); setRole(''); setSaving(false);
+    if (!uid) return;
+    void Promise.all([
+      supabase.from('notification_settings').select('*').eq('user_id', uid).maybeSingle(),
+      supabase.from('profiles').select('role').eq('id', uid).maybeSingle(),
+    ]).then(([pref, profile]) => {
+      if (!active) return;
+      if (pref.error || profile.error) throw new Error('load');
+      setSettings(pref.data ?? { user_id: uid });
+      setRole(String(profile.data?.role ?? 'attendee')); // Never use user-editable auth metadata for roles.
+    }).catch(() => { if (active) setError('No se pudieron cargar tus preferencias.'); })
+      .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
+  }, [uid, reload]);
+  const save = async (key: string, value: boolean) => {
+    if (!uid || !settings || settings.user_id !== uid || busy.current) return;
+    busy.current = true; setSaving(true); setError(''); setNotice('');
+    const epoch = identity.current.epoch;
     try {
-      const next = { ...(settings || { user_id: userId }), [key]: value } as any;
-      setSettings(next);
-      const { error } = await supabase
-        .from('notification_settings')
-        .upsert({ user_id: userId, [key]: value }, { onConflict: 'user_id' });
-      if (error) throw error;
-    } catch {
-      setSettings(prev => prev ? ({ ...prev, [key]: !value } as any) : prev);
-    } finally {
-      setSavingKey(null);
-    }
+      if (key === 'push_enabled' && value && !await registerForPushNotifications(uid, { requestPermission: true })) {
+        throw new Error('No se pudo registrar este dispositivo. Revisa los permisos del teléfono y que uses una versión de pruebas compatible.');
+      }
+      if (identity.current.uid !== uid || identity.current.epoch !== epoch) return;
+      const { data, error: failure } = await supabase.rpc('set_core_notification_preferences', { p_values: { [key]: value }, p_user: uid });
+      if (failure) throw new Error('No se pudo guardar. La preferencia anterior se conserva.');
+      if (identity.current.uid === uid && identity.current.epoch === epoch) setSettings(data as Settings);
+    } catch (failure: any) {
+      if (identity.current.uid === uid && identity.current.epoch === epoch) setError(String(failure.message || 'No se pudo guardar.'));
+    } finally { busy.current = false; if (identity.current.epoch === epoch) setSaving(false); }
   };
-
-  type SettingsKey = keyof Settings & string;
-
-  if (!user) {
-    return (
-      <AuthRequiredScreen
-        title={t('notification_preferences.title')}
-        subtitle={t('profile.sign_in_prompt')}
-        ctaLabel={t('auth.login')}
-        Icon={LogIn}
-      />
-    );
-  }
-
-  return (
-    <View style={styles.container}>
-      <LinearGradient colors={['#0F0F1A', '#1A1025', '#0F0F1A']} style={StyleSheet.absoluteFill} />
-      <SafeAreaView style={styles.safeArea}>
-        <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.back}>
-            <ArrowLeft size={24} color="white" />
-          </TouchableOpacity>
-          <Text style={styles.title}>{t('notification_preferences.title')}</Text>
-          <View style={styles.back} />
-        </View>
-
-        {loading ? (
-          <View style={styles.loading}>
-            <DiscoLoader label={t('common.loading')} size={120} />
-          </View>
-        ) : (
-          <ScrollView contentContainerStyle={styles.content}>
+  const activate = async () => {
+    if (!uid || busy.current) return;
+    busy.current = true; setSaving(true); setNotice('');
+    const epoch = identity.current.epoch;
+    const registered = await registerForPushNotifications(uid, { requestPermission: true });
+    if (identity.current.uid === uid && identity.current.epoch === epoch) {
+      setNotice(registered ? 'Dispositivo registrado. La entrega se comprobará en el piloto de notificaciones.'
+        : 'No se pudo activar. Revisa el permiso de notificaciones en los ajustes del teléfono y vuelve a intentarlo.');
+      setSaving(false);
+    }
+    busy.current = false;
+  };
+  if (!uid) return <AuthRequiredScreen title="Notificaciones" subtitle="Inicia sesión para gestionar tus avisos." ctaLabel="Iniciar sesión" Icon={LogIn} />;
+  const own = settings?.user_id === uid ? settings : null;
+  return <View style={styles.container}>
+    <LinearGradient colors={['#0F0F1A', '#1A1025', '#0F0F1A']} style={StyleSheet.absoluteFill} />
+    <SafeAreaView style={styles.safeArea}>
+      <View style={styles.header}>
+        <TouchableOpacity accessibilityRole="button" accessibilityLabel="Volver" onPress={() => router.back()} style={styles.back}><ArrowLeft size={24} color="white" /></TouchableOpacity>
+        <Text style={styles.title}>Preferencias</Text><View style={styles.back} />
+      </View>
+      {loading ? <View style={styles.loading}><DiscoLoader label="Cargando preferencias" size={120} /></View> :
+        <ScrollView contentContainerStyle={styles.content}>
+          {!!error && <Text accessibilityRole="alert" style={styles.rowLabel}>{error}</Text>}
+          {!own ? <TouchableOpacity accessibilityRole="button" onPress={() => setReload(n => n + 1)} style={styles.back}><Text style={styles.rowLabel}>Reintentar</Text></TouchableOpacity> :
             <GlassView intensity={14} style={styles.card}>
-              <Text style={styles.cardTitle}>{t('notification_preferences.card_title')}</Text>
-              <Text style={styles.cardSub}>{t('notification_preferences.card_subtitle')}</Text>
-
-              {items.map((it, idx) => {
-                const enabled = Boolean((settings as any)?.[it.key] ?? true);
-                const disabled = savingKey === it.key;
-                return (
-                  <View key={it.key}>
-                    {idx > 0 ? <View style={styles.divider} /> : null}
-                    <View style={styles.row}>
-                      <View style={styles.rowText}>
-                        <Text style={styles.rowLabel}>{it.label}</Text>
-                        <Text style={styles.rowDesc}>{it.desc}</Text>
-                      </View>
-                      <Switch
-                        value={enabled}
-                        onValueChange={(v) => void updateSetting(it.key, v)}
-                        disabled={disabled}
-                        trackColor={{ false: 'rgba(255,255,255,0.12)', true: Colors.dark.primary }}
-                        thumbColor={'#fff'}
-                      />
-                    </View>
-                  </View>
-                );
-              })}
-            </GlassView>
-          </ScrollView>
-        )}
-      </SafeAreaView>
-    </View>
-  );
+              <Text style={styles.cardTitle}>Tú eliges cómo recibirlos</Text>
+              <Text style={styles.cardSub}>El historial de Eclipse se conserva aunque desactives push o correo. Los envíos del piloto se habilitan por separado.</Text>
+              <TouchableOpacity accessibilityRole="button" disabled={saving} onPress={() => void activate()} style={{ paddingVertical: 16 }}>
+                <Text style={styles.rowLabel}>Activar en este dispositivo</Text>
+              </TouchableOpacity>
+              {!!notice && <Text accessibilityLiveRegion="polite" style={styles.cardSub}>{notice}</Text>}
+              {coreItems.map(item => <View key={item.key}>
+                <View style={styles.divider} /><View style={styles.row}>
+                  <View style={styles.rowText}><Text style={styles.rowLabel}>{item.label}</Text><Text style={styles.rowDesc}>{item.desc}</Text></View>
+                  <Switch accessibilityLabel={item.label} value={Boolean(own[item.key] ?? item.key !== 'quiet_hours_enabled')}
+                    disabled={saving} onValueChange={value => void save(item.key, value)}
+                    trackColor={{ false: 'rgba(255,255,255,0.12)', true: Colors.dark.primary }} thumbColor="#fff" />
+                </View>
+              </View>)}
+              <View style={styles.divider} />
+              <Text style={styles.rowLabel}>Promociones desactivadas</Text>
+              <Text style={styles.rowDesc}>No se activan al permitir notificaciones de compras. Se decidirán en una fase independiente.</Text>
+              <View style={styles.divider} />
+              <Text style={styles.rowLabel}>Próxima etapa</Text>
+              <Text style={styles.rowDesc}>{role === 'organizer' ? 'Recordatorios, ventas agrupadas y alertas de inventario: pendientes de implementación y activación.' : 'Recordatorios de eventos: pendientes de implementación y activación.'}</Text>
+            </GlassView>}
+        </ScrollView>}
+    </SafeAreaView>
+  </View>;
 }
 
 const styles = StyleSheet.create({

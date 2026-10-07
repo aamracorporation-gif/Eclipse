@@ -14,6 +14,11 @@ export type NotificationModel = {
   priority?: NotificationPriority;
   status?: NotificationStatus;
   data?: Record<string, unknown> | null;
+  notification_version?: number;
+  category?: string;
+  event_id?: string | null;
+  archived_at?: string | null;
+  read_at?: string | null;
   read: boolean;
   created_at: string;
 };
@@ -21,7 +26,7 @@ export type NotificationModel = {
 export function normalizeNotificationRow(row: NotificationRow): NotificationModel {
   const read =
     row?.read === true ||
-    row?.status === 'read' ||
+    (row?.notification_version !== 2 && row?.status === 'read') ||
     !!row?.read_at;
 
   return {
@@ -35,6 +40,11 @@ export function normalizeNotificationRow(row: NotificationRow): NotificationMode
     priority: row?.priority ?? undefined,
     status: row?.status ?? undefined,
     data: row?.data ?? null,
+    notification_version: row?.notification_version,
+    category: row?.category,
+    event_id: row?.event_id ?? null,
+    archived_at: row?.archived_at ?? null,
+    read_at: row?.read_at ?? null,
     read,
     created_at: String(row?.created_at || new Date().toISOString()),
   };

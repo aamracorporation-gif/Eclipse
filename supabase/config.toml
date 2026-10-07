@@ -40,3 +40,6 @@ verify_jwt = true
 # Stripe authenticates this endpoint with its timestamped webhook signature.
 [functions.box-office-webhook]
 verify_jwt = false
+
+[functions.dispatch-core-notifications]
+verify_jwt = true

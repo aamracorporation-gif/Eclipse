@@ -1,3 +1,4 @@
+import { notificationInboxRoute } from '@/lib/notificationRouting';
 import { LAUNCH_FEATURES } from '@/lib/launchFeatures';
 import 'react-native-url-polyfill/auto';
 import { Component, type ReactNode, useCallback, useEffect, useRef, useState } from 'react';
@@ -355,61 +356,10 @@ function RootLayoutNav({ fontsLoaded }: { fontsLoaded: boolean }) {
   useEffect(() => {
     if (!isAppReady) return;
 
-    const navigateFromNotification = (data: any) => {
-      const type = String(data?.type || data?.tipo || '');
-
-      // Organizer notifications → creator panel
-      const organizerTypes = [
-        'organizer_new_sale', 'organizer_realtime_sale', 'organizer_verified', 'organizer_rejected',
-        'stock_alerts', 'realtime_sales', 'daily_summary', 'new_sale',
-        'stock_low', 'organizer_weekly_recap',
-      ];
-      if (organizerTypes.some(t => type.includes(t))) {
-        router.push('/(creator)/' as any);
-        return;
-      }
-
-      // Purchase / ticket / validation → tickets screen
-      const ticketTypes = [
-        'purchase_confirmed', 'purchase_completed', 'purchase_fulfilled',
-        'ticket_validated', 'ticket_cancelled', 'ticket_upgraded',
-        'event_reminder_24h', 'event_reminder_1h',
-        'compra_entrada', 'compra_vip', 'entrada_validada',
-        'event_almost_full',
-      ];
-      if (ticketTypes.some(t => type.includes(t))) {
-        router.push('/(tabs)/tickets' as any);
-        return;
-      }
-
-      // Resale notifications → resale screen
-      const resaleTypes = ['resale_sold', 'resale_purchased', 'resale_update', 'resale_purchase', 'compra_reventa'];
-      if (resaleTypes.some(t => type.includes(t))) {
-        router.push((LAUNCH_FEATURES.resale ? '/(tabs)/resale' : '/(tabs)/tickets') as any);
-        return;
-      }
-
-      // Event-related → event detail
-      const eventId = String(data?.eventId || data?.event_id || '');
-      if (eventId) {
-        router.push(`/(tabs)/event/${eventId}` as any);
-        return;
-      }
-
-      const urlRaw = String(data?.url || data?.event_url || data?.link || '');
-      const url = urlRaw.trim();
-      if (!url) return;
-
-      const cleaned = url.replace(/^\/+/, '');
-      const match = cleaned.match(/(^|\/)event\/([^/?#]+)/i);
-      if (match?.[2]) {
-        router.push(`/(tabs)/event/${match[2]}` as any);
-        return;
-      }
-
-      if (cleaned.startsWith('(tabs)/') || cleaned.startsWith('(creator)/') || cleaned.startsWith('(auth)/')) {
-        router.push(`/${cleaned}` as any);
-      }
+    const navigateFromNotification = (data: Record<string, unknown>) => {
+      // The destination is loaded in the inbox under the signed-in user's RLS policy.
+      router.push(notificationInboxRoute(data));
+      void Notifications.clearLastNotificationResponseAsync().catch(() => {});
     };
 
     Notifications.getLastNotificationResponseAsync()
@@ -519,16 +469,9 @@ export default function RootLayout() {
       }
     })();
 
-    const dispatchPending = () => {
-      supabase.functions.invoke('dispatch-notifications', { body: { limit: 100 } }).catch(() => {});
-    };
-
-    dispatchPending();
-
     const sub = AppState.addEventListener('change', (state) => {
       if (state === 'active') {
         void initLanguage();
-        dispatchPending();
       }
     });
     return () => {

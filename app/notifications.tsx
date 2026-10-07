@@ -1,7 +1,7 @@
-import React, { useMemo, useState } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, StatusBar } from 'react-native';
-import { useRouter } from 'expo-router';
-import { ArrowLeft, CheckCheck, Bell, Clock, Trash2 } from '@/lib/icons';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, StatusBar, Modal, ScrollView, ActivityIndicator } from 'react-native';
+import { useRouter, useLocalSearchParams } from 'expo-router';
+import { ArrowLeft, CheckCheck, Bell, Clock, Trash2, LogIn } from '@/lib/icons';
 import { useNotifications, Notification } from '@/lib/NotificationContext';
 import { Colors } from '@/constants/Colors';
 import { GlassView } from '@/components/ui/GlassView';
@@ -9,188 +9,114 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { formatDistanceToNow } from 'date-fns';
 import { es, enUS, fr } from 'date-fns/locale';
-import { useTranslation } from 'react-i18next';
 import { useI18n } from '@/lib/I18nContext';
 import { useAppDialog } from '@/components/ui/AppDialog';
+import { useAuth } from '@/lib/AuthContext';
+import { supabase } from '@/lib/supabase';
+import { normalizeNotificationRow } from '@/lib/notificationSchema';
+import { notificationAction, notificationIdIsValid } from '@/lib/notificationRouting';
+import { AuthRequiredScreen } from '@/components/ui/AuthRequiredScreen';
 
 export default function NotificationsScreen() {
   const router = useRouter();
-  const { t } = useTranslation();
+  const params = useLocalSearchParams<{ notificationId?: string }>();
   const { language } = useI18n();
+  const { user } = useAuth();
+  const uid = user?.id ?? null;
+  const identity = useRef({ uid, epoch: 0 });
+  if (identity.current.uid !== uid) identity.current = { uid, epoch: identity.current.epoch + 1 };
   const { show: showDialog } = useAppDialog();
-  const { notifications, markAsRead, markAllAsRead, deleteNotification, deleteAllNotifications, loading } = useNotifications();
+  const { notifications, unreadCount, markAsRead, markAllAsRead, deleteNotification, loading, error, fetchNotifications, hasMore, loadMore } = useNotifications();
+  const markReadRef = useRef(markAsRead); markReadRef.current = markAsRead;
   const [filter, setFilter] = useState<'all' | 'unread' | 'urgent'>('all');
-
-  const getLocale = () => {
-    switch (language) {
-      case 'es': return es;
-      case 'en': return enUS;
-      case 'fr': return fr;
-      default: return es;
+  const [detailId, setDetailId] = useState<string | null>(null);
+  const [detail, setDetail] = useState<Notification | null>(null);
+  const [detailError, setDetailError] = useState('');
+  const [profileRole, setProfileRole] = useState('');
+  useEffect(() => {
+    setDetail(null); setDetailError('');
+    setDetailId(notificationIdIsValid(params.notificationId) ? params.notificationId : null);
+  }, [params.notificationId, uid]);
+  useEffect(() => {
+    let active = true; setDetail(null); setDetailError(''); setProfileRole('');
+    if (!uid || !detailId) return;
+    // Query ownership explicitly as well as through RLS, including archived/out-of-page notifications.
+    void Promise.all([
+      supabase.from('notifications').select('*').eq('id', detailId).eq('user_id', uid).maybeSingle(),
+      supabase.from('profiles').select('role').eq('id', uid).maybeSingle(),
+    ]).then(([result, profile]) => {
+      if (!active) return;
+      if (result.error || profile.error) throw new Error('load');
+      if (!result.data || result.data.user_id !== uid) { setDetailError('Este aviso ya no está disponible para tu cuenta.'); return; }
+      const loaded = normalizeNotificationRow(result.data);
+      setDetail(loaded);
+      if (!loaded.read) void markReadRef.current(detailId);
+      setProfileRole(String(profile.data?.role ?? ''));
+    }).catch(() => { if (active) setDetailError('No se pudo abrir el aviso. Cierra y vuelve a intentarlo.'); });
+    return () => { active = false; };
+  }, [uid, detailId]);
+  const filtered = useMemo(() => notifications.filter(n => filter === 'unread' ? !n.read : filter === 'urgent' ? n.priority === 'high' : true), [filter, notifications]);
+  const locale = language === 'en' ? enUS : language === 'fr' ? fr : es;
+  const close = () => { setDetailId(null); setDetail(null); router.setParams({ notificationId: undefined }); };
+  const action = detail && uid && detail.user_id === uid ? notificationAction(detail, uid, profileRole) : null;
+  const openAction = async () => {
+    if (!detail || !uid || !action) return;
+    const epoch = identity.current.epoch;
+    if (action.path.includes('/event/')) {
+      const { data, error: failure } = await supabase.from('events').select('id').eq('id', detail.event_id!).maybeSingle();
+      if (identity.current.uid !== uid || identity.current.epoch !== epoch) return;
+      if (failure || !data) { setDetailError('El evento ya no está disponible. La información del aviso se conserva.'); return; }
     }
+    close(); router.push(action.path as any);
   };
-
-  const filtered = useMemo(() => {
-    if (filter === 'unread') return notifications.filter(n => !n.read);
-    if (filter === 'urgent') return notifications.filter(n => (n.priority || 'normal') === 'high');
-    return notifications;
-  }, [filter, notifications]);
-
+  if (!uid) return <AuthRequiredScreen title="Notificaciones" subtitle="Inicia sesión para ver tus avisos." ctaLabel="Iniciar sesión" Icon={LogIn} />;
   const renderNotification = ({ item }: { item: Notification }) => {
-    const timeAgo = formatDistanceToNow(new Date(item.created_at), { 
-      addSuffix: true, 
-      locale: getLocale() 
-    });
-    const text =
-      (typeof item.message === 'string' && item.message.trim() ? item.message.trim() : '') ||
-      (typeof item.body === 'string' && item.body.trim() ? item.body.trim() : '') ||
-      (typeof item.title === 'string' && item.title.trim() ? item.title.trim() : '') ||
-      '';
-
-    const handlePress = () => {
-      if (!item.read) markAsRead(item.id);
-      const data = item.data as any;
-      const type = String(data?.type || data?.tipo || item.type || '');
-      const organizerTypes = [
-        'organizer_new_sale', 'organizer_realtime_sale', 'organizer_verified', 'organizer_rejected',
-        'stock_alerts', 'realtime_sales', 'daily_summary', 'new_sale',
-        'stock_low', 'organizer_weekly_recap',
-      ];
-      const ticketTypes = [
-        'purchase_confirmed', 'purchase_completed', 'purchase_fulfilled',
-        'ticket_validated', 'ticket_cancelled', 'ticket_upgraded',
-        'event_reminder_24h', 'event_reminder_1h',
-        'compra_entrada', 'compra_vip', 'entrada_validada',
-        'event_almost_full',
-      ];
-      const resaleTypes = ['resale_sold', 'resale_purchased', 'resale_update', 'resale_purchase', 'compra_reventa'];
-      if (organizerTypes.some(t => type.includes(t))) { router.push('/(creator)/' as any); return; }
-      if (ticketTypes.some(t => type.includes(t))) { router.push('/(tabs)/tickets' as any); return; }
-      if (resaleTypes.some(t => type.includes(t))) { router.push('/(tabs)/resale' as any); return; }
-      const eventId = String(data?.eventId || data?.event_id || '');
-      if (eventId) { router.push(`/(tabs)/event/${eventId}` as any); return; }
-      const urlRaw = String(data?.url || data?.event_url || '').trim();
-      const match = urlRaw.replace(/^\/+/, '').match(/(^|\/)event\/([^/?#]+)/i);
-      if (match?.[2]) { router.push(`/(tabs)/event/${match[2]}` as any); }
-    };
-
-    return (
-      <TouchableOpacity
-        activeOpacity={0.8}
-        onPress={handlePress}
-        style={[styles.notificationCard, !item.read && styles.unreadCard]}
-      >
-        <GlassView intensity={item.read ? 10 : 25} style={styles.glass}>
-          <View style={styles.iconContainer}>
-            <View style={[styles.iconCircle, { backgroundColor: item.read ? 'rgba(255,255,255,0.05)' : Colors.dark.primary + '20' }]}>
-              <Bell size={20} color={item.read ? 'rgba(255,255,255,0.4)' : Colors.dark.primary} />
-            </View>
-            {!item.read && <View style={styles.unreadDot} />}
-          </View>
-          
-          <View style={styles.content}>
-            {item.title ? (
-              <Text style={[styles.titleText, !item.read && styles.unreadMessage]} numberOfLines={2}>
-                {item.title}
-              </Text>
-            ) : null}
-            <Text style={[styles.message, !item.read && styles.unreadMessage]}>
-              {text}
-            </Text>
-            <View style={styles.footer}>
-              <Clock size={12} color="rgba(255,255,255,0.4)" />
-              <Text style={styles.timeText}>{timeAgo}</Text>
-            </View>
-          </View>
-
-          <TouchableOpacity
-            activeOpacity={0.8}
-            onPress={() => {
-              showDialog({
-                title: t('common.confirm', { defaultValue: 'Confirmar' }),
-                  message: t('notifications.confirm_delete_one', { defaultValue: '¿Eliminar esta notificación?' }),
-                actions: [
-                  { label: t('common.delete', { defaultValue: 'Eliminar' }), variant: 'primary', onPress: () => void deleteNotification(item.id) },
-                  { label: t('common.cancel', { defaultValue: 'Cancelar' }), variant: 'outline' },
-                ],
-              });
-            }}
-            style={styles.deleteBtn}
-          >
-            <Trash2 size={18} color="rgba(255,255,255,0.55)" />
-          </TouchableOpacity>
-        </GlassView>
-      </TouchableOpacity>
-    );
+    const date = new Date(item.created_at);
+    const time = Number.isFinite(date.getTime()) ? formatDistanceToNow(date, { addSuffix: true, locale }) : '';
+    return <TouchableOpacity accessibilityRole="button" accessibilityLabel={`${item.read ? '' : 'No leído. '}${item.title || 'Aviso'}`}
+      onPress={() => setDetailId(item.id)} style={[styles.notificationCard, !item.read && styles.unreadCard]}>
+      <GlassView intensity={item.read ? 10 : 25} style={styles.glass}>
+        <View style={styles.iconContainer}><Bell size={20} color={Colors.dark.primary} />{!item.read && <View style={styles.unreadDot} />}</View>
+        <View style={styles.content}>
+          <Text style={styles.titleText}>{item.title || 'Eclipse'}</Text>
+          <Text style={styles.message}>{item.body || item.message || ''}</Text>
+          <View style={styles.footer}><Clock size={12} color="rgba(255,255,255,0.4)" /><Text style={styles.timeText}>{time}</Text></View>
+        </View>
+        <TouchableOpacity accessibilityRole="button" accessibilityLabel="Archivar aviso" style={styles.deleteBtn} onPress={event => {
+          event.stopPropagation(); showDialog({ title: 'Archivar aviso', message: 'Se retirará de tu centro. No se borra el registro ni se cancelan los envíos.',
+            actions: [{ label: 'Archivar', variant: 'primary', onPress: () => void deleteNotification(item.id) }, { label: 'Cancelar', variant: 'outline' }] });
+        }}><Trash2 size={18} color="rgba(255,255,255,0.55)" /></TouchableOpacity>
+      </GlassView>
+    </TouchableOpacity>;
   };
-
-  return (
-    <View style={styles.container}>
-      <StatusBar barStyle="light-content" />
-      <LinearGradient
-        colors={Colors.dark.backgroundGradient}
-        style={StyleSheet.absoluteFill}
-      />
-
-      <SafeAreaView style={styles.safeArea}>
-        <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-            <ArrowLeft size={24} color="white" />
-          </TouchableOpacity>
-          <Text style={styles.title}>{t('common.notifications')}</Text>
-          <View style={styles.headerActions}>
-            <TouchableOpacity onPress={markAllAsRead} style={styles.headerActionBtn}>
-              <CheckCheck size={20} color={Colors.dark.primary} />
-            </TouchableOpacity>
-            <TouchableOpacity
-              onPress={() => {
-                showDialog({
-                  title: t('common.confirm', { defaultValue: 'Confirmar' }),
-                  message: t('notifications.confirm_delete_all', { defaultValue: '¿Eliminar todas las notificaciones?' }),
-                  actions: [
-                    { label: t('common.delete_all', { defaultValue: 'Eliminar todas' }), variant: 'primary', onPress: () => void deleteAllNotifications() },
-                    { label: t('common.cancel', { defaultValue: 'Cancelar' }), variant: 'outline' },
-                  ],
-                });
-              }}
-              style={styles.headerActionBtn}
-            >
-              <Trash2 size={20} color="rgba(255,255,255,0.55)" />
-            </TouchableOpacity>
-          </View>
-        </View>
-
-        <View style={styles.filterRow}>
-          <TouchableOpacity onPress={() => setFilter('all')} style={[styles.filterChip, filter === 'all' && styles.filterChipActive]}>
-            <Text style={[styles.filterChipText, filter === 'all' && styles.filterChipTextActive]}>{t('notifications.filters.all')}</Text>
-          </TouchableOpacity>
-          <TouchableOpacity onPress={() => setFilter('unread')} style={[styles.filterChip, filter === 'unread' && styles.filterChipActive]}>
-            <Text style={[styles.filterChipText, filter === 'unread' && styles.filterChipTextActive]}>{t('notifications.filters.unread')}</Text>
-          </TouchableOpacity>
-          <TouchableOpacity onPress={() => setFilter('urgent')} style={[styles.filterChip, filter === 'urgent' && styles.filterChipActive]}>
-            <Text style={[styles.filterChipText, filter === 'urgent' && styles.filterChipTextActive]}>{t('notifications.filters.urgent')}</Text>
-          </TouchableOpacity>
-        </View>
-
-        <FlatList
-          data={filtered}
-          keyExtractor={(item) => item.id}
-          renderItem={renderNotification}
-          contentContainerStyle={styles.listContent}
-          ListEmptyComponent={
-            !loading ? (
-              <View style={styles.emptyContainer}>
-                <View style={styles.emptyIconCircle}>
-                  <Bell size={48} color="rgba(255,255,255,0.1)" />
-                </View>
-                <Text style={styles.emptyTitle}>{t('notifications.empty')}</Text>
-              </View>
-            ) : null
-          }
-        />
-      </SafeAreaView>
-    </View>
-  );
+  return <View style={styles.container}>
+    <StatusBar barStyle="light-content" /><LinearGradient colors={Colors.dark.backgroundGradient} style={StyleSheet.absoluteFill} />
+    <SafeAreaView style={styles.safeArea}>
+      <View style={styles.header}>
+        <TouchableOpacity accessibilityRole="button" accessibilityLabel="Volver" onPress={() => router.back()} style={styles.backButton}><ArrowLeft size={24} color="white" /></TouchableOpacity>
+        <Text style={styles.title}>Notificaciones · {unreadCount}</Text>
+        <TouchableOpacity accessibilityRole="button" accessibilityLabel="Marcar todas como leídas" onPress={() => void markAllAsRead()} style={styles.headerActionBtn}><CheckCheck size={20} color={Colors.dark.primary} /></TouchableOpacity>
+      </View>
+      <TouchableOpacity accessibilityRole="button" onPress={() => router.push('/notification-preferences')} style={{ padding: 16 }}><Text style={styles.filterChipTextActive}>Gestionar preferencias</Text></TouchableOpacity>
+      <View style={styles.filterRow}>{([['all','Todas'],['unread','No leídas'],['urgent','Importantes']] as const).map(([key,label]) =>
+        <TouchableOpacity key={key} accessibilityRole="button" accessibilityState={{ selected: filter === key }} onPress={() => setFilter(key)} style={[styles.filterChip, filter === key && styles.filterChipActive]}><Text style={styles.filterChipText}>{label}</Text></TouchableOpacity>)}</View>
+      {!!error && <TouchableOpacity accessibilityRole="button" onPress={() => void fetchNotifications()} style={{ padding: 16 }}><Text accessibilityRole="alert" style={styles.message}>{error} Pulsa para reintentar.</Text></TouchableOpacity>}
+      <FlatList data={filtered} keyExtractor={n => n.id} renderItem={renderNotification} contentContainerStyle={styles.listContent}
+        refreshing={loading} onRefresh={() => void fetchNotifications()}
+        ListEmptyComponent={loading ? <ActivityIndicator accessibilityLabel="Cargando notificaciones" /> : <View style={styles.emptyContainer}><Bell size={48} color={Colors.dark.primary} /><Text style={styles.emptyTitle}>{error ? 'No se ha podido actualizar' : 'No hay avisos en este filtro'}</Text></View>}
+        ListFooterComponent={hasMore ? <TouchableOpacity accessibilityRole="button" onPress={() => void loadMore()} style={{ padding: 18 }}><Text style={styles.message}>Cargar avisos anteriores</Text></TouchableOpacity> : null} />
+      <Modal visible={!!detailId} animationType="slide" onRequestClose={close}>
+        <SafeAreaView style={styles.container}>
+          <TouchableOpacity accessibilityRole="button" accessibilityLabel="Cerrar detalle" onPress={close} style={{ padding: 20 }}><Text style={styles.titleText}>Cerrar</Text></TouchableOpacity>
+          <ScrollView contentContainerStyle={{ padding: 24 }}>
+            {detail?.user_id === uid ? <><Text style={styles.titleText}>{detail.title}</Text><Text style={[styles.message,{ marginTop: 20 }]}>{detail.body || detail.message}</Text>
+              {!!action && <TouchableOpacity accessibilityRole="button" onPress={() => void openAction()} style={{ paddingVertical: 24 }}><Text style={styles.filterChipTextActive}>{action.label}</Text></TouchableOpacity>}</> : !detailError ? <ActivityIndicator accessibilityLabel="Cargando detalle" /> : null}
+            {!!detailError && <Text accessibilityRole="alert" style={styles.message}>{detailError}</Text>}
+          </ScrollView>
+        </SafeAreaView>
+      </Modal>
+    </SafeAreaView>
+  </View>;
 }
 
 const styles = StyleSheet.create({

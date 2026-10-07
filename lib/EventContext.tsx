@@ -632,15 +632,7 @@ export function EventProvider({ children }: { children: React.ReactNode }) {
       }
 
       await fetchEvents();
-      try {
-        await invokeEdgeFunctionStrict('dispatch-notifications', {
-          limit: 400,
-          eventId: id,
-          enqueueEventUpdate: true,
-        });
-      } catch {
-        console.warn('No se pudieron enviar las notificaciones del evento actualizado.');
-      }
+      // The committed event transition is captured by the server notification core.
       return updatedAt;
     } catch (error) {
       console.error('Error updating event:', error);
@@ -658,9 +650,6 @@ export function EventProvider({ children }: { children: React.ReactNode }) {
       if (error) throw error;
 
       setEvents((prev) => prev.filter((e) => e.id !== id));
-      try {
-        await invokeEdgeFunctionStrict('dispatch-notifications', { limit: 400 });
-      } catch {}
     } catch (error) {
       console.error('Error deleting event:', error);
       throw error;
