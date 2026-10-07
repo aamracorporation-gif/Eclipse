@@ -1,7 +1,7 @@
 import { createContext, useContext, useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { Session, User } from '@supabase/supabase-js';
-import { registerForPushNotifications } from './notifications';
+import { unregisterPushNotifications } from './notifications';
 import * as Linking from 'expo-linking';
 import { resolveAuthRedirect } from './authRedirect';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -82,7 +82,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (user) {
       fetchWorkerProfile(user.id);
-      registerForPushNotifications(user.id).catch(() => {});
       (async () => {
         try {
           const raw = await AsyncStorage.getItem('pending_event_share');
@@ -211,6 +210,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const signOut = async () => {
+    try { await withTimeout(unregisterPushNotifications(user?.id??null), 4000, 'Unregister notifications'); } catch {}
     await withTimeout(supabase.auth.signOut(), 20000, 'Sign out');
   };
 

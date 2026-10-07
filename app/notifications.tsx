@@ -1,373 +1,77 @@
-import React, { useMemo, useState } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, StatusBar } from 'react-native';
-import { useRouter } from 'expo-router';
-import { ArrowLeft, CheckCheck, Bell, Clock, Trash2 } from '@/lib/icons';
-import { useNotifications, Notification } from '@/lib/NotificationContext';
-import { Colors } from '@/constants/Colors';
-import { GlassView } from '@/components/ui/GlassView';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { LinearGradient } from 'expo-linear-gradient';
-import { formatDistanceToNow } from 'date-fns';
-import { es, enUS, fr } from 'date-fns/locale';
-import { useTranslation } from 'react-i18next';
-import { useI18n } from '@/lib/I18nContext';
-import { useAppDialog } from '@/components/ui/AppDialog';
+import React,{useCallback,useEffect,useRef,useState} from 'react';
+import {View,Text,StyleSheet,FlatList,TouchableOpacity,ScrollView,ActivityIndicator,Modal} from 'react-native';
+import {useLocalSearchParams,useRouter} from 'expo-router';
+import {SafeAreaView} from 'react-native-safe-area-context';
+import {LinearGradient} from 'expo-linear-gradient';
+import {ArrowLeft,Bell,LogIn} from '@/lib/icons';
+import {useNotifications,type Notification} from '@/lib/NotificationContext';
+import {useAuth} from '@/lib/AuthContext';
+import {useAppDialog} from '@/components/ui/AppDialog';
+import {AuthRequiredScreen} from '@/components/ui/AuthRequiredScreen';
+import {supabase} from '@/lib/supabase';
+import {normalizeNotificationRow} from '@/lib/notificationSchema';
+import {NOTIFICATION_UUID,NOTIFICATION_ROLE_LABELS,isSafeNotificationDestination} from '@/lib/notificationNavigation';
 
-export default function NotificationsScreen() {
-  const router = useRouter();
-  const { t } = useTranslation();
-  const { language } = useI18n();
-  const { show: showDialog } = useAppDialog();
-  const { notifications, markAsRead, markAllAsRead, deleteNotification, deleteAllNotifications, loading } = useNotifications();
-  const [filter, setFilter] = useState<'all' | 'unread' | 'urgent'>('all');
-
-  const getLocale = () => {
-    switch (language) {
-      case 'es': return es;
-      case 'en': return enUS;
-      case 'fr': return fr;
-      default: return es;
-    }
-  };
-
-  const filtered = useMemo(() => {
-    if (filter === 'unread') return notifications.filter(n => !n.read);
-    if (filter === 'urgent') return notifications.filter(n => (n.priority || 'normal') === 'high');
-    return notifications;
-  }, [filter, notifications]);
-
-  const renderNotification = ({ item }: { item: Notification }) => {
-    const timeAgo = formatDistanceToNow(new Date(item.created_at), { 
-      addSuffix: true, 
-      locale: getLocale() 
-    });
-    const text =
-      (typeof item.message === 'string' && item.message.trim() ? item.message.trim() : '') ||
-      (typeof item.body === 'string' && item.body.trim() ? item.body.trim() : '') ||
-      (typeof item.title === 'string' && item.title.trim() ? item.title.trim() : '') ||
-      '';
-
-    const handlePress = () => {
-      if (!item.read) markAsRead(item.id);
-      const data = item.data as any;
-      const type = String(data?.type || data?.tipo || item.type || '');
-      const organizerTypes = [
-        'organizer_new_sale', 'organizer_realtime_sale', 'organizer_verified', 'organizer_rejected',
-        'stock_alerts', 'realtime_sales', 'daily_summary', 'new_sale',
-        'stock_low', 'organizer_weekly_recap',
-      ];
-      const ticketTypes = [
-        'purchase_confirmed', 'purchase_completed', 'purchase_fulfilled',
-        'ticket_validated', 'ticket_cancelled', 'ticket_upgraded',
-        'event_reminder_24h', 'event_reminder_1h',
-        'compra_entrada', 'compra_vip', 'entrada_validada',
-        'event_almost_full',
-      ];
-      const resaleTypes = ['resale_sold', 'resale_purchased', 'resale_update', 'resale_purchase', 'compra_reventa'];
-      if (organizerTypes.some(t => type.includes(t))) { router.push('/(creator)/' as any); return; }
-      if (ticketTypes.some(t => type.includes(t))) { router.push('/(tabs)/tickets' as any); return; }
-      if (resaleTypes.some(t => type.includes(t))) { router.push('/(tabs)/resale' as any); return; }
-      const eventId = String(data?.eventId || data?.event_id || '');
-      if (eventId) { router.push(`/(tabs)/event/${eventId}` as any); return; }
-      const urlRaw = String(data?.url || data?.event_url || '').trim();
-      const match = urlRaw.replace(/^\/+/, '').match(/(^|\/)event\/([^/?#]+)/i);
-      if (match?.[2]) { router.push(`/(tabs)/event/${match[2]}` as any); }
-    };
-
-    return (
-      <TouchableOpacity
-        activeOpacity={0.8}
-        onPress={handlePress}
-        style={[styles.notificationCard, !item.read && styles.unreadCard]}
-      >
-        <GlassView intensity={item.read ? 10 : 25} style={styles.glass}>
-          <View style={styles.iconContainer}>
-            <View style={[styles.iconCircle, { backgroundColor: item.read ? 'rgba(255,255,255,0.05)' : Colors.dark.primary + '20' }]}>
-              <Bell size={20} color={item.read ? 'rgba(255,255,255,0.4)' : Colors.dark.primary} />
-            </View>
-            {!item.read && <View style={styles.unreadDot} />}
-          </View>
-          
-          <View style={styles.content}>
-            {item.title ? (
-              <Text style={[styles.titleText, !item.read && styles.unreadMessage]} numberOfLines={2}>
-                {item.title}
-              </Text>
-            ) : null}
-            <Text style={[styles.message, !item.read && styles.unreadMessage]}>
-              {text}
-            </Text>
-            <View style={styles.footer}>
-              <Clock size={12} color="rgba(255,255,255,0.4)" />
-              <Text style={styles.timeText}>{timeAgo}</Text>
-            </View>
-          </View>
-
-          <TouchableOpacity
-            activeOpacity={0.8}
-            onPress={() => {
-              showDialog({
-                title: t('common.confirm', { defaultValue: 'Confirmar' }),
-                  message: t('notifications.confirm_delete_one', { defaultValue: '¿Eliminar esta notificación?' }),
-                actions: [
-                  { label: t('common.delete', { defaultValue: 'Eliminar' }), variant: 'primary', onPress: () => void deleteNotification(item.id) },
-                  { label: t('common.cancel', { defaultValue: 'Cancelar' }), variant: 'outline' },
-                ],
-              });
-            }}
-            style={styles.deleteBtn}
-          >
-            <Trash2 size={18} color="rgba(255,255,255,0.55)" />
-          </TouchableOpacity>
-        </GlassView>
-      </TouchableOpacity>
-    );
-  };
-
-  return (
-    <View style={styles.container}>
-      <StatusBar barStyle="light-content" />
-      <LinearGradient
-        colors={Colors.dark.backgroundGradient}
-        style={StyleSheet.absoluteFill}
-      />
-
-      <SafeAreaView style={styles.safeArea}>
-        <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-            <ArrowLeft size={24} color="white" />
-          </TouchableOpacity>
-          <Text style={styles.title}>{t('common.notifications')}</Text>
-          <View style={styles.headerActions}>
-            <TouchableOpacity onPress={markAllAsRead} style={styles.headerActionBtn}>
-              <CheckCheck size={20} color={Colors.dark.primary} />
-            </TouchableOpacity>
-            <TouchableOpacity
-              onPress={() => {
-                showDialog({
-                  title: t('common.confirm', { defaultValue: 'Confirmar' }),
-                  message: t('notifications.confirm_delete_all', { defaultValue: '¿Eliminar todas las notificaciones?' }),
-                  actions: [
-                    { label: t('common.delete_all', { defaultValue: 'Eliminar todas' }), variant: 'primary', onPress: () => void deleteAllNotifications() },
-                    { label: t('common.cancel', { defaultValue: 'Cancelar' }), variant: 'outline' },
-                  ],
-                });
-              }}
-              style={styles.headerActionBtn}
-            >
-              <Trash2 size={20} color="rgba(255,255,255,0.55)" />
-            </TouchableOpacity>
-          </View>
-        </View>
-
-        <View style={styles.filterRow}>
-          <TouchableOpacity onPress={() => setFilter('all')} style={[styles.filterChip, filter === 'all' && styles.filterChipActive]}>
-            <Text style={[styles.filterChipText, filter === 'all' && styles.filterChipTextActive]}>{t('notifications.filters.all')}</Text>
-          </TouchableOpacity>
-          <TouchableOpacity onPress={() => setFilter('unread')} style={[styles.filterChip, filter === 'unread' && styles.filterChipActive]}>
-            <Text style={[styles.filterChipText, filter === 'unread' && styles.filterChipTextActive]}>{t('notifications.filters.unread')}</Text>
-          </TouchableOpacity>
-          <TouchableOpacity onPress={() => setFilter('urgent')} style={[styles.filterChip, filter === 'urgent' && styles.filterChipActive]}>
-            <Text style={[styles.filterChipText, filter === 'urgent' && styles.filterChipTextActive]}>{t('notifications.filters.urgent')}</Text>
-          </TouchableOpacity>
-        </View>
-
-        <FlatList
-          data={filtered}
-          keyExtractor={(item) => item.id}
-          renderItem={renderNotification}
-          contentContainerStyle={styles.listContent}
-          ListEmptyComponent={
-            !loading ? (
-              <View style={styles.emptyContainer}>
-                <View style={styles.emptyIconCircle}>
-                  <Bell size={48} color="rgba(255,255,255,0.1)" />
-                </View>
-                <Text style={styles.emptyTitle}>{t('notifications.empty')}</Text>
-              </View>
-            ) : null
-          }
-        />
-      </SafeAreaView>
-    </View>
-  );
+export default function NotificationsScreen(){
+ const router=useRouter();const {user}=useAuth();const uid=user?.id??'';const owner=useRef(uid);owner.current=uid;
+ const {notification_id}=useLocalSearchParams<{notification_id?:string}>();const handled=useRef('');
+ const {show}=useAppDialog();const inbox=useNotifications();const {fetchNotifications}=inbox;
+ const [detail,setDetail]=useState<{owner:string;row:Notification}|null>(null),[opening,setOpening]=useState(false),[acting,setActing]=useState(false);
+ useEffect(()=>{setOpening(false);setActing(false);setDetail(null);handled.current='';},[uid]);
+ const open=useCallback(async(id:string)=>{
+  if(!uid||!NOTIFICATION_UUID.test(id))return;
+  setOpening(true);
+  try{
+   const {data,error}=await supabase.rpc('notification_detail_v2',{p_id:id});
+   if(owner.current!==uid)return;
+   if(error||!data||data.user_id!==uid)throw new Error('Esta notificación ya no está disponible para tu cuenta.');
+   setDetail({owner:uid,row:normalizeNotificationRow(data)});
+   const read=await supabase.rpc('notification_inbox_action_v2',{p_action:'read',p_ids:[id],p_expected_user:uid});
+   if(read.error)throw new Error('Se abrió el aviso, pero no se pudo marcar como leído.');
+   if(owner.current===uid)await fetchNotifications();
+  }catch(e){if(owner.current===uid)show({title:'Notificaciones',message:e instanceof Error?e.message:'No se pudo abrir el aviso.'});}
+  finally{if(owner.current===uid)setOpening(false);}
+ },[uid,fetchNotifications,show]);
+ useEffect(()=>{
+  const id=String(notification_id??'');const key=`${uid}:${id}`;
+  if(uid&&id&&handled.current!==key){handled.current=key;void open(id);}
+ },[uid,notification_id,open]);
+ const visibleDetail=detail?.owner===uid?detail.row:null;
+ const action=async(work:()=>Promise<void>)=>{
+  setActing(true);try{await work();if(owner.current===uid)setDetail(null);}catch(e){if(owner.current===uid)show({title:'No se pudo guardar',message:e instanceof Error?e.message:'Vuelve a intentarlo.'});}finally{if(owner.current===uid)setActing(false);}
+ };
+ const follow=async()=>{
+  if(!visibleDetail||acting)return;setActing(true);
+  try{
+   const {data,error}=await supabase.rpc('notification_destination_v2',{p_id:visibleDetail.id});
+   if(owner.current!==uid)return;
+   if(error||!isSafeNotificationDestination(data))throw new Error('El contenido ya no está disponible para tu cuenta.');
+   if(data==='/notifications'){show({title:'Información del aviso',message:'Este aviso no tiene otra pantalla disponible. Puedes conservarlo en tu historial.'});return;}
+   setDetail(null);router.push(data as any);
+  }catch(e){if(owner.current===uid)show({title:'Destino no disponible',message:e instanceof Error?e.message:'Vuelve a intentarlo.'});}finally{if(owner.current===uid)setActing(false);}
+ };
+ if(!user)return <AuthRequiredScreen title="Notificaciones" subtitle="Inicia sesión para consultar tus avisos." ctaLabel="Iniciar sesión" Icon={LogIn}/>;
+ const chip=(text:string,selected:boolean,press:()=>void)=><TouchableOpacity key={text} accessibilityRole="button" accessibilityState={{selected}} onPress={press} style={[styles.chip,selected&&styles.chipActive]}><Text style={styles.chipText}>{text}</Text></TouchableOpacity>;
+ return <View style={styles.page}><LinearGradient colors={['#0F0F1A','#1A1025','#0F0F1A']} style={StyleSheet.absoluteFill}/><SafeAreaView style={styles.safe}>
+  <View style={styles.header}><TouchableOpacity accessibilityLabel="Volver" onPress={()=>router.back()} style={styles.icon}><ArrowLeft color="white" size={24}/></TouchableOpacity><View style={styles.grow}><Text style={styles.title}>Notificaciones</Text><Text style={styles.muted}>{inbox.unreadCount} sin leer</Text></View><TouchableOpacity accessibilityRole="button" onPress={()=>router.push('/notification-preferences')}><Text style={styles.link}>Ajustes</Text></TouchableOpacity></View>
+  <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipBar} contentContainerStyle={styles.chipContent}>{chip('Todos los perfiles',inbox.selectedRole===null,()=>inbox.setSelectedRole(null))}{inbox.roles.map(role=>chip(NOTIFICATION_ROLE_LABELS[role],inbox.selectedRole===role,()=>inbox.setSelectedRole(role)))}</ScrollView>
+  <View style={styles.filters}>{chip('Todas',inbox.filter==='all',()=>inbox.setFilter('all'))}{chip('No leídas',inbox.filter==='unread',()=>inbox.setFilter('unread'))}{chip('Importantes',inbox.filter==='important',()=>inbox.setFilter('important'))}</View>
+  <View style={styles.actions}><TouchableOpacity onPress={()=>inbox.setShowArchived(!inbox.showArchived)}><Text style={styles.link}>{inbox.showArchived?'Volver a recibidas':'Ver archivo'}</Text></TouchableOpacity><TouchableOpacity disabled={acting||inbox.unreadCount===0} onPress={()=>void action(inbox.markAllAsRead)}><Text style={[styles.link,(acting||inbox.unreadCount===0)&&styles.disabled]}>Marcar todo leído</Text></TouchableOpacity></View>
+  {inbox.error?<View style={styles.notice}><Text accessibilityRole="alert" style={styles.body}>{inbox.error}</Text><TouchableOpacity onPress={()=>void inbox.fetchNotifications()}><Text style={styles.link}>Reintentar</Text></TouchableOpacity></View>:null}
+  {opening?<ActivityIndicator accessibilityLabel="Abriendo notificación" color="#C5ABFF"/>:null}
+  <FlatList data={inbox.notifications} keyExtractor={item=>item.id} refreshing={inbox.loading&&inbox.notifications.length>0} onRefresh={()=>void inbox.fetchNotifications()} contentContainerStyle={styles.list}
+    renderItem={({item})=><TouchableOpacity accessibilityRole="button" accessibilityLabel={`${item.read?'Leída':'No leída'}. ${item.title||'Notificación'}`} onPress={()=>void open(item.id)} style={[styles.card,!item.read&&styles.unread]}>
+      <View style={styles.cardHeading}><View style={[styles.dot,item.read&&styles.readDot]}/><Text style={styles.cardTitle}>{item.title||'Notificación'}</Text>{item.priority==='high'?<Text style={styles.important}>Importante</Text>:null}</View>
+      <Text style={styles.body} numberOfLines={3}>{item.body||item.message}</Text><View style={styles.cardFooter}><Text style={styles.muted}>{item.role?NOTIFICATION_ROLE_LABELS[item.role]:''}</Text><Text style={styles.muted}>{Number.isFinite(Date.parse(item.created_at))?new Date(item.created_at).toLocaleString('es-ES',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'}):''}</Text></View>
+    </TouchableOpacity>}
+    ListEmptyComponent={!inbox.loading&&!inbox.error?<View style={styles.empty}><Bell size={38} color="#C5ABFF"/><Text style={styles.emptyTitle}>{inbox.showArchived?'No hay avisos archivados':'Todo al día'}</Text><Text style={styles.muted}>Aquí aparecerán los avisos que correspondan a tu actividad.</Text></View>:null}
+    ListFooterComponent={inbox.loading?<ActivityIndicator color="#C5ABFF"/>:inbox.hasMore?<TouchableOpacity style={styles.more} onPress={()=>void inbox.loadMore()}><Text style={styles.link}>Cargar más</Text></TouchableOpacity>:null}/>
+  <Modal visible={!!visibleDetail} transparent animationType="slide" onRequestClose={()=>setDetail(null)}><View style={styles.scrim}><SafeAreaView style={styles.modal}><ScrollView contentContainerStyle={styles.modalContent}>
+    <Text style={styles.muted}>ECLIPSE · {visibleDetail?.role?NOTIFICATION_ROLE_LABELS[visibleDetail.role]:''}</Text><Text style={styles.detailTitle}>{visibleDetail?.title}</Text><Text style={styles.detailBody}>{visibleDetail?.body||visibleDetail?.message}</Text>
+    <TouchableOpacity disabled={acting} accessibilityRole="button" style={styles.primary} onPress={()=>void follow()}><Text style={styles.primaryText}>Ver en Eclipse</Text></TouchableOpacity>
+    <TouchableOpacity disabled={acting} style={styles.more} onPress={()=>visibleDetail&&void action(()=>visibleDetail.archived_at?inbox.restoreNotification(visibleDetail.id):inbox.deleteNotification(visibleDetail.id))}><Text style={styles.link}>{visibleDetail?.archived_at?'Restaurar aviso':'Archivar aviso'}</Text></TouchableOpacity>
+    <TouchableOpacity style={styles.more} onPress={()=>setDetail(null)}><Text style={styles.body}>Cerrar</Text></TouchableOpacity>
+  </ScrollView></SafeAreaView></View></Modal>
+ </SafeAreaView></View>;
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: Colors.dark.background,
-  },
-  safeArea: {
-    flex: 1,
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingVertical: 15,
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255,255,255,0.05)',
-  },
-  backButton: {
-    width: 40,
-    height: 40,
-    justifyContent: 'center',
-  },
-  title: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: Colors.dark.text,
-  },
-  headerActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-  },
-  headerActionBtn: {
-    width: 40,
-    height: 40,
-    justifyContent: 'center',
-    alignItems: 'flex-end',
-  },
-  filterRow: {
-    flexDirection: 'row',
-    gap: 10,
-    paddingHorizontal: 20,
-    paddingTop: 12,
-    paddingBottom: 6,
-  },
-  filterChip: {
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.10)',
-    backgroundColor: 'rgba(255,255,255,0.04)',
-  },
-  filterChipActive: {
-    borderColor: Colors.dark.primary,
-    backgroundColor: Colors.dark.primary + '26',
-  },
-  filterChipText: {
-    color: 'rgba(255,255,255,0.75)',
-    fontSize: 12,
-    fontWeight: '800',
-  },
-  filterChipTextActive: {
-    color: Colors.dark.text,
-  },
-  listContent: {
-    padding: 20,
-    paddingBottom: 40,
-  },
-  notificationCard: {
-    marginBottom: 12,
-    borderRadius: 16,
-    overflow: 'hidden',
-  },
-  unreadCard: {
-    shadowColor: Colors.dark.primary,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 5,
-  },
-  glass: {
-    flexDirection: 'row',
-    padding: 16,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.05)',
-  },
-  iconContainer: {
-    position: 'relative',
-    marginRight: 16,
-  },
-  iconCircle: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  unreadDot: {
-    position: 'absolute',
-    top: 0,
-    right: 0,
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-    backgroundColor: Colors.dark.primary,
-    borderWidth: 2,
-    borderColor: '#1A1025',
-  },
-  content: {
-    flex: 1,
-  },
-  titleText: {
-    fontSize: 14,
-    color: 'rgba(255,255,255,0.9)',
-    fontWeight: '800',
-    lineHeight: 18,
-    marginBottom: 6,
-  },
-  message: {
-    fontSize: 15,
-    color: 'rgba(255,255,255,0.7)',
-    lineHeight: 20,
-    marginBottom: 8,
-  },
-  unreadMessage: {
-    color: Colors.dark.text,
-    fontWeight: '600',
-  },
-  footer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  deleteBtn: {
-    width: 34,
-    height: 34,
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-    alignSelf: 'flex-start',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.10)',
-    backgroundColor: 'rgba(255,255,255,0.04)',
-    marginLeft: 10,
-  },
-  timeText: {
-    fontSize: 12,
-    color: 'rgba(255,255,255,0.4)',
-  },
-  emptyContainer: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 100,
-  },
-  emptyIconCircle: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    backgroundColor: 'rgba(255,255,255,0.03)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 24,
-  },
-  emptyTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: Colors.dark.text,
-    marginBottom: 8,
-  },
-  emptyText: {
-    fontSize: 14,
-    color: 'rgba(255,255,255,0.4)',
-    textAlign: 'center',
-    paddingHorizontal: 40,
-  },
-});
+const styles=StyleSheet.create({page:{flex:1,backgroundColor:'#0F0F1A'},safe:{flex:1},header:{flexDirection:'row',alignItems:'center',padding:20,gap:14},icon:{padding:8},grow:{flex:1},title:{color:'white',fontSize:26,fontWeight:'700'},muted:{color:'#AFA9BD',fontSize:12,lineHeight:18},link:{color:'#CDB8FF',fontWeight:'600',fontSize:14},chipBar:{maxHeight:52},chipContent:{paddingHorizontal:20,gap:8,alignItems:'center'},chip:{paddingVertical:9,paddingHorizontal:12,borderRadius:20,backgroundColor:'#241E33',borderWidth:1,borderColor:'#352C48'},chipActive:{backgroundColor:'#49336A',borderColor:'#BB95EE'},chipText:{color:'#F0EAF9',fontSize:13},filters:{flexDirection:'row',gap:8,padding:20,paddingBottom:12},actions:{flexDirection:'row',justifyContent:'space-between',paddingHorizontal:20,paddingBottom:12},disabled:{opacity:0.4},list:{padding:20,paddingTop:8,paddingBottom:48},card:{backgroundColor:'#201A2D',borderRadius:18,padding:18,borderWidth:1,borderColor:'#352D45',marginBottom:12},unread:{borderColor:'#9570C5',backgroundColor:'#2B203B'},cardHeading:{flexDirection:'row',alignItems:'center',gap:8,marginBottom:9},dot:{height:7,width:7,borderRadius:4,backgroundColor:'#C9A5FF'},readDot:{backgroundColor:'transparent'},cardTitle:{color:'white',fontSize:16,fontWeight:'700',flex:1},important:{color:'#EDCD8F',fontSize:10,fontWeight:'700'},body:{color:'#DDD7E7',fontSize:14,lineHeight:21},cardFooter:{flexDirection:'row',justifyContent:'space-between',marginTop:13},notice:{margin:20,padding:18,gap:12,backgroundColor:'#312336',borderRadius:14},empty:{alignItems:'center',gap:12,paddingTop:70},emptyTitle:{color:'white',fontSize:21,fontWeight:'600'},more:{padding:16,alignItems:'center'},scrim:{flex:1,backgroundColor:'#00000099',justifyContent:'flex-end'},modal:{maxHeight:'80%',backgroundColor:'#211A2F',borderTopLeftRadius:24,borderTopRightRadius:24},modalContent:{padding:26},detailTitle:{color:'white',fontSize:26,lineHeight:33,fontWeight:'700',marginVertical:18},detailBody:{color:'#E1DBE9',fontSize:17,lineHeight:26,marginBottom:28},primary:{padding:16,backgroundColor:'#8F65CD',borderRadius:14,alignItems:'center'},primaryText:{color:'white',fontSize:16,fontWeight:'700'}});

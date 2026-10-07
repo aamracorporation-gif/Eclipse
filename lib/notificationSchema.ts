@@ -16,15 +16,23 @@ export type NotificationModel = {
   data?: Record<string, unknown> | null;
   read: boolean;
   created_at: string;
+  delivery_version?: number;
+  archived_at?: string|null;
+  expires_at?: string|null;
+  category?: string;
 };
 
 export function normalizeNotificationRow(row: NotificationRow): NotificationModel {
   const read =
     row?.read === true ||
-    row?.status === 'read' ||
+    (row?.delivery_version !== 2 && row?.status === 'read') ||
     !!row?.read_at;
 
   return {
+    delivery_version: row?.delivery_version,
+    archived_at: row?.archived_at??null,
+    expires_at: row?.expires_at??null,
+    category: row?.category,
     id: String(row?.id || ''),
     user_id: String(row?.user_id || ''),
     role: row?.role,
