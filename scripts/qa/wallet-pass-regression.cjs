@@ -35,17 +35,18 @@ const baseEnv = {
 };
 const ticket = {
   id: '00000000-0000-4000-8000-000000000001', user_id: 'owner', buyer_name: 'QA Fixture', buyer_email: 'qa@example.invalid', quantity: 1,
-  qr_token: 'FIXTURE-QR-DO-NOT-USE', ticket_type: 'vip', status: 'valid', ticket_status: 'active',
+  qr_token: 'FIXTURE-QR-DO-NOT-USE', ticket_type: 'vip', status: 'valid', ticket_status: 'active', payment_status: 'paid', validation_status: 'valid',
   event_ticket_types: { id: 'type-fixture', name: 'VIP', category: 'vip', metadata: { vipGroupSize: 4, benefits: 'Fixture benefit', vipBottles: [{ brand: 'Fixture brand', quantity: 1 }] } },
   events: { id: 'event-fixture', title: 'QA Event', event_date: '2029-01-01T20:00:00Z', venues: { name: 'QA Venue', address: 'Fixture address' } },
 };
+const FixedDate = class extends Date { constructor(...args) { super(...(args.length ? args : ['2026-10-07T18:00:00Z'])); } static now() { return Date.parse('2026-10-07T18:00:00Z'); } };
 function loadModule(file, imports, extras = {}) {
   const exports = {};
   const source = ts.transpileModule(fs.readFileSync(file, 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: true } }).outputText;
   vm.runInNewContext(source, { exports, require: name => {
     if (name in imports) return imports[name];
     throw new Error('Unexpected import: ' + name);
-  }, Buffer, Response, Request, TextDecoder, URLSearchParams, atob, btoa, console: { log() {}, error() {}, warn() {} }, ...extras });
+  }, Date: FixedDate, Buffer, Response, Request, TextDecoder, URLSearchParams, AbortSignal, atob, btoa, console: { log() {}, info() {}, error() {}, warn() {} }, ...extras });
   return exports;
 }
 const shared = loadModule(path.join(root, 'supabase/functions/_shared/walletPem.ts'), {});
@@ -55,6 +56,23 @@ async function invoke(platform, options = {}) {
   let passData;
   let passFiles;
   const providerCalls=[];
+  let googleObject = ticket.wallet_added ? { id: baseEnv.GOOGLE_WALLET_ISSUER_ID + '.' + ticket.id, classId: baseEnv.GOOGLE_WALLET_CLASS_ID, state: 'ACTIVE', barcode: { value: ticket.qr_token } } : null;
+  const providerFetch = async (url, init = {}) => {
+    providerCalls.push({url,init});
+    if (url === 'https://oauth2.googleapis.com/token') return new Response(JSON.stringify({access_token:'fixture-token'}));
+    if (url.includes('/genericClass/')) return new Response(JSON.stringify({id: baseEnv.GOOGLE_WALLET_CLASS_ID}));
+    if (url.endsWith('/genericObject') && init.method === 'POST') {
+      googleObject=JSON.parse(init.body); return new Response(JSON.stringify(googleObject));
+    }
+    if (url.includes('/genericObject/')) {
+      if (init.method === 'GET') return new Response(JSON.stringify(googleObject || {}), { status: googleObject ? 200 : 404 });
+      if (init.method === 'PATCH') {
+        if (options.googleDenied) return new Response('{}', {status:403});
+        googleObject={...googleObject,...JSON.parse(init.body)}; return new Response(JSON.stringify(googleObject));
+      }
+    }
+    throw Error('Unexpected provider endpoint');
+  };
   const env = { ...baseEnv, ...options.env };
   const filters = {};
   const client = {
@@ -70,6 +88,7 @@ async function invoke(platform, options = {}) {
     },
   };
   const imports = {
+    '../_shared/googleWalletApi.ts': loadModule(path.join(root, 'supabase/functions/_shared/googleWalletApi.ts'), {}, { fetch: providerFetch }),
     '../_shared/ticketProduct.ts': loadModule(path.join(root, 'supabase/functions/_shared/ticketProduct.ts'), {}),
     'https://esm.sh/@supabase/supabase-js@2.49.1': { createClient: () => client },
     'https://esm.sh/passkit-generator@3.1.10': { PKPass: class extends PKPass {
@@ -88,18 +107,13 @@ async function invoke(platform, options = {}) {
     'node:buffer': { Buffer }, './bundledAssets.ts': assets, '../_shared/walletPem.ts': shared, '../_shared/walletDesign.ts': loadModule(path.join(root, 'supabase/functions/_shared/walletDesign.ts'), {}),
   };
   const dir = platform === 'ios' ? 'apple-wallet-generator' : 'generate-wallet-pass';
-  loadModule(path.join(root, 'supabase/functions', dir, 'index.ts'), imports, { fetch:async (url,init)=>{
-    providerCalls.push({url,init});
-    if(url==='https://oauth2.googleapis.com/token')return new Response(JSON.stringify({access_token:'fixture-token'}));
-    if(url.startsWith('https://walletobjects.googleapis.com/walletobjects/v1/genericobject/'))return new Response('{}',{status:options.googleDenied?403:200});
-    throw Error('Unexpected provider endpoint');
-  },Deno: { env: { get: name => env[name] }, serve: fn => { handler = fn; } } });
+  loadModule(path.join(root, 'supabase/functions', dir, 'index.ts'), imports, { fetch: providerFetch,Deno: { env: { get: name => env[name] }, serve: fn => { handler = fn; } } });
   const method = options.method || 'POST';
   const response = await handler(new Request('https://fixture.invalid/wallet', {
     method, headers: { ...(options.noAuth ? {} : { Authorization: 'Bearer fixture' }), 'Content-Type': 'application/json' },
     ...(method === 'POST' ? { body: JSON.stringify({ ticket_id: ticket.id, platform }) } : {}),
   }));
-  return { status: response.status, body: await response.json(), passData, passFiles,providerCalls };
+  return { status: response.status, body: await response.json(), passData, passFiles,providerCalls,googleObject };
 }
 let passed = 0;
 async function check(name, fn) { await fn(); passed++; console.log('PASS ' + name); }
@@ -128,7 +142,11 @@ async function check(name, fn) { await fn(); passed++; console.log('PASS ' + nam
       assert.ok(result.body.url.startsWith('https://pay.google.com/gp/v/save/'));
       const jwt = result.body.url.split('/').pop();
       const verified = await jose.jwtVerify(jwt, crypto.createPublicKey(pkcs8), { issuer: baseEnv.GOOGLE_WALLET_SERVICE_ACCOUNT_EMAIL, audience: 'google' });
-      const object = verified.payload.payload.genericObjects[0];
+      const reference = verified.payload.payload.genericObjects[0];
+      assert.deepEqual(Object.keys(reference), ['id']);
+      assert.equal(reference.id, '123456789.' + ticket.id);
+      assert.ok(jwt.length < 1800); assert.ok(Array.isArray(verified.payload.origins));
+      const object = result.googleObject;
       assert.equal(object.barcode.value, ticket.qr_token);
       assert.equal(object.id, '123456789.' + ticket.id);
       assert.ok(object.textModulesData.some(x=>x.id === 'bottles' && x.body.includes('Fixture brand')));
@@ -138,7 +156,7 @@ async function check(name, fn) { await fn(); passed++; console.log('PASS ' + nam
   await check('Google existing pass receives a presentation-only PATCH', async()=>{
     ticket.wallet_added=true;
     const result=await invoke('android');assert.equal(result.status,200);
-    const call=result.providerCalls[1];assert.equal(call.init.method,'PATCH');
+    const call=result.providerCalls.find(item=>item.init.method==='PATCH');assert.ok(call);
     const patched=JSON.parse(call.init.body);assert.ok(patched.heroImage);assert.ok(patched.textModulesData);
     assert.ok(!('barcode' in patched));assert.ok(!('state' in patched));delete ticket.wallet_added;
   });
@@ -154,7 +172,8 @@ async function check(name, fn) { await fn(); passed++; console.log('PASS ' + nam
     assert.ok(ios.passData.eventTicket.auxiliaryFields.some(f=>f.value==='6 personas'));
     const android = await invoke('android'); assert.equal(android.status,200);
     const verified = await jose.jwtVerify(android.body.url.split('/').pop(),crypto.createPublicKey(pkcs8));
-    const obj = verified.payload.payload.genericObjects[0];
+    const obj = android.googleObject;
+    assert.equal(verified.payload.payload.genericObjects[0].id,obj.id);
     assert.equal(obj.textModulesData.find(f=>f.id==='access').body,'MESA ECLIPSE');
     assert.equal(obj.textModulesData.find(f=>f.id==='group').body,'6 personas');
     ticket.event_ticket_types = previous; delete ticket.product_snapshot;
@@ -181,14 +200,16 @@ async function check(name, fn) { await fn(); passed++; console.log('PASS ' + nam
       }
       const android = await invoke('android'); assert.equal(android.status,200);
       const verified = await jose.jwtVerify(android.body.url.split('/').pop(),crypto.createPublicKey(pkcs8));
-      const obj = verified.payload.payload.genericObjects[0];
+      const obj = android.googleObject;
+      assert.equal(verified.payload.payload.genericObjects[0].id,obj.id);
       assert.equal(obj.textModulesData.find(f=>f.id==='show').body,'00:30');
       assert.equal(obj.textModulesData.find(f=>f.id==='entry').body,'00:30');
       assert.ok(obj.heroImage.sourceUri.uri.endsWith('google_'+tier+'.png'));
       const hero = fs.readFileSync(path.join(root,'assets/wallet-pass',`google_${tier}.png`));
       assert.equal(hero.readUInt32BE(16),1032);assert.equal(hero.readUInt32BE(20),812);
       assert.ok(!obj.textModulesData.some(f=>['gate','section','lane'].includes(f.id)));
-      assert.equal(verified.payload.payload.genericClasses[0].classTemplateInfo.cardTemplateOverride.cardRowTemplateInfos.length,2);
+      assert.ok(!verified.payload.payload.genericClasses, 'Existing shared class must not be overwritten by a Save link');
+      assert.ok(!android.providerCalls.some(call=>call.url.includes('/genericClass/') && call.init.method!=='GET'));
     });
   }
   console.log(`TOTAL ${passed} passed; real signing libraries, fixture credentials, no provider calls. Does not validate Apple trust chain or device installation.`);

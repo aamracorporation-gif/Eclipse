@@ -32,6 +32,8 @@ jobs:
       - run: npm run typecheck
       - run: npm run lint
       - run: npm test -- --runInBand
+      - name: Google Wallet Save flow with mocked providers
+        run: node --test scripts/tests/googleWalletSave.test.cjs
       - name: Check embedded Wallet artwork
         run: node scripts/sync-wallet-assets.cjs --check
       - name: Validate Wallet signing and authorization with fixture credentials

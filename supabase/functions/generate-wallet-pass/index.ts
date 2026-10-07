@@ -1,3 +1,4 @@
+import { GoogleWalletError, validateGoogleWalletIds, walletTicketUnavailable, exchangeGoogleWalletToken, persistGoogleWalletObject, googleWalletSaveClaims } from '../_shared/googleWalletApi.ts';
 import { resolveTicketProduct } from '../_shared/ticketProduct.ts';
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
@@ -6,27 +7,21 @@ import { WALLET_THEMES, walletTier, walletDate, WALLET_ART_BASE } from "../_shar
 import { normalizeWalletPem } from "../_shared/walletPem.ts";
 
 async function getServiceAccountToken(saEmail: string, privateKeyPem: string): Promise<string> {
-  const key = await importPKCS8(privateKeyPem, "RS256");
+  let key;
+  try { key = await importPKCS8(privateKeyPem, "RS256"); }
+  catch { throw new GoogleWalletError('WALLET_PRIVATE_KEY_FORMAT', 'La clave privada de Google Wallet no tiene un formato válido en el servidor.'); }
   const now = Math.floor(Date.now() / 1000);
   const jwt = await new SignJWT({
     scope: "https://www.googleapis.com/auth/wallet_object.issuer",
   })
     .setProtectedHeader({ alg: "RS256", typ: "JWT" })
     .setIssuer(saEmail)
-    .setSubject(saEmail)
     .setAudience("https://oauth2.googleapis.com/token")
     .setIssuedAt(now)
     .setExpirationTime(now + 3600)
     .sign(key);
 
-  const resp = await fetch("https://oauth2.googleapis.com/token", {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: `grant_type=urn%3Aietf%3Aparams%3Aoauth%3Agrant-type%3Ajwt-bearer&assertion=${jwt}`,
-  });
-  const data = await resp.json();
-  if (!data.access_token) throw new Error("Token error: " + JSON.stringify(data));
-  return data.access_token;
+  return exchangeGoogleWalletToken(jwt);
 }
 
 function jsonResponse(body: any, status = 200) {
@@ -34,6 +29,7 @@ function jsonResponse(body: any, status = 200) {
     status,
     headers: {
       "Content-Type": "application/json",
+      "Cache-Control": "no-store",
       "Access-Control-Allow-Origin": "*",
       "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
       "Access-Control-Allow-Methods": "POST, OPTIONS",
@@ -96,6 +92,10 @@ serve(async (req) => {
         user_id,
         status,
         ticket_status,
+        validation_status,
+        payment_status,
+        scanned_at,
+        quantity,
         qr_token,
         qr_code,
         buyer_name,
@@ -114,6 +114,9 @@ serve(async (req) => {
           id,
           title,
           event_date,
+          end_datetime,
+          is_cancelled,
+          status,
           poster_url,
           venues (name, address, latitude, longitude)
         )
@@ -146,6 +149,9 @@ serve(async (req) => {
       );
     }
 
+    const unavailable = walletTicketUnavailable(ticket);
+    if (unavailable) return jsonResponse({ ok: false, error: unavailable, code: 'WALLET_TICKET_UNAVAILABLE' }, 409);
+
     const GOOGLE_WALLET_ISSUER_ID = Deno.env.get("GOOGLE_WALLET_ISSUER_ID")?.trim();
     const GOOGLE_WALLET_CLASS_ID = Deno.env.get("GOOGLE_WALLET_CLASS_ID")?.trim();
     const GOOGLE_WALLET_SERVICE_ACCOUNT_EMAIL = Deno.env.get("GOOGLE_WALLET_SERVICE_ACCOUNT_EMAIL")?.trim();
@@ -163,6 +169,8 @@ serve(async (req) => {
       );
     }
 
+    validateGoogleWalletIds(GOOGLE_WALLET_ISSUER_ID, GOOGLE_WALLET_CLASS_ID);
+
     // ── Helpers ───────────────────────────────────────────────────────────────
     const nonEmpty = (v: unknown) => { const s = String(v ?? "").trim(); return s || null; };
     const parsePositiveNumber = (v: unknown) => {
@@ -179,7 +187,7 @@ serve(async (req) => {
     const venueName    = String(ticket.events?.venues?.name || "Local por confirmar");
     const venueAddress = String((ticket.events?.venues as any)?.address || "").trim();
     const posterUrl    = String(ticket.events?.poster_url || "");
-    const qrValue      = String(ticket.qr_token || ticket.qr_code || ticket.id);
+    const qrValue      = String(ticket.qr_token || ticket.qr_code);
 
     const eventDate  = eventDateIso ? new Date(eventDateIso) : null;
     const validDate  = eventDate && Number.isFinite(eventDate.getTime());
@@ -231,15 +239,6 @@ serve(async (req) => {
     const timeDisplay = walletDate(eventDate, true);
     const entryDisplay = walletDate(entryDate, true);
     const shortDateDisplay = walletDate(eventDate);
-    // ── Generic class (no review required, same as original working approach) ──
-    const field = (id: string) => ({ firstValue: { fields: [{ fieldPath: `object.textModulesData['${id}']` }] } });
-    const genericClass: any = { id: GOOGLE_WALLET_CLASS_ID, classTemplateInfo: {
-      cardTemplateOverride: { cardRowTemplateInfos: [
-        { twoItems: { startItem: field('date'), endItem: field('show') } },
-        { twoItems: { startItem: field('holder'), endItem: field('access') } },
-      ] },
-    } };
-
     // ── Generic object with Apple-matching aesthetic ──────────────────────────
     const genericObject: any = {
       id: objectId,
@@ -289,48 +288,29 @@ serve(async (req) => {
       contentDescription: { defaultValue: { language: "es-ES", value: `Eclipse · ${theme.label}` } },
     };
     const privateKeyPem = normalizeWalletPem(GOOGLE_WALLET_PRIVATE_KEY);
+    // Google validates the credentials and pass before returning a Save link.
+    // Only this authenticated user's valid ticket is registered; no shared class is changed.
+    const accessToken = await getServiceAccountToken(GOOGLE_WALLET_SERVICE_ACCOUNT_EMAIL, privateKeyPem);
+    await persistGoogleWalletObject(accessToken, genericObject);
     const key = await importPKCS8(privateKeyPem, "RS256");
     const nowSeconds = Math.floor(Date.now() / 1000);
-    // A Save JWT does not refresh an existing object. Patch only presentation
-    // fields, after ticket ownership and validity have been checked above.
-    if (ticket.wallet_added) {
-      const assertion = await new SignJWT({scope:'https://www.googleapis.com/auth/wallet_object.issuer'})
-        .setProtectedHeader({alg:'RS256'}).setIssuer(GOOGLE_WALLET_SERVICE_ACCOUNT_EMAIL)
-        .setAudience('https://oauth2.googleapis.com/token').setIssuedAt(nowSeconds)
-        .setExpirationTime(nowSeconds+300).sign(key);
-      const tokenResponse = await fetch('https://oauth2.googleapis.com/token', {
-        method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},
-        body:new URLSearchParams({grant_type:'urn:ietf:params:oauth:grant-type:jwt-bearer',assertion}),
-      });
-      if (!tokenResponse.ok) return jsonResponse({ok:false,error:'Google Wallet no permite actualizar el pase en este momento.'},503);
-      const {access_token} = await tokenResponse.json();
-      if (!access_token) return jsonResponse({ok:false,error:'Google Wallet no ha autorizado la actualización.'},503);
-      const {hexBackgroundColor,cardTitle,header,subheader,textModulesData,logo,heroImage} = genericObject;
-      const updated = await fetch(`https://walletobjects.googleapis.com/walletobjects/v1/genericobject/${encodeURIComponent(objectId)}`, {
-        method:'PATCH',headers:{Authorization:`Bearer ${access_token}`,'Content-Type':'application/json'},
-        body:JSON.stringify({hexBackgroundColor,cardTitle,header,subheader,textModulesData,logo,heroImage}),
-      });
-      if (!updated.ok && updated.status!==404) return jsonResponse({ok:false,error:'Google Wallet no ha aceptado la actualización del pase. Revisa los permisos del emisor.'},503);
-    }
-    const jwt = await new SignJWT({
-      typ: "savetowallet",
-      iat: nowSeconds,
-      payload: { genericClasses: [genericClass], genericObjects: [genericObject] },
-    })
-      .setProtectedHeader({ alg: "RS256" })
+    const jwt = await new SignJWT(googleWalletSaveClaims(objectId, nowSeconds))
+      .setProtectedHeader({ alg: "RS256", typ: "JWT" })
       .setIssuer(GOOGLE_WALLET_SERVICE_ACCOUNT_EMAIL)
       .setAudience("google")
       .sign(key);
-
+    if (jwt.length > 1800) throw new GoogleWalletError('WALLET_LINK_TOO_LONG', 'El enlace de Google Wallet excede el tamaño permitido. Contacta con soporte.');
     const url = `https://pay.google.com/gp/v/save/${jwt}`;
+    console.info('[WALLET] Google pass prepared', { save_jwt_length: jwt.length });
     return jsonResponse({ ok: true, platform: "android", url, objectId });
 
   } catch (err) {
-    console.error("[WALLET] Fatal Error:", err.message);
-    return jsonResponse({ 
-      ok: false, 
-      error: "Error interno del servidor",
-      details: err.message 
-    }, 500);
+    if (err instanceof GoogleWalletError) {
+      console.error('[WALLET] Google request failed', { code: err.code, upstream_status: err.upstreamStatus });
+      return jsonResponse({ ok: false, error: `${err.message} (${err.code})`, code: err.code }, 503);
+    }
+    // Raw provider errors may include credentials or pass data. Do not return or log them.
+    console.error('[WALLET] Unexpected generation failure');
+    return jsonResponse({ ok: false, error: 'No se ha podido preparar el pase. Contacta con soporte de Eclipse.', code: 'WALLET_INTERNAL_ERROR' }, 500);
   }
 });
