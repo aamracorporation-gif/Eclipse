@@ -1,0 +1,41 @@
+name: Notification migration scaffold
+on:
+  push:
+    branches: [codex/notifications-core-v1]
+    paths: [.github/workflows/notification-migration-scaffold.yml]
+permissions:
+  contents: read
+jobs:
+  scaffold:
+    if: github.repository == 'aamracorporation-gif/Eclipse' && github.ref == 'refs/heads/codex/notifications-core-v1'
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Generate empty migration, without a database connection
+        run: |
+          npx --yes supabase@2.120.0 --help >/dev/null
+          npx --yes supabase@2.120.0 migration --help >/dev/null
+          npx --yes supabase@2.120.0 migration new --help >/dev/null
+          test -z "$(find supabase/migrations -name '*_notification_core_v1.sql' -print)"
+          npx --yes supabase@2.120.0 migration new notification_core_v1
+          file="$(find supabase/migrations -name '*_notification_core_v1.sql' -print)"
+          test -n "$file"
+          printf '%s\n' '-- Scaffold only. Implementation must pass review and tests before deployment.' > "$file"
+          printf 'Generated migration: %s\n' "$file"
+          git add -- "$file"
+      - name: Save only scaffold to isolated branch
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          test "$(git ls-remote origin "refs/heads/$GITHUB_REF_NAME" | cut -f1)" = "$GITHUB_SHA"
+          git -c user.name='github-actions[bot]' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' commit -m 'chore: initialize notification core migration via Supabase CLI'
+          auth="$(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)"
+          git -c "http.https://github.com/.extraheader=AUTHORIZATION: basic $auth" push origin "HEAD:refs/heads/$GITHUB_REF_NAME"
