@@ -16,7 +16,6 @@ async function getServiceAccountToken(saEmail: string, privateKeyPem: string): P
   })
     .setProtectedHeader({ alg: "RS256", typ: "JWT" })
     .setIssuer(saEmail)
-    .setSubject(saEmail)
     .setAudience("https://oauth2.googleapis.com/token")
     .setIssuedAt(now)
     .setExpirationTime(now + 3600)
