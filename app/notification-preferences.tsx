@@ -1,3 +1,4 @@
+import { OrganizerNotificationPreferences, type OrganizerNotificationSettings } from '@/components/OrganizerNotificationPreferences';
 import React,{useEffect,useRef,useState} from 'react';
 import {View,Text,StyleSheet,Switch,TouchableOpacity,ScrollView,TextInput,ActivityIndicator,Linking} from 'react-native';
 import {SafeAreaView} from 'react-native-safe-area-context';
@@ -13,7 +14,7 @@ import {LAUNCH_FEATURES} from '@/lib/launchFeatures';
 // Legacy contract retained for callers while the v2 interface uses explicit role preferences.
 const COMMON_KEYS=(['purchase_updates','event_reminders','resale_updates'] as const).filter(k=>k!=='resale_updates'||LAUNCH_FEATURES.resale);
 export function __test_getVisiblePreferenceKeys(role:string|null|undefined):string[]{return String(role||'').toLowerCase()==='organizer'?[...COMMON_KEYS,'stock_alerts','realtime_sales','daily_summary','stock_threshold_alerts']:[...COMMON_KEYS];}
-type Preferences={user_id:string;role:NotificationRole;push_enabled:boolean;email_enabled:boolean;purchase_updates:boolean;event_changes:boolean;event_reminders:boolean;operations:boolean;quiet_enabled:boolean;quiet_start:number;quiet_end:number;timezone:string;event_night_override:boolean};
+type Preferences=OrganizerNotificationSettings & {user_id:string;role:NotificationRole;push_enabled:boolean;email_enabled:boolean;purchase_updates:boolean;event_changes:boolean;event_reminders:boolean;operations:boolean;quiet_enabled:boolean;quiet_start:number;quiet_end:number;timezone:string;event_night_override:boolean};
 const rows:[keyof Preferences,string,string][]=[
  ['push_enabled','Avisos en el móvil','Se aplican a los dispositivos de este perfil con permiso del sistema.'],
  ['email_enabled','Avisos por correo','Avisos de actividad. No modifica los correos de acceso o recuperación de cuenta.'],
@@ -59,6 +60,7 @@ export default function NotificationPreferencesScreen(){
   {message?<Text accessibilityLiveRegion="polite" style={styles.message}>{message}</Text>:null}
   {loading?<ActivityIndicator color="#C5ABFF"/>:!visible?<TouchableOpacity style={styles.button} onPress={()=>setReload(n=>n+1)}><Text style={styles.label}>Reintentar</Text></TouchableOpacity>:<View style={styles.card}>
    {rows.filter(([key])=>key!=='operations'||role!=='attendee').map(([key,title,description])=><View key={key} style={styles.row}><View style={styles.rowText}><Text style={styles.label}>{title}</Text><Text style={styles.description}>{description}</Text></View><Switch accessibilityLabel={title} disabled={busy} value={Boolean(visible[key])} onValueChange={v=>void save({[key]:v})} trackColor={{false:'#4A4358',true:'#9567CA'}}/></View>)}
+   {role==='organizer'?<OrganizerNotificationPreferences value={visible} disabled={busy} onChange={patch=>void save(patch)}/>:null}
    {visible.quiet_enabled?<View style={styles.schedule}><Text style={styles.label}>Silencio ({visible.timezone})</Text><View style={styles.clockRow}><TextInput accessibilityLabel="Inicio de silencio, hora y minutos" value={start} onChangeText={setStart} placeholder="00:00" placeholderTextColor="#9C95A9" maxLength={5} editable={!busy} style={styles.input}/><Text style={styles.label}>a</Text><TextInput accessibilityLabel="Fin de silencio, hora y minutos" value={end} onChangeText={setEnd} placeholder="11:00" placeholderTextColor="#9C95A9" maxLength={5} editable={!busy} style={styles.input}/></View><TouchableOpacity disabled={busy} style={styles.button} onPress={()=>{const a=parseNotificationClock(start),b=parseNotificationClock(end);if(a===null||b===null||a===b){setMessage('Indica dos horas distintas en formato HH:mm.');return;}void save({quiet_start:a,quiet_end:b});}}><Text style={styles.label}>Guardar horario</Text></TouchableOpacity></View>:null}
   </View>}
   <TouchableOpacity disabled={busy} style={styles.primary} onPress={()=>void activate()}><Text style={styles.label}>{busy?'Guardando…':'Activar avisos en este móvil'}</Text></TouchableOpacity><TouchableOpacity style={styles.button} onPress={()=>void Linking.openSettings().catch(()=>setMessage('Abre los ajustes del sistema manualmente.'))}><Text style={styles.label}>Abrir ajustes del móvil</Text></TouchableOpacity>

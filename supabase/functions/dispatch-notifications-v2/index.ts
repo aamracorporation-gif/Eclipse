@@ -1,5 +1,6 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.49.1';
-import { authorizedNotificationWorker, runNotificationDispatch } from '../_shared/notificationDelivery.ts';
+import { authorizedNotificationWorker } from '../_shared/notificationDelivery.ts';
+import { runNotificationDispatchWithHealth } from '../_shared/notificationWorkerHealth.ts';
 
 Deno.serve(async (req) => {
   const secret=Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
@@ -10,7 +11,7 @@ Deno.serve(async (req) => {
   if (!url || !secret) return respond(503,{ok:false,code:'NOT_CONFIGURED'});
   const client=createClient(url,secret,{auth:{persistSession:false,autoRefreshToken:false}});
   try {
-    const result=await runNotificationDispatch((name,args)=>client.rpc(name,args),name=>Deno.env.get(name));
+    const result=await runNotificationDispatchWithHealth((name,args)=>client.rpc(name,args),name=>Deno.env.get(name));
     console.info('[NOTIFICATIONS_V2]',{processed:result.processed,receipts:result.receipts,dispatch:result.dispatch});
     return respond(200,{ok:true,...result});
   } catch {
