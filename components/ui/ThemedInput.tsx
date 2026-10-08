@@ -11,12 +11,13 @@ interface ThemedInputProps extends Omit<TextInputProps, 'style'> {
   error?: string;
   success?: boolean;
   label?: string;
+  hint?: string;
   style?: StyleProp<ViewStyle>;
   containerStyle?: StyleProp<ViewStyle>;
   inputStyle?: StyleProp<TextStyle>;
 }
 
-export const ThemedInput = forwardRef<TextInput, ThemedInputProps>(({ icon, leftIcon, rightIcon, error, success, label, style, containerStyle, inputStyle, accessibilityLabel, ...props }, ref) => {
+export const ThemedInput = forwardRef<TextInput, ThemedInputProps>(({ icon, leftIcon, rightIcon, error, success, label, hint, style, containerStyle, inputStyle, accessibilityLabel, ...props }, ref) => {
   const Icon = icon ?? leftIcon;
   const resolvedRightIcon =
     rightIcon ??
@@ -45,6 +46,7 @@ export const ThemedInput = forwardRef<TextInput, ThemedInputProps>(({ icon, left
           underlineColorAndroid="transparent"
           placeholderTextColor={Colors.dark.textSecondary}
           accessibilityLabel={accessibilityLabel ?? label}
+          accessibilityHint={hint}
           accessibilityState={{ disabled: props.editable === false }}
           {...props}
         />
@@ -54,6 +56,7 @@ export const ThemedInput = forwardRef<TextInput, ThemedInputProps>(({ icon, left
           </View>
         )}
       </View>
+      {hint && <Text style={styles.hint}>{hint}</Text>}
       {error && (
         <Text style={styles.errorText} accessibilityRole="alert" accessibilityLiveRegion="polite">
           {error}
@@ -132,5 +135,6 @@ const styles = StyleSheet.create({
     marginTop: theme.space[2],
     marginLeft: theme.space[1],
     fontWeight: '400',
-  }
+  },
+  hint: { color: Colors.dark.textSecondary, fontSize: 12, lineHeight: 18, marginTop: 8 },
 });

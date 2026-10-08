@@ -48,3 +48,26 @@ it('a pending validation cannot update state after leaving checkout', async () =
   props.onChange.mockClear(); await act(async () => { finish({ data: rule, error: null }); });
   expect(props.onChange).not.toHaveBeenCalled();
 });
+
+it('exposes the same product validation to the build 65 presentation adapter', async () => {
+  rpc.mockResolvedValue({data:rule,error:null});
+  let control:any;
+  await act(async()=>{tree=create(<DiscountCodeField {...props} render={value=>{control=value;return null;}}/>);});
+  await act(async()=>{control.onChange('vip20');});
+  await act(async()=>{control.apply();});
+  expect(rpc).toHaveBeenCalledWith('validate_discount_code_for_product',expect.objectContaining({p_code:'VIP20',p_vip_reservado_id:'table',p_quantity:1}));
+  expect(props.onChange).toHaveBeenLastCalledWith(expect.objectContaining({selectionKey:expect.any(String),value:20}));
+});
+it('the presentation adapter discards late validation after changing product', async () => {
+  let finish:(value:unknown)=>void=()=>{};
+  rpc.mockReturnValue(new Promise(resolve=>{finish=resolve;}));
+  let control:any; const render=(value:any)=>{control=value;return null;};
+  await act(async()=>{tree=create(<DiscountCodeField {...props} render={render}/>);});
+  await act(async()=>{control.onChange('vip20');});
+  await act(async()=>{control.apply();});
+  expect(control.busy).toBe(true);
+  await act(async()=>{tree.update(<DiscountCodeField {...props} productId="other-table" render={render}/>);});
+  await act(async()=>{finish({data:rule,error:null});});
+  expect(control.value).toBe(''); expect(control.busy).toBe(false);
+  expect(props.onChange.mock.calls.every(([value])=>value===null)).toBe(true);
+});

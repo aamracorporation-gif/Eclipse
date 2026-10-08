@@ -1,145 +1,21 @@
-import React, { useState } from 'react';
+import React from 'react';
 import {
-  Modal,
-  Platform,
   Pressable,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
-import DateTimePicker, {
-  DateTimePickerAndroid,
-} from '@react-native-community/datetimepicker';
 import { LinearGradient } from 'expo-linear-gradient';
 import { ThemedInput } from '@/components/ui/ThemedInput';
 import { ThemedButton } from '@/components/ui/ThemedButton';
 import { Colors } from '@/constants/Colors';
+import { theme } from '@/theme/styles';
+import { FormDateTimeField } from '@/components/ui/FormDateTimeField';
 import {
   OFFER_CATEGORIES,
   type TicketDraft,
 } from '@/lib/createEventTicketConfig';
 
-function SaleDate({
-  label,
-  value,
-  onChange,
-  base,
-}: {
-  label: string;
-  value?: string;
-  onChange: (v: string) => void;
-  base?: Date | null;
-}) {
-  const [open, setOpen] = useState(false),
-    [draft, setDraft] = useState(new Date());
-  const choose = () => {
-    const initial = value ? new Date(value) : base || new Date();
-    setDraft(initial);
-    if (Platform.OS === 'android') {
-      DateTimePickerAndroid.open({
-        value: initial,
-        mode: 'date',
-        onChange: (e, d) => {
-          if (e.type !== 'set' || !d) return;
-          DateTimePickerAndroid.open({
-            value: d,
-            mode: 'time',
-            is24Hour: true,
-            onChange: (e2, time) => {
-              if (e2.type === 'set' && time) {
-                d.setHours(time.getHours(), time.getMinutes(), 0, 0);
-                onChange(d.toISOString());
-              }
-            },
-          });
-        },
-      });
-    } else setOpen(true);
-  };
-  return (
-    <View style={styles.dateBox}>
-      <Text style={styles.label}>{label}</Text>
-      {Platform.OS === 'web' ? (
-        React.createElement('input', {
-          type: 'datetime-local',
-          value: value
-            ? new Date(
-                new Date(value).getTime() -
-                  new Date(value).getTimezoneOffset() * 60000,
-              )
-                .toISOString()
-                .slice(0, 16)
-            : '',
-          onChange: (e: any) =>
-            onChange(
-              e.target.value ? new Date(e.target.value).toISOString() : '',
-            ),
-          style: {
-            background: '#11101e',
-            color: '#eee8ff',
-            border: '1px solid #393247',
-            padding: 12,
-            borderRadius: 12,
-            width: '100%',
-            colorScheme: 'dark',
-            minWidth: 0,
-            boxSizing: 'border-box',
-          },
-        })
-      ) : (
-        <Pressable
-          accessibilityRole="button"
-          onPress={choose}
-          style={styles.dateButton}
-        >
-          <Text style={styles.value}>
-            {value
-              ? new Date(value).toLocaleString('es-ES', {
-                  day: '2-digit',
-                  month: 'short',
-                  hour: '2-digit',
-                  minute: '2-digit',
-                })
-              : 'Sin programar'}
-          </Text>
-        </Pressable>
-      )}
-      {!!value && (
-        <Pressable onPress={() => onChange('')}>
-          <Text style={styles.link}>Quitar horario</Text>
-        </Pressable>
-      )}
-      <Modal
-        visible={open && Platform.OS === 'ios'}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setOpen(false)}
-      >
-        <View style={styles.modal}>
-          <View style={styles.modalBody}>
-            <DateTimePicker
-              value={draft}
-              mode="datetime"
-              display="spinner"
-              themeVariant="dark"
-              onChange={(_, d) => d && setDraft(d)}
-            />
-            <ThemedButton
-              title="Confirmar horario"
-              onPress={() => {
-                onChange(draft.toISOString());
-                setOpen(false);
-              }}
-            />
-            <Pressable onPress={() => setOpen(false)}>
-              <Text style={styles.link}>Cancelar</Text>
-            </Pressable>
-          </View>
-        </View>
-      </Modal>
-    </View>
-  );
-}
 export function SalesOfferForm({
   value,
   onChange,
@@ -171,13 +47,19 @@ export function SalesOfferForm({
     label: string,
     placeholder: string,
     numeric = false,
+    hint?: string,
   ) => (
     <ThemedInput
       label={label}
+      hint={hint}
+      multiline={key === 'benefits'}
+      inputStyle={key === 'benefits' ? { minHeight: 100, textAlignVertical: 'top' } : undefined}
+      maxLength={key === 'name' ? 120 : undefined}
+      editable={!(key === 'price' && v.category === 'free')}
       placeholder={placeholder}
       value={String(v[key] ?? '')}
       onChangeText={(x) => set(key, x)}
-      keyboardType={numeric ? 'decimal-pad' : 'default'}
+      keyboardType={numeric ? key === 'price' || key === 'extraBottlePrice' ? 'decimal-pad' : 'number-pad' : 'default'}
       error={showErrors ? errors[key] : undefined}
     />
   );
@@ -193,10 +75,10 @@ export function SalesOfferForm({
   return (
     <View style={styles.root}>
       <View style={styles.heading}>
-        <Text style={styles.eyebrow}>ECLIPSE / VENTAS</Text>
-        <Text style={styles.title}>Diseña el acceso.</Text>
+        <Text style={styles.eyebrow}>CONFIGURAR OFERTA</Text>
+        <Text style={styles.title}>{v.id === 'draft' ? 'Nueva entrada o mesa' : 'Editar oferta'}</Text>
         <Text style={styles.subtitle}>
-          Cada oferta, sus condiciones. Todo claro antes de pagar.
+          Los campos con * son obligatorios. El precio siempre corresponde a una unidad de venta.
         </Text>
       </View>
       {section(
@@ -210,7 +92,7 @@ export function SalesOfferForm({
             key={c.key}
             accessibilityRole="radio"
             accessibilityState={{ checked: v.category === c.key }}
-            onPress={() =>
+            onPress={() => v.category !== c.key &&
               onChange({
                 ...v,
                 category: c.key,
@@ -249,45 +131,48 @@ export function SalesOfferForm({
       )}
       {field(
         'name',
-        'Nombre de la oferta',
-        table ? 'Mesa Eclipse · 6 personas' : 'Entrada + 2 consumiciones',
+        'Nombre de la oferta *',
+        table ? 'Mesa Eclipse · 6 personas' : group ? 'Pack de 4 entradas' : 'Entrada + consumición',
+        false, 'Es el nombre que verá el cliente al comprar y en su entrada.',
       )}
       <View style={styles.row}>
         <View style={styles.half}>
           {field(
             'price',
             table
-              ? 'Precio por mesa (€)'
+              ? 'Precio por mesa (€) *'
               : group
-                ? 'Precio por pack (€)'
-                : 'Precio por persona (€)',
+                ? 'Precio por pack (€) *'
+                : 'Precio por persona (€) *',
             '20',
             true,
+            v.category === 'free' ? 'Las invitaciones siempre son gratuitas.' : 'Precio base. El cliente verá los gastos de gestión por separado.',
           )}
         </View>
         <View style={styles.half}>
           {field(
             'quantity',
             table
-              ? 'Mesas disponibles'
+              ? 'Mesas disponibles *'
               : group
-                ? 'Packs disponibles'
-                : 'Entradas a la venta',
-            '100',
+                ? 'Cupo de packs *'
+                : 'Cupo de entradas *',
+            table ? '4' : group ? '20' : '100',
             true,
+            table ? 'Mesas que quedan disponibles, sin contar las vendidas.' : `Cupo total, incluidas las unidades vendidas${v.originalMetadata?.catalogSold ? ': ' + v.originalMetadata.catalogSold : ''}.`,
           )}
         </View>
       </View>
-      {table && field('vipGroupSize', 'Personas incluidas por mesa', '6', true)}
+      {table && field('vipGroupSize', 'Capacidad por mesa *', '6', true, 'Número máximo de personas incluidas en una reserva completa.')}
       {group &&
-        field('admissionsPerUnit', 'Personas incluidas por pack', '4', true)}
+        field('admissionsPerUnit', 'Personas por pack *', '4', true, 'Por ejemplo: 20 packs de 4 personas permiten acceder a 80 personas. Un QR por pack y acceso conjunto, sin mesa reservada.')}
       {!table && (
         <View style={styles.row}>
           <View style={styles.half}>
-            {field('minPerOrder', 'Mínimo por compra', '1', true)}
+            {field('minPerOrder', 'Mínimo por compra *', '1', true, group ? 'Packs completos, no personas.' : 'Entradas en una misma compra.')}
           </View>
           <View style={styles.half}>
-            {field('maxPerOrder', 'Máximo por compra', '10', true)}
+            {field('maxPerOrder', 'Máximo por compra *', '10', true, group ? 'Entre 1 y 10 packs.' : 'Entre 1 y 10 entradas.')}
           </View>
         </View>
       )}
@@ -298,19 +183,19 @@ export function SalesOfferForm({
       )}
       {field(
         'generalAccessZone',
-        'Zona de acceso',
+        'Zona de acceso (opcional)',
         'Pista principal, terraza, mesa junto a cabina…',
       )}
       {!table &&
-        field('includedDrinks', 'Consumiciones por persona', '0', true)}
+        field('includedDrinks', 'Consumiciones por persona', '0', true, 'Pon 0 si no incluye bebida. En un pack, esta cantidad se aplica a cada persona.')}
       {table && (
         <View style={styles.bottles}>
-          <Text style={styles.label}>Botellas incluidas</Text>
+          <Text style={styles.label}>Botellas incluidas (opcional)</Text><Text style={styles.hint}>Se incluyen en el precio de la mesa. Si no añades ninguna, se vende sin botellas.</Text>
           {v.vipFreeBottles.map((b, i) => (
             <View key={i} style={styles.row}>
               <View style={{ flex: 3 }}>
                 <ThemedInput
-                  label="Botella"
+                  label="Botella *"
                   placeholder="Tipo o marca"
                   value={b.brand}
                   onChangeText={(x) =>
@@ -326,9 +211,9 @@ export function SalesOfferForm({
                   }
                 />
               </View>
-              <View style={{ flex: 1 }}>
+              <View style={{ width: 110 }}>
                 <ThemedInput
-                  label="Uds."
+                  label="Cantidad *"
                   value={b.quantity}
                   keyboardType="number-pad"
                   onChangeText={(x) =>
@@ -373,10 +258,12 @@ export function SalesOfferForm({
       {v.category === 'early' &&
         field(
           'earlyEntryMinutes',
-          'Acceso antes de la apertura (minutos)',
+          'Minutos de acceso anticipado *',
           '30',
           true,
+          'Por ejemplo, 30 permite entrar media hora antes del inicio del evento. No es un tramo de precio anticipado.',
         )}
+      {table && field('extraBottlePrice', 'Precio de botella adicional (€, opcional)', '80', true, 'Se muestra como información adicional. No forma parte del precio base de la mesa.')}
       {v.category === 'backstage' &&
         field(
           'backstageHost',
@@ -385,14 +272,16 @@ export function SalesOfferForm({
         )}
       {field(
         'benefits',
-        'Condiciones e inclusiones',
-        'Qué incluye exactamente. Indica aquí las condiciones de acceso.',
+        'Otras condiciones (opcional)',
+        'Ej.: bebida a elegir entre refresco y cerveza.',
+        false, 'Añade detalles que no hayas indicado arriba y que el cliente deba conocer antes de pagar.',
       )}
       {field(
         'entryDeadlineMinutes',
-        'Acceso hasta (minutos desde el inicio, opcional)',
+        'Límite de llegada en minutos (opcional)',
         '120',
         true,
+        'Se cuenta desde el inicio del evento: 120 significa dos horas después. En blanco, esta oferta no añade un límite de llegada.',
       )}
       {!!v.entryDeadlineMinutes && eventDate && (
         <Text style={styles.notice}>
@@ -400,7 +289,7 @@ export function SalesOfferForm({
           {new Date(
             eventDate.getTime() + Number(v.entryDeadlineMinutes) * 60000,
           ).toLocaleString('es-ES')}
-          . El límite figurará en el QR.
+          . Se mostrará en la entrada y se comprobará al acceder.
         </Text>
       )}
       {section(
@@ -408,43 +297,30 @@ export function SalesOfferForm({
         'Cuándo se vende',
         'Una anticipada es un tramo de precio; no cambia la zona de acceso.',
       )}
-      <Text style={styles.label}>Tramo comercial</Text>
+      <Text style={styles.label}>Tramo de precio (opcional)</Text>
       <View style={styles.phases}>
         {[
           'Anticipada',
           'Primer tramo',
           'Segundo tramo',
           'Último tramo',
-          'Taquilla online',
+          'Precio final',
+          'Sin tramo',
         ].map((p) => (
           <Pressable
             key={p}
-            onPress={() => set('salePhase', p)}
-            style={[styles.phase, v.salePhase === p && styles.selected]}
+            accessibilityRole="radio" accessibilityState={{ checked: v.salePhase === (p === 'Sin tramo' ? '' : p) }}
+            onPress={() => set('salePhase', p === 'Sin tramo' ? '' : p)}
+            style={[styles.phase, v.salePhase === (p === 'Sin tramo' ? '' : p) && styles.selected]}
           >
             <Text style={styles.phaseText}>{p}</Text>
           </Pressable>
         ))}
       </View>
-      <View style={styles.row}>
-        <SaleDate
-          label="Abrir venta"
-          value={v.salesStartAt}
-          onChange={(x) => set('salesStartAt', x)}
-          base={eventDate}
-        />
-        <SaleDate
-          label="Cerrar venta"
-          value={v.salesEndAt}
-          onChange={(x) => set('salesEndAt', x)}
-          base={eventDate}
-        />
-      </View>
-      {showErrors && errors.salesEndAt && (
-        <Text style={styles.error}>{errors.salesEndAt}</Text>
-      )}
+      <FormDateTimeField label="Abrir venta (opcional)" value={v.salesStartAt} onChange={x => set('salesStartAt', x)} optional hint="En blanco, se podrá comprar al publicar el evento." error={showErrors ? errors.salesStartAt : undefined}/>
+      <FormDateTimeField label="Cerrar venta (opcional)" value={v.salesEndAt} onChange={x => set('salesEndAt', x)} base={eventDate} optional hint="En blanco, no añades un cierre programado. Siguen aplicándose la disponibilidad y las condiciones de acceso." error={showErrors ? errors.salesEndAt : undefined}/>
       <LinearGradient
-        colors={['#211339', '#11101E']}
+        colors={[Colors.dark.primarySoft, Colors.dark.surfaceSubtle]}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
         style={styles.preview}
@@ -453,7 +329,7 @@ export function SalesOfferForm({
         <Text style={styles.previewName}>{v.name || 'Tu próxima noche'}</Text>
         <View style={styles.priceLine}>
           <Text style={styles.price}>
-            {Number(v.price.replace(',', '.')) || 0} €
+            {v.price.trim() ? new Intl.NumberFormat('es-ES', {style: 'currency', currency: 'EUR'}).format(Number(v.price.replace(',', '.')) || 0) : '— €'}
           </Text>
           <Text style={styles.unit}>
             {table ? 'por mesa' : group ? 'por pack' : 'por persona'}
@@ -466,7 +342,7 @@ export function SalesOfferForm({
               bottleCount +
               (bottleCount === 1 ? ' botella incluida' : ' botellas incluidas')
             : group
-              ? (v.admissionsPerUnit || '—') + ' personas · acceso conjunto'
+              ? (v.admissionsPerUnit || '—') + ' personas · sin mesa · acceso conjunto'
               : (v.includedDrinks || '0') + ' consumiciones por persona'}
         </Text>
         <Text style={styles.hint}>
@@ -476,8 +352,8 @@ export function SalesOfferForm({
       <ThemedButton
         title={
           v.id === 'draft'
-            ? 'Añadir oferta al catálogo'
-            : 'Guardar cambios de la oferta'
+            ? 'Añadir al evento'
+            : 'Guardar oferta'
         }
         onPress={onAdd}
       />
@@ -485,7 +361,7 @@ export function SalesOfferForm({
         <Pressable accessibilityRole="button" onPress={onCancel}>
           <Text style={[styles.link, { textAlign: 'center' }]}>
             {v.id === 'draft'
-              ? 'Limpiar oferta'
+              ? 'Cancelar oferta'
               : 'Descartar cambios de esta oferta'}
           </Text>
         </Pressable>
@@ -497,19 +373,20 @@ const styles = StyleSheet.create({
   root: { gap: 12, minWidth: 0 },
   heading: { paddingBottom: 8, gap: 8 },
   eyebrow: {
-    color: '#BDA6F8',
-    fontSize: 10,
+    color: Colors.dark.secondary,
+    fontSize: 12,
     fontWeight: '800',
     letterSpacing: 2,
   },
   title: {
-    fontSize: 32,
-    lineHeight: 38,
+    fontSize: 24,
+    lineHeight: 30,
+    fontFamily: theme.typography.fontFamily.display,
     fontWeight: '800',
-    color: '#F4F0FF',
+    color: Colors.dark.text,
     letterSpacing: -1,
   },
-  subtitle: { fontSize: 14, lineHeight: 21, color: '#ADA6BC' },
+  subtitle: { fontSize: 14, lineHeight: 21, color: Colors.dark.textSecondary },
   sectionHeader: {
     flexDirection: 'row',
     gap: 12,
@@ -518,35 +395,36 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   number: {
-    color: '#BBA4F0',
-    fontSize: 11,
+    color: Colors.dark.secondary,
+    fontSize: 12,
     fontWeight: '800',
     letterSpacing: 1,
     borderWidth: 1,
-    borderColor: '#423350',
+    borderColor: Colors.dark.border,
     padding: 8,
     borderRadius: 9,
   },
-  sectionTitle: { fontSize: 19, fontWeight: '700', color: '#F4F0FF' },
-  hint: { fontSize: 12, lineHeight: 18, color: '#A49BAD', marginTop: 3 },
+  sectionTitle: { fontSize: 19, fontWeight: '700', color: Colors.dark.text },
+  hint: { fontSize: 12, lineHeight: 18, color: Colors.dark.textSecondary, marginTop: 3 },
   options: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   option: {
-    width: '48%',
+    width: '47%',
+    minWidth: 130,
     flexGrow: 1,
     padding: 13,
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: '#30273D',
-    backgroundColor: '#100D19',
+    borderColor: Colors.dark.border,
+    backgroundColor: Colors.dark.surfaceSubtle,
     minHeight: 95,
   },
-  selected: { borderColor: '#AE8BE9', backgroundColor: '#28173F' },
-  selectedText: { color: '#E5D7FF' },
+  selected: { borderColor: Colors.dark.primary, backgroundColor: Colors.dark.primarySoft },
+  selectedText: { color: Colors.dark.text },
   optionTop: { flexDirection: 'row', justifyContent: 'space-between', gap: 5 },
-  optionName: { color: '#E4DEED', fontWeight: '700', fontSize: 13, flex: 1 },
+  optionName: { color: Colors.dark.text, fontWeight: '700', fontSize: 13, flex: 1 },
   optionDetail: {
-    color: '#A79BAF',
-    fontSize: 11,
+    color: Colors.dark.textSecondary,
+    fontSize: 12,
     lineHeight: 16,
     marginTop: 7,
   },
@@ -555,34 +433,34 @@ const styles = StyleSheet.create({
     width: 12,
     borderRadius: 6,
     borderWidth: 1,
-    borderColor: '#655572',
+    borderColor: Colors.dark.borderStrong,
     marginTop: 2,
   },
-  radioOn: { backgroundColor: '#C5A3FF', borderColor: '#C5A3FF' },
-  row: { flexDirection: 'row', gap: 10, alignItems: 'flex-start' },
-  half: { flex: 1 },
-  label: { color: '#C7BFD1', fontSize: 12, fontWeight: '600', marginBottom: 8 },
+  radioOn: { backgroundColor: Colors.dark.primary, borderColor: Colors.dark.primary },
+  row: { flexDirection: 'row', flexWrap: 'wrap', gap: 12, alignItems: 'flex-start' },
+  half: { flex: 1, minWidth: 170 },
+  label: { color: Colors.dark.text, fontSize: 12, fontWeight: '600', marginBottom: 8 },
   phases: { flexDirection: 'row', flexWrap: 'wrap', gap: 7 },
   phase: {
     paddingHorizontal: 12,
     paddingVertical: 10,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#393045',
+    borderColor: Colors.dark.border,
   },
-  phaseText: { color: '#DED4EA', fontSize: 11 },
+  phaseText: { color: Colors.dark.text, fontSize: 11 },
   dateBox: { flex: 1, gap: 3, minWidth: 0 },
   dateButton: {
     padding: 13,
-    backgroundColor: '#11101E',
+    backgroundColor: Colors.dark.surfaceSubtle,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#393247',
+    borderColor: Colors.dark.border,
     minHeight: 48,
   },
-  value: { color: '#F4EDFF', fontSize: 13 },
+  value: { color: Colors.dark.text, fontSize: 13 },
   link: {
-    color: '#BDA6F8',
+    color: Colors.dark.secondary,
     fontSize: 12,
     paddingVertical: 12,
     fontWeight: '600',
@@ -591,21 +469,21 @@ const styles = StyleSheet.create({
   bottles: {
     gap: 8,
     padding: 13,
-    backgroundColor: '#15101E',
+    backgroundColor: Colors.dark.surfaceSubtle,
     borderRadius: 15,
   },
-  notice: { color: '#E1CD9E', lineHeight: 18, fontSize: 12 },
+  notice: { color: Colors.dark.secondary, lineHeight: 18, fontSize: 12 },
   preview: {
     padding: 22,
     borderRadius: 20,
     borderWidth: 1,
-    borderColor: '#594068',
+    borderColor: Colors.dark.border,
     marginTop: 12,
     gap: 10,
   },
   previewName: {
     fontSize: 22,
-    color: '#FFF',
+    color: Colors.dark.text,
     fontWeight: '700',
     letterSpacing: -0.4,
   },
@@ -613,15 +491,15 @@ const styles = StyleSheet.create({
   price: {
     fontSize: 38,
     fontWeight: '800',
-    color: '#EEE4FF',
+    color: Colors.dark.text,
     letterSpacing: -1,
   },
-  unit: { fontSize: 12, color: '#B4A4C7' },
-  previewDetail: { color: '#D7C8E9', fontSize: 13 },
+  unit: { fontSize: 12, color: Colors.dark.textSecondary },
+  previewDetail: { color: Colors.dark.textSecondary, fontSize: 13 },
   error: { color: Colors.dark.error, fontSize: 12 },
-  modal: { flex: 1, justifyContent: 'flex-end', backgroundColor: '#0009' },
+  modal: { flex: 1, justifyContent: 'flex-end', backgroundColor: Colors.dark.overlay },
   modalBody: {
-    backgroundColor: '#171022',
+    backgroundColor: Colors.dark.backgroundElevated,
     padding: 24,
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,

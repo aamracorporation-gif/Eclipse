@@ -37,3 +37,11 @@ android_backup/
 # OS / editor
 .DS_Store
 Thumbs.db
+
+scripts/qa/.preview-creator.tsx
+docs/qa/build65-restored/*.js
+docs/qa/build65-restored/*.html
+docs/qa/build65-restored/*.ttf
+docs/qa/build65-restored/Icon-*.png
+.restore-build65.cjs
+.capture-build65.cjs
