@@ -1,3 +1,5 @@
+import { GlassView } from '@/components/ui/GlassView';
+import { profileAppearance } from '@/theme/profileAppearance';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, KeyboardAvoidingView, Modal, Platform, Pressable, RefreshControl, ScrollView, StatusBar, StyleSheet, Switch, Text, TextInput, View, useWindowDimensions } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -57,7 +59,7 @@ function Badge(props: { tone: 'ok' | 'warn' | 'error' | 'neutral'; label: string
 
 function Card(props: { title: string; subtitle?: string; icon?: any; actionLabel?: string; onActionPress?: () => void; children?: any }) {
   return (
-    <View style={ui.card} accessibilityRole="summary" accessibilityLabel={props.title}>
+    <GlassView intensity={14} contentContainerStyle={{ padding: 0 }} style={[ui.card, profileAppearance.card]} accessibilityRole="summary" accessibilityLabel={props.title}>
       <View style={ui.cardHeader}>
         <View style={ui.cardHeaderLeft}>
           {props.icon ? <View style={ui.iconCircle}>{props.icon}</View> : null}
@@ -79,7 +81,7 @@ function Card(props: { title: string; subtitle?: string; icon?: any; actionLabel
         )}
       </View>
       {!!props.children && <View style={{ marginTop: 12 }}>{props.children}</View>}
-    </View>
+    </GlassView>
   );
 }
 
@@ -87,7 +89,7 @@ function KeyValue(props: { label: string; value: string }) {
   return (
     <View style={ui.kvRow}>
       <Text style={ui.kvLabel}>{props.label}</Text>
-      <Text style={ui.kvValue} numberOfLines={1} adjustsFontSizeToFit>{props.value}</Text>
+      <Text style={ui.kvValue}>{props.value}</Text>
     </View>
   );
 }
@@ -107,7 +109,10 @@ function PrimaryButton(props: { label: string; onPress: () => void; disabled?: b
         props.disabled ? ui.buttonDisabled : null,
       ]}
     >
-      <Text style={ui.buttonText}>{props.label}</Text>
+      <View style={[profileAppearance.actionRow, { width: '100%', paddingVertical: 0 }]}>
+        <Text style={[ui.buttonText, { flex: 1, textAlign: 'left' }]}>{props.label}</Text>
+        <ChevronRight size={16} color={Colors.dark.textSecondary} />
+      </View>
     </Pressable>
   );
 }
@@ -343,7 +348,7 @@ export default function OrganizerProfileTab() {
   const dirty = useMemo(() => profileKey(draft) !== initialKeyRef.current, [draft]);
   const editModalHeight = useMemo(() => {
     const available = Math.max(0, windowHeight - 32);
-    return Math.max(520, Math.min(860, available));
+    return Math.min(860, available);
   }, [windowHeight]);
 
   const validateCityCountry = useCallback(async () => {
@@ -552,59 +557,52 @@ export default function OrganizerProfileTab() {
     <View style={ui.screen}>
       <StatusBar barStyle="light-content" />
       <LinearGradient
-        colors={[Colors.dark.background, '#1e1b4b', '#050510']}
+        colors={[Colors.dark.background, '#1e1b4b']}
         style={StyleSheet.absoluteFill}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
       />
-      <View pointerEvents="none" style={ui.glowA} />
-      <View pointerEvents="none" style={ui.glowB} />
+
 
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
         <ScrollView
-          contentContainerStyle={[ui.content, { paddingTop: insets.top + 16, paddingBottom: insets.bottom + 20 }]}
+          contentContainerStyle={[ui.content, profileAppearance.content, { paddingTop: insets.top + 16, paddingBottom: insets.bottom + 20 }]}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#fff" />}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
-          <View style={ui.headerCard}>
-            <LinearGradient
-              colors={['rgba(124,58,237,0.28)', 'rgba(6,182,212,0.14)', 'rgba(255,255,255,0.04)']}
-              style={StyleSheet.absoluteFill}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-            />
-            <View style={ui.headerRow}>
-              <View style={ui.avatarRingWrap} accessibilityRole="image" accessibilityLabel={t('tabs.profile', { defaultValue: 'Avatar' })}>
+          <GlassView intensity={14} contentContainerStyle={{ padding: 0 }} style={[ui.headerCard, profileAppearance.headerCard]}>
+            <View style={[ui.headerRow, profileAppearance.headerRow, { flexWrap: 'wrap' }]}>
+              <View style={[ui.avatarRingWrap, profileAppearance.avatarRingWrap]} accessibilityRole="image" accessibilityLabel={t('tabs.profile', { defaultValue: 'Avatar' })}>
                 <LinearGradient
                   colors={['rgba(124,58,237,0.90)', 'rgba(6,182,212,0.55)', 'rgba(255,255,255,0.10)']}
-                  style={ui.avatarRing}
+                  style={[ui.avatarRing, profileAppearance.avatarRing]}
                 >
-                  <View style={ui.avatarRingInner}>
-                    <View style={ui.avatarFallback}>
-                      <Text style={ui.avatarFallbackText}>{initials}</Text>
+                  <View style={[ui.avatarRingInner, profileAppearance.avatarRingInner]}>
+                    <View style={[ui.avatarFallback, profileAppearance.avatarFallback]}>
+                      <Text style={[ui.avatarFallbackText, profileAppearance.avatarFallbackText]}>{initials}</Text>
                     </View>
                   </View>
                 </LinearGradient>
               </View>
 
               <View style={{ flex: 1 }}>
-                <Text style={ui.headerName} numberOfLines={1}>{displayName}</Text>
-                <Text style={ui.headerEmail} numberOfLines={1}>{email}</Text>
-                <View style={ui.headerMetaRow}>
-                  <View style={ui.memberBadge}>
-                    <Text style={ui.memberBadgeText}>
+                <Text style={[ui.headerName, profileAppearance.headerName]} numberOfLines={1}>{displayName}</Text>
+                <Text style={[ui.headerEmail, profileAppearance.headerEmail]} numberOfLines={1}>{email}</Text>
+                <View style={[ui.headerMetaRow, profileAppearance.headerMetaRow]}>
+                  <View style={[ui.memberBadge, profileAppearance.memberBadge]}>
+                    <Text style={[ui.memberBadgeText, profileAppearance.memberBadgeText]}>
                       {t('profile.member_since', { defaultValue: 'Miembro desde {{year}}', year: new Date(user?.created_at || Date.now()).getFullYear() })}
                     </Text>
                   </View>
                 </View>
               </View>
 
-              <View style={{ alignItems: 'flex-end', gap: 8 }}>
+              <View style={{ width: '100%', alignItems: 'flex-start', gap: 8 }}>
                 <Badge tone={verificationTone as any} label={verificationLabel} />
               </View>
             </View>
-          </View>
+          </GlassView>
 
           {banner && (
             <View style={[ui.banner, bannerStyle]} accessibilityRole="alert">
@@ -663,7 +661,7 @@ export default function OrganizerProfileTab() {
                 <Text style={ui.kvLabel}>{t('common.language', { defaultValue: 'Idioma' })}</Text>
                 <Text style={ui.kvValue}>{language === 'en' ? 'English' : language === 'fr' ? 'Français' : 'Español'}</Text>
               </View>
-              <View style={{ flexDirection: 'row', gap: 10 }}>
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>
                 <SecondaryButton label="ES" selected={language === 'es'} onPress={() => setLanguage('es')} />
                 <SecondaryButton label="EN" selected={language === 'en'} onPress={() => setLanguage('en')} />
                 <SecondaryButton label="FR" selected={language === 'fr'} onPress={() => setLanguage('fr')} />
@@ -972,7 +970,7 @@ const SUPPORT_CATEGORIES = ['Problema técnico', 'Pago / tickets', 'Cuenta', 'Ev
 const SUPPORT_EMAIL = 'soporte@weareeclipseoficial.com';
 
 const suppStyles = StyleSheet.create({
-  sheet: { borderTopLeftRadius: 28, borderTopRightRadius: 28, backgroundColor: '#03030E', paddingHorizontal: 20, paddingTop: 12, paddingBottom: 8, maxHeight: '85%', minHeight: 400 },
+  sheet: { borderTopLeftRadius: 28, borderTopRightRadius: 28, backgroundColor: '#03030E', paddingHorizontal: 20, paddingTop: 12, paddingBottom: 8, maxHeight: '85%', minHeight: 0 },
   handle: { width: 36, height: 4, borderRadius: 2, backgroundColor: 'rgba(255,255,255,0.18)', alignSelf: 'center', marginBottom: 16 },
   header: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 20 },
   headerIcon: { width: 36, height: 36, borderRadius: 18, backgroundColor: 'rgba(14,165,233,0.15)', alignItems: 'center', justifyContent: 'center' },
@@ -1016,7 +1014,7 @@ const ui = StyleSheet.create({
   },
   content: { paddingHorizontal: 16, gap: 12 },
   titleRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 12, marginBottom: 2 },
-  h1: { color: 'white', fontSize: 22, fontWeight: '900' },
+  h1: { color: 'white', fontSize: 22, fontWeight: '700' },
   h2: { color: 'rgba(255,255,255,0.70)', fontWeight: '700', marginTop: 6 },
   headerCard: {
     borderRadius: 22,
@@ -1038,8 +1036,8 @@ const ui = StyleSheet.create({
     borderColor: 'rgba(255,255,255,0.14)',
     backgroundColor: 'rgba(0,0,0,0.25)',
   },
-  avatarFallbackText: { color: 'white', fontWeight: '900', fontSize: 18 },
-  headerName: { color: 'white', fontWeight: '900', fontSize: 18 },
+  avatarFallbackText: { color: 'white', fontWeight: '700', fontSize: 18 },
+  headerName: { color: 'white', fontWeight: '700', fontSize: 18 },
   headerEmail: { color: 'rgba(255,255,255,0.65)', fontWeight: '700', marginTop: 4 },
   headerMetaRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 10 },
   memberBadge: {
@@ -1052,15 +1050,15 @@ const ui = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  memberBadgeText: { color: 'rgba(255,255,255,0.78)', fontWeight: '800', fontSize: 11 },
+  memberBadgeText: { color: 'rgba(255,255,255,0.78)', fontWeight: '600', fontSize: 11 },
   banner: { borderRadius: 14, paddingHorizontal: 12, paddingVertical: 10, borderWidth: 1 },
   bannerOk: { backgroundColor: 'rgba(34,197,94,0.14)', borderColor: 'rgba(34,197,94,0.35)' },
   bannerWarn: { backgroundColor: 'rgba(245,158,11,0.14)', borderColor: 'rgba(245,158,11,0.35)' },
   bannerError: { backgroundColor: 'rgba(239,68,68,0.14)', borderColor: 'rgba(239,68,68,0.35)' },
-  bannerText: { color: 'white', fontWeight: '900' },
+  bannerText: { color: 'white', fontWeight: '700' },
   bannerSubText: { color: 'rgba(255,255,255,0.70)', fontWeight: '700', marginTop: 4, lineHeight: 18 },
   badge: { borderRadius: 999, paddingHorizontal: 10, height: 24, alignItems: 'center', justifyContent: 'center', borderWidth: 1 },
-  badgeText: { fontWeight: '900', fontSize: 11 },
+  badgeText: { fontWeight: '700', fontSize: 11 },
   badgeOk: { backgroundColor: 'rgba(34,197,94,0.14)', borderColor: 'rgba(34,197,94,0.35)' },
   badgeOkText: { color: '#4ade80' },
   badgeWarn: { backgroundColor: 'rgba(245,158,11,0.14)', borderColor: 'rgba(245,158,11,0.35)' },
@@ -1088,7 +1086,7 @@ const ui = StyleSheet.create({
     borderWidth: 1,
     borderColor: alpha(Colors.dark.primary, 0.28),
   },
-  cardTitle: { color: 'white', fontWeight: '900', fontSize: 16 },
+  cardTitle: { color: 'white', fontWeight: '700', fontSize: 16 },
   cardSubtitle: { color: 'rgba(255,255,255,0.70)', fontWeight: '700', marginTop: 6, lineHeight: 18 },
   chevronBtn: {
     width: 40,
@@ -1102,26 +1100,27 @@ const ui = StyleSheet.create({
   },
   chevronBtnPressed: { transform: [{ scale: 0.98 }], backgroundColor: 'rgba(255,255,255,0.10)' },
   kvRow: { flexDirection: 'row', justifyContent: 'space-between', gap: 10, paddingVertical: 6 },
-  kvLabel: { color: 'rgba(255,255,255,0.62)', fontWeight: '800' },
-  kvValue: { color: 'white', fontWeight: '900', flex: 1, textAlign: 'right' },
+  kvLabel: { color: 'rgba(255,255,255,0.62)', fontWeight: '600' },
+  kvValue: { color: 'white', fontWeight: '700', flex: 1, textAlign: 'right' },
   divider: { height: 1, backgroundColor: 'rgba(255,255,255,0.10)' },
   button: {
-    height: 52,
+    minHeight: 48,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
     borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
-    flex: 1,
   },
-  buttonPrimary: { backgroundColor: Colors.dark.primary, borderColor: alpha(Colors.dark.primary, 0.35) },
-  buttonDanger: { backgroundColor: '#ef4444', borderColor: 'rgba(239,68,68,0.45)' },
+  buttonPrimary: { backgroundColor: Colors.dark.primarySoft, borderColor: Colors.dark.border },
+  buttonDanger: { backgroundColor: 'rgba(239,68,68,0.18)', borderColor: 'rgba(239,68,68,0.45)' },
   buttonSecondary: { backgroundColor: 'rgba(255,255,255,0.06)', borderColor: 'rgba(255,255,255,0.14)' },
   buttonSelected: { backgroundColor: alpha(Colors.dark.primary, 0.22), borderColor: alpha(Colors.dark.primary, 0.55) },
   buttonPressed: { transform: [{ scale: 0.99 }] },
   buttonDisabled: { opacity: 0.5 },
-  buttonText: { color: Colors.dark.text, fontWeight: '900', fontSize: 14 },
+  buttonText: { textAlign: 'center', flexShrink: 1, color: Colors.dark.text, fontWeight: '700', fontSize: 14 },
   buttonTextSelected: { color: 'white' },
-  loadingText: { color: 'rgba(255,255,255,0.70)', fontWeight: '800', textAlign: 'center' },
+  loadingText: { color: 'rgba(255,255,255,0.70)', fontWeight: '600', textAlign: 'center' },
   modalBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.82)', justifyContent: 'center', alignItems: 'center' },
   modalCard: {
     borderRadius: 26,
@@ -1139,7 +1138,7 @@ const ui = StyleSheet.create({
   },
   modalKav: { width: '100%', flex: 1, justifyContent: 'center', alignItems: 'center', padding: 12 },
   modalTop: { flexDirection: 'row', alignItems: 'center', gap: 10, padding: 16, paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.08)' },
-  modalTitle: { color: 'white', fontWeight: '900', fontSize: 18 },
+  modalTitle: { color: 'white', fontWeight: '700', fontSize: 18 },
   modalSubtitle: { color: 'rgba(255,255,255,0.68)', fontWeight: '700', marginTop: 6, lineHeight: 18 },
   cancelBtn: {
     height: 40,
@@ -1152,7 +1151,7 @@ const ui = StyleSheet.create({
     borderColor: 'rgba(255,255,255,0.12)',
   },
   cancelBtnPressed: { transform: [{ scale: 0.98 }], backgroundColor: 'rgba(255,255,255,0.10)' },
-  cancelBtnText: { color: 'white', fontWeight: '900' },
+  cancelBtnText: { color: 'white', fontWeight: '700' },
   closeBtn: {
     width: 40,
     height: 40,
@@ -1172,9 +1171,9 @@ const ui = StyleSheet.create({
     borderColor: 'rgba(255,255,255,0.10)',
     backgroundColor: 'rgba(255,255,255,0.04)',
   },
-  sectionTitle: { color: 'white', fontWeight: '900', fontSize: 15 },
+  sectionTitle: { color: 'white', fontWeight: '700', fontSize: 15 },
   sectionBody: { marginTop: 12, gap: 12 },
-  label: { color: 'rgba(255,255,255,0.92)', fontWeight: '900', fontSize: 13 },
+  label: { color: 'rgba(255,255,255,0.92)', fontWeight: '700', fontSize: 13 },
   hint: { color: 'rgba(255,255,255,0.62)', fontWeight: '700', marginTop: 4, lineHeight: 16 },
   input: {
     height: 50,
@@ -1184,10 +1183,10 @@ const ui = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.06)',
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.12)',
-    fontWeight: '800',
+    fontWeight: '600',
   },
   inputError: { borderColor: 'rgba(239,68,68,0.55)', backgroundColor: 'rgba(239,68,68,0.08)' },
-  errorText: { color: '#fb7185', fontWeight: '800' },
+  errorText: { color: '#fb7185', fontWeight: '600' },
   autoSaveRow: {
     borderRadius: 18,
     padding: 14,

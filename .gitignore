@@ -45,3 +45,8 @@ docs/qa/build65-restored/*.ttf
 docs/qa/build65-restored/Icon-*.png
 .restore-build65.cjs
 .capture-build65.cjs
+scripts/qa/.preview-tabs.ts
+docs/qa/responsive-review/*.js
+docs/qa/responsive-review/*.html
+docs/qa/responsive-review/*.ttf
+docs/qa/responsive-review/Icon-*.png

@@ -528,7 +528,7 @@ const styles = StyleSheet.create({
   },
   content: {
     padding: 24,
-    paddingBottom: 100,
+    paddingBottom: 24,
   },
   eventInfo: {
     marginBottom: 24,

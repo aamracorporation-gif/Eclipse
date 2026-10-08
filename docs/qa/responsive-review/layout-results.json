@@ -1,0 +1,242 @@
+[
+  {
+    "view": "customer",
+    "width": 320,
+    "height": 568,
+    "fontScale": 1,
+    "bodyWidth": 320,
+    "checks": "passed"
+  },
+  {
+    "view": "organizer",
+    "width": 320,
+    "height": 568,
+    "fontScale": 1,
+    "bodyWidth": 320,
+    "checks": "passed"
+  },
+  {
+    "view": "workers",
+    "width": 320,
+    "height": 568,
+    "fontScale": 1,
+    "bodyWidth": 320,
+    "checks": "passed"
+  },
+  {
+    "view": "add",
+    "width": 320,
+    "height": 568,
+    "fontScale": 1,
+    "bodyWidth": 320,
+    "checks": "passed"
+  },
+  {
+    "view": "sell",
+    "width": 320,
+    "height": 568,
+    "fontScale": 1,
+    "bodyWidth": 320,
+    "checks": "passed"
+  },
+  {
+    "view": "dashboard",
+    "width": 320,
+    "height": 568,
+    "fontScale": 1,
+    "bodyWidth": 320,
+    "checks": "passed"
+  },
+  {
+    "view": "customer",
+    "width": 390,
+    "height": 844,
+    "fontScale": 1,
+    "bodyWidth": 390,
+    "checks": "passed"
+  },
+  {
+    "view": "organizer",
+    "width": 390,
+    "height": 844,
+    "fontScale": 1,
+    "bodyWidth": 390,
+    "checks": "passed"
+  },
+  {
+    "view": "workers",
+    "width": 390,
+    "height": 844,
+    "fontScale": 1,
+    "bodyWidth": 390,
+    "checks": "passed"
+  },
+  {
+    "view": "add",
+    "width": 390,
+    "height": 844,
+    "fontScale": 1,
+    "bodyWidth": 390,
+    "checks": "passed"
+  },
+  {
+    "view": "sell",
+    "width": 390,
+    "height": 844,
+    "fontScale": 1,
+    "bodyWidth": 390,
+    "checks": "passed"
+  },
+  {
+    "view": "dashboard",
+    "width": 390,
+    "height": 844,
+    "fontScale": 1,
+    "bodyWidth": 390,
+    "checks": "passed"
+  },
+  {
+    "view": "customer",
+    "width": 844,
+    "height": 390,
+    "fontScale": 1,
+    "bodyWidth": 844,
+    "checks": "passed"
+  },
+  {
+    "view": "organizer",
+    "width": 844,
+    "height": 390,
+    "fontScale": 1,
+    "bodyWidth": 844,
+    "checks": "passed"
+  },
+  {
+    "view": "workers",
+    "width": 844,
+    "height": 390,
+    "fontScale": 1,
+    "bodyWidth": 844,
+    "checks": "passed"
+  },
+  {
+    "view": "add",
+    "width": 844,
+    "height": 390,
+    "fontScale": 1,
+    "bodyWidth": 844,
+    "checks": "passed"
+  },
+  {
+    "view": "sell",
+    "width": 844,
+    "height": 390,
+    "fontScale": 1,
+    "bodyWidth": 844,
+    "checks": "passed"
+  },
+  {
+    "view": "dashboard",
+    "width": 844,
+    "height": 390,
+    "fontScale": 1,
+    "bodyWidth": 844,
+    "checks": "passed"
+  },
+  {
+    "view": "customer",
+    "width": 768,
+    "height": 1024,
+    "fontScale": 1,
+    "bodyWidth": 768,
+    "checks": "passed"
+  },
+  {
+    "view": "organizer",
+    "width": 768,
+    "height": 1024,
+    "fontScale": 1,
+    "bodyWidth": 768,
+    "checks": "passed"
+  },
+  {
+    "view": "workers",
+    "width": 768,
+    "height": 1024,
+    "fontScale": 1,
+    "bodyWidth": 768,
+    "checks": "passed"
+  },
+  {
+    "view": "add",
+    "width": 768,
+    "height": 1024,
+    "fontScale": 1,
+    "bodyWidth": 768,
+    "checks": "passed"
+  },
+  {
+    "view": "sell",
+    "width": 768,
+    "height": 1024,
+    "fontScale": 1,
+    "bodyWidth": 768,
+    "checks": "passed"
+  },
+  {
+    "view": "dashboard",
+    "width": 768,
+    "height": 1024,
+    "fontScale": 1,
+    "bodyWidth": 768,
+    "checks": "passed"
+  },
+  {
+    "view": "customer",
+    "width": 320,
+    "height": 568,
+    "fontScale": 1.35,
+    "bodyWidth": 320,
+    "checks": "passed"
+  },
+  {
+    "view": "organizer",
+    "width": 320,
+    "height": 568,
+    "fontScale": 1.35,
+    "bodyWidth": 320,
+    "checks": "passed"
+  },
+  {
+    "view": "workers",
+    "width": 320,
+    "height": 568,
+    "fontScale": 1.35,
+    "bodyWidth": 320,
+    "checks": "passed"
+  },
+  {
+    "view": "add",
+    "width": 320,
+    "height": 568,
+    "fontScale": 1.35,
+    "bodyWidth": 320,
+    "checks": "passed"
+  },
+  {
+    "view": "sell",
+    "width": 320,
+    "height": 568,
+    "fontScale": 1.35,
+    "bodyWidth": 320,
+    "checks": "passed"
+  },
+  {
+    "view": "dashboard",
+    "width": 320,
+    "height": 568,
+    "fontScale": 1.35,
+    "bodyWidth": 320,
+    "checks": "passed"
+  }
+]

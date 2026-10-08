@@ -719,7 +719,7 @@ const styles = StyleSheet.create({
     letterSpacing: -0.2,
   },
   listContent: {
-    paddingBottom: 140,
+    paddingBottom: 24,
   },
   cardContainer: {
     aspectRatio: 0.86,

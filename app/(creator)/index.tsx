@@ -1,3 +1,4 @@
+import { loadOrganizerSales, periodSales } from '@/lib/organizerSales';
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, StatusBar, AppState, Linking, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -14,9 +15,8 @@ import { TimeFilter, TimeRange } from '@/components/dashboard/TimeFilter';
 import { RevenueChart } from '@/components/dashboard/RevenueChart';
 import { ThemedButton } from '@/components/ui/ThemedButton';
 import { DiscoLoader } from '@/components/ui/DiscoLoader';
-import * as Notifications from 'expo-notifications';
 import * as ExpoLinking from 'expo-linking';
-import { scheduleLocalNotification, registerForPushNotifications } from '@/lib/notifications';
+import { registerForPushNotifications } from '@/lib/notifications';
 
 
 
@@ -52,11 +52,10 @@ export default function CreatorDashboard() {
   const [loadingAdminOverview, setLoadingAdminOverview] = useState(false);
   const pendingStripeReturnRef = useRef(false);
   const stripeAutoRefreshRef = useRef<{ accountId: string | null; attemptedAt: number }>({ accountId: null, attemptedAt: 0 });
-  const salesDataRef = useRef(salesData);
-  const eventsRef = useRef(events);
-  const fetchStatsInFlightRef = useRef(false);
+  const [statsError, setStatsError] = useState(false);
+  const [statsNow, setStatsNow] = useState(() => new Date());
+  const statsRequestRef = useRef(0);
   const fetchProfileInFlightRef = useRef(false);
-  const lastStatsFetchAtRef = useRef(0);
   const lastProfileFetchAtRef = useRef(0);
   const lastStripeStatsFetchAtRef = useRef(0);
   const [refreshing, setRefreshing] = useState(false);
@@ -94,50 +93,29 @@ export default function CreatorDashboard() {
 
   const isAdmin = profileRole === 'admin';
 
-  useEffect(() => {
-    eventsRef.current = events;
-  }, [events]);
 
-  // Function to fetch stats
-  const fetchStats = useCallback(async (opts?: { force?: boolean }) => {
+  const fetchStats = useCallback(async () => {
     if (!userId) return;
-    if (fetchStatsInFlightRef.current) return;
-    const force = !!opts?.force;
-    const now = Date.now();
-    if (!force && now - lastStatsFetchAtRef.current < 3 * 60_000) return;
-    fetchStatsInFlightRef.current = true;
+    const request = ++statsRequestRef.current;
     setLoadingStats(true);
+    setStatsError(false);
     try {
-      const myEvents = (eventsRef.current || []).filter((e: any) => e.creatorId === userId);
-      const myEventIds = myEvents.map(e => e.id);
-      
-      if (myEventIds.length === 0) {
-        setSalesData([]);
-        setLoadingStats(false);
-        return;
-      }
-
-      const { data, error } = await supabase
-        .from('tickets')
-        .select('purchase_date, total_price, quantity')
-        .in('event_id', myEventIds);
-
-      if (error) throw error;
-
-      if (data) {
-        setSalesData(data.map(t => ({
-          date: t.purchase_date,
-          amount: Number(t.total_price) || 0,
-          qty: Number((t as any).quantity) || 0,
-        })));
-      }
-      lastStatsFetchAtRef.current = Date.now();
-    } catch (error) {
-      console.error('Error fetching sales stats:', error);
+      const sales = await loadOrganizerSales(supabase, userId);
+      if (request !== statsRequestRef.current) return;
+      setSalesData(sales);
+      setStatsNow(new Date());
+    } catch {
+      if (request === statsRequestRef.current) setStatsError(true);
     } finally {
-      fetchStatsInFlightRef.current = false;
-      setLoadingStats(false);
+      if (request === statsRequestRef.current) setLoadingStats(false);
     }
+  }, [userId]);
+
+  useEffect(() => {
+    const requests = statsRequestRef;
+    setSalesData([]);
+    setStatsError(false);
+    return () => { requests.current++; };
   }, [userId]);
 
   const fetchMyProfile = useCallback(async (opts?: { force?: boolean }) => {
@@ -284,7 +262,13 @@ export default function CreatorDashboard() {
       if (!userId) return;
       if (!isAdmin) void fetchStats();
       void fetchMyProfile();
-      return;
+      const foreground = AppState.addEventListener('change', state => {
+        if (state === 'active' && !isAdmin) void fetchStats();
+      });
+      const timer = setInterval(() => {
+        if (AppState.currentState === 'active' && !isAdmin) void fetchStats();
+      }, 60_000);
+      return () => { foreground.remove(); clearInterval(timer); statsRequestRef.current++; };
     }, [fetchMyProfile, fetchStats, isAdmin, userId])
   );
 
@@ -294,87 +278,22 @@ export default function CreatorDashboard() {
     fetchAdminOverview();
   }, [fetchAdminOverview, isAdmin, userId]);
 
-  // Request notification permissions
-  useEffect(() => {
-    if (isAdmin) return;
-    async function requestPermissions() {
-      const { status } = await Notifications.requestPermissionsAsync();
-      if (status !== 'granted') {
-        console.warn('Permiso de notificaciones no concedido.');
-      }
-    }
-    requestPermissions();
-  }, [isAdmin]);
-
   const onRefresh = useCallback(async () => {
     if (!userId) return;
     if (refreshing) return;
     setRefreshing(true);
     try {
       refreshEvents?.().catch(() => {});
-      await Promise.all([fetchStats({ force: true }), fetchMyProfile({ force: true })]);
+      await Promise.all([fetchStats(), fetchMyProfile({ force: true })]);
     } finally {
       setRefreshing(false);
     }
   }, [fetchMyProfile, fetchStats, refreshing, refreshEvents, userId]);
 
-  useEffect(() => {
-    if (!userId || isAdmin) return;
-
-    const channel = supabase
-      .channel(`organizer-notifications-${userId}`)
-      .on(
-        'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'notifications',
-          filter: `user_id=eq.${userId}`,
-        },
-        async (payload) => {
-          const n = payload.new as any;
-          if (!n || n.role !== 'organizer' || (n.type !== 'organizer_realtime_sale' && n.type !== 'NEW_SALE')) return;
-          const title = String(n.title || t('creator.notifications.new_sale_title'));
-          const body = String(n.body || n.message || '');
-          await scheduleLocalNotification(title, body, n.data || {}, 1);
-        }
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [isAdmin, t, userId]);
-
-  useEffect(() => {
-    salesDataRef.current = salesData;
-  }, [salesData]);
-
   const myEvents = events.filter(e => e.creatorId === user?.id);
-  
-  // Calculate aggregated stats based on time filter
-  const stats = useMemo(() => {
-    const now = new Date();
-    let filteredSales = [...salesData];
-    
-    if (timeRange === 'day') {
-      const startOfDay = new Date(now.setHours(0,0,0,0));
-      filteredSales = salesData.filter(d => new Date(d.date) >= startOfDay);
-    } else if (timeRange === 'week') {
-      const startOfWeek = new Date(now);
-      startOfWeek.setDate(now.getDate() - 7);
-      filteredSales = salesData.filter(d => new Date(d.date) >= startOfWeek);
-    } else if (timeRange === 'month') {
-      const startOfMonth = new Date(now);
-      startOfMonth.setMonth(now.getMonth() - 1);
-      filteredSales = salesData.filter(d => new Date(d.date) >= startOfMonth);
-    }
-
-    const revenue = filteredSales.reduce((acc, curr) => acc + curr.amount, 0);
-    const tickets = filteredSales.reduce((acc, curr) => acc + (curr.qty || 0), 0);
-
-    return { revenue, tickets };
-  }, [salesData, timeRange]);
+  const stats = useMemo(() => periodSales(salesData, timeRange, statsNow).reduce(
+    (total, sale) => ({ revenue: total.revenue + sale.amount, tickets: total.tickets + sale.qty }),
+    { revenue: 0, tickets: 0 }), [salesData, timeRange, statsNow]);
 
   const topEvent = myEvents.reduce<{ title: string; sold: number } | null>((best, event) => {
     const soldCount = event.ticketTypes?.reduce((tAcc, ticket) => tAcc + ticket.sold, 0) || event.sold || 0;
@@ -699,22 +618,23 @@ export default function CreatorDashboard() {
                 )}
               </GlassView>
 
-              <TimeFilter value={timeRange} onChange={setTimeRange} />
+              <TimeFilter value={timeRange} onChange={range => { setTimeRange(range); setStatsNow(new Date()); void fetchStats(); }} />
+              {statsError && <View accessibilityRole="alert" style={{ padding: 16 }}>
+                <Text style={{ color: Colors.dark.textSecondary }}>No se han podido actualizar las ventas. Reintenta para consultar datos actuales.</Text>
+                <TouchableOpacity accessibilityRole="button" onPress={() => void fetchStats()} style={{ paddingVertical: 12 }}><Text style={{ color: Colors.dark.secondary }}>Reintentar</Text></TouchableOpacity>
+              </View>}
 
               <GlassView intensity={15} style={styles.chartSection}>
                 <View style={styles.chartHeader}>
                     <View>
-                        <Text style={styles.chartLabel}>{t('creator.organizer.revenue_real_30d')}</Text>
+                        <Text style={styles.chartLabel}>{timeRange === 'day' ? 'Ventas de hoy' : timeRange === 'week' ? 'Ventas de esta semana' : 'Ventas de este mes'}</Text>
                         <Text style={[styles.chartValue, isSmallPhone && { fontSize: 28 }]}>
-                          {stripeStats 
-                            ? (stripeStats.revenue_30d / 100).toLocaleString(localeTag, { style: 'currency', currency: 'EUR' })
-                            : (0).toLocaleString(localeTag, { style: 'currency', currency: 'EUR' })
-                          }
+                          {loadingStats || statsError ? '—' : stats.revenue.toLocaleString(localeTag, { style: 'currency', currency: 'EUR' })}
                         </Text>
                     </View>
                     <View style={[styles.trendBadge, { backgroundColor: 'rgba(139, 92, 246, 0.15)' }]}>
                         <BarChart3 size={14} color="#a78bfa" />
-                        <Text style={[styles.trendText, { color: '#a78bfa' }]}>Stripe</Text>
+                        <Text style={[styles.trendText, { color: '#a78bfa' }]}>Ventas</Text>
                     </View>
                 </View>
                 
@@ -723,7 +643,7 @@ export default function CreatorDashboard() {
                       <DiscoLoader size={56} />
                   </View>
                 ) : (
-                  <RevenueChart data={salesData} timeRange={timeRange} color="#8b5cf6" height={isSmallPhone ? 180 : 220} />
+                  <RevenueChart data={statsError ? [] : salesData} now={statsNow} timeRange={timeRange} color="#8b5cf6" height={isSmallPhone ? 180 : 220} />
                 )}
               </GlassView>
 
@@ -735,7 +655,7 @@ export default function CreatorDashboard() {
               >
                 <MetricCard 
                     title={t('creator.organizer.metrics.tickets_sold')} 
-                    value={stats.tickets.toString()} 
+                    value={loadingStats || statsError ? '—' : stats.tickets.toString()}
                     icon={Ticket} 
                     color="#ec4899" 
                     gradientColors={['#ec4899', '#db2777']}

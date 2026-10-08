@@ -1014,13 +1014,13 @@ const styles = StyleSheet.create({
   listContent: {
     paddingHorizontal: 14,
     paddingTop: 0,
-    paddingBottom: 120,
+    paddingBottom: 24,
     flexGrow: 1,
   },
   listContentEmpty: {
     padding: 20,
     paddingTop: 10,
-    paddingBottom: 120,
+    paddingBottom: 24,
     flexGrow: 1,
   },
   loadingContainer: {
