@@ -6,76 +6,53 @@ on:
 permissions:
   contents: read
 jobs:
-  inspect:
+  snapshot:
     runs-on: ubuntu-latest
-    timeout-minutes: 100
+    timeout-minutes: 5
     environment: staging
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - platform: android
-            build_id: 83e1bc6b-b294-4a39-a287-b511f148e699
-          - platform: ios
-            build_id: 9b2dc61b-d8f2-4cce-b01e-a7b107c1806d
-    env:
-      BUILD_ID: ${{ matrix.build_id }}
-      PLATFORM: ${{ matrix.platform }}
     steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: 55487308c9327eace83c7c5fc7b1afdf66ec566d
-          persist-credentials: false
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - uses: expo/expo-github-action@v8
-        with:
-          eas-version: 18.0.1
-          token: ${{ secrets.EXPO_TOKEN }}
-      - name: Inspect existing build without creating or submitting builds
+      - name: Read exact EAS build and submission states
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
         run: |
-          for attempt in 1; do
-            eas build:view "$BUILD_ID" --json > "$RUNNER_TEMP/status.raw"
-            python3 - <<'PY'
-          import json, os, pathlib
-          root = pathlib.Path(os.environ['RUNNER_TEMP'])
-          raw = (root / 'status.raw').read_text()
-          decoder = json.JSONDecoder()
-          result = None
-          for pos, char in enumerate(raw):
-              if char != '{':
-                  continue
-              try:
-                  obj, end = decoder.raw_decode(raw[pos:])
-              except json.JSONDecodeError:
-                  continue
-              if isinstance(obj, dict) and obj.get('id') == os.environ['BUILD_ID']:
-                  result = obj
-                  break
-          if result is None:
-              raise RuntimeError('No matching build JSON found in EAS output')
-          assert result['gitCommitHash'] == '55487308c9327eace83c7c5fc7b1afdf66ec566d'
-          expected = 'preview' if os.environ['PLATFORM'] == 'android' else 'testflight'
-          assert result['buildProfile'] == expected
-          fields = ['id','status','platform','buildProfile','gitCommitHash','appVersion','appBuildVersion','createdAt','completedAt','error','artifacts','estimatedWaitTimeLeftSeconds','estimatedQueuePosition','queuePosition','priority','resourceClass']
-          safe = {key: result.get(key) for key in fields}
-          (root / 'status.json').write_text(json.dumps(safe))
-          print(json.dumps(safe))
-          PY
-            status="$(jq -er '.status' "$RUNNER_TEMP/status.json")"
-            case "$status" in
-              FINISHED)
-                cat "$RUNNER_TEMP/status.json" >> "$GITHUB_STEP_SUMMARY"
-                if [ "$PLATFORM" = ios ]; then
-                  printf '%s\n' "" "Prepared, not executed:" "eas submit --platform ios --profile testflight --id $BUILD_ID --non-interactive" "Target App Store Connect app: 6773071994. No submission or Apple acceptance is implied." >> "$GITHUB_STEP_SUMMARY"
-                fi
-                exit 0 ;;
-              ERRORED|CANCELED)
-                cat "$RUNNER_TEMP/status.json" >> "$GITHUB_STEP_SUMMARY"
-                exit 1 ;;
-            esac
-            echo 'Build remains pending; this snapshot does not confirm completion.' >> "$GITHUB_STEP_SUMMARY"
-          done
-          cat "$RUNNER_TEMP/status.json" >> "$GITHUB_STEP_SUMMARY"
-          exit 0
+          node - <<'NODE'
+          const fs = require('node:fs');
+          (async () => {
+            const query = `query CandidateSnapshot($android: ID!, $ios: ID!) {
+              builds {
+                android: byId(buildId: $android) {
+                  id status platform buildProfile gitCommitHash appVersion appBuildVersion createdAt completedAt
+                  initialQueuePosition queuePosition estimatedWaitTimeLeftSeconds priority
+                  metrics { buildWaitTime buildQueueTime buildDuration }
+                  artifacts { applicationArchiveUrl buildUrl }
+                  error { errorCode message }
+                }
+                ios: byId(buildId: $ios) {
+                  id status platform buildProfile gitCommitHash appVersion appBuildVersion
+                  submissions { id status platform iosConfig { ascAppIdentifier } error { errorCode message } }
+                }
+              }
+            }`;
+            const res = await fetch('https://api.expo.dev/graphql', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', authorization: 'Bearer ' + process.env.EXPO_TOKEN },
+              body: JSON.stringify({ query, variables: {
+                android: '83e1bc6b-b294-4a39-a287-b511f148e699',
+                ios: '9b2dc61b-d8f2-4cce-b01e-a7b107c1806d'
+              } })
+            });
+            if (!res.ok) throw new Error('EAS query HTTP ' + res.status);
+            const body = await res.json();
+            if (body.errors?.length) throw new Error(body.errors.map(e => e.message).join('; '));
+            const states = body.data.builds;
+            for (const [platform, build] of Object.entries(states)) {
+              if (build.gitCommitHash !== '55487308c9327eace83c7c5fc7b1afdf66ec566d') throw new Error('Unexpected source commit');
+              if (build.buildProfile !== (platform === 'ios' ? 'testflight' : 'preview')) throw new Error('Unexpected build profile');
+            }
+            console.log(JSON.stringify(states));
+            fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, JSON.stringify(states, null, 2) + '\n');
+          })().catch(error => { console.error(error.message); process.exitCode = 1; });
+          NODE
