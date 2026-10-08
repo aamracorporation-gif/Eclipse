@@ -66,7 +66,7 @@ jobs:
           eas build:list --platform android --build-profile preview --git-commit-hash 55487308c9327eace83c7c5fc7b1afdf66ec566d --limit 10 --non-interactive --json > "$RUNNER_TEMP/existing.json"
           jq '[.[] | select(.status == "NEW" or .status == "IN_QUEUE" or .status == "IN_PROGRESS" or .status == "FINISHED")] | .[:1]' "$RUNNER_TEMP/existing.json" > "$RUNNER_TEMP/build.json"
           if [ "$(jq 'length' "$RUNNER_TEMP/build.json")" = 0 ]; then
-            eas build --platform android --profile preview --non-interactive --no-wait --json > "$RUNNER_TEMP/build.json"
+            eas env:exec preview 'eas build --platform android --profile preview --non-interactive --no-wait --json > "$RUNNER_TEMP/build.json"' --non-interactive
           fi
           jq -c '.[] | {id,status,platform,buildProfile,gitCommitHash,appVersion,appBuildVersion}' "$RUNNER_TEMP/build.json"
           jq -e 'length == 1 and .[0].gitCommitHash == "55487308c9327eace83c7c5fc7b1afdf66ec566d"' "$RUNNER_TEMP/build.json"
@@ -127,7 +127,7 @@ jobs:
           eas build:list --platform ios --build-profile testflight --git-commit-hash 55487308c9327eace83c7c5fc7b1afdf66ec566d --limit 10 --non-interactive --json > "$RUNNER_TEMP/existing.json"
           jq '[.[] | select(.status == "NEW" or .status == "IN_QUEUE" or .status == "IN_PROGRESS" or .status == "FINISHED")] | .[:1]' "$RUNNER_TEMP/existing.json" > "$RUNNER_TEMP/build.json"
           if [ "$(jq 'length' "$RUNNER_TEMP/build.json")" = 0 ]; then
-            eas build --platform ios --profile testflight --non-interactive --no-wait --json > "$RUNNER_TEMP/build.json"
+            eas env:exec preview 'eas build --platform ios --profile testflight --non-interactive --no-wait --json > "$RUNNER_TEMP/build.json"' --non-interactive
           fi
           jq -c '.[] | {id,status,platform,buildProfile,gitCommitHash,appVersion,appBuildVersion}' "$RUNNER_TEMP/build.json"
           jq -e 'length == 1 and .[0].gitCommitHash == "55487308c9327eace83c7c5fc7b1afdf66ec566d"' "$RUNNER_TEMP/build.json"
