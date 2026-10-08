@@ -1,0 +1,84 @@
+name: Eclipse build 67 and TestFlight
+on:
+  push:
+    branches: [codex/restore-build65-forms-push]
+    paths: [.github/workflows/eclipse-build67.yml]
+permissions:
+  contents: read
+concurrency:
+  group: eclipse-staging-build67
+  cancel-in-progress: false
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    environment: staging
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: de7c4b82b686669d32a6a5d6256dad14a31f407d
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - uses: expo/expo-github-action@v8
+        with:
+          eas-version: 18.0.1
+          token: ${{ secrets.EXPO_TOKEN }}
+      - name: Build the reviewed staging commit and submit only iOS 67
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        run: |
+          node - <<'NODE'
+          const {spawnSync}=require('node:child_process');
+          const fs=require('node:fs');
+          const sha='de7c4b82b686669d32a6a5d6256dad14a31f407d';
+          const project='42ebb6eb-62b1-4784-a483-831ae3c804f2';
+          function eas(args) {
+            const r=spawnSync('eas',args,{encoding:'utf8',maxBuffer:24*1024*1024});
+            if(r.status!==0) { console.log('COMMAND_FAILED='+JSON.stringify({command:args[0],status:r.status})); return null; }
+            return r.stdout;
+          }
+          function parse(raw){if(raw===null) return null;try{return JSON.parse(raw)}catch{throw Error('Invalid EAS metadata response');}}
+          async function query(query,variables={}) {
+            const r=await fetch('https://api.expo.dev/graphql',{method:'POST',headers:{'Content-Type':'application/json',authorization:'Bearer '+process.env.EXPO_TOKEN},body:JSON.stringify({query,variables})});
+            const v=await r.json();if(!r.ok||v.errors?.length)throw Error('EAS status query failed');return v.data;
+          }
+          const safe=b=>({id:b.id,status:b.status,platform:b.platform,appVersion:b.appVersion,appBuildVersion:b.appBuildVersion,gitCommitHash:b.gitCommitHash});
+          async function status(id) {
+            const d=await query('query($id:ID!){builds{byId(buildId:$id){id status platform appVersion appBuildVersion gitCommitHash app{id}}}}',{id});
+            const b=d.builds.byId;
+            if(b.app.id!==project||b.gitCommitHash!==sha)throw Error('Unexpected build source or project');
+            return b;
+          }
+          (async()=>{
+            if(spawnSync('git',['rev-parse','HEAD'],{encoding:'utf8'}).stdout.trim()!==sha)throw Error('Wrong source commit');
+            const v=parse(eas(['build:version:get','--platform','ios','--profile','testflight','--non-interactive','--json']));
+            console.log('IOS_REMOTE_VERSION='+JSON.stringify(v));
+            if(String(v?.buildNumber)!=='66')throw Error('Expected remote version 66 before creating 67');
+            const android=parse(eas(['build','--platform','android','--profile','preview','--non-interactive','--no-wait','--json']));
+            const ab=Array.isArray(android)?android[0]:android;
+            if(ab?.id) console.log('ANDROID_QUEUED='+JSON.stringify(safe(await status(ab.id))));
+            const ios=parse(eas(['build','--platform','ios','--profile','testflight','--non-interactive','--no-wait','--json']));
+            const ib=Array.isArray(ios)?ios[0]:ios;
+            if(!ib?.id)throw Error('iOS build was not queued');
+            console.log('IOS_QUEUED='+JSON.stringify(safe(await status(ib.id))));
+            const end=Date.now()+45*60*1000;let b;
+            while(Date.now()<end){
+              b=await status(ib.id);
+              console.log('IOS_STATUS='+JSON.stringify(safe(b)));
+              if(String(b.appBuildVersion)!=='67')throw Error('Refusing submission: build is not 67');
+              if(b.status==='FINISHED')break;
+              if(['ERRORED','CANCELED'].includes(b.status))throw Error('iOS build did not finish successfully');
+              await new Promise(resolve=>setTimeout(resolve,45000));
+            }
+            if(b?.status!=='FINISHED')throw Error('Build still pending; resume using its exact ID');
+            const out=eas(['submit','--platform','ios','--profile','testflight','--id',b.id,'--non-interactive','--wait']);
+            if(out===null)throw Error('TestFlight submission needs inspection');
+            const urls=[...out.matchAll(/https:\/\/expo\.dev\/accounts\/[^\s]+\/projects\/[^\s]+\/submissions\/[0-9a-f-]+/g)].map(x=>x[0]);
+            console.log('IOS_SUBMISSION='+JSON.stringify({buildId:b.id,buildNumber:b.appBuildVersion,cliFinished:true,urls,appleAcceptanceConfirmed:false}));
+            if(ab?.id)console.log('ANDROID_STATUS='+JSON.stringify(safe(await status(ab.id))));
+          })().catch(e=>{console.error(e.message);process.exitCode=1});
+          NODE
