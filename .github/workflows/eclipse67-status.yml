@@ -21,5 +21,12 @@ jobs:
             const r=await fetch('https://api.expo.dev/graphql',{method:'POST',headers:{'Content-Type':'application/json',authorization:'Bearer '+process.env.EXPO_TOKEN},body:JSON.stringify({query})});
             const v=await r.json();if(!r.ok||v.errors?.length)throw Error('EAS status unavailable');
             console.log('EAS_BUILDS='+JSON.stringify(v.data.app.byId.builds.filter(b=>b.gitCommitHash==='de7c4b82b686669d32a6a5d6256dad14a31f407d')));
+            const cq='query{app{byId(appId:"42ebb6eb-62b1-4784-a483-831ae3c804f2"){iosAppCredentials{appleAppIdentifier{bundleIdentifier} pushKey{id}} androidAppCredentials{applicationIdentifier googleServiceAccountKeyForFcmV1{id}}}}}';
+            const cr=await fetch('https://api.expo.dev/graphql',{method:'POST',headers:{'Content-Type':'application/json',authorization:'Bearer '+process.env.EXPO_TOKEN},body:JSON.stringify({query:cq})});
+            const cv=await cr.json();
+            if(cr.ok&&!cv.errors?.length){const app=cv.data.app.byId;
+              console.log('PUSH_CREDENTIALS_PRESENT='+JSON.stringify({ios:app.iosAppCredentials.some(x=>x.appleAppIdentifier?.bundleIdentifier==='com.achraf.eclipse'&&!!x.pushKey),android:app.androidAppCredentials.some(x=>x.applicationIdentifier==='com.achraf.eclipse'&&!!x.googleServiceAccountKeyForFcmV1)}));
+            }else console.log('PUSH_CREDENTIALS_PRESENT=unverified');
+
           })().catch(()=>{console.error('EAS status unavailable');process.exitCode=1});
           NODE
