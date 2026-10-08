@@ -17,10 +17,10 @@ jobs:
         run: |
           node - <<'NODE'
           (async()=>{
-            const query='query{app{byId(appId:"42ebb6eb-62b1-4784-a483-831ae3c804f2"){builds(offset:0,limit:10){id status platform appVersion appBuildVersion gitCommitHash queuePosition estimatedWaitTimeLeftSeconds submissions{id status}}}}}';
+            const query='query{app{byId(appId:"42ebb6eb-62b1-4784-a483-831ae3c804f2"){builds(offset:0,limit:10){id status platform appVersion appBuildVersion gitCommitHash appIdentifier buildProfile distribution artifacts{applicationArchiveUrl} submissions{id status}}}}}';
             const r=await fetch('https://api.expo.dev/graphql',{method:'POST',headers:{'Content-Type':'application/json',authorization:'Bearer '+process.env.EXPO_TOKEN},body:JSON.stringify({query})});
             const v=await r.json();if(!r.ok||v.errors?.length)throw Error('EAS status unavailable');
-            console.log('EAS_BUILDS='+JSON.stringify(v.data.app.byId.builds.filter(b=>b.gitCommitHash==='de7c4b82b686669d32a6a5d6256dad14a31f407d')));
+            console.log('EAS_BUILDS='+JSON.stringify(v.data.app.byId.builds.filter(b=>b.gitCommitHash==='de7c4b82b686669d32a6a5d6256dad14a31f407d').map(({artifacts,...b})=>({...b,apkReady:b.platform==='ANDROID'&&b.status==='FINISHED'&&!!artifacts?.applicationArchiveUrl&&new URL(artifacts.applicationArchiveUrl).pathname.endsWith('.apk')}))));
             const cq='query{app{byId(appId:"42ebb6eb-62b1-4784-a483-831ae3c804f2"){iosAppCredentials{appleAppIdentifier{bundleIdentifier} pushKey{id}} androidAppCredentials{applicationIdentifier googleServiceAccountKeyForFcmV1{id}}}}}';
             const cr=await fetch('https://api.expo.dev/graphql',{method:'POST',headers:{'Content-Type':'application/json',authorization:'Bearer '+process.env.EXPO_TOKEN},body:JSON.stringify({query:cq})});
             const cv=await cr.json();
