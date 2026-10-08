@@ -17,10 +17,11 @@ jobs:
         run: |
           node - <<'NODE'
           (async () => {
-            const query = 'query PreviousBuild($appId:String!){app{byId(appId:$appId){id builds(offset:0,limit:30,filter:{platform:IOS}){id status appVersion appBuildVersion gitCommitHash buildProfile createdAt}}}}';
+            const query = 'query PreviousBuild($appId:String!){__type(name:"Build"){fields{name type{name kind ofType{name kind}}}} app{byId(appId:$appId){id builds(offset:0,limit:30,filter:{platform:IOS}){id status appVersion appBuildVersion gitCommitHash buildProfile createdAt}}}}';
             const r=await fetch('https://api.expo.dev/graphql',{method:'POST',headers:{'Content-Type':'application/json',authorization:'Bearer '+process.env.EXPO_TOKEN},body:JSON.stringify({query,variables:{appId:'42ebb6eb-62b1-4784-a483-831ae3c804f2'}})});
             if(!r.ok)throw Error('EAS metadata HTTP '+r.status);
             const b=await r.json();if(b.errors?.length)throw Error(b.errors.map(e=>e.message).join('; '));
+            console.log('BUILD_FIELDS='+JSON.stringify(b.data.__type));
             const builds=b.data.app.byId.builds;
             console.log(JSON.stringify(builds.filter(x=>['64','65','66'].includes(x.appBuildVersion))));
             if(!builds.some(x=>x.appBuildVersion==='65'))throw Error('Build 65 not found in recent metadata');
