@@ -58,7 +58,7 @@ jobs:
           assert result['gitCommitHash'] == '55487308c9327eace83c7c5fc7b1afdf66ec566d'
           expected = 'preview' if os.environ['PLATFORM'] == 'android' else 'testflight'
           assert result['buildProfile'] == expected
-          fields = ['id','status','platform','buildProfile','gitCommitHash','appVersion','appBuildVersion','createdAt','completedAt','error','artifacts']
+          fields = ['id','status','platform','buildProfile','gitCommitHash','appVersion','appBuildVersion','createdAt','completedAt','error','artifacts','estimatedWaitTimeLeftSeconds','estimatedQueuePosition','queuePosition','priority','resourceClass']
           safe = {key: result.get(key) for key in fields}
           (root / 'status.json').write_text(json.dumps(safe))
           print(json.dumps(safe))
