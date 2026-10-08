@@ -1,0 +1,45 @@
+{
+  "candidate": {
+    "repository": "aamracorporation-gif/Eclipse",
+    "branch": "codex/staging-release-candidate-20261008",
+    "commit": "55487308c9327eace83c7c5fc7b1afdf66ec566d",
+    "environment": "preview",
+    "appEnvironment": "staging",
+    "easProjectId": "42ebb6eb-62b1-4784-a483-831ae3c804f2"
+  },
+  "android": {
+    "id": "83e1bc6b-b294-4a39-a287-b511f148e699",
+    "profile": "preview",
+    "format": "apk",
+    "status": "IN_QUEUE",
+    "checkedAt": "2026-10-08T16:16:37Z",
+    "url": "https://expo.dev/accounts/ashhhhhhhh/projects/Eclipse/builds/83e1bc6b-b294-4a39-a287-b511f148e699"
+  },
+  "ios": {
+    "id": "9b2dc61b-d8f2-4cce-b01e-a7b107c1806d",
+    "profile": "testflight",
+    "status": "FINISHED",
+    "version": "1.0.0",
+    "buildNumber": "66",
+    "completedAt": "2026-10-08T16:15:05.409Z",
+    "url": "https://expo.dev/accounts/ashhhhhhhh/projects/Eclipse/builds/9b2dc61b-d8f2-4cce-b01e-a7b107c1806d",
+    "ipa": "https://expo.dev/artifacts/eas/cyWP9vLUENgvGsbsfUouVyttXs9LylOTCJz_E-daHq0.ipa"
+  },
+  "testflightSubmission": {
+    "status": "prepared_not_submitted",
+    "buildId": "9b2dc61b-d8f2-4cce-b01e-a7b107c1806d",
+    "profile": "testflight",
+    "ascAppId": "6773071994",
+    "bundleIdentifier": "com.achraf.eclipse",
+    "command": "eas submit --platform ios --profile testflight --id 9b2dc61b-d8f2-4cce-b01e-a7b107c1806d --non-interactive",
+    "appleAcceptance": "not_checked",
+    "submissionCredentials": "not_validated_by_submission",
+    "instructions": "Run from the candidate checkout with Expo authentication. The command is prepared only and has not been executed. EAS build completion is separate from submission, Apple processing, and TestFlight availability."
+  },
+  "evidence": {
+    "buildRun": "https://github.com/aamracorporation-gif/Eclipse/actions/runs/37805739081",
+    "completionMonitor": "https://github.com/aamracorporation-gif/Eclipse/actions/runs/37806758870",
+    "statusSnapshot": "https://github.com/aamracorporation-gif/Eclipse/actions/runs/37807426549",
+    "productionModified": false
+  }
+}
