@@ -63,6 +63,11 @@ jobs:
             const v={buildNumber:vd.app.byId.latestAppVersionByPlatformAndApplicationIdentifier?.buildVersion};
             console.log('IOS_REMOTE_VERSION='+JSON.stringify(v));
             if(String(v?.buildNumber)!=='66')throw Error('Expected remote version 66 before creating 67');
+            if(eas(['env:pull','--environment','preview','--path','.env.local','--non-interactive'])===null)throw Error('Preview environment unavailable');
+            const vars=require('dotenv').parse(fs.readFileSync('.env.local'));
+            for(const [name,value] of Object.entries(vars))if(name.startsWith('EXPO_PUBLIC_'))process.env[name]=value;
+            process.env.ECLIPSE_BUILD_ENV='staging';
+            require('./scripts/buildEnvironment.cjs').validateBuildEnvironment();
             const android=parse(eas(['build','--platform','android','--profile','preview','--non-interactive','--no-wait','--json']));
             const ab=Array.isArray(android)?android[0]:android;
             if(ab?.id) console.log('ANDROID_QUEUED='+JSON.stringify(safe(await status(ab.id))));
@@ -87,3 +92,7 @@ jobs:
             if(ab?.id)console.log('ANDROID_STATUS='+JSON.stringify(safe(await status(ab.id))));
           })().catch(e=>{console.error(e.message);process.exitCode=1});
           NODE
+
+      - name: Remove temporary build environment
+        if: always()
+        run: rm -f .env.local
