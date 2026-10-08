@@ -61,8 +61,8 @@ export async function unregisterPushNotifications(userId:string|null):Promise<vo
 }
 export async function initNotifications() {
   Notifications.setNotificationHandler({handleNotification:async()=>({
-    shouldShowAlert:false,shouldPlaySound:false,shouldSetBadge:false,shouldShowBanner:false,shouldShowList:false,
-  })}); // While foreground, the live inbox/badge is the single presentation surface.
+    shouldPlaySound:true,shouldSetBadge:true,shouldShowBanner:true,shouldShowList:true,
+  })}); // Present real remote pushes through the OS as well as keeping the in-app inbox.
   await channels();
 }
 // Compatibility exports. No local schedule or client-side service dispatcher.
