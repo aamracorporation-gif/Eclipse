@@ -1,0 +1,76 @@
+name: Submit Eclipse 66 to TestFlight
+run-name: Submit verified staging iOS build 66 to TestFlight
+on:
+  push:
+    branches: [codex/build-staging-candidate-55487308]
+    paths: [.github/workflows/submit-testflight-66.yml]
+permissions:
+  contents: read
+concurrency:
+  group: eclipse-testflight-submission-9b2dc61b
+  cancel-in-progress: false
+jobs:
+  submit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    environment: staging
+    env:
+      BUILD_ID: 9b2dc61b-d8f2-4cce-b01e-a7b107c1806d
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: 55487308c9327eace83c7c5fc7b1afdf66ec566d
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Verify exact candidate and submission destination
+        run: |
+          test "$(git rev-parse HEAD)" = 55487308c9327eace83c7c5fc7b1afdf66ec566d
+          node - <<'NODE'
+          const assert = require('node:assert/strict');
+          const app = require('./app.json').expo;
+          const c = require('./eas.json');
+          assert.equal(app.extra.eas.projectId, '42ebb6eb-62b1-4784-a483-831ae3c804f2');
+          assert.equal(app.ios.bundleIdentifier, 'com.achraf.eclipse');
+          assert.equal(c.submit.testflight.ios.ascAppId, '6773071994');
+          assert.equal(c.build.testflight.extends, 'preview');
+          assert.equal(c.build.preview.env.ECLIPSE_BUILD_ENV, 'staging');
+          NODE
+      - uses: expo/expo-github-action@v8
+        with:
+          eas-version: 18.0.1
+          token: ${{ secrets.EXPO_TOKEN }}
+      - name: Verify finished iOS 66 and its source commit
+        run: |
+          eas build:view "$BUILD_ID" --json > "$RUNNER_TEMP/build.raw"
+          python3 - <<'PY'
+          import json, os, pathlib
+          raw = (pathlib.Path(os.environ['RUNNER_TEMP']) / 'build.raw').read_text()
+          decoder = json.JSONDecoder()
+          build = None
+          for pos, char in enumerate(raw):
+              if char != '{':
+                  continue
+              try:
+                  candidate, _ = decoder.raw_decode(raw[pos:])
+              except json.JSONDecodeError:
+                  continue
+              if isinstance(candidate, dict) and candidate.get('id') == os.environ['BUILD_ID']:
+                  build = candidate
+                  break
+          assert build is not None, 'No matching build returned'
+          assert build['status'] == 'FINISHED'
+          assert build['platform'] == 'IOS'
+          assert build['buildProfile'] == 'testflight'
+          assert build['gitCommitHash'] == '55487308c9327eace83c7c5fc7b1afdf66ec566d'
+          assert str(build['appBuildVersion']) == '66'
+          print(json.dumps({key: build[key] for key in ['id','status','platform','buildProfile','gitCommitHash','appVersion','appBuildVersion']}))
+          PY
+      - name: Submit exact build to App Store Connect for TestFlight
+        run: |
+          set -o pipefail
+          eas submit --platform ios --profile testflight --id "$BUILD_ID" --non-interactive --wait 2>&1 | tee "$RUNNER_TEMP/submission.log"
+          printf '%s\n' "EAS Submit command completed for iOS build 66: $BUILD_ID." "App Store Connect app: 6773071994." "Apple processing and TestFlight availability require separate confirmation; this does not publish an App Store release." >> "$GITHUB_STEP_SUMMARY"
