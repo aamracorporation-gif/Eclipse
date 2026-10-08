@@ -11,11 +11,17 @@
     "id": "83e1bc6b-b294-4a39-a287-b511f148e699",
     "profile": "preview",
     "format": "apk",
-    "status": "IN_QUEUE",
-    "checkedAt": "2026-10-08T16:19:32Z",
+    "status": "IN_PROGRESS",
+    "checkedAt": "2026-10-08T16:35:15Z",
     "url": "https://expo.dev/accounts/ashhhhhhhh/projects/Eclipse/builds/83e1bc6b-b294-4a39-a287-b511f148e699",
     "priority": "NORMAL",
-    "estimatedWaitTimeLeftSeconds": null
+    "estimatedWaitTimeLeftSeconds": null,
+    "runnerBuild": {
+      "status": "in_progress",
+      "run": "https://github.com/aamracorporation-gif/Eclipse/actions/runs/37809299868",
+      "builder": "EAS local on GitHub Actions",
+      "sourceCommit": "55487308c9327eace83c7c5fc7b1afdf66ec566d"
+    }
   },
   "ios": {
     "id": "9b2dc61b-d8f2-4cce-b01e-a7b107c1806d",
@@ -28,20 +34,22 @@
     "ipa": "https://expo.dev/artifacts/eas/cyWP9vLUENgvGsbsfUouVyttXs9LylOTCJz_E-daHq0.ipa"
   },
   "testflightSubmission": {
-    "status": "prepared_not_submitted",
+    "status": "IN_QUEUE",
     "buildId": "9b2dc61b-d8f2-4cce-b01e-a7b107c1806d",
     "profile": "testflight",
     "ascAppId": "6773071994",
     "bundleIdentifier": "com.achraf.eclipse",
-    "command": "eas submit --platform ios --profile testflight --id 9b2dc61b-d8f2-4cce-b01e-a7b107c1806d --non-interactive",
-    "appleAcceptance": "not_checked",
-    "submissionCredentials": "not_validated_by_submission",
-    "instructions": "Run from the candidate checkout with Expo authentication. The command is prepared only and has not been executed. EAS build completion is separate from submission, Apple processing, and TestFlight availability."
+    "command": "eas submit --platform ios --profile testflight --id 9b2dc61b-d8f2-4cce-b01e-a7b107c1806d --non-interactive --wait",
+    "appleAcceptance": "pending_not_confirmed",
+    "submissionCredentials": "EAS accepted the submission for scheduling; Apple validation pending",
+    "instructions": "Submission has been requested and registered by EAS. Do not submit a duplicate. Wait for the existing submission result, then verify Apple processing and TestFlight availability.",
+    "submissionId": "a1bcdbc3-1d90-4623-aa64-682afb2ef5f2"
   },
   "evidence": {
     "buildRun": "https://github.com/aamracorporation-gif/Eclipse/actions/runs/37805739081",
     "completionMonitor": "https://github.com/aamracorporation-gif/Eclipse/actions/runs/37806758870",
-    "statusSnapshot": "https://github.com/aamracorporation-gif/Eclipse/actions/runs/37807804469",
-    "productionModified": false
+    "statusSnapshot": "https://github.com/aamracorporation-gif/Eclipse/actions/runs/37809364189",
+    "productionModified": false,
+    "submissionRun": "https://github.com/aamracorporation-gif/Eclipse/actions/runs/37808441977"
   }
 }
