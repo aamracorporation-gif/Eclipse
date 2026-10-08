@@ -56,7 +56,7 @@ export function ThemedButton({
         {loading ? (
           <DiscoLoader size={18} />
         ) : (
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+          <View style={styles.contentRow}>
             {iconPosition === 'left' && icon}
             <Text style={[styles.outlineText, textStyle]}>{title}</Text>
             {iconPosition === 'right' && icon}
@@ -91,7 +91,7 @@ export function ThemedButton({
         {loading ? (
           <DiscoLoader size={18} />
         ) : (
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+          <View style={styles.contentRow}>
             {iconPosition === 'left' && icon}
             <Text style={[styles.text, textStyle]}>{title}</Text>
             {iconPosition === 'right' && icon}
@@ -103,6 +103,7 @@ export function ThemedButton({
 }
 
 const styles = StyleSheet.create({
+  contentRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, maxWidth: '100%' },
   container: {
     borderRadius: theme.components.button.borderRadius,
     overflow: 'hidden',
@@ -114,19 +115,23 @@ const styles = StyleSheet.create({
   gradient: {
     flex: 1,
     width: '100%',
-    height: '100%',
     justifyContent: 'center',
     alignItems: 'center',
     paddingHorizontal: theme.space[4],
+    paddingVertical: 12,
   },
   // Removed contentContainer as it is no longer needed
   text: {
+    flexShrink: 1,
+    textAlign: 'center',
     color: Colors.dark.text,
     fontSize: theme.typography.size.md,
     fontWeight: theme.typography.weight.bold,
     letterSpacing: 0.2,
   },
   outlineButton: {
+    paddingHorizontal: theme.space[4],
+    paddingVertical: 12,
     width: '100%',
     minHeight: theme.components.button.height,
     justifyContent: 'center',
@@ -137,6 +142,8 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent',
   },
   outlineText: {
+    flexShrink: 1,
+    textAlign: 'center',
     color: Colors.dark.primary,
     fontSize: theme.typography.size.md,
     fontWeight: theme.typography.weight.semibold,

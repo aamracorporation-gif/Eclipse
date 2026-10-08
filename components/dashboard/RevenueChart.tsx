@@ -1,7 +1,7 @@
-import React, { useMemo } from 'react';
-import { View, Text, StyleSheet, Dimensions } from 'react-native';
+import React, { useMemo, useState } from 'react';
+import { View, Text, StyleSheet } from 'react-native';
 import { Svg, Path, Defs, LinearGradient, Stop, Circle, Line } from 'react-native-svg';
-import { useResponsive } from '@/lib/responsive';
+import { salesPeriodStart } from '@/lib/organizerSales';
 
 export type TimeRange = 'day' | 'week' | 'month';
 
@@ -10,41 +10,21 @@ interface RevenueChartProps {
   timeRange: TimeRange;
   color?: string;
   height?: number;
+  now?: Date;
 }
 
-export function RevenueChart({ data, timeRange, color = '#8b5cf6', height = 220 }: RevenueChartProps) {
-  const { maxContentWidth } = useResponsive();
-  const screenWidth = Math.min(Dimensions.get('window').width, maxContentWidth);
-  const chartWidth = screenWidth - 48; // Padding
+export function RevenueChart({ data, timeRange, color = '#8b5cf6', height = 220, now = new Date() }: RevenueChartProps) {
+  const [containerWidth, setContainerWidth] = useState(0);
+  const chartWidth = Math.max(0, containerWidth - 40);
   const chartHeight = height - 40; // Space for labels
   
   // Process data based on time range
   const chartPoints = useMemo(() => {
     if (!data || data.length === 0) return [];
 
-    const now = new Date();
-    let filteredData = [...data];
-    let groupBy: 'hour' | 'day' | 'month' = 'day';
-    let startDate: Date = new Date(now);
-    let endDate = now;
-
-    // 1. Determine Range and Grouping
-    if (timeRange === 'day') {
-      startDate = new Date(now);
-      startDate.setHours(0, 0, 0, 0);
-      groupBy = 'hour';
-    } else if (timeRange === 'week') {
-      startDate = new Date(now);
-      startDate.setDate(now.getDate() - 6); // Last 7 days
-      startDate.setHours(0, 0, 0, 0);
-      groupBy = 'day';
-    } else if (timeRange === 'month') {
-      startDate = new Date(now);
-      startDate.setMonth(now.getMonth() - 1);
-      startDate.setHours(0, 0, 0, 0);
-      groupBy = 'day';
-    }
-
+    const startDate = salesPeriodStart(timeRange, now);
+    const endDate = now;
+    const groupBy = timeRange === 'day' ? 'hour' : 'day';
     // 2. Generate Time Slots (Buckets)
     const buckets: { label: string; date: Date; value: number }[] = [];
     const current = new Date(startDate);
@@ -81,9 +61,9 @@ export function RevenueChart({ data, timeRange, color = '#8b5cf6', height = 220 
     }
 
     // 3. Aggregate Data into Buckets
-    filteredData.forEach(item => {
+    data.forEach(item => {
       const itemDate = new Date(item.date);
-      if (itemDate < startDate) return;
+      if (itemDate < startDate || itemDate > now) return;
 
       // Find bucket
       const bucket = buckets.find(b => {
@@ -102,11 +82,11 @@ export function RevenueChart({ data, timeRange, color = '#8b5cf6', height = 220 
     });
 
     return buckets;
-  }, [data, timeRange]);
+  }, [data, timeRange, now]);
 
   if (chartPoints.length === 0) {
     return (
-      <View style={[styles.container, { height }]}>
+      <View onLayout={event => setContainerWidth(event.nativeEvent.layout.width)} style={[styles.container, { height }]}>
         <Text style={styles.noDataText}>No hay datos para este periodo</Text>
       </View>
     );
@@ -132,7 +112,7 @@ export function RevenueChart({ data, timeRange, color = '#8b5cf6', height = 220 
   const visibleLabels = points.filter((_, i) => i % labelInterval === 0);
 
   return (
-    <View style={[styles.container, { height }]}>
+    <View onLayout={event => setContainerWidth(event.nativeEvent.layout.width)} style={[styles.container, { height }]}>
       <Svg width={chartWidth} height={chartHeight + 30}>
         <Defs>
           <LinearGradient id="gradient" x1="0" y1="0" x2="0" y2="1">

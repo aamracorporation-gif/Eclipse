@@ -18,12 +18,14 @@ export function TimeFilter({ value, onChange }: TimeFilterProps) {
   ];
 
   return (
-    <GlassView intensity={20} style={styles.container}>
+    <GlassView intensity={20} style={styles.container} contentContainerStyle={styles.options}>
       {options.map((option) => {
         const isActive = value === option.value;
         return (
           <TouchableOpacity
             key={option.value}
+            accessibilityRole="button"
+            accessibilityState={{ selected: isActive }}
             onPress={() => onChange(option.value)}
             style={[styles.tab, isActive && styles.activeTab]}
           >
@@ -38,8 +40,8 @@ export function TimeFilter({ value, onChange }: TimeFilterProps) {
 }
 
 const styles = StyleSheet.create({
+  options: { flexDirection: 'row', padding: 0, gap: 4 },
   container: {
-    flexDirection: 'row',
     padding: 4,
     borderRadius: 16,
     backgroundColor: 'rgba(255,255,255,0.05)',
@@ -47,7 +49,9 @@ const styles = StyleSheet.create({
   },
   tab: {
     flex: 1,
+    minHeight: 44,
     paddingVertical: 8,
+    paddingHorizontal: 4,
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: 12,

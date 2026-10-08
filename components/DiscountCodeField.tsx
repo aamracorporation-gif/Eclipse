@@ -11,7 +11,12 @@ export type AppliedDiscount = {
   selectionKey: string;
 };
 
+export type DiscountControl = {
+  value: string; onChange: (code: string) => void; apply: () => void; remove: () => void;
+  label?: string; busy: boolean; error?: string;
+};
 type Props = {
+  render?: (control: DiscountControl) => React.ReactNode;
   eventId: string;
   kind: DiscountProductKind;
   productId: string | null;
@@ -23,7 +28,7 @@ type Props = {
 };
 
 /** Both checkouts use the same control. Late responses cannot authorize a different selection. */
-export function DiscountCodeField({ eventId, kind, productId, quantity, value, disabled, onChange, onCheckingChange }: Props) {
+export function DiscountCodeField({ eventId, kind, productId, quantity, value, disabled, onChange, onCheckingChange, render }: Props) {
   const [code, setCode] = useState('');
   const [checking, setChecking] = useState(false);
   const [error, setError] = useState('');
@@ -73,6 +78,13 @@ export function DiscountCodeField({ eventId, kind, productId, quantity, value, d
     }
   };
   const applied = value?.selectionKey === key ? value : null;
+  if (render) return render({
+    value: code,
+    onChange: next => { if (!disabled && !checking && !applied) { setCode(next.toUpperCase()); setError(''); } },
+    apply: () => { if (!applied) void apply(); },
+    remove: () => { if (!disabled && !checking) { sequence.current++; callbacks.current.onChange(null); setCode(''); setError(''); } },
+    label: applied?.label, busy: checking, error,
+  });
   return <View style={styles.container}>
     <Text style={styles.label}>Código de descuento</Text>
     {applied ? <View style={styles.row}>

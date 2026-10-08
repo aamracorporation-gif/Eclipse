@@ -1,3 +1,4 @@
+import { profileAppearance } from '@/theme/profileAppearance';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, Switch, Share } from 'react-native';
 import { useState } from 'react';
 import { useRouter } from 'expo-router';
@@ -116,12 +117,12 @@ export default function AddWorker() {
           <TouchableOpacity onPress={safeBack} style={styles.backButton}>
             <ChevronLeft size={24} color="white" />
           </TouchableOpacity>
-          <Text style={styles.title}>{t('creator.workers.add_button')}</Text>
+          <Text style={[styles.title, { flex: 1, textAlign: 'center', marginHorizontal: 8 }]}>{t('creator.workers.add_button')}</Text>
           <View style={{ width: 24 }} />
         </View>
 
-        <ScrollView contentContainerStyle={styles.content}>
-          <GlassView intensity={10} style={styles.card}>
+        <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={[styles.content, profileAppearance.content]}>
+          <GlassView intensity={10} style={[styles.card, profileAppearance.card]} contentContainerStyle={{ padding: 0 }}>
             <Text style={styles.sectionTitle}>{t('creator.workers.personal_info_title')}</Text>
             
             <ThemedInput
@@ -143,12 +144,12 @@ export default function AddWorker() {
             />
           </GlassView>
 
-          <GlassView intensity={10} style={styles.card}>
+          <GlassView intensity={10} style={[styles.card, profileAppearance.card]} contentContainerStyle={{ padding: 0 }}>
             <Text style={styles.sectionTitle}>{t('creator.workers.permissions_title')}</Text>
             <Text style={styles.sectionSubtitle}>{t('creator.workers.permissions_subtitle')}</Text>
 
             <View style={styles.permissionRow}>
-              <View>
+              <View style={{ flex: 1, minWidth: 0, marginRight: 12 }}>
                 <Text style={styles.permTitle}>{t('creator.workers.perm_scan_title')}</Text>
                 <Text style={styles.permDesc}>{t('creator.workers.perm_scan_desc')}</Text>
               </View>
@@ -162,7 +163,7 @@ export default function AddWorker() {
             <View style={styles.divider} />
 
             <View style={styles.permissionRow}>
-              <View>
+              <View style={{ flex: 1, minWidth: 0, marginRight: 12 }}>
                 <Text style={styles.permTitle}>{t('creator.workers.perm_sell_title')}</Text>
                 <Text style={styles.permDesc}>{boxOffice.enabled ? t('creator.workers.perm_sell_desc') : 'Requiere Taquilla Premium · 50 €/mes'}</Text>
               </View>
@@ -177,7 +178,7 @@ export default function AddWorker() {
             <View style={styles.divider} />
 
             <View style={styles.permissionRow}>
-              <View>
+              <View style={{ flex: 1, minWidth: 0, marginRight: 12 }}>
                 <Text style={styles.permTitle}>{t('creator.workers.perm_stats_title')}</Text>
                 <Text style={styles.permDesc}>{t('creator.workers.perm_stats_desc')}</Text>
               </View>
@@ -190,7 +191,7 @@ export default function AddWorker() {
           </GlassView>
         </ScrollView>
 
-        <View style={styles.footer}>
+        <View style={[styles.footer, profileAppearance.content]}>
           <ThemedButton
             title={loading ? t('creator.workers.sending') : t('creator.workers.send_invite')}
             onPress={handleSubmit}

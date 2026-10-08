@@ -62,8 +62,8 @@ export const OFFER_CATEGORIES: {
   },
   {
     key: 'group',
-    label: 'Pack de grupo',
-    detail: 'Un precio por pack; acceso conjunto',
+    label: 'Pack de entradas',
+    detail: 'Varias personas, acceso conjunto y sin mesa',
   },
   {
     key: 'free',
@@ -126,6 +126,7 @@ export function createEmptyTicketDraft(): TicketDraft {
 export function getTicketDraftErrors(t: TicketDraft) {
   const errors: Record<string, string> = {};
   if (!t.name.trim()) errors.name = 'Pon un nombre para la oferta.';
+  else if (t.name.trim().length > 120) errors.name = 'Usa un máximo de 120 caracteres.';
   const price = parsePositiveNumber(t.price),
     qty = parsePositiveInt(t.quantity);
   if (price === null || (price > 0 && price < 0.5) || (price || 0) > 500000)
@@ -145,6 +146,8 @@ export function getTicketDraftErrors(t: TicketDraft) {
   )
     errors.quantity =
       'Introduce entre 1 y 50.000 unidades; una mesa existente puede quedar agotada con 0.';
+  if (t.category !== 'vip_table' && qty !== null && qty < Number(t.originalMetadata?.catalogSold || 0))
+    errors.quantity = `Ya se han vendido ${t.originalMetadata?.catalogSold} unidades. El cupo total no puede ser menor.`;
   if (!OFFER_CATEGORIES.some((c) => c.key === t.category))
     errors.category = 'El VIP solo se vende como reservado de mesa.';
   if (t.category !== 'vip_table' && /\bvip\b/i.test(t.name))
@@ -182,15 +185,17 @@ export function getTicketDraftErrors(t: TicketDraft) {
     if (n === null || n < 5 || n > 240)
       errors.earlyEntryMinutes = 'Entre 5 y 240 minutos de antelación.';
   }
-  if (t.backstageMeetGreet && !t.backstageHost.trim())
+  if (t.category === 'backstage' && t.backstageMeetGreet && !t.backstageHost.trim())
     errors.backstageHost = 'Indica el anfitrión o artista.';
   if (!/^\d+$/.test(t.includedDrinks || '0') || Number(t.includedDrinks) > 20)
     errors.includedDrinks = 'Entre 0 y 20 consumiciones por persona.';
   const min = parsePositiveInt(t.minPerOrder || '1'),
     max = parsePositiveInt(t.maxPerOrder || '10');
-  if (!min || !max || min > max || max > 10)
-    errors.maxPerOrder =
-      'Entre 1 y 10 unidades; máximo igual o mayor al mínimo.';
+  if (t.category !== 'vip_table') {
+    if (!min || min > 10) errors.minPerOrder = 'El mínimo debe estar entre 1 y 10 unidades.';
+    if (!max || max > 10 || (min && max < min)) errors.maxPerOrder = 'Entre 1 y 10 unidades, sin bajar del mínimo.';
+    if (min && qty !== null && qty < min) errors.quantity = 'El cupo debe permitir al menos una compra con el mínimo indicado.';
+  }
   const start = t.salesStartAt ? Date.parse(t.salesStartAt) : null,
     end = t.salesEndAt ? Date.parse(t.salesEndAt) : null;
   if (start !== null && !Number.isFinite(start))
@@ -212,6 +217,7 @@ export function buildTicketName(t: TicketDraft) {
 export function serializeTicketMetadata(t: TicketDraft) {
   const original = { ...(t.originalMetadata || {}) };
   delete original.catalogAvailable;
+  delete original.catalogSold;
   return {
     ...original,
     category: t.category,
@@ -233,8 +239,8 @@ export function serializeTicketMetadata(t: TicketDraft) {
     numberedSeat: false,
     earlyEntryMinutes: t.category === 'early' ? Number(t.earlyEntryMinutes) : 0,
     dedicatedLane: t.category === 'fast_lane' || t.earlyDedicatedLane,
-    backstageMeetGreet: t.backstageMeetGreet,
-    backstageHost: t.backstageHost.trim(),
+    backstageMeetGreet: t.category === 'backstage' && t.backstageMeetGreet,
+    backstageHost: t.category === 'backstage' ? t.backstageHost.trim() : '',
     ...(t.category === 'vip_table'
       ? {
           vipGroupSize: Number(t.vipGroupSize),
@@ -292,7 +298,29 @@ export function offerFromRow(row: any, table = false): TicketDraft {
       row.extra_bottle_price == null ? '' : String(row.extra_bottle_price),
     originalMetadata: {
       ...m,
-      ...(table ? { catalogAvailable: row.quantity_available } : {}),
+      ...(table ? { catalogAvailable: row.quantity_available } : { catalogSold: Number(row.sold || 0) }),
     },
   };
+}
+
+export function prepareOfferForCatalog(draft: TicketDraft): TicketDraft | null {
+  if (Object.keys(getTicketDraftErrors(draft)).length) return null;
+  return { ...draft, name: draft.name.trim(), price: String(parsePositiveNumber(draft.price)), quantity: String(Number(draft.quantity)), benefits: draft.benefits.trim() };
+}
+
+export function hasPendingOffer(draft: TicketDraft) {
+  return JSON.stringify(draft) !== JSON.stringify(createEmptyTicketDraft());
+}
+
+export function getCatalogSummary(offers: TicketDraft[]) {
+  return offers.reduce((summary, offer) => {
+    const units = Number(offer.quantity) || 0;
+    const sold = Number(offer.originalMetadata?.catalogSold || 0);
+    const remaining = offer.category === 'vip_table' ? units : Math.max(0, units - sold);
+    if (offer.category === 'vip_table') summary.tables += remaining;
+    else if (offer.category === 'group') summary.packs += remaining;
+    else summary.tickets += remaining;
+    summary.people += remaining * (offer.category === 'vip_table' ? Number(offer.vipGroupSize) || 0 : offer.category === 'group' ? Number(offer.admissionsPerUnit) || 0 : 1);
+    return summary;
+  }, { tickets: 0, packs: 0, tables: 0, people: 0 });
 }

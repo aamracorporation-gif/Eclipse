@@ -21,12 +21,27 @@ async function run(delivery,handler,extraEnv={}){
 }
 const json=(obj,status=200)=>new Response(JSON.stringify(obj),{status,headers:{'Content-Type':'application/json'}});
 test('worker requires exact service bearer credential',()=>{assert.equal(api.authorizedNotificationWorker('Bearer fixture','fixture'),true);for(const h of [null,'fixture','Bearer other','Bearer fixture '])assert.equal(api.authorizedNotificationWorker(h,'fixture'),false);assert.equal(api.authorizedNotificationWorker('Bearer ',''),false);});
-test('push contains neither QR, title, recipient name nor event data',()=>{const p=api.privatePush(make(), 'stage-fixture');const s=JSON.stringify(p);assert.ok(!s.includes('PRIVATE')&&!s.includes('Private event'));assert.deepEqual(Object.keys(p.data).sort(),['notification_id','notification_schema','project_ref']);assert.equal(p.channelId,'eclipse-activity');assert.ok(p.ttl>0&&p.ttl<=3600);});
-test('reminders have their own Android channel',()=>assert.equal(api.privatePush(make({category:'reminder'}),'s').channelId,'eclipse-reminders'));
+test('push shows the authorized title and body while navigation includes only IDs',()=>{
+ const p=api.notificationPush(make({title:'Tus entradas están confirmadas',body:'Tu compra para Noche Eclipse está confirmada.',qr:'secret-qr',buyer_email:'private@example.invalid'}), 'stage-fixture');
+ assert.equal(p.title,'Tus entradas están confirmadas');assert.equal(p.body,'Tu compra para Noche Eclipse está confirmada.');
+ assert.deepEqual(Object.keys(p.data).sort(),['notification_id','notification_schema','project_ref']);
+ assert.ok(!JSON.stringify(p).includes('secret-qr')&&!JSON.stringify(p).includes('private@example.invalid'));
+ assert.equal(p.channelId,'eclipse-activity');assert.ok(p.ttl>0&&p.ttl<=3600);
+});
+test('push previews normalize whitespace and truncate long copy without broken Unicode',()=>{
+ const p=api.notificationPush(make({title:'  Cambio\n en tu evento  ',body:'🎉 Música electrónica '.repeat(30)}),'stage-fixture');
+ assert.equal(p.title,'Cambio en tu evento');assert.ok(Array.from(p.body).length<=160);assert.ok(p.body.endsWith('…'));assert.ok(!p.body.includes('\uFFFD'));
+ assert.ok(Array.from(api.notificationPush(make({title:'🎉'.repeat(100)}),'s').title).length<=80);
+});
+test('blank preview body falls back to its informative title',()=>{
+ assert.equal(api.notificationPush(make({title:'Asignación retirada',body:'  \n '}),'s').body,'Asignación retirada');
+ const p=api.notificationPush(make({title:' ',body:''}),'s');assert.equal(p.title,'Eclipse');assert.ok(p.body.length>0);
+});
+test('reminders have their own Android channel',()=>assert.equal(api.notificationPush(make({category:'reminder'}),'s').channelId,'eclipse-reminders'));
 test('email text is escaped and no untrusted href is used',()=>{const h=api.notificationEmail({title:'<script>alert(1)</script>',body:'<a href="javascript:x">click</a>&'});assert.ok(h.includes('&lt;script&gt;'));assert.ok(!h.includes('<script>')&&!h.includes('<a href='));assert.ok(h.includes('&amp;'));});
 test('disabled deployment still prepares inbox, but makes no network request or claim',async()=>{const r=await run(make(),()=>{throw Error('NETWORK MUST NOT RUN');},{NOTIFICATIONS_V2_SEND_ENABLED:'false'});assert.equal(r.calls.length,1);assert.equal(r.result.dispatch,'disabled');});
 test('absence of deployment flag is fail-closed',async()=>{const r=await run(make(),()=>{throw Error('NETWORK MUST NOT RUN');},{NOTIFICATIONS_V2_SEND_ENABLED:undefined});assert.equal(r.result.processed,0);});
-test('Expo acceptance preserves receipt ID',async()=>{const r=await run(make(),async()=>json({data:{status:'ok',id:'test-receipt'}}));assert.equal(r.completed[0].p_outcome,'accepted');assert.equal(r.completed[0].p_provider_id,'test-receipt');});
+test('Expo receives informative copy and acceptance preserves receipt ID',async()=>{let payload;const d=make({title:'Cambio importante en tu evento',body:'Noche Eclipse: ha cambiado el horario.'});const r=await run(d,async(url,opts)=>{payload=JSON.parse(opts.body);return json({data:{status:'ok',id:'test-receipt'}})});assert.equal(payload.title,d.title);assert.equal(payload.body,d.body);assert.equal(r.completed[0].p_outcome,'accepted');assert.equal(r.completed[0].p_provider_id,'test-receipt');});
 test('expired job never reaches a provider',async()=>{let n=0;const r=await run(make({expires_at:'2020-01-01T00:00:00Z'}),async()=>{n++;return json({});});assert.equal(n,0);assert.equal(r.completed[0].p_code,'EXPIRED');});
 test('account-bound authorization checked immediately before send',async()=>{let n=0;const r=await run(null,async()=>{n++;return json({});});assert.equal(n,0);assert.equal(r.completed.length,0);});
 test('wrong Expo project is blocked',async()=>{const r=await run(make({project_id:id}),async()=>{throw Error('NETWORK MUST NOT RUN');});assert.equal(r.completed[0].p_code,'EXPO_PROJECT_MISMATCH');});

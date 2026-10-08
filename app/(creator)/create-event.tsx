@@ -5,6 +5,7 @@ import {
   Alert,
   Image,
   Keyboard,
+  KeyboardAvoidingView,
   Modal,
   Platform,
   Pressable,
@@ -16,7 +17,6 @@ import {
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
-import DateTimePicker, { DateTimePickerAndroid } from '@react-native-community/datetimepicker';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as ImagePicker from 'expo-image-picker';
 import * as Location from 'expo-location';
@@ -25,9 +25,15 @@ import { Colors } from '@/constants/Colors';
 import { GlassView } from '@/components/ui/GlassView';
 import { ThemedButton } from '@/components/ui/ThemedButton';
 import { ThemedInput } from '@/components/ui/ThemedInput';
+import { FormDateTimeField } from '@/components/ui/FormDateTimeField';
+import { theme } from '@/theme/styles';
+import { EVENT_FORM_STEPS, eventStepForField, getEventDraftErrors, type EventDraft } from '@/lib/createEventForm';
 import WebView from 'react-native-webview';
 import {
   buildTicketName,
+  prepareOfferForCatalog,
+  hasPendingOffer,
+  getCatalogSummary,
   offerFromRow,
   OFFER_CATEGORIES,
   createEmptyTicketDraft,
@@ -43,10 +49,8 @@ import { supabase } from '@/lib/supabase';
 import { useEvents } from '@/lib/EventContext';
 import {
   ArrowLeft,
-  Calendar,
   Camera,
   Check,
-  Clock,
   Image as ImageIcon,
   Lock,
   MapPin,
@@ -58,21 +62,6 @@ import {
   X,
 } from '@/lib/icons';
 
-type EventDraft = {
-  title: string;
-  description: string;
-  location: string;
-  imageUri: string;
-  venuePlanUri: string;
-  theme: string;
-  dressCode: string;
-  ageRestriction: string;
-  eventType: string;
-  allowResale: boolean;
-  dateTime: Date | null;
-  endDateTime: Date | null;
-  coordinates: { latitude: number; longitude: number } | null;
-};
 
 const MAPTILER_KEY = process.env.EXPO_PUBLIC_MAPTILER_KEY || '';
 
@@ -167,7 +156,6 @@ function nextRoundedDateTime(now: Date) {
   const m = d.getMinutes();
   const rounded = Math.ceil(m / 5) * 5;
   d.setMinutes(rounded);
-  if (rounded >= 60) d.setHours(d.getHours() + 1, 0, 0, 0);
   return d;
 }
 
@@ -203,15 +191,15 @@ export default function CreateEventScreen() {
   const [ticketTypes, setTicketTypes] = useState<TicketDraft[]>([]);
 
   const [loading, setLoading] = useState(false);
+  const [formStep, setFormStep] = useState(0);
+  const [offerAttempted, setOfferAttempted] = useState(false);
+  const [offerEditorOpen, setOfferEditorOpen] = useState(true);
+  const [formNotice, setFormNotice] = useState('');
+  const scrollRef = useRef<ScrollView>(null);
+  const catalogSummary = useMemo(() => getCatalogSummary(ticketTypes), [ticketTypes]);
+  const navigateStep = (step: number) => { Keyboard.dismiss(); setFormStep(step); setFormNotice(''); scrollRef.current?.scrollTo({ y: 0, animated: false }); };
+
   const [submitAttempted, setSubmitAttempted] = useState(false);
-
-  const [showIosDateTime, setShowIosDateTime] = useState(false);
-  const [iosDateTimeDraft, setIosDateTimeDraft] = useState<Date>(() => nextRoundedDateTime(new Date()));
-  const iosDateTimeDraftRef = useRef<Date>(iosDateTimeDraft);
-
-  const [showIosEndDateTime, setShowIosEndDateTime] = useState(false);
-  const [iosEndDateTimeDraft, setIosEndDateTimeDraft] = useState<Date>(() => nextRoundedDateTime(new Date()));
-  const iosEndDateTimeDraftRef = useRef<Date>(iosEndDateTimeDraft);
 
   const [showMapModal, setShowMapModal] = useState(false);
   const [mapSelection, setMapSelection] = useState<{ latitude: number; longitude: number } | null>(null);
@@ -265,6 +253,7 @@ export default function CreateEventScreen() {
             : null,
         });
         if (data.venues?.name) setLocationQuery(data.venues.name);
+        setOfferEditorOpen(false);
         setTicketTypes([
           ...(data.event_ticket_types || []).filter((t:any)=>!t.deleted_at && t.is_active!==false && t.category!=='vip').map((t:any)=>offerFromRow(t)),
           ...(data.reservados_vip || []).filter((t:any)=>!t.deleted_at && t.is_active!==false).map((t:any)=>offerFromRow(t,true)),
@@ -300,57 +289,9 @@ export default function CreateEventScreen() {
     return { capacity, minPrice };
   }, [ticketTypes]);
 
-  const uiDateTimeText = useMemo(() => {
-    if (!draft.dateTime) return 'Seleccionar fecha y hora';
-    return `${draft.dateTime.toLocaleDateString()} • ${toHM(draft.dateTime)}`;
-  }, [draft.dateTime]);
-
-  const uiEndDateTimeText = useMemo(() => {
-    if (!draft.endDateTime) return 'Seleccionar fecha y hora de fin';
-    return `${draft.endDateTime.toLocaleDateString()} • ${toHM(draft.endDateTime)}`;
-  }, [draft.endDateTime]);
-
   const newTicketErrors = useMemo(() => getTicketDraftErrors(newTicket), [newTicket]);
 
-  const errors = useMemo(() => {
-    const e: Record<string, string> = {};
-
-    if (!draft.title.trim()) e.title = 'Obligatorio.';
-    else if (draft.title.length > 100) e.title = 'El título no puede superar 100 caracteres';
-    if (!draft.description.trim()) e.description = 'Obligatorio.';
-    else if (draft.description.length > 2000) e.description = 'La descripción no puede superar 2.000 caracteres';
-    if (!draft.location.trim()) e.location = 'Selecciona la ubicación en el mapa.';
-    if (!draft.imageUri.trim() && !isEditing) e.imageUri = 'Selecciona un cartel desde la cámara o la galería.';
-
-    const age = parsePositiveInt(draft.ageRestriction);
-    if (age === null || age < 16 || age > 99) e.ageRestriction = 'Edad mínima permitida: 16 años.';
-
-    if (!draft.dateTime || !Number.isFinite(draft.dateTime.getTime())) {
-      e.dateTime = 'Selecciona fecha y hora.';
-    } else if (!isEditing && draft.dateTime.getTime() < minDateTime.getTime()) {
-      e.dateTime = 'Debe ser una fecha/hora futura.';
-    } else {
-      const maxFutureDate = new Date();
-      maxFutureDate.setFullYear(maxFutureDate.getFullYear() + 5);
-      if (draft.dateTime.getTime() > maxFutureDate.getTime()) {
-        e.dateTime = 'La fecha no puede ser más de 5 años en el futuro';
-      }
-    }
-
-    if (!draft.endDateTime || !Number.isFinite(draft.endDateTime.getTime())) {
-      e.endDateTime = 'Selecciona la fecha y hora de finalización.';
-    } else if (draft.dateTime && draft.endDateTime.getTime() <= draft.dateTime.getTime()) {
-      e.endDateTime = 'Debe ser posterior a la fecha de inicio.';
-    }
-
-    if (!draft.coordinates) e.coordinates = 'Marca la ubicación exacta del evento.';
-
-    if (ticketTypes.length === 0) {
-      e.ticketTypes = 'Añade al menos un tipo de entrada.';
-    }
-
-    return e;
-  }, [draft, isEditing, minDateTime, ticketTypes.length]);
+  const errors = useMemo(() => getEventDraftErrors(draft, isEditing, minDateTime, ticketTypes.length), [draft, isEditing, minDateTime, ticketTypes.length]);
 
   const getError = useCallback(
     (key: string) => {
@@ -465,6 +406,7 @@ export default function CreateEventScreen() {
 
   const onLocationQueryChange = useCallback((text: string) => {
     setLocationQuery(text);
+    setDraft(prev => ({ ...prev, location: '', coordinates: null }));
     setShowSuggestions(true);
     if (geocodeTimerRef.current) clearTimeout(geocodeTimerRef.current);
     if (text.trim().length < 3) { setLocationSuggestions([]); return; }
@@ -544,134 +486,30 @@ export default function CreateEventScreen() {
     } catch {}
   }, []);
 
-  const openDateTimePicker = useCallback(() => {
-    Keyboard.dismiss();
-    const base = draft.dateTime && Number.isFinite(draft.dateTime.getTime()) ? new Date(draft.dateTime) : new Date(minDateTime);
-
-    if (Platform.OS === 'android') {
-      DateTimePickerAndroid.open({
-        value: base,
-        mode: 'date',
-        minimumDate: minDateTime,
-        onChange: (event, selectedDate) => {
-          if (event.type !== 'set' || !selectedDate) return;
-          const next = new Date(base);
-          next.setFullYear(selectedDate.getFullYear(), selectedDate.getMonth(), selectedDate.getDate());
-          DateTimePickerAndroid.open({
-            value: next,
-            mode: 'time',
-            is24Hour: true,
-            onChange: (timeEvent, selectedTime) => {
-              if (timeEvent.type !== 'set' || !selectedTime) return;
-              next.setHours(selectedTime.getHours(), selectedTime.getMinutes(), 0, 0);
-              updateDraft('dateTime', new Date(next));
-            },
-          });
-        },
-      });
-      return;
-    }
-
-    if (Platform.OS === 'ios') {
-      setIosDateTimeDraft(base);
-      iosDateTimeDraftRef.current = base;
-      setShowIosDateTime(true);
-    }
-  }, [draft.dateTime, minDateTime, updateDraft]);
-
-  const onIosDateTimeChange = useCallback((event: any, selectedDate?: Date) => {
-    if (event?.type && event.type !== 'set') return;
-    if (!selectedDate || !Number.isFinite(selectedDate.getTime())) return;
-    const next = new Date(selectedDate);
-    iosDateTimeDraftRef.current = next;
-    setIosDateTimeDraft(next);
-  }, []);
-
-  const confirmIosDateTime = useCallback(() => {
-    const next = iosDateTimeDraftRef.current;
-    if (!next || !Number.isFinite(next.getTime())) {
-      setShowIosDateTime(false);
-      return;
-    }
-    updateDraft('dateTime', next.getTime() < minDateTime.getTime() ? new Date(minDateTime) : new Date(next));
-    setShowIosDateTime(false);
-  }, [minDateTime, updateDraft]);
-
-  const openEndDateTimePicker = useCallback(() => {
-    Keyboard.dismiss();
-    const startBase = draft.dateTime && Number.isFinite(draft.dateTime.getTime()) ? new Date(draft.dateTime) : new Date(minDateTime);
-    const base = draft.endDateTime && Number.isFinite(draft.endDateTime.getTime())
-      ? new Date(draft.endDateTime)
-      : new Date(startBase.getTime() + 4 * 60 * 60 * 1000); // default +4h from start
-
-    if (Platform.OS === 'android') {
-      DateTimePickerAndroid.open({
-        value: base,
-        mode: 'date',
-        minimumDate: draft.dateTime ?? minDateTime,
-        onChange: (event, selectedDate) => {
-          if (event.type !== 'set' || !selectedDate) return;
-          const next = new Date(base);
-          next.setFullYear(selectedDate.getFullYear(), selectedDate.getMonth(), selectedDate.getDate());
-          DateTimePickerAndroid.open({
-            value: next,
-            mode: 'time',
-            is24Hour: true,
-            onChange: (timeEvent, selectedTime) => {
-              if (timeEvent.type !== 'set' || !selectedTime) return;
-              next.setHours(selectedTime.getHours(), selectedTime.getMinutes(), 0, 0);
-              updateDraft('endDateTime', new Date(next));
-            },
-          });
-        },
-      });
-      return;
-    }
-    if (Platform.OS === 'ios') {
-      setIosEndDateTimeDraft(base);
-      iosEndDateTimeDraftRef.current = base;
-      setShowIosEndDateTime(true);
-    }
-  }, [draft.dateTime, draft.endDateTime, minDateTime, updateDraft]);
-
-  const onIosEndDateTimeChange = useCallback((event: any, selectedDate?: Date) => {
-    if (event?.type && event.type !== 'set') return;
-    if (!selectedDate || !Number.isFinite(selectedDate.getTime())) return;
-    iosEndDateTimeDraftRef.current = new Date(selectedDate);
-    setIosEndDateTimeDraft(new Date(selectedDate));
-  }, []);
-
-  const confirmIosEndDateTime = useCallback(() => {
-    const next = iosEndDateTimeDraftRef.current;
-    if (!next || !Number.isFinite(next.getTime())) { setShowIosEndDateTime(false); return; }
-    updateDraft('endDateTime', new Date(next));
-    setShowIosEndDateTime(false);
-  }, [updateDraft]);
-
   const addTicketType = useCallback(() => {
-    const ticketErrors = getTicketDraftErrors(newTicket);
-    const name = newTicket.name.trim();
-    const price = parsePositiveNumber(newTicket.price);
-    const quantity = parsePositiveInt(newTicket.quantity);
+    setOfferAttempted(true);
+    const prepared = prepareOfferForCatalog(newTicket);
+    if (!prepared) return;
+    const entry = { ...prepared, id: prepared.id === 'draft' ? `${Date.now()}-${Math.random().toString(36).slice(2, 8)}` : prepared.id };
+    setTicketTypes(prev => [...prev.filter(ticket => ticket.id !== entry.id), entry]);
+    setNewTicket(createEmptyTicketDraft());
+    setOfferAttempted(false);
+    setOfferEditorOpen(false);
+    setFormNotice('Oferta guardada en el formulario. Se publicará al guardar el evento.');
+  }, [newTicket]);
 
-    if (Object.keys(ticketErrors).length > 0 || !name || price === null || quantity === null) {
-      setSubmitAttempted(true);
-      Alert.alert('Entradas', 'Revisa los campos personalizados de esta entrada.');
+  const continueForm = () => {
+    setSubmitAttempted(true);
+    if (formStep === 2 && offerEditorOpen && hasPendingOffer(newTicket)) {
+      setOfferAttempted(true);
+      setFormNotice('Añade o guarda la oferta que estás editando antes de continuar.');
       return;
     }
-
-    const entry: TicketDraft = {
-      ...newTicket,
-      id: newTicket.id === 'draft' ? `${Date.now()}-${Math.random().toString(36).slice(2, 8)}` : newTicket.id,
-      name,
-      price: String(price),
-      quantity: String(quantity),
-      benefits: newTicket.benefits.trim(),
-    };
-
-    setTicketTypes((prev) => [...prev.filter(t=>t.id!==entry.id), entry]);
-    setNewTicket(createEmptyTicketDraft());
-  }, [newTicket]);
+    const currentErrors = Object.keys(errors).filter(key => eventStepForField(key) <= formStep);
+    if (currentErrors.length) { setFormStep(eventStepForField(currentErrors[0])); setFormNotice('Revisa los campos señalados para continuar.'); scrollRef.current?.scrollTo({y: 0, animated: true}); return; }
+    setSubmitAttempted(false);
+    navigateStep(formStep + 1);
+  };
 
   const removeTicketType = useCallback((id: string) => {
     setTicketTypes((prev) => prev.filter((ticket) => ticket.id !== id));
@@ -679,12 +517,15 @@ export default function CreateEventScreen() {
 
   const submit = useCallback(async () => {
     setSubmitAttempted(true);
-    if (newTicket.name.trim() || newTicket.price.trim() || newTicket.quantity.trim()) {
+    if (offerEditorOpen && hasPendingOffer(newTicket)) {
+      setFormStep(2);
+      setOfferAttempted(true);
       Alert.alert('Oferta pendiente', 'Añade o guarda la oferta que estás editando antes de publicar el evento.');
       return;
     }
     if (Object.keys(errors).length > 0) {
-      Alert.alert('Revisa el formulario', 'Hay campos pendientes o inválidos.');
+      setFormStep(eventStepForField(Object.keys(errors)[0]));
+      setFormNotice('Revisa los campos señalados antes de publicar.');
       return;
     }
     if (!user?.id) {
@@ -768,29 +609,36 @@ export default function CreateEventScreen() {
       setLoading(false);
       Alert.alert('Error', String(e?.message || 'No se pudo crear el evento.'));
     }
-  }, [addEvent, updateEvent, isEditing, eventId, draft, errors, metrics.capacity, metrics.minPrice, safeBack, ticketTypes, newTicket, user?.id]);
+  }, [addEvent, updateEvent, isEditing, eventId, draft, errors, metrics.capacity, metrics.minPrice, safeBack, ticketTypes, newTicket, offerEditorOpen, user?.id]);
 
   return (
     <View style={styles.container}>
-      <LinearGradient colors={[Colors.dark.background, '#1e1b4b']} style={StyleSheet.absoluteFill} />
+      <LinearGradient colors={Colors.dark.backgroundGradient} style={StyleSheet.absoluteFill} />
       <SafeAreaView style={styles.safeArea}>
         <View style={styles.header}>
           <TouchableOpacity onPress={safeBack} style={styles.backButton}>
-            <GlassView intensity={20} style={styles.backButtonContainer}>
+            <GlassView contentContainerStyle={{padding: 0}} intensity={20} style={styles.backButtonContainer}>
               <ArrowLeft size={24} color={Colors.dark.text} />
             </GlassView>
           </TouchableOpacity>
           <View style={{ flex: 1 }}>
             <Text style={styles.headerTitle}>{isEditing ? 'Editar evento' : 'Crear evento'}</Text>
-            <Text style={styles.headerSubtitle}>{isEditing ? 'Modifica los detalles y guarda los cambios.' : 'Completa todo y publícalo con imágenes, mapa y entradas personalizadas.'}</Text>
+            <Text style={styles.headerSubtitle}>{isEditing ? 'Revisa tus cambios antes de guardarlos.' : 'Prepara tu evento y revisa cómo se venderá.'}</Text>
           </View>
         </View>
 
-        <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-          <GlassView intensity={14} style={[styles.card, styles.cardBorder]}>
+        <KeyboardAvoidingView style={{flex: 1}} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        <ScrollView ref={scrollRef} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+          <View style={styles.stepsRow}>{EVENT_FORM_STEPS.map((label, index) => <Pressable key={label} accessibilityRole="button" accessibilityLabel={`Paso ${index + 1}: ${label}`} accessibilityState={{ selected: formStep === index, disabled: index > formStep }} disabled={index > formStep} onPress={() => navigateStep(index)} style={styles.stepItem}><View style={[styles.stepLine, index <= formStep && styles.stepLineActive]}/><Text style={[styles.stepText, index === formStep && styles.stepTextActive]}>{index + 1}. {label}</Text></Pressable>)}</View>
+          <Text style={styles.helperText}>Los campos con * son obligatorios. Tus cambios se publican al confirmar el último paso.</Text>
+          {!!formNotice && <Text accessibilityRole="alert" style={styles.formNotice}>{formNotice}</Text>}
+          {formStep === 0 && <>
+
+          <GlassView contentContainerStyle={{padding: 0}} intensity={14} style={[styles.card, styles.cardBorder]}>
             <Text style={styles.sectionTitle}>Información básica</Text>
             <ThemedInput
-              label="Nombre"
+              label="Nombre del evento *"
+              hint="Así aparecerá en la app y en las entradas."
               placeholder="Nombre del evento"
               value={draft.title}
               onChangeText={(value) => updateDraft('title', value)}
@@ -799,7 +647,8 @@ export default function CreateEventScreen() {
               maxLength={100}
             />
             <ThemedInput
-              label="Descripción"
+              label="Descripción *"
+              hint="Cuenta qué ocurrirá: ambiente, artistas y lo que incluye la experiencia."
               placeholder="Describe el evento"
               value={draft.description}
               onChangeText={(value) => updateDraft('description', value)}
@@ -807,14 +656,14 @@ export default function CreateEventScreen() {
               multiline
               numberOfLines={4}
               maxLength={2000}
-              containerStyle={{ minHeight: 120 }}
+              inputStyle={{ minHeight: 120, textAlignVertical: 'top' }}
             />
-            <Text style={styles.fieldLabel}>Tipo de evento</Text>
+            <Text style={styles.fieldLabel}>Tipo de evento *</Text>
             <View style={styles.chipsRow}>
               {eventTypeOptions.map(({ key, label, Icon }) => {
                 const selected = draft.eventType === key;
                 return (
-                  <Pressable key={key} onPress={() => updateDraft('eventType', key)} style={[styles.chip, selected ? styles.chipActive : null]}>
+                  <Pressable key={key} accessibilityRole="radio" accessibilityState={{checked:selected}} onPress={() => updateDraft('eventType', key)} style={[styles.chip, selected ? styles.chipActive : null]}>
                     <Icon size={16} color={selected ? '#fff' : Colors.dark.textSecondary} />
                     <Text style={[styles.chipText, selected ? styles.chipTextActive : null]}>{label}</Text>
                   </Pressable>
@@ -823,38 +672,92 @@ export default function CreateEventScreen() {
             </View>
           </GlassView>
 
-          <GlassView intensity={14} style={[styles.card, styles.cardBorder]}>
-            <Text style={styles.sectionTitle}>Fecha y hora</Text>
-            <TouchableOpacity onPress={openDateTimePicker} activeOpacity={0.85}>
-              <View pointerEvents="none">
-                <ThemedInput
-                  label="Inicio del evento *"
-                  value={uiDateTimeText}
-                  editable={false}
-                  error={getError('dateTime')}
-                  icon={<Calendar size={20} color={Colors.dark.textSecondary} />}
-                  rightIcon={<Clock size={18} color={Colors.dark.textSecondary} />}
-                />
+          <GlassView contentContainerStyle={{padding: 0}} intensity={14} style={[styles.card, styles.cardBorder]}>
+            <Text style={styles.sectionTitle}>Imágenes</Text>
+            <View style={styles.imageGrid}>
+              <View style={styles.imageCol}>
+                <Text style={styles.fieldLabel}>Cartel del evento *</Text>
+                <TouchableOpacity onPress={() => chooseImageSource('imageUri')} activeOpacity={0.85}>
+                  <GlassView contentContainerStyle={{padding: 0, flex: 1}} intensity={10} style={[styles.imageSelector, getError('imageUri') ? styles.imageSelectorError : null]}>
+                    {draft.imageUri ? (
+                      <Image source={{ uri: draft.imageUri }} style={styles.imagePreview} resizeMode="cover" />
+                    ) : (
+                      <View style={styles.imagePlaceholder}>
+                        <Camera size={26} color={Colors.dark.textSecondary} />
+                        <Text style={styles.imagePlaceholderText}>Añadir cartel</Text>
+                      </View>
+                    )}
+                  </GlassView>
+                </TouchableOpacity>
+                {getError('imageUri') ? <Text style={styles.errorText}>{getError('imageUri')}</Text> : null}
               </View>
-            </TouchableOpacity>
-            <TouchableOpacity onPress={openEndDateTimePicker} activeOpacity={0.85} style={{ marginTop: 12 }}>
-              <View pointerEvents="none">
-                <ThemedInput
-                  label="Fin del evento *"
-                  value={uiEndDateTimeText}
-                  editable={false}
-                  error={getError('endDateTime')}
-                  icon={<Calendar size={20} color={Colors.dark.textSecondary} />}
-                  rightIcon={<Clock size={18} color={Colors.dark.textSecondary} />}
-                />
+
+              <View style={styles.imageCol}>
+                <Text style={styles.fieldLabel}>Plano (opcional)</Text>
+                <TouchableOpacity onPress={() => chooseImageSource('venuePlanUri')} activeOpacity={0.85}>
+                  <GlassView contentContainerStyle={{padding: 0, flex: 1}} intensity={10} style={styles.imageSelector}>
+                    {draft.venuePlanUri ? (
+                      <Image source={{ uri: draft.venuePlanUri }} style={styles.imagePreview} resizeMode="cover" />
+                    ) : (
+                      <View style={styles.imagePlaceholder}>
+                        <ImageIcon size={26} color={Colors.dark.textSecondary} />
+                        <Text style={styles.imagePlaceholderText}>Opcional</Text>
+                      </View>
+                    )}
+                  </GlassView>
+                </TouchableOpacity>
               </View>
-            </TouchableOpacity>
-            <Text style={{ color: 'rgba(255,255,255,0.4)', fontSize: 12, marginTop: 8, lineHeight: 16 }}>
-              Al finalizar el evento se eliminarán automáticamente las entradas caducadas.
-            </Text>
+            </View>
           </GlassView>
 
-          <GlassView intensity={14} style={[styles.card, styles.cardBorder]}>
+          <GlassView contentContainerStyle={{padding: 0}} intensity={14} style={[styles.card, styles.cardBorder]}>
+            <Text style={styles.sectionTitle}>Detalles del evento</Text>
+            <ThemedInput
+              label="Música / temática (opcional)"
+              placeholder="Ej: Tech house"
+              value={draft.theme}
+              onChangeText={(value) => updateDraft('theme', value)}
+              icon={<Sparkles size={20} color={Colors.dark.textSecondary} />}
+            />
+            <ThemedInput
+              label="Código de vestimenta (opcional)"
+              hint="Si existe una norma de vestimenta, explícalo aquí."
+              placeholder="Ej: Total black"
+              value={draft.dressCode}
+              onChangeText={(value) => updateDraft('dressCode', value)}
+              icon={<Tag size={20} color={Colors.dark.textSecondary} />}
+            />
+            <ThemedInput
+              label="Edad mínima *"
+              hint="Edad exigida para acceder al evento."
+              placeholder="18"
+              value={draft.ageRestriction}
+              onChangeText={(value) => updateDraft('ageRestriction', value)}
+              error={getError('ageRestriction')}
+              keyboardType="numeric"
+              returnKeyType="done"
+              onSubmitEditing={() => Keyboard.dismiss()}
+              icon={<Lock size={20} color={Colors.dark.textSecondary} />}
+            />
+
+            {LAUNCH_FEATURES.resale && (<View style={styles.toggleRow}>
+              <Text style={styles.toggleLabel}>Permitir reventa</Text>
+              <Pressable onPress={() => updateDraft('allowResale', !draft.allowResale)} style={[styles.switchPill, draft.allowResale ? styles.switchPillOn : null]}>
+                <Text style={styles.switchPillText}>{draft.allowResale ? 'Sí' : 'No'}</Text>
+              </Pressable>
+            </View>)}
+          </GlassView>
+
+          </>}
+          {formStep === 1 && <>
+          <GlassView contentContainerStyle={{padding: 0}} intensity={14} style={[styles.card, styles.cardBorder]}>
+            <Text style={styles.sectionTitle}>Fecha y hora</Text>
+            <FormDateTimeField label="Inicio del evento *" value={draft.dateTime?.toISOString()} onChange={value => updateDraft('dateTime', value ? new Date(value) : null)} error={getError('dateTime')} minimumDate={isEditing ? undefined : minDateTime} hint="Fecha y hora de apertura general. Se usarán para calcular los accesos anticipados y los límites de llegada."/>
+            <FormDateTimeField label="Fin del evento *" value={draft.endDateTime?.toISOString()} onChange={value => updateDraft('endDateTime', value ? new Date(value) : null)} error={getError('endDateTime')} minimumDate={draft.dateTime || minDateTime} base={new Date((draft.dateTime || minDateTime).getTime() + 4 * 60 * 60 * 1000)} hint="Si la fiesta termina de madrugada, selecciona el día siguiente. Debe ser posterior al inicio."/>
+            <Text style={styles.helperText}>Los horarios se muestran en la hora local de tu dispositivo.</Text>
+          </GlassView>
+
+          <GlassView contentContainerStyle={{padding: 0}} intensity={14} style={[styles.card, styles.cardBorder]}>
             <View style={styles.sectionHeaderRow}>
               <Text style={styles.sectionTitle}>Ubicación</Text>
               <ThemedButton
@@ -868,7 +771,8 @@ export default function CreateEventScreen() {
             </View>
             <View>
               <ThemedInput
-                label="Lugar"
+                label="Dirección del evento *"
+                hint="Elige un resultado de búsqueda o marca el punto en el mapa. Escribir una dirección no fija su ubicación."
                 placeholder="Escribe la dirección o busca en el mapa"
                 value={locationQuery}
                 onChangeText={onLocationQueryChange}
@@ -908,170 +812,41 @@ export default function CreateEventScreen() {
             ) : null}
           </GlassView>
 
-          <GlassView intensity={14} style={[styles.card, styles.cardBorder]}>
-            <Text style={styles.sectionTitle}>Imágenes</Text>
-            <View style={styles.imageGrid}>
-              <View style={styles.imageCol}>
-                <Text style={styles.fieldLabel}>Cartel del evento</Text>
-                <TouchableOpacity onPress={() => chooseImageSource('imageUri')} activeOpacity={0.85}>
-                  <GlassView intensity={10} style={[styles.imageSelector, getError('imageUri') ? styles.imageSelectorError : null]}>
-                    {draft.imageUri ? (
-                      <Image source={{ uri: draft.imageUri }} style={styles.imagePreview} resizeMode="cover" />
-                    ) : (
-                      <View style={styles.imagePlaceholder}>
-                        <Camera size={26} color={Colors.dark.textSecondary} />
-                        <Text style={styles.imagePlaceholderText}>Camara o galería</Text>
-                      </View>
-                    )}
-                  </GlassView>
-                </TouchableOpacity>
-                {getError('imageUri') ? <Text style={styles.errorText}>{getError('imageUri')}</Text> : null}
-              </View>
 
-              <View style={styles.imageCol}>
-                <Text style={styles.fieldLabel}>Plano del recinto</Text>
-                <TouchableOpacity onPress={() => chooseImageSource('venuePlanUri')} activeOpacity={0.85}>
-                  <GlassView intensity={10} style={styles.imageSelector}>
-                    {draft.venuePlanUri ? (
-                      <Image source={{ uri: draft.venuePlanUri }} style={styles.imagePreview} resizeMode="cover" />
-                    ) : (
-                      <View style={styles.imagePlaceholder}>
-                        <ImageIcon size={26} color={Colors.dark.textSecondary} />
-                        <Text style={styles.imagePlaceholderText}>Opcional</Text>
-                      </View>
-                    )}
-                  </GlassView>
-                </TouchableOpacity>
-              </View>
-            </View>
-          </GlassView>
+          </>}
+          {formStep === 2 && <GlassView contentContainerStyle={{padding: 0}} intensity={14} style={[styles.card, styles.cardBorder]}>
+            <Text style={styles.sectionTitle}>Entradas y mesas</Text>
+            <Text style={styles.helperText}>Añade las opciones que podrá elegir tu cliente. Cada oferta tiene su precio, cupo y condiciones. VIP corresponde siempre a una mesa reservada.</Text>
+            {getError('ticketTypes') && <Text accessibilityRole="alert" style={styles.errorText}>{getError('ticketTypes')}</Text>}
+            <View style={styles.ticketList}>{ticketTypes.map(ticket => <View key={ticket.id} style={styles.ticketCard}>
+              <View style={{flex: 1, minWidth: 0}}><Text style={styles.ticketTitle}>{buildTicketName(ticket)}</Text><Text style={styles.ticketMeta}>{new Intl.NumberFormat('es-ES',{style:'currency',currency:'EUR'}).format(Number(ticket.price))} / {ticket.category === 'vip_table' ? 'mesa' : ticket.category === 'group' ? 'pack' : 'persona'}</Text><Text style={styles.ticketMeta}>{ticket.category === 'vip_table' ? ticket.quantity + ' mesas disponibles · hasta ' + ticket.vipGroupSize + ' personas por mesa' : ticket.category === 'group' ? ticket.quantity + ' packs en total · ' + ticket.admissionsPerUnit + ' personas por pack · sin mesa' : ticket.quantity + ' entradas en total'}</Text></View>
+              <View><TouchableOpacity accessibilityRole="button" accessibilityLabel={`Editar ${ticket.name}`} disabled={offerEditorOpen && hasPendingOffer(newTicket)} onPress={() => {setNewTicket({...ticket}); setOfferAttempted(false); setOfferEditorOpen(true); setFormNotice('');}} style={styles.deleteButton}><Text style={{color: Colors.dark.secondary}}>Editar</Text></TouchableOpacity><TouchableOpacity accessibilityRole="button" accessibilityLabel={`Quitar ${ticket.name} del catálogo`} disabled={offerEditorOpen && hasPendingOffer(newTicket)} onPress={() => removeTicketType(ticket.id)} style={styles.deleteButton}><Trash2 size={18} color={Colors.dark.error}/></TouchableOpacity></View>
+            </View>)}</View>
+            {offerEditorOpen ? <View style={styles.offerEditor}><SalesOfferForm value={newTicket} onChange={setNewTicket} errors={newTicketErrors} showErrors={offerAttempted} onAdd={addTicketType} onCancel={() => {setNewTicket(createEmptyTicketDraft()); setOfferAttempted(false); setOfferEditorOpen(false); setFormNotice('');}} eventDate={draft.dateTime}/></View> : <ThemedButton title="Añadir entrada o mesa" variant="outline" onPress={() => {setNewTicket(createEmptyTicketDraft()); setOfferAttempted(false); setOfferEditorOpen(true);}} style={{marginTop: 20}}/>}
+            <View style={styles.metricsCard}><Text style={styles.metricsTitle}>Disponibilidad del catálogo</Text><Text style={styles.metricsText}>{catalogSummary.tickets} entradas · {catalogSummary.packs} packs · {catalogSummary.tables} mesas</Text><Text style={styles.metricsText}>Hasta {catalogSummary.people} personas con las unidades disponibles.</Text></View>
+          </GlassView>}
+          {formStep === 3 && <>
+            <GlassView contentContainerStyle={{padding: 0}} intensity={14} style={[styles.card, styles.cardBorder]}>
+              <Text style={styles.sectionTitle}>Revisa tu evento</Text>
+              <Text style={styles.helperText}>{isEditing ? 'Estos cambios se guardarán en tu evento.' : 'Esto es lo que publicarás para tus clientes.'}</Text>
+              {!!draft.imageUri && <Image source={{uri:draft.imageUri}} style={styles.reviewPoster} resizeMode="cover"/>}
+              <Text style={styles.reviewTitle}>{draft.title}</Text><Text style={styles.reviewText}>{draft.description}</Text>
+              <Text style={styles.reviewLabel}>Fecha y lugar</Text><Text style={styles.reviewText}>{draft.dateTime?.toLocaleString('es-ES')} → {draft.endDateTime?.toLocaleString('es-ES')}</Text><Text style={styles.reviewText}>{draft.location}</Text>
+              <Text style={styles.reviewLabel}>Condiciones de acceso</Text><Text style={styles.reviewText}>Edad mínima: {draft.ageRestriction} años{draft.dressCode ? ' · Vestimenta: ' + draft.dressCode : ''}{draft.theme ? '\nMúsica / temática: ' + draft.theme : ''}</Text>
+              <ThemedButton title="Editar información" variant="outline" onPress={() => navigateStep(0)} style={{marginTop:16}}/>
+            </GlassView>
+            <GlassView contentContainerStyle={{padding: 0}} intensity={14} style={[styles.card, styles.cardBorder]}>
+              <Text style={styles.sectionTitle}>Lo que podrá comprar el cliente</Text>
+              {ticketTypes.map(ticket => <View key={ticket.id} style={styles.reviewOffer}><Text style={styles.ticketTitle}>{ticket.name}</Text><Text style={styles.reviewText}>{new Intl.NumberFormat('es-ES',{style:'currency',currency:'EUR'}).format(Number(ticket.price))} / {ticket.category === 'vip_table' ? 'mesa completa' : ticket.category === 'group' ? 'pack de ' + ticket.admissionsPerUnit + ' personas' : 'persona'}</Text><Text style={styles.ticketMeta}>{ticket.category === 'vip_table' ? 'Mesa reservada para hasta ' + ticket.vipGroupSize + ' personas' : ticket.category === 'group' ? 'Acceso conjunto · Sin mesa reservada' : OFFER_CATEGORIES.find(c => c.key === ticket.category)?.label}</Text>{!!ticket.benefits && <Text style={styles.ticketMeta}>{ticket.benefits}</Text>}{!!ticket.salesStartAt && <Text style={styles.ticketMeta}>Venta desde {new Date(ticket.salesStartAt).toLocaleString('es-ES')}</Text>}{!!ticket.salesEndAt && <Text style={styles.ticketMeta}>Venta hasta {new Date(ticket.salesEndAt).toLocaleString('es-ES')}</Text>}</View>)}
+              <Text style={styles.helperText}>Precios base. Los gastos de gestión se desglosan durante la compra.</Text>
+              <ThemedButton title="Editar entradas y mesas" variant="outline" onPress={() => navigateStep(2)}/>
+            </GlassView>
+          </>}
 
-          <GlassView intensity={14} style={[styles.card, styles.cardBorder]}>
-            <SalesOfferForm value={newTicket} onChange={setNewTicket} errors={newTicketErrors} showErrors={submitAttempted} onAdd={addTicketType} onCancel={()=>setNewTicket(createEmptyTicketDraft())} eventDate={draft.dateTime}/>
-            {getError('ticketTypes') ? <Text style={styles.errorText}>{getError('ticketTypes')}</Text> : null}
-
-            {ticketTypes.length ? (
-              <View style={styles.ticketList}>
-                {ticketTypes.map((ticket) => (
-                  <View key={ticket.id} style={styles.ticketCard}>
-                    <View style={{ flex: 1 }}>
-                      <Text style={styles.ticketTitle}>{buildTicketName(ticket)}</Text>
-                      <Text style={styles.ticketMeta}>
-                        {Number(ticket.price).toFixed(2)}€ • {ticket.quantity} uds
-                      </Text>
-                      <Text style={styles.ticketMeta}>
-                        {ticket.category==='vip_table' ? 'Mesa VIP · '+ticket.vipGroupSize+' personas' : OFFER_CATEGORIES.find(c=>c.key===ticket.category)?.label}
-                      </Text>
-                    </View>
-                    <TouchableOpacity accessibilityLabel="Editar oferta" onPress={() => setNewTicket({...ticket})} style={styles.deleteButton}>
-                      <Text style={{color:Colors.dark.secondary}}>Editar</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity onPress={() => removeTicketType(ticket.id)} style={styles.deleteButton}>
-                      <Trash2 size={18} color={Colors.dark.error} />
-                    </TouchableOpacity>
-                  </View>
-                ))}
-              </View>
-            ) : null}
-
-            <View style={styles.metricsCard}>
-              <Text style={styles.metricsTitle}>Resumen automático</Text>
-              <Text style={styles.metricsText}>Precio base desde: {metrics.minPrice !== null ? `${metrics.minPrice.toFixed(2)}€` : '--'}</Text>
-              <Text style={styles.metricsText}>Unidades configuradas: {metrics.capacity}</Text>
-            </View>
-          </GlassView>
-
-          <GlassView intensity={14} style={[styles.card, styles.cardBorder]}>
-            <Text style={styles.sectionTitle}>Detalles del evento</Text>
-            <ThemedInput
-              label="Música / temática"
-              placeholder="Ej: Tech house"
-              value={draft.theme}
-              onChangeText={(value) => updateDraft('theme', value)}
-              icon={<Sparkles size={20} color={Colors.dark.textSecondary} />}
-            />
-            <ThemedInput
-              label="Dress code"
-              placeholder="Ej: Total black"
-              value={draft.dressCode}
-              onChangeText={(value) => updateDraft('dressCode', value)}
-              icon={<Tag size={20} color={Colors.dark.textSecondary} />}
-            />
-            <ThemedInput
-              label="Edad mínima"
-              placeholder="18"
-              value={draft.ageRestriction}
-              onChangeText={(value) => updateDraft('ageRestriction', value)}
-              error={getError('ageRestriction')}
-              keyboardType="numeric"
-              returnKeyType="done"
-              onSubmitEditing={() => Keyboard.dismiss()}
-              icon={<Lock size={20} color={Colors.dark.textSecondary} />}
-            />
-
-            {LAUNCH_FEATURES.resale && (<View style={styles.toggleRow}>
-              <Text style={styles.toggleLabel}>Permitir reventa</Text>
-              <Pressable onPress={() => updateDraft('allowResale', !draft.allowResale)} style={[styles.switchPill, draft.allowResale ? styles.switchPillOn : null]}>
-                <Text style={styles.switchPillText}>{draft.allowResale ? 'Sí' : 'No'}</Text>
-              </Pressable>
-            </View>)}
-          </GlassView>
-
-          <ThemedButton title={isEditing ? "Guardar evento y catálogo" : "Publicar evento"} onPress={submit} loading={loading} icon={<Check size={18} color="white" />} />
+          <View style={styles.formActions}>{formStep > 0 && <ThemedButton title="Anterior" variant="outline" disabled={loading} onPress={() => navigateStep(formStep - 1)} style={{flex:1}}/>}{formStep < 3 ? <ThemedButton title="Continuar" onPress={continueForm} style={{flex:2}}/> : <ThemedButton title={isEditing ? 'Guardar cambios' : 'Publicar evento'} onPress={submit} loading={loading} icon={<Check size={18} color="white"/>} style={{flex:2}}/>}</View>
           <View style={{ height: 28 }} />
         </ScrollView>
-
-        {Platform.OS === 'ios' ? (
-          <Modal visible={showIosDateTime} transparent animationType="slide" onRequestClose={() => setShowIosDateTime(false)}>
-            <View style={styles.modalOverlay}>
-              <View style={styles.modalCard}>
-                <View style={styles.modalHeaderRow}>
-                  <TouchableOpacity onPress={() => setShowIosDateTime(false)}>
-                    <Text style={styles.modalActionText}>Cancelar</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity onPress={confirmIosDateTime}>
-                    <Text style={styles.modalActionText}>Confirmar</Text>
-                  </TouchableOpacity>
-                </View>
-                <DateTimePicker
-                  value={iosDateTimeDraft}
-                  mode="datetime"
-                  display="spinner"
-                  onChange={onIosDateTimeChange}
-                  minimumDate={minDateTime}
-                  themeVariant="dark"
-                  textColor={Colors.dark.text as any}
-                />
-              </View>
-            </View>
-          </Modal>
-        ) : null}
-
-        {Platform.OS === 'ios' ? (
-          <Modal visible={showIosEndDateTime} transparent animationType="slide" onRequestClose={() => setShowIosEndDateTime(false)}>
-            <View style={styles.modalOverlay}>
-              <View style={styles.modalCard}>
-                <View style={styles.modalHeaderRow}>
-                  <TouchableOpacity onPress={() => setShowIosEndDateTime(false)}>
-                    <Text style={styles.modalActionText}>Cancelar</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity onPress={confirmIosEndDateTime}>
-                    <Text style={styles.modalActionText}>Confirmar</Text>
-                  </TouchableOpacity>
-                </View>
-                <DateTimePicker
-                  value={iosEndDateTimeDraft}
-                  mode="datetime"
-                  display="spinner"
-                  onChange={onIosEndDateTimeChange}
-                  minimumDate={draft.dateTime ?? minDateTime}
-                  themeVariant="dark"
-                  textColor={Colors.dark.text as any}
-                />
-              </View>
-            </View>
-          </Modal>
-        ) : null}
+        </KeyboardAvoidingView>
 
         <Modal visible={showMapModal} animationType="slide" onRequestClose={() => setShowMapModal(false)}>
           <View style={[styles.mapModalScreen, { paddingTop: insets.top }]}>
@@ -1163,8 +938,8 @@ const styles = StyleSheet.create({
   backButtonContainer: { padding: 8, borderRadius: 12, backgroundColor: 'rgba(255,255,255,0.10)' },
   headerTitle: { color: Colors.dark.text, fontSize: 24, fontWeight: '900' },
   headerSubtitle: { color: Colors.dark.textSecondary, marginTop: 4, lineHeight: 18 },
-  content: { paddingHorizontal: 24, paddingBottom: 40 },
-  card: { padding: 18, borderRadius: 20, marginBottom: 16 },
+  content: { paddingHorizontal: 16, paddingBottom: 40, width: '100%', maxWidth: 680, alignSelf: 'center' },
+  card: { padding: 20, borderRadius: theme.radius.lg, marginBottom: 16 },
   cardBorder: {
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.10)',
@@ -1172,7 +947,14 @@ const styles = StyleSheet.create({
   },
   sectionTitle: { color: Colors.dark.text, fontSize: 18, fontWeight: '900', marginBottom: 12 },
   sectionHeaderRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 8 },
-  fieldLabel: { color: Colors.dark.textSecondary, fontSize: 13, marginBottom: 10, marginTop: 4 },
+  fieldLabel: { color: Colors.dark.text, fontSize: 16, fontWeight: '600', marginBottom: 10, marginTop: 4 },
+  stepsRow: {flexDirection: 'row', gap: 8, marginBottom: 20},
+  stepItem: {flex:1}, stepLine: {height:3, borderRadius:3, backgroundColor:Colors.dark.border, marginBottom:8}, stepLineActive: {backgroundColor:Colors.dark.primary},
+  stepText: {color:Colors.dark.textSecondary,fontSize:12,lineHeight:18}, stepTextActive:{color:Colors.dark.text,fontWeight:'700'},
+  formNotice: {color:Colors.dark.secondary, backgroundColor:Colors.dark.primarySoft, borderRadius:14, padding:14, marginBottom:16, fontSize:14, lineHeight:21},
+  formActions: {flexDirection:'row',gap:12}, offerEditor:{marginTop:24,paddingTop:24,borderTopWidth:1,borderTopColor:Colors.dark.border},
+  reviewPoster:{width:'100%',height:180,borderRadius:14,marginBottom:20}, reviewTitle:{fontSize:24,fontWeight:'900',color:Colors.dark.text,marginBottom:8},
+  reviewLabel:{fontSize:14,fontWeight:'700',color:Colors.dark.text,marginTop:20,marginBottom:8}, reviewText:{fontSize:14,lineHeight:21,color:Colors.dark.textSecondary}, reviewOffer:{paddingVertical:16,borderTopWidth:1,borderTopColor:Colors.dark.border,gap:4},
   helperText: { color: Colors.dark.textSecondary, fontSize: 12, lineHeight: 17, marginBottom: 12 },
   chipsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 12 },
   chip: {
@@ -1248,7 +1030,7 @@ const styles = StyleSheet.create({
   },
   ticketTitle: { color: Colors.dark.text, fontWeight: '900', fontSize: 14, marginBottom: 4 },
   ticketMeta: { color: Colors.dark.textSecondary, fontSize: 13 },
-  deleteButton: { padding: 8 },
+  deleteButton: { padding: 10, minHeight: 44, justifyContent: 'center' },
   metricsCard: {
     marginTop: 14,
     borderRadius: 14,
@@ -1355,4 +1137,3 @@ const styles = StyleSheet.create({
     zIndex: 10,
   },
 });
-

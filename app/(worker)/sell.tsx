@@ -1,3 +1,5 @@
+import { useResponsive } from '@/lib/responsive';
+import { profileAppearance } from '@/theme/profileAppearance';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert } from 'react-native';
 import { useMemo, useState, useEffect, useCallback, useRef } from 'react';
@@ -22,6 +24,7 @@ export default function WorkerSell() {
   const { workerProfile } = useAuth();
   const boxOffice = useBoxOfficeAccess(workerProfile?.organizer_id);
   const router = useRouter();
+  const { width } = useResponsive();
   const [events, setEvents] = useState<any[]>([]);
   const [selectedEvent, setSelectedEvent] = useState<any>(null);
   const [ticketTypes, setTicketTypes] = useState<any[]>([]);
@@ -407,20 +410,24 @@ export default function WorkerSell() {
           <View style={{ width: 24 }} />
         </View>
 
-        <ScrollView contentContainerStyle={styles.content}>
+        <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={[styles.content, profileAppearance.content]}>
           {/* Event Selector */}
           <Text style={styles.sectionTitle}>Evento</Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.eventScroll}>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.eventScroll} contentContainerStyle={{ alignItems: 'stretch', paddingVertical: 2, gap: 12 }}>
             {events.map(event => (
               <TouchableOpacity 
-                key={event.id} 
+                key={event.id}
+                accessibilityRole="button"
+                accessibilityState={{ selected: selectedEvent?.id === event.id }}
                 onPress={() => selectEvent(event)}
                 activeOpacity={0.8}
               >
                 <GlassView 
+                  contentContainerStyle={{ padding: 16 }}
                   intensity={selectedEvent?.id === event.id ? 40 : 10} 
                   style={[
                     styles.eventCard,
+                    { width: Math.min(260, Math.max(160, width - 64)) },
                     selectedEvent?.id === event.id && styles.selectedEvent
                   ]}
                 >
@@ -445,8 +452,8 @@ export default function WorkerSell() {
                   <Text style={styles.emptyText}>No hay entradas disponibles para este evento.</Text>
                 </GlassView>
               ) : ticketTypes.map(type => (
-                <GlassView key={type.id} intensity={15} style={styles.ticketRow}>
-                  <View>
+                <GlassView key={type.id} intensity={15} style={styles.ticketRow} contentContainerStyle={{ padding: 0, flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 16 }}>
+                  <View style={{ flex: 1, minWidth: 120 }}>
                     <Text style={styles.ticketName}>{type.name}</Text>
                     <Text style={styles.ticketPrice}>{type.price}€</Text>
                   </View>
@@ -638,6 +645,8 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.1)',
   },
   title: {
+    flex: 1,
+    textAlign: 'center',
     fontSize: 20,
     fontWeight: 'bold',
     color: 'white',
@@ -653,19 +662,18 @@ const styles = StyleSheet.create({
   },
   eventScroll: {
     marginBottom: 30,
-    maxHeight: 100,
+    flexGrow: 0,
+    flexShrink: 0,
   },
   eventCard: {
-    padding: 15,
-    borderRadius: 16,
-    marginRight: 15,
-    width: 160,
+    padding: 0,
+    borderRadius: 20,
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.1)',
   },
   selectedEvent: {
     borderColor: Colors.dark.primary,
-    backgroundColor: 'rgba(59, 130, 246, 0.2)',
+    backgroundColor: Colors.dark.primarySoft,
   },
   eventName: {
     color: 'white',
@@ -677,9 +685,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
   },
   ticketRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
     padding: 15,
     borderRadius: 16,
     marginBottom: 15,

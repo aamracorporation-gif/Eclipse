@@ -1,3 +1,4 @@
+import { profileAppearance } from '@/theme/profileAppearance';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, Alert, RefreshControl } from 'react-native';
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'expo-router';
@@ -145,13 +146,13 @@ export default function ManageWorkers() {
     };
 
     return (
-      <GlassView intensity={15} style={styles.workerCard}>
+      <GlassView intensity={15} style={[styles.workerCard, profileAppearance.card]} contentContainerStyle={{ padding: 0 }}>
         {/* Top row: name + delete */}
         <View style={styles.cardHeader}>
           <View style={styles.avatar}>
             <Text style={styles.avatarText}>{(item.name || '?')[0].toUpperCase()}</Text>
           </View>
-          <View style={{ flex: 1, marginLeft: 12 }}>
+          <View style={{ flex: 1, minWidth: 0, marginLeft: 12 }}>
             <Text style={styles.workerName}>{item.name}</Text>
             <Text style={styles.workerEmail}>{item.email}</Text>
           </View>
@@ -195,7 +196,7 @@ export default function ManageWorkers() {
         </View>
 
         {/* Footer: date + stats button */}
-        {boxOffice.enabled && <TouchableOpacity accessibilityRole="button" disabled={!!permissionBusy} onPress={()=>void toggleSales()} style={{paddingVertical:12}}><Text style={{color: salePermission ? '#C7B8DC' : '#E0C28C',fontSize:12,fontWeight:'700'}}>{permissionBusy===item.id ? 'Guardando…' : salePermission ? 'Retirar permiso de venta en taquilla' : 'Autorizar venta en taquilla'}</Text></TouchableOpacity>}
+        {boxOffice.enabled && <TouchableOpacity accessibilityRole="button" disabled={!!permissionBusy} onPress={()=>void toggleSales()} style={{paddingVertical:12}}><Text style={{color: salePermission ? Colors.dark.textSecondary : Colors.dark.secondary,fontSize:12,fontWeight:'700'}}>{permissionBusy===item.id ? 'Guardando…' : salePermission ? 'Retirar permiso de venta en taquilla' : 'Autorizar venta en taquilla'}</Text></TouchableOpacity>}
         <View style={styles.cardFooter}>
           <Text style={styles.dateText}>
             Añadido: {new Date(item.created_at).toLocaleDateString('es-ES')}
@@ -216,7 +217,7 @@ export default function ManageWorkers() {
   return (
     <View style={styles.container}>
       <LinearGradient colors={[Colors.dark.background, '#1e1b4b']} style={StyleSheet.absoluteFill} />
-      <SafeAreaView style={styles.safeArea}>
+      <SafeAreaView edges={['top', 'left', 'right']} style={styles.safeArea}>
         <View style={styles.header}>
           <TouchableOpacity onPress={safeBack} style={styles.backButton}>
             <ChevronLeft size={24} color="white" />
@@ -234,8 +235,8 @@ export default function ManageWorkers() {
             data={workers}
             renderItem={renderWorker}
             keyExtractor={item => item.id}
-            contentContainerStyle={styles.listContent}
-            ListHeaderComponent={<TouchableOpacity accessibilityRole="button" onPress={()=>router.push('/(creator)/box-office')} style={{padding:20,borderRadius:18,backgroundColor:'#261B35',borderWidth:1,borderColor:'#564065',gap:7,marginBottom:12}}><Text style={{color:'#E0C28C',fontSize:10,fontWeight:'800',letterSpacing:1.5}}>TAQUILLA PREMIUM · {boxOffice.enabled ? 'ACTIVA' : '50 €/MES'}</Text><Text style={{color:'white',fontSize:17,fontWeight:'700'}}>{boxOffice.enabled ? 'Gestionar suscripción' : 'Desbloquea la venta para tu equipo'}</Text><Text style={{color:'#BCACCE',fontSize:12,lineHeight:18}}>El escáner está incluido. La suscripción permite vender entradas y mesas desde la app.</Text></TouchableOpacity>}
+            contentContainerStyle={[styles.listContent, profileAppearance.content]}
+            ListHeaderComponent={<TouchableOpacity accessibilityRole="button" onPress={()=>router.push('/(creator)/box-office')} style={{padding:20,borderRadius:18,backgroundColor:Colors.dark.surface,borderWidth:1,borderColor:Colors.dark.border,gap:7,marginBottom:12}}><Text style={{color:Colors.dark.secondary,fontSize:10,fontWeight:'800',letterSpacing:1.5}}>TAQUILLA PREMIUM · {boxOffice.enabled ? 'ACTIVA' : '50 €/MES'}</Text><Text style={{color:'white',fontSize:17,fontWeight:'700'}}>{boxOffice.enabled ? 'Gestionar suscripción' : 'Desbloquea la venta para tu equipo'}</Text><Text style={{color:Colors.dark.textSecondary,fontSize:12,lineHeight:18}}>El escáner está incluido. La suscripción permite vender entradas y mesas desde la app.</Text></TouchableOpacity>}
             refreshControl={
               <RefreshControl
                 refreshing={refreshing}
@@ -254,7 +255,7 @@ export default function ManageWorkers() {
           />
         )}
 
-        <View style={styles.footer}>
+        <View style={[styles.footer, profileAppearance.content]}>
           <ThemedButton
             title={t('creator.workers.add_button')}
             onPress={() => router.push('/(creator)/workers/add')}
@@ -284,7 +285,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  title: { fontSize: 20, fontWeight: 'bold', color: 'white' },
+  title: { ...profileAppearance.title, flex: 1, textAlign: 'center', marginHorizontal: 8 },
   listContent: { padding: 20, gap: 12 },
 
   workerCard: { borderRadius: 18, padding: 16 },
@@ -346,6 +347,8 @@ const styles = StyleSheet.create({
 
   cardFooter: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
     alignItems: 'center',
     justifyContent: 'space-between',
     borderTopWidth: 1,

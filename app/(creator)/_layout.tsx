@@ -126,13 +126,12 @@ export default function CreatorLayout() {
         initialRouteName="index"
         screenOptions={{
           headerShown: false,
+          sceneStyle: { backgroundColor: Colors.dark.background },
           tabBarActiveTintColor: Colors.dark.primary,
           tabBarInactiveTintColor: Colors.dark.textSecondary,
           tabBarStyle: {
-            position: 'absolute',
-            left: 16,
-            right: 16,
-            bottom: 0,
+            // Normal-flow tabs reserve space for every screen, including nested staff routes.
+            marginHorizontal: 16,
             height: 56 + insets.bottom,
             paddingTop: 6,
             paddingBottom: insets.bottom + 6,
