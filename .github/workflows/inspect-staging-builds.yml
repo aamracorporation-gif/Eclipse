@@ -1,0 +1,81 @@
+name: Inspect Eclipse staging builds
+on:
+  push:
+    branches: [codex/build-staging-candidate-55487308]
+    paths: [.github/workflows/inspect-staging-builds.yml]
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 100
+    environment: staging
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: android
+            build_id: 83e1bc6b-b294-4a39-a287-b511f148e699
+          - platform: ios
+            build_id: 9b2dc61b-d8f2-4cce-b01e-a7b107c1806d
+    env:
+      BUILD_ID: ${{ matrix.build_id }}
+      PLATFORM: ${{ matrix.platform }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: 55487308c9327eace83c7c5fc7b1afdf66ec566d
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: expo/expo-github-action@v8
+        with:
+          eas-version: 18.0.1
+          token: ${{ secrets.EXPO_TOKEN }}
+      - name: Inspect existing build without creating or submitting builds
+        run: |
+          for attempt in $(seq 1 90); do
+            eas build:view "$BUILD_ID" --json > "$RUNNER_TEMP/status.raw"
+            python3 - <<'PY'
+          import json, os, pathlib
+          root = pathlib.Path(os.environ['RUNNER_TEMP'])
+          raw = (root / 'status.raw').read_text()
+          decoder = json.JSONDecoder()
+          result = None
+          for pos, char in enumerate(raw):
+              if char != '{':
+                  continue
+              try:
+                  obj, end = decoder.raw_decode(raw[pos:])
+              except json.JSONDecodeError:
+                  continue
+              if isinstance(obj, dict) and obj.get('id') == os.environ['BUILD_ID']:
+                  result = obj
+                  break
+          if result is None:
+              raise RuntimeError('No matching build JSON found in EAS output')
+          assert result['gitCommitHash'] == '55487308c9327eace83c7c5fc7b1afdf66ec566d'
+          expected = 'preview' if os.environ['PLATFORM'] == 'android' else 'testflight'
+          assert result['buildProfile'] == expected
+          fields = ['id','status','platform','buildProfile','gitCommitHash','appVersion','appBuildVersion','createdAt','completedAt','error','artifacts']
+          safe = {key: result.get(key) for key in fields}
+          (root / 'status.json').write_text(json.dumps(safe))
+          print(json.dumps(safe))
+          PY
+            status="$(jq -er '.status' "$RUNNER_TEMP/status.json")"
+            case "$status" in
+              FINISHED)
+                cat "$RUNNER_TEMP/status.json" >> "$GITHUB_STEP_SUMMARY"
+                if [ "$PLATFORM" = ios ]; then
+                  printf '%s\n' "" "Prepared, not executed:" "eas submit --platform ios --profile testflight --id $BUILD_ID --non-interactive" "Target App Store Connect app: 6773071994. No submission or Apple acceptance is implied." >> "$GITHUB_STEP_SUMMARY"
+                fi
+                exit 0 ;;
+              ERRORED|CANCELED)
+                cat "$RUNNER_TEMP/status.json" >> "$GITHUB_STEP_SUMMARY"
+                exit 1 ;;
+            esac
+            sleep 60
+          done
+          cat "$RUNNER_TEMP/status.json" >> "$GITHUB_STEP_SUMMARY"
+          exit 1
