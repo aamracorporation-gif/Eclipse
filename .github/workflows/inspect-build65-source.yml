@@ -39,8 +39,9 @@ jobs:
               paths=[n for n in archive.namelist() if n.endswith('main.jsbundle')]
               if len(paths)!=1: raise RuntimeError('Expected one application bundle')
               bundle=archive.read(paths[0])
-          labels=['Diseña el acceso.','ECLIPSE / VENTAS','Tipos de entrada','Nombre de la entrada','Configuración VIP','Catálogo de venta','Reservados de mesa','MESA COMPLETA','Añadir tipo de entrada','Añadir oferta','VIP / Reservado','Precio del reservado completo','Grupo VIP','Información básica']
-          print('UI_LABEL_MATCHES='+json.dumps({label:(label.encode() in bundle or label.encode('utf-16le') in bundle) for label in labels},ensure_ascii=False))
+          labels=['Crear evento','Información básica','Nombre del evento','Nombre de la oferta','Qué vendes','Precio y disponibilidad','Anticipada','Configuración general','General','VIP','early','ticketTypeCardSelected','ticketCategories','SalesOfferForm','Diseña el acceso.','ECLIPSE / VENTAS','Tipos de entrada','Nombre de la entrada','Configuración VIP','Catálogo de venta','Reservados de mesa','MESA COMPLETA','Añadir tipo de entrada','Añadir oferta','VIP / Reservado','Precio del reservado completo','Grupo VIP','Información básica']
+          print('BUNDLE_FORMAT='+json.dumps({'bytes':len(bundle),'hermes':bundle[:8].hex()=='c61fbc03c103191f','source_map_in_ipa':any(n.endswith('.map') for n in archive.namelist())}))
+          print('UI_LABEL_MATCHES='+json.dumps({label:any(encoded in bundle for encoded in [label.encode(), label.encode('utf-16le'), label.encode('latin1',errors='ignore'), json.dumps(label,ensure_ascii=True)[1:-1].encode()]) for label in labels},ensure_ascii=False))
           PY
       - name: Remove temporary IPA
         if: always()
