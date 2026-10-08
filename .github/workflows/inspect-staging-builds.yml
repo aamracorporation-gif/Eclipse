@@ -25,7 +25,7 @@ jobs:
               builds {
                 android: byId(buildId: $android) {
                   id status platform buildProfile gitCommitHash appVersion appBuildVersion createdAt completedAt
-                  initialQueuePosition queuePosition estimatedWaitTimeLeftSeconds priority
+                  initialQueuePosition queuePosition estimatedWaitTimeLeftSeconds priority logFiles
                   metrics { buildWaitTime buildQueueTime buildDuration }
                   artifacts { applicationArchiveUrl buildUrl }
                   error { errorCode message }
@@ -52,6 +52,25 @@ jobs:
               if (build.gitCommitHash !== '55487308c9327eace83c7c5fc7b1afdf66ec566d') throw new Error('Unexpected source commit');
               if (build.buildProfile !== (platform === 'ios' ? 'testflight' : 'preview')) throw new Error('Unexpected build profile');
             }
+            const progress = [];
+            for (const url of (states.android.logFiles || []).slice(-3)) {
+              try {
+                const response = await fetch(url);
+                if (!response.ok) continue;
+                const rows = (await response.text()).split('\n');
+                for (const row of rows) {
+                  let entry;
+                  try { entry = JSON.parse(row); } catch { continue; }
+                  const msg = String(entry.msg || entry.message || '');
+                  if (/secret|token|password|api.key|EXPO_PUBLIC|authorization/i.test(msg)) continue;
+                  if (/^> Task :|BUILD SUCCESSFUL|FAILURE: Build failed|^Execution failed for task|Starting.*Gradle/.test(msg)) {
+                    progress.push(msg.slice(0, 240));
+                  }
+                }
+              } catch {}
+            }
+            delete states.android.logFiles;
+            states.android.recentBuildProgress = progress.slice(-12);
             console.log(JSON.stringify(states));
             fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, JSON.stringify(states, null, 2) + '\n');
           })().catch(error => { console.error(error.message); process.exitCode = 1; });
