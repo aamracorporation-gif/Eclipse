@@ -1,0 +1,106 @@
+name: Eclipse build 68 and TestFlight
+on:
+  push:
+    branches: [codex/restore-build65-forms-push]
+    paths: [.github/workflows/eclipse-build68.yml]
+permissions:
+  contents: read
+concurrency:
+  group: eclipse-staging-release
+  cancel-in-progress: false
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    environment: staging
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: 96a80a86f7a16bb2d1cdf7af45748530e73fea0c
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - uses: expo/expo-github-action@v8
+        with:
+          eas-version: 18.0.1
+          token: ${{ secrets.EXPO_TOKEN }}
+      - name: Queue Android APK 5 and iOS 68 with automatic TestFlight submission
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        run: |
+          node - <<'NODE'
+          const {spawnSync}=require('node:child_process');
+          const fs=require('node:fs');
+          const sha='96a80a86f7a16bb2d1cdf7af45748530e73fea0c';
+          const project='42ebb6eb-62b1-4784-a483-831ae3c804f2';
+          function eas(args) {
+            const r=spawnSync('eas',args,{encoding:'utf8',maxBuffer:24*1024*1024});
+            if(r.status!==0) {
+              let diagnostic=(r.stderr||'').replace(/\u001b\[[0-9;]*m/g,'');
+              for(const value of Object.values(process.env))if(value&&value.length>8)diagnostic=diagnostic.split(value).join('[masked]');
+              diagnostic=diagnostic.replace(/eyJ[A-Za-z0-9_.-]+|(?:sk|sb_secret|ExpoToken)_[A-Za-z0-9_-]+/g,'[masked]');
+              console.log('EAS_DIAGNOSTIC='+JSON.stringify(diagnostic.split('\n').slice(-16).join('\n')));
+              throw Error('EAS command failed: '+args[0]+'. Inspect existing builds before retrying.');
+            }
+            return r.stdout;
+          }
+          async function query(query,variables={}) {
+            const r=await fetch('https://api.expo.dev/graphql',{method:'POST',headers:{'Content-Type':'application/json',authorization:'Bearer '+process.env.EXPO_TOKEN},body:JSON.stringify({query,variables})});
+            const v=await r.json();if(!r.ok||v.errors?.length)throw Error('EAS metadata request failed');return v.data;
+          }
+          const safe=b=>({id:b.id,status:b.status,platform:b.platform,buildProfile:b.buildProfile,appVersion:b.appVersion,appBuildVersion:b.appBuildVersion,gitCommitHash:b.gitCommitHash,submissions:b.submissions?.map(s=>({id:s.id,status:s.status,ascAppIdentifier:s.iosConfig?.ascAppIdentifier}))});
+          async function snapshot(){
+            const d=await query(`query($id:String!){app{byId(appId:$id){id
+              ios:latestAppVersionByPlatformAndApplicationIdentifier(platform:IOS,applicationIdentifier:"com.achraf.eclipse"){storeVersion buildVersion}
+              android:latestAppVersionByPlatformAndApplicationIdentifier(platform:ANDROID,applicationIdentifier:"com.achraf.eclipse"){storeVersion buildVersion}
+              builds(offset:0,limit:50){id status platform buildProfile appVersion appBuildVersion gitCommitHash submissions{id status iosConfig{ascAppIdentifier}}}
+            }}}`,{id:project});
+            if(d.app.byId.id!==project)throw Error('Unexpected Expo project');return d.app.byId;
+          }
+          function candidate(app,platform,profile,version){
+            const found=app.builds.filter(b=>b.gitCommitHash===sha&&b.platform===platform&&b.buildProfile===profile);
+            if(found.length>1)throw Error('Multiple existing builds; inspect before continuing');
+            const b=found[0];
+            if(b&&(String(b.appBuildVersion)!==version||['ERRORED','CANCELED'].includes(b.status)))throw Error('Existing build needs inspection');
+            return b;
+          }
+          (async()=>{
+            if(spawnSync('git',['rev-parse','HEAD'],{encoding:'utf8'}).stdout.trim()!==sha)throw Error('Wrong source commit');
+            eas(['env:pull','--environment','preview','--path','.env.local','--non-interactive']);
+            const vars=require('dotenv').parse(fs.readFileSync('.env.local'));
+            for(const [name,value] of Object.entries(vars))if(name.startsWith('EXPO_PUBLIC_'))process.env[name]=value;
+            process.env.ECLIPSE_BUILD_ENV='staging';
+            require('./scripts/buildEnvironment.cjs').validateBuildEnvironment();
+            const config=require('./eas.json');
+            if(config.build.preview.android.buildType!=='apk'||config.build.preview.environment!=='preview'||config.build.testflight.extends!=='preview'||config.submit.testflight.ios.ascAppId!=='6773071994')throw Error('Unexpected release profile');
+            let app=await snapshot();
+            let android=candidate(app,'ANDROID','preview','5');
+            if(!android){
+              if(!['4','5'].includes(String(app.android?.buildVersion)))throw Error('Unexpected Android remote version');
+              if(String(app.android.buildVersion)==='4')await query('mutation($input:AppVersionInput!){appVersion{createAppVersion(appVersionInput:$input){id}}}',{input:{appId:project,platform:'ANDROID',applicationIdentifier:'com.achraf.eclipse',storeVersion:'1.0.0',buildVersion:'5'}});
+              const raw=JSON.parse(eas(['build','--platform','android','--profile','preview','--message','Eclipse staging 68: corrected layouts and notifications','--non-interactive','--no-wait','--json']));
+              const id=(Array.isArray(raw)?raw[0]:raw)?.id;
+              app=await snapshot();android=candidate(app,'ANDROID','preview','5');
+              if(!id||android?.id!==id)throw Error('Android creation requires inspection');
+            }
+            console.log('ANDROID_BUILD='+JSON.stringify(safe(android)));
+            app=await snapshot();let ios=candidate(app,'IOS','testflight','68');
+            if(!ios){
+              if(String(app.ios?.buildVersion)!=='67')throw Error('Expected iOS version 67 before creating 68');
+              const raw=JSON.parse(eas(['build','--platform','ios','--profile','testflight','--auto-submit-with-profile','testflight','--message','Eclipse 68: corrected layouts and notification previews','--non-interactive','--no-wait','--json']));
+              const id=(Array.isArray(raw)?raw[0]:raw)?.id;
+              app=await snapshot();ios=candidate(app,'IOS','testflight','68');
+              if(!id||ios?.id!==id)throw Error('iOS creation requires inspection');
+            }
+            console.log('IOS_BUILD='+JSON.stringify(safe(ios)));
+            if(ios.submissions?.some(s=>s.iosConfig?.ascAppIdentifier!=='6773071994'))throw Error('Unexpected submission target');
+            console.log('APPLE_ACCEPTANCE_CONFIRMED=false');
+          })().catch(e=>{console.error(e.message);process.exitCode=1});
+          NODE
+      - name: Remove temporary build environment
+        if: always()
+        run: rm -f .env.local
+
