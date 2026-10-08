@@ -11,20 +11,37 @@ jobs:
     environment: staging
     timeout-minutes: 5
     steps:
-      - name: Inspect build 65 provenance without exporting secrets
+      - name: Compare known UI presence (IPA inspection authorized by owner)
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
         run: |
           node - <<'NODE'
           (async () => {
-            const query='query {builds{byId(buildId:"4bb4efa4-63d0-43db-9b1d-885f29745dab"){id message gitCommitHash gitCommitMessage gitRef isGitWorkingTreeDirty projectMetadataFileUrl}} __type(name:"BuildArtifacts"){fields{name}}}';
+            const query='query {builds{byId(buildId:"4bb4efa4-63d0-43db-9b1d-885f29745dab"){id app{id} projectMetadataFileUrl artifacts{applicationArchiveUrl}}}}';
             const r=await fetch('https://api.expo.dev/graphql',{method:'POST',headers:{'Content-Type':'application/json',authorization:'Bearer '+process.env.EXPO_TOKEN},body:JSON.stringify({query})});
-            if(!r.ok)throw Error('EAS metadata HTTP '+r.status);
-            const b=await r.json();if(b.errors?.length)throw Error(b.errors.map(e=>e.message).join('; '));
+            if(!r.ok)throw Error('EAS metadata unavailable');
+            const b=await r.json();if(b.errors?.length)throw Error('EAS query failed');
             const build=b.data.builds.byId;
-            const metadataUrl=build.projectMetadataFileUrl;delete build.projectMetadataFileUrl;
-            console.log('PROVENANCE='+JSON.stringify(build));
-            console.log('ARTIFACT_FIELDS='+JSON.stringify(b.data.__type));
-            if(metadataUrl){const response=await fetch(metadataUrl);if(!response.ok)throw Error('Metadata HTTP '+response.status);const metadata=await response.json();console.log('METADATA_KEYS='+JSON.stringify(Object.keys(metadata)));for(const key of Object.keys(metadata)){if(/^(git|commit|source|files|project)/i.test(key)&& !/secret|token|env|credential|key/i.test(key))console.log(key+': '+JSON.stringify(metadata[key]).slice(0,5000));}}
+            if(build.app.id!=='42ebb6eb-62b1-4784-a483-831ae3c804f2')throw Error('Unexpected project');
+            const metadata=await (await fetch(build.projectMetadataFileUrl)).json();
+            if(!Array.isArray(metadata.archiveContent)||metadata.archiveContent.some(x=>typeof x!=='string'))throw Error('Unexpected metadata shape');
+            const known=['components/SalesOfferForm.tsx','components/DiscountCodeField.tsx','app/(creator)/create-event.tsx','app/(tabs)/event/[id].tsx'];
+            console.log('KNOWN_UI_FILES='+JSON.stringify(Object.fromEntries(known.map(p=>[p,metadata.archiveContent.some(x=>x===p||x.endsWith('/'+p))]))));
+            const archive=await fetch(build.artifacts.applicationArchiveUrl);if(!archive.ok)throw Error('IPA unavailable');
+            require('node:fs').writeFileSync(process.env.RUNNER_TEMP+'/eclipse65.ipa',Buffer.from(await archive.arrayBuffer()));
           })().catch(e=>{console.error(e.message);process.exitCode=1});
           NODE
+      - name: Compare fixed public interface labels in the embedded application
+        run: |
+          python3 - <<'PY'
+          import zipfile, os, json
+          with zipfile.ZipFile(os.environ['RUNNER_TEMP']+'/eclipse65.ipa') as archive:
+              paths=[n for n in archive.namelist() if n.endswith('main.jsbundle')]
+              if len(paths)!=1: raise RuntimeError('Expected one application bundle')
+              bundle=archive.read(paths[0])
+          labels=['Diseña el acceso.','ECLIPSE / VENTAS','Tipos de entrada','Nombre de la entrada','Configuración VIP','Catálogo de venta','Reservados de mesa','MESA COMPLETA','Añadir tipo de entrada','Añadir oferta','VIP / Reservado','Precio del reservado completo','Grupo VIP','Información básica']
+          print('UI_LABEL_MATCHES='+json.dumps({label:(label.encode() in bundle or label.encode('utf-16le') in bundle) for label in labels},ensure_ascii=False))
+          PY
+      - name: Remove temporary IPA
+        if: always()
+        run: rm -f "$RUNNER_TEMP/eclipse65.ipa"
