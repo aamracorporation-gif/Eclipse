@@ -1,0 +1,27 @@
+name: Remove sensitive auxiliary build log
+on:
+  push:
+    branches: [codex/build-staging-candidate-55487308]
+    paths: [.github/workflows/clear-auxiliary-run-log.yml]
+permissions:
+  actions: write
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Delete only failed auxiliary runner logs
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          node - <<'NODE'
+          (async () => {
+            const endpoint = 'https://api.github.com/repos/aamracorporation-gif/Eclipse/actions/runs/37809299868/logs';
+            const headers = {Accept:'application/vnd.github+json', Authorization:'Bearer ' + process.env.GH_TOKEN, 'X-GitHub-Api-Version':'2022-11-28'};
+            const response = await fetch(endpoint, {method:'DELETE', headers});
+            if (response.status !== 204) throw new Error('Log deletion failed: HTTP ' + response.status);
+            const check = await fetch(endpoint, {headers, redirect:'manual'});
+            if (check.status !== 404 && check.status !== 410) throw new Error('Deletion verification failed: HTTP ' + check.status);
+            console.log('Auxiliary run 37809299868 logs deleted; verified HTTP ' + check.status + '. Build artifacts and EAS release unchanged.');
+          })().catch(error => {console.error(error.message); process.exitCode = 1;});
+          NODE
