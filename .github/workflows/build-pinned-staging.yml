@@ -1,0 +1,180 @@
+name: Build pinned Eclipse staging candidate
+run-name: APK then TestFlight candidate 55487308
+
+on:
+  push:
+    branches: [codex/build-staging-candidate-55487308]
+    paths: [.github/workflows/build-pinned-staging.yml]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: eclipse-staging-candidate-55487308
+  cancel-in-progress: false
+
+jobs:
+  android:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: staging
+    outputs:
+      build_id: ${{ steps.build.outputs.build_id }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: 55487308c9327eace83c7c5fc7b1afdf66ec566d
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Verify source and staging profiles
+        run: |
+          test "$(git rev-parse HEAD)" = "55487308c9327eace83c7c5fc7b1afdf66ec566d"
+          node - <<'NODE'
+          const assert = require('node:assert/strict');
+          const c = require('./eas.json');
+          assert.equal(c.build.preview.env.ECLIPSE_BUILD_ENV, 'staging');
+          assert.equal(c.build.preview.environment, 'preview');
+          assert.equal(c.build.preview.channel, 'staging');
+          assert.equal(c.build.preview.android.buildType, 'apk');
+          assert.equal(c.build.testflight.extends, 'preview');
+          assert.equal(c.build.testflight.distribution, 'store');
+          assert.equal(c.build.testflight.environment, undefined);
+          assert.equal(c.build.testflight.env, undefined);
+          assert.equal(c.submit.testflight.ios.ascAppId, '6773071994');
+          NODE
+      - run: npm ci
+      - name: Validate environment guards
+        run: node --test scripts/tests/buildEnvironment.test.cjs scripts/tests/stagingServices.test.cjs
+      - name: Configure EAS
+        uses: expo/expo-github-action@v8
+        with:
+          eas-version: 18.0.1
+          token: ${{ secrets.EXPO_TOKEN }}
+      - name: Verify Expo authentication
+        run: eas whoami
+      - name: Queue android preview
+        id: build
+        run: |
+          test "$(git rev-parse HEAD)" = "55487308c9327eace83c7c5fc7b1afdf66ec566d"
+          git diff --exit-code
+          eas build --platform android --profile preview --non-interactive --no-wait --json > "$RUNNER_TEMP/build.json"
+          jq -c '.[] | {id,status,platform,buildProfile,gitCommitHash,appVersion,appBuildVersion}' "$RUNNER_TEMP/build.json"
+          jq -e 'length == 1 and .[0].gitCommitHash == "55487308c9327eace83c7c5fc7b1afdf66ec566d"' "$RUNNER_TEMP/build.json"
+          id="$(jq -er '.[0].id' "$RUNNER_TEMP/build.json")"
+          echo "build_id=$id" >> "$GITHUB_OUTPUT"
+          printf '%s\n' "android / preview: $id" "Source: 55487308c9327eace83c7c5fc7b1afdf66ec566d" >> "$GITHUB_STEP_SUMMARY"
+
+  ios:
+    needs: android
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: staging
+    outputs:
+      build_id: ${{ steps.build.outputs.build_id }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: 55487308c9327eace83c7c5fc7b1afdf66ec566d
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Verify source and staging profiles
+        run: |
+          test "$(git rev-parse HEAD)" = "55487308c9327eace83c7c5fc7b1afdf66ec566d"
+          node - <<'NODE'
+          const assert = require('node:assert/strict');
+          const c = require('./eas.json');
+          assert.equal(c.build.preview.env.ECLIPSE_BUILD_ENV, 'staging');
+          assert.equal(c.build.preview.environment, 'preview');
+          assert.equal(c.build.preview.channel, 'staging');
+          assert.equal(c.build.preview.android.buildType, 'apk');
+          assert.equal(c.build.testflight.extends, 'preview');
+          assert.equal(c.build.testflight.distribution, 'store');
+          assert.equal(c.build.testflight.environment, undefined);
+          assert.equal(c.build.testflight.env, undefined);
+          assert.equal(c.submit.testflight.ios.ascAppId, '6773071994');
+          NODE
+      - run: npm ci
+      - name: Validate environment guards
+        run: node --test scripts/tests/buildEnvironment.test.cjs scripts/tests/stagingServices.test.cjs
+      - name: Configure EAS
+        uses: expo/expo-github-action@v8
+        with:
+          eas-version: 18.0.1
+          token: ${{ secrets.EXPO_TOKEN }}
+      - name: Verify Expo authentication
+        run: eas whoami
+      - name: Queue ios testflight
+        id: build
+        run: |
+          test "$(git rev-parse HEAD)" = "55487308c9327eace83c7c5fc7b1afdf66ec566d"
+          git diff --exit-code
+          eas build --platform ios --profile testflight --non-interactive --no-wait --json > "$RUNNER_TEMP/build.json"
+          jq -c '.[] | {id,status,platform,buildProfile,gitCommitHash,appVersion,appBuildVersion}' "$RUNNER_TEMP/build.json"
+          jq -e 'length == 1 and .[0].gitCommitHash == "55487308c9327eace83c7c5fc7b1afdf66ec566d"' "$RUNNER_TEMP/build.json"
+          id="$(jq -er '.[0].id' "$RUNNER_TEMP/build.json")"
+          echo "build_id=$id" >> "$GITHUB_OUTPUT"
+          printf '%s\n' "ios / testflight: $id" "Source: 55487308c9327eace83c7c5fc7b1afdf66ec566d" >> "$GITHUB_STEP_SUMMARY"
+
+  status:
+    if: ${{ always() && (needs.android.outputs.build_id != '' || needs.ios.outputs.build_id != '') }}
+    needs: [android, ios]
+    runs-on: ubuntu-latest
+    timeout-minutes: 100
+    environment: staging
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: android
+            build_id: ${{ needs.android.outputs.build_id }}
+          - platform: ios
+            build_id: ${{ needs.ios.outputs.build_id }}
+    env:
+      BUILD_ID: ${{ matrix.build_id }}
+      PLATFORM: ${{ matrix.platform }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: 55487308c9327eace83c7c5fc7b1afdf66ec566d
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: expo/expo-github-action@v8
+        with:
+          eas-version: 18.0.1
+          token: ${{ secrets.EXPO_TOKEN }}
+      - name: Wait for EAS and verify source
+        run: |
+          if [ -z "$BUILD_ID" ]; then
+            echo "$PLATFORM was not queued." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          for attempt in $(seq 1 90); do
+            eas build:view "$BUILD_ID" --json > "$RUNNER_TEMP/status.json"
+            jq -c '{id,status,platform,buildProfile,gitCommitHash,appVersion,appBuildVersion}' "$RUNNER_TEMP/status.json"
+            jq -e '.gitCommitHash == "55487308c9327eace83c7c5fc7b1afdf66ec566d"' "$RUNNER_TEMP/status.json"
+            status="$(jq -er '.status' "$RUNNER_TEMP/status.json")"
+            case "$status" in
+              FINISHED)
+                printf '%s\n' "$PLATFORM: $BUILD_ID FINISHED" "Source: 55487308c9327eace83c7c5fc7b1afdf66ec566d" >> "$GITHUB_STEP_SUMMARY"
+                jq -c '{id,status,platform,buildProfile,gitCommitHash,appVersion,appBuildVersion,artifacts}' "$RUNNER_TEMP/status.json"
+                if [ "$PLATFORM" = ios ]; then
+                  printf '%s\n' "Prepared submission command (not executed):" "eas submit --platform ios --profile testflight --id $BUILD_ID --non-interactive" "No submission or Apple acceptance is implied." >> "$GITHUB_STEP_SUMMARY"
+                fi
+                exit 0 ;;
+              ERRORED|CANCELED)
+                jq -c '{id,status,error}' "$RUNNER_TEMP/status.json"
+                printf '%s\n' "$PLATFORM: $BUILD_ID $status" >> "$GITHUB_STEP_SUMMARY"
+                exit 1 ;;
+            esac
+            sleep 60
+          done
+          echo "EAS build remains pending: $BUILD_ID" >> "$GITHUB_STEP_SUMMARY"
+          exit 1
