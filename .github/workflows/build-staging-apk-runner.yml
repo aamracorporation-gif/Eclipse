@@ -1,0 +1,83 @@
+name: Build Eclipse staging APK on runner
+run-name: Generate signed preview APK from candidate 55487308
+on:
+  push:
+    branches: [codex/build-staging-candidate-55487308]
+    paths: [.github/workflows/build-staging-apk-runner.yml]
+permissions:
+  contents: read
+concurrency:
+  group: eclipse-apk-runner-55487308
+  cancel-in-progress: false
+jobs:
+  apk:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 75
+    environment: staging
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: 55487308c9327eace83c7c5fc7b1afdf66ec566d
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+      - name: Prepare Android SDK
+        run: sdkmanager "platforms;android-36" "build-tools;36.0.0" "ndk;27.1.12297006" "cmake;3.22.1"
+      - run: npm ci
+      - name: Verify unchanged candidate and APK profile
+        run: |
+          test "$(git rev-parse HEAD)" = 55487308c9327eace83c7c5fc7b1afdf66ec566d
+          git diff --quiet -- . ':!node_modules' ':!backend/node_modules'
+          node - <<'NODE'
+          const assert = require('node:assert/strict');
+          const c = require('./eas.json').build.preview;
+          assert.equal(c.env.ECLIPSE_BUILD_ENV, 'staging');
+          assert.equal(c.environment, 'preview');
+          assert.equal(c.channel, 'staging');
+          assert.equal(c.android.buildType, 'apk');
+          assert.equal(c.distribution, 'internal');
+          NODE
+      - uses: expo/expo-github-action@v8
+        with:
+          eas-version: 18.0.1
+          token: ${{ secrets.EXPO_TOKEN }}
+      - name: Build signed staging APK with EAS on this runner
+        run: |
+          mkdir -p "$RUNNER_TEMP/eclipse-apk"
+          eas env:exec preview 'eas build --platform android --profile preview --local --non-interactive --output "$RUNNER_TEMP/eclipse-apk/Eclipse-preview-55487308.apk"' --non-interactive
+      - name: Verify APK signature and record provenance
+        run: |
+          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose "$RUNNER_TEMP/eclipse-apk/Eclipse-preview-55487308.apk"
+          "$ANDROID_HOME/build-tools/36.0.0/aapt" dump badging "$RUNNER_TEMP/eclipse-apk/Eclipse-preview-55487308.apk" > "$RUNNER_TEMP/eclipse-apk/badging.txt"
+          python3 - <<'PY'
+          import hashlib, json, os, pathlib, subprocess
+          root = pathlib.Path(os.environ['RUNNER_TEMP']) / 'eclipse-apk'
+          apk = root / 'Eclipse-preview-55487308.apk'
+          package = next(line for line in (root / 'badging.txt').read_text().splitlines() if line.startswith('package:'))
+          assert "name='com.achraf.eclipse'" in package
+          commit = subprocess.check_output(['git','rev-parse','HEAD'], text=True).strip()
+          assert commit == '55487308c9327eace83c7c5fc7b1afdf66ec566d'
+          record = {'commit': commit, 'profile': 'preview', 'environment': 'staging', 'builder': 'EAS local on GitHub Actions', 'apk': apk.name, 'sha256': hashlib.sha256(apk.read_bytes()).hexdigest(), 'bytes': apk.stat().st_size, 'androidPackage': package, 'signatureVerified': True}
+          (root / 'BUILD.json').write_text(json.dumps(record, indent=2))
+          print(json.dumps(record))
+          PY
+      - uses: actions/upload-artifact@v4
+        id: artifact
+        with:
+          name: Eclipse-preview-55487308-APK
+          path: |
+            ${{ runner.temp }}/eclipse-apk/Eclipse-preview-55487308.apk
+            ${{ runner.temp }}/eclipse-apk/BUILD.json
+          if-no-files-found: error
+          retention-days: 14
+      - name: Record APK download
+        env:
+          ARTIFACT_URL: ${{ steps.artifact.outputs.artifact-url }}
+        run: printf '%s\n' "$ARTIFACT_URL" >> "$GITHUB_STEP_SUMMARY"
