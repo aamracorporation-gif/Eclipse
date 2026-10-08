@@ -1,0 +1,28 @@
+name: Identify Eclipse build 65 source
+on:
+  push:
+    branches: [codex/restore-build65-forms-push]
+    paths: [.github/workflows/inspect-build65-source.yml]
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    environment: staging
+    timeout-minutes: 5
+    steps:
+      - name: Read EAS build metadata only
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        run: |
+          node - <<'NODE'
+          (async () => {
+            const query = 'query PreviousBuild($appId:String!){app{byId(appId:$appId){id builds(offset:0,limit:30,filter:{platform:IOS}){id status appVersion appBuildVersion gitCommitHash buildProfile createdAt}}}}';
+            const r=await fetch('https://api.expo.dev/graphql',{method:'POST',headers:{'Content-Type':'application/json',authorization:'Bearer '+process.env.EXPO_TOKEN},body:JSON.stringify({query,variables:{appId:'42ebb6eb-62b1-4784-a483-831ae3c804f2'}})});
+            if(!r.ok)throw Error('EAS metadata HTTP '+r.status);
+            const b=await r.json();if(b.errors?.length)throw Error(b.errors.map(e=>e.message).join('; '));
+            const builds=b.data.app.byId.builds;
+            console.log(JSON.stringify(builds.filter(x=>['64','65','66'].includes(x.appBuildVersion))));
+            if(!builds.some(x=>x.appBuildVersion==='65'))throw Error('Build 65 not found in recent metadata');
+          })().catch(e=>{console.error(e.message);process.exitCode=1});
+          NODE
