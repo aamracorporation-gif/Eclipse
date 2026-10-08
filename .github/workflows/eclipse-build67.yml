@@ -38,7 +38,11 @@ jobs:
           const project='42ebb6eb-62b1-4784-a483-831ae3c804f2';
           function eas(args) {
             const r=spawnSync('eas',args,{encoding:'utf8',maxBuffer:24*1024*1024});
-            if(r.status!==0) { console.log('COMMAND_FAILED='+JSON.stringify({command:args[0],status:r.status})); return null; }
+            if(r.status!==0) { console.log('COMMAND_FAILED='+JSON.stringify({command:args[0],status:r.status}));
+              let diagnostic=(r.stderr||'').replace(/\u001b\[[0-9;]*m/g,'');
+              for(const value of Object.values(process.env))if(value&&value.length>8)diagnostic=diagnostic.split(value).join('[masked]');
+              diagnostic=diagnostic.replace(/eyJ[A-Za-z0-9_.-]+|(?:sk|sb_secret|ExpoToken)_[A-Za-z0-9_-]+/g,'[masked]');
+              console.log('EAS_DIAGNOSTIC='+JSON.stringify(diagnostic.split('\n').slice(-12).join('\n')));return null; }
             return r.stdout;
           }
           function parse(raw){if(raw===null) return null;try{return JSON.parse(raw)}catch{throw Error('Invalid EAS metadata response');}}
@@ -55,7 +59,8 @@ jobs:
           }
           (async()=>{
             if(spawnSync('git',['rev-parse','HEAD'],{encoding:'utf8'}).stdout.trim()!==sha)throw Error('Wrong source commit');
-            const v=parse(eas(['build:version:get','--platform','ios','--profile','testflight','--non-interactive','--json']));
+            const vd=await query('query($appId:String!){app{byId(appId:$appId){latestAppVersionByPlatformAndApplicationIdentifier(platform:IOS,applicationIdentifier:"com.achraf.eclipse"){buildVersion}}}}',{appId:project});
+            const v={buildNumber:vd.app.byId.latestAppVersionByPlatformAndApplicationIdentifier?.buildVersion};
             console.log('IOS_REMOTE_VERSION='+JSON.stringify(v));
             if(String(v?.buildNumber)!=='66')throw Error('Expected remote version 66 before creating 67');
             const android=parse(eas(['build','--platform','android','--profile','preview','--non-interactive','--no-wait','--json']));
