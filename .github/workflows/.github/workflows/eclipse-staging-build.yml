@@ -1,0 +1,56 @@
+name: Eclipse staging candidate build
+
+on:
+  workflow_dispatch:
+    inputs:
+      platform:
+        description: Plataforma
+        required: true
+        type: choice
+        default: android
+        options:
+          - android
+          - ios
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    environment: staging
+
+    steps:
+      - name: Checkout candidata Eclipse
+        uses: actions/checkout@v4
+        with:
+          ref: codex/staging-release-candidate-20261008
+
+      - name: Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Instalar dependencias
+        run: npm ci
+
+      - name: Configurar EAS
+        uses: expo/expo-github-action@v8
+        with:
+          eas-version: 18.0.1
+          token: ${{ secrets.EXPO_TOKEN }}
+
+      - name: Comprobar cuenta Expo
+        run: eas whoami --non-interactive
+
+      - name: Comprobar proyecto
+        run: |
+          npx expo install --check
+          npm run typecheck
+          npm run lint
+
+      - name: Compilar Android de staging
+        if: ${{ inputs.platform == 'android' }}
+        run: eas build --platform android --profile preview --non-interactive --no-wait
+
+      - name: Compilar iOS para TestFlight
+        if: ${{ inputs.platform == 'ios' }}
+        run: eas build --platform ios --profile testflight --non-interactive --no-wait
