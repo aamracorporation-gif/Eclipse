@@ -5,7 +5,7 @@
  const out='docs/qa/build65-restored';fs.mkdirSync(out,{recursive:true});
  await esbuild.build({entryPoints:['scripts/qa/review-build65.tsx'],bundle:true,outfile:out+'/review.js',platform:'browser',format:'iife',jsx:'automatic',alias:{'react-native':'react-native-web','@':process.cwd()},resolveExtensions:['.web.tsx','.tsx','.web.ts','.ts','.web.js','.js','.json'],define:{'process.env.NODE_ENV':'"production"','process.env.EXPO_OS':'"web"','__DEV__':'false',global:'window'},loader:{'.js':'jsx','.ttf':'file','.png':'file','.jpg':'file'},plugins:[{name:'offline-preview',setup(build){
  build.onResolve({filter:/^@\/lib\/supabase$/},args=>({path:args.path,namespace:'offline'}));
- build.onLoad({filter:/.*/,namespace:'offline'},()=>({contents:"export const supabase={rpc:async()=>({data:null,error:{message:'Vista de ejemplo: no se validan códigos reales.'}})}",loader:'js'}));
+ build.onLoad({filter:/.*/,namespace:'offline'},()=>({contents:"export const supabase={rpc:async()=>({data:null,error:{message:'Vista de ejemplo: no se validan códigos reales.'}}),from:(table)=>{const chain={select:()=>chain,eq:()=>chain,is:()=>chain,order:async()=>({data:table==='reservados_vip'?[{id:'mesa',name:'Mesa Eclipse',base_price:300,is_active:true}]:[{id:'general',name:'Entrada + consumición',price:20,is_active:true},{id:'group',name:'Pack de 4 entradas',price:68,is_active:true},{id:'free',name:'Lista Eclipse',price:0,is_active:true}],error:null})};return chain;}}",loader:'js'}));
  build.onResolve({filter:/^@react-native-community\/datetimepicker$/},()=>({path:path.resolve('scripts/qa/web-datepicker-stub.js')}));
  }}]});
  fs.writeFileSync(out+'/index.html','<!doctype html><html lang="es"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>html,body{margin:0;background:#050510;color:#F8FAFC;font-family:Arial,sans-serif}*{box-sizing:border-box}#root{min-height:100vh}</style><div id="root"></div><script src="./review.js"></script></html>');
@@ -17,7 +17,7 @@
  const page=await browser.newPage({viewport:{width:390,height:844},deviceScaleFactor:2,locale:'es-ES'});
  const errors=[];page.on('pageerror',error=>errors.push(error.message));
  await page.route('**/*',route=>new URL(route.request().url()).hostname==='127.0.0.1'?route.continue():route.abort());
- for(const view of ['tickets','vip','creator']){
+ for(const view of ['tickets','vip','creator','organizer']){
    await page.goto('http://127.0.0.1:'+server.address().port+'/?view='+view);await page.waitForLoadState('networkidle');await page.evaluate(()=>document.fonts.ready);
    if(errors.length)throw Error(errors.join(';'));
    await page.screenshot({path:out+'/'+view+'.png',fullPage:true});

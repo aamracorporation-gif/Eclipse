@@ -1,4 +1,7 @@
-// @ts-nocheck
+// @ts-nocheck Standalone visual harness; payments and network effects are disabled.
+import {DiscountScopePicker} from '@/components/DiscountScopePicker';
+import {GlassView} from '@/components/ui/GlassView';
+import {ThemedInput} from '@/components/ui/ThemedInput';
 import React,{useState} from 'react';
 import {createRoot} from 'react-dom/client';
 import {View} from 'react-native';
@@ -19,5 +22,9 @@ const saving=calculateDiscountCents(Math.round(subtotal*100),discount?{discount_
 const cents=Math.round((subtotal-saving)*100),fee=subtotal===0?0:Math.max(Math.round((cents*.015+25)/.985),50)/100;
 return <View style={{padding:16,paddingTop:28}}><DiscountCodeField key={tab} eventId={event.id} kind={tab==='vip'?'vip_table':'event_ticket'} productId={tab==='vip'?'mesa':id} quantity={tab==='vip'?1:quantity} value={discount} onChange={onDiscount} onCheckingChange={onChecking} render={coupon=><CustomerPurchasePanel event={event} tab={tab} onTab={onTab} selectedId={tab==='vip'?'mesa':id} onSelect={value=>{onSelect(value);onQuantity(1);}} quantity={quantity} min={1} max={selected.metadata.maxPerOrder} onQuantity={onQuantity} name={name} email={email} onName={onName} onEmail={onEmail} subtotal={subtotal} fee={fee} total={subtotal-saving+fee} saving={saving} unavailable={null} busy={false} authenticated onSubmit={()=>{}} coupon={coupon} wallet={{enabled:false,selected:false,balance:0,loading:false,onChange:()=>{}}}/>}/></View>;
 }
-const creator=new URLSearchParams(location.search).get('view')==='creator';
-createRoot(document.getElementById('root')!).render(creator?<div style={{height:'100vh',display:'flex'}}><DemoCreator/></div>:<Purchase/>);
+function Organizer(){
+ const [scope,onScope]=useState('selected'),[ticketIds,onTickets]=useState(['general']),[vipIds,onVips]=useState(['mesa']);
+ return <View style={{padding:20}}><GlassView style={{padding:20}}><ThemedInput label="Código de descuento" value="ECLIPSE20" editable={false}/><DiscountScopePicker eventId="preview" scope={scope} ticketIds={ticketIds} vipIds={vipIds} onScope={onScope} onTickets={onTickets} onVips={onVips} onReady={()=>{}}/></GlassView></View>;
+}
+const view=new URLSearchParams(location.search).get('view');const creator=view==='creator';
+createRoot(document.getElementById('root')!).render(view==='organizer'?<Organizer/>:creator?<div style={{height:'100vh',display:'flex'}}><DemoCreator/></div>:<Purchase/>);
