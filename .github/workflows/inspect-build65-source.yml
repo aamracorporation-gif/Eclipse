@@ -11,19 +11,20 @@ jobs:
     environment: staging
     timeout-minutes: 5
     steps:
-      - name: Read EAS build metadata only
+      - name: Inspect build 65 provenance without exporting secrets
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
         run: |
           node - <<'NODE'
           (async () => {
-            const query = 'query PreviousBuild($appId:String!){__type(name:"Build"){fields{name type{name kind ofType{name kind}}}} app{byId(appId:$appId){id builds(offset:0,limit:30,filter:{platform:IOS}){id status appVersion appBuildVersion gitCommitHash buildProfile createdAt}}}}';
-            const r=await fetch('https://api.expo.dev/graphql',{method:'POST',headers:{'Content-Type':'application/json',authorization:'Bearer '+process.env.EXPO_TOKEN},body:JSON.stringify({query,variables:{appId:'42ebb6eb-62b1-4784-a483-831ae3c804f2'}})});
+            const query='query {builds{byId(buildId:"4bb4efa4-63d0-43db-9b1d-885f29745dab"){id message gitCommitHash gitCommitMessage gitRef isGitWorkingTreeDirty projectMetadataFileUrl}} __type(name:"BuildArtifacts"){fields{name}}}';
+            const r=await fetch('https://api.expo.dev/graphql',{method:'POST',headers:{'Content-Type':'application/json',authorization:'Bearer '+process.env.EXPO_TOKEN},body:JSON.stringify({query})});
             if(!r.ok)throw Error('EAS metadata HTTP '+r.status);
             const b=await r.json();if(b.errors?.length)throw Error(b.errors.map(e=>e.message).join('; '));
-            console.log('BUILD_FIELDS='+JSON.stringify(b.data.__type));
-            const builds=b.data.app.byId.builds;
-            console.log(JSON.stringify(builds.filter(x=>['64','65','66'].includes(x.appBuildVersion))));
-            if(!builds.some(x=>x.appBuildVersion==='65'))throw Error('Build 65 not found in recent metadata');
+            const build=b.data.builds.byId;
+            const metadataUrl=build.projectMetadataFileUrl;delete build.projectMetadataFileUrl;
+            console.log('PROVENANCE='+JSON.stringify(build));
+            console.log('ARTIFACT_FIELDS='+JSON.stringify(b.data.__type));
+            if(metadataUrl){const response=await fetch(metadataUrl);if(!response.ok)throw Error('Metadata HTTP '+response.status);const metadata=await response.json();console.log('METADATA_KEYS='+JSON.stringify(Object.keys(metadata)));for(const key of Object.keys(metadata)){if(/^(git|commit|source|files|project)/i.test(key)&& !/secret|token|env|credential|key/i.test(key))console.log(key+': '+JSON.stringify(metadata[key]).slice(0,5000));}}
           })().catch(e=>{console.error(e.message);process.exitCode=1});
           NODE
