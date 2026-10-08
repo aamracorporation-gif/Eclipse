@@ -1,9 +1,7 @@
-name: Build Eclipse staging APK on runner
+name: Retired Eclipse staging APK runner
 run-name: Generate signed preview APK from candidate 55487308
 on:
-  push:
-    branches: [codex/build-staging-candidate-55487308]
-    paths: [.github/workflows/build-staging-apk-runner.yml]
+  workflow_dispatch:
 permissions:
   contents: read
 concurrency:
@@ -11,6 +9,8 @@ concurrency:
   cancel-in-progress: false
 jobs:
   apk:
+    # Retired after successful EAS cloud build; prevents another local credential-bearing failure log.
+    if: ${{ false }}
     runs-on: ubuntu-24.04
     timeout-minutes: 75
     environment: staging
