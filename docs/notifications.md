@@ -1,5 +1,11 @@
 # Sistema de Notificaciones (Supabase + Expo)
 
+## Vista previa push y filtros (9 de octubre de 2026)
+
+El transporte v2 muestra el título autorizado del aviso (hasta 80 caracteres) y un resumen de su cuerpo (hasta 160), en lugar de sustituir todos los mensajes por una frase genérica. Conserva el significado de cada aviso: compra confirmada, cambio de evento, asignación o recordatorio. Normaliza espacios y termina los textos largos con puntos suspensivos; el detalle completo sigue en el buzón. Los datos de navegación contienen únicamente los identificadores y la versión del esquema; la autorización de sesión y las preferencias se comprueban antes del envío. La vista previa puede mostrar el nombre del evento en la pantalla bloqueada, según los ajustes del sistema del usuario.
+
+La fila de perfiles tiene altura natural, no se comprime contra la lista y permite desplazamiento horizontal. Sus etiquetas se leen antes de seleccionarlas. Los filtros secundarios se distribuyen en varias líneas cuando hace falta, y el encabezado reserva una fila para los ajustes. La revisión visual utiliza la pantalla real con datos ficticios: `ECLIPSE_REVIEW_TOOLS=<tooling>/node_modules node scripts/qa/capture-responsive.cjs --notifications`. Resultados y capturas: `docs/qa/notification-review/`. No sustituye una comprobación visual nativa.
+
 ## Objetivo
 Unificar y endurecer el sistema de notificaciones para que soporte:
 - Notificaciones in-app persistentes con historial, filtros y marcado como leído.

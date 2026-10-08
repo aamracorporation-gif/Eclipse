@@ -1,0 +1,42 @@
+[
+  {
+    "view": "notifications",
+    "width": 320,
+    "height": 568,
+    "fontScale": 1,
+    "bodyWidth": 320,
+    "checks": "passed"
+  },
+  {
+    "view": "notifications",
+    "width": 390,
+    "height": 844,
+    "fontScale": 1,
+    "bodyWidth": 390,
+    "checks": "passed"
+  },
+  {
+    "view": "notifications",
+    "width": 844,
+    "height": 390,
+    "fontScale": 1,
+    "bodyWidth": 844,
+    "checks": "passed"
+  },
+  {
+    "view": "notifications",
+    "width": 768,
+    "height": 1024,
+    "fontScale": 1,
+    "bodyWidth": 768,
+    "checks": "passed"
+  },
+  {
+    "view": "notifications",
+    "width": 320,
+    "height": 568,
+    "fontScale": 1.35,
+    "bodyWidth": 320,
+    "checks": "passed"
+  }
+]

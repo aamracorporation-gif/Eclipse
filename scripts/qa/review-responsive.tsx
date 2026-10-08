@@ -14,6 +14,7 @@ import Workers from '@/app/(creator)/workers/index';
 import AddWorker from '@/app/(creator)/workers/add';
 import Sell from '@/app/(worker)/sell';
 import Dashboard from '@/app/(creator)/index';
+import Notifications from '@/app/notifications';
 import { creatorTabStyle, customerTabStyle } from './.preview-tabs';
 import { User, Ticket, Calendar, BarChart3 } from '@/lib/icons';
 
@@ -28,7 +29,7 @@ const icons = [BarChart3, Calendar, Ticket, Ticket, User];
 const Blank = () => <View/>;
 createRoot(document.getElementById('root')!).render(<SafeAreaProvider initialMetrics={metrics}>
   <NavigationContainer>
-    {view === 'sell' ? <Sell/> : <Tab.Navigator initialRouteName={['customer','organizer'].includes(view) ? 'Perfil' : names[0]} screenOptions={{ headerShown: false, animation: 'none', sceneStyle: { backgroundColor: '#050510' }, tabBarActiveTintColor: '#7C3AED', tabBarInactiveTintColor: '#A1A1AA', tabBarStyle: (view === 'customer' ? customerTabStyle : creatorTabStyle)({ bottom }), tabBarLabelStyle: { paddingBottom: 2, fontSize: 10, fontWeight: '600' } }}>
+    {view === 'notifications' ? <Notifications/> : view === 'sell' ? <Sell/> : <Tab.Navigator initialRouteName={['customer','organizer'].includes(view) ? 'Perfil' : names[0]} screenOptions={{ headerShown: false, animation: 'none', sceneStyle: { backgroundColor: '#050510' }, tabBarActiveTintColor: '#7C3AED', tabBarInactiveTintColor: '#A1A1AA', tabBarStyle: (view === 'customer' ? customerTabStyle : creatorTabStyle)({ bottom }), tabBarLabelStyle: { paddingBottom: 2, fontSize: 10, fontWeight: '600' } }}>
       {names.map((name, index) => <Tab.Screen name={name} key={name} component={index === (['customer','organizer'].includes(view) ? names.length - 1 : 0) ? component : Blank} options={{ tabBarIcon: ({ color, size }) => { const Icon = index === names.length - 1 ? User : icons[index]; return <Icon size={size} color={color}/>; } }}/>) }
     </Tab.Navigator>}
   </NavigationContainer>

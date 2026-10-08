@@ -4,7 +4,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.authorizedNotificationWorker = authorizedNotificationWorker;
 exports.escapeNotificationHtml = escapeNotificationHtml;
 exports.notificationEmail = notificationEmail;
-exports.privatePush = privatePush;
+exports.notificationPush = notificationPush;
 exports.reconcileNotificationReceipts = reconcileNotificationReceipts;
 exports.runNotificationDispatch = runNotificationDispatch;
 const EXPO_SEND = 'https://exp.host/--/api/v2/push/send';
@@ -29,9 +29,19 @@ function escapeNotificationHtml(value) {
 function notificationEmail(d) {
     return `<!doctype html><html lang="es"><body style="margin:0;background:#f5f3f8;font-family:Arial,sans-serif;color:#201a2f"><main style="max-width:560px;margin:32px auto;padding:32px;background:white;border-radius:16px"><p style="font-size:13px;letter-spacing:3px;color:#6846ab">ECLIPSE</p><h1 style="font-size:25px;line-height:1.3">${escapeNotificationHtml(d.title)}</h1><p style="font-size:16px;line-height:1.6;white-space:pre-line">${escapeNotificationHtml(d.body)}</p><p style="margin-top:28px;font-size:14px">Abre Eclipse para consultar los detalles en tu centro de notificaciones.</p><hr style="border:0;border-top:1px solid #ebe7f0"><p style="font-size:12px;color:#6f677d">Aviso sobre tu actividad en Eclipse. Gestiona tus preferencias desde la aplicación. Nunca compartas el QR de tu entrada.</p></main></body></html>`;
 }
-function privatePush(d, projectRef, now = Date.now()) {
-    // An already queued OS notification cannot be recalled on logout. Display no event, buyer or QR data.
-    return { to: d.to, title: 'Eclipse', body: 'Tienes una actualización en Eclipse. Abre la app para consultar los detalles.',
+function pushPreview(value, limit) {
+    const text = value.replace(/\s+/gu, ' ').trim();
+    const characters = Array.from(text);
+    if (characters.length <= limit)
+        return text;
+    const prefix = characters.slice(0, limit - 1).join('');
+    const lastSpace = prefix.lastIndexOf(' ');
+    return (lastSpace > prefix.length / 2 ? prefix.slice(0, lastSpace) : prefix).trimEnd() + '…';
+}
+function notificationPush(d, projectRef, now = Date.now()) {
+    // Show a short preview of the authorized inbox copy. Keep navigation data limited to IDs.
+    return { to: d.to, title: pushPreview(d.title, 80) || 'Eclipse',
+        body: pushPreview(d.body, 160) || pushPreview(d.title, 160) || 'Abre Eclipse para consultar este aviso.',
         data: { notification_schema: 2, notification_id: d.notification_id, project_ref: projectRef },
         channelId: d.category === 'reminder' ? 'eclipse-reminders' : 'eclipse-activity',
         priority: d.priority === 'high' ? 'high' : 'normal', sound: 'default',
@@ -63,7 +73,7 @@ async function sendOne(d, env, send) {
         const projectRef = new URL(env('SUPABASE_URL')).hostname.split('.')[0];
         url = EXPO_SEND;
         headers = expoHeaders(env);
-        body = privatePush(d, projectRef);
+        body = notificationPush(d, projectRef);
     }
     else {
         if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(d.to))

@@ -3,7 +3,8 @@ const fs=require('fs'),path=require('path'),http=require('http'),ts=require('typ
 const tooling=process.env.ECLIPSE_REVIEW_TOOLS;
 if(!tooling)throw Error('Set ECLIPSE_REVIEW_TOOLS to isolated tooling node_modules');
 const esbuild=require(path.join(tooling,'esbuild')),{chromium}=require(path.join(tooling,'playwright'));
-const out='docs/qa/responsive-review';fs.mkdirSync(out,{recursive:true});
+const notificationsOnly=process.argv.includes('--notifications');
+const out=notificationsOnly?'docs/qa/notification-review':'docs/qa/responsive-review';fs.mkdirSync(out,{recursive:true});
 // Extract current production tab styles, so the preview checks the same reserved space as the app.
 let generated="import {Colors} from '@/constants/Colors';import {theme} from '@/theme/styles';\n";
 for(const [kind,file] of [['creator','app/(creator)/_layout.tsx'],['customer','app/(tabs)/_layout.tsx']]){
@@ -30,9 +31,13 @@ const mocks={
  '@/lib/edgeFunctions':`export const invokeEdgeFunction=async()=>({data:null,error:null});export const invokeEdgeFunctionStrict=async()=>({});`,
  '@/lib/payments/api':`export const getStripeAccountStats=async()=>({available_balance:0,pending_balance:0,revenue_30d:0});export const createStripeConnectOnboardingLink=async()=>({});export const createStripeConnectAccount=async()=>({});export const refreshStripeConnectStatus=async()=>({});`,
  '@/hooks/useBoxOfficeAccess':`export const useBoxOfficeAccess=()=>({enabled:true,can_sell:true,checking:false});`,
- '@/components/ui/AppDialog':`export const useAppDialog=()=>({showDialog:()=>{}});`,
+ '@/components/ui/AppDialog':`export const useAppDialog=()=>({showDialog:()=>{},show:()=>{}});`,
+ '@/lib/NotificationContext':`import React from 'react';
+ const roles=['attendee','organizer','staff'];const noop=async()=>{};
+ const notifications=[{id:'10000000-0000-4000-8000-000000000001',title:'Tus entradas están confirmadas',body:'Tu compra para Noche Eclipse está confirmada. Consulta tus entradas en Eclipse.',role:'attendee',priority:'normal',read:false,created_at:'2026-10-09T14:00:00Z'},{id:'10000000-0000-4000-8000-000000000002',title:'Tienes un evento asignado',body:'Consulta tus asignaciones actuales en Eclipse.',role:'staff',priority:'normal',read:false,created_at:'2026-10-09T13:30:00Z'}];
+ export function useNotifications(){const [selectedRole,setSelectedRole]=React.useState(null),[filter,setFilter]=React.useState('all'),[showArchived,setShowArchived]=React.useState(false);return {selectedRole,setSelectedRole,filter,setFilter,showArchived,setShowArchived,roles,notifications:notifications.filter(n=>(!selectedRole||n.role===selectedRole)&&(filter!=='important'||n.priority==='high')),unreadCount:2,loading:false,hasMore:false,error:null,fetchNotifications:noop,loadMore:noop,markAllAsRead:noop};}`,
  '@/lib/notifications':`export const scheduleLocalNotification=async()=>{};export const registerForPushNotifications=async()=>{};`,
- 'expo-router':`export {useFocusEffect} from '@react-navigation/native';const routes={push:()=>{},replace:()=>{},back:()=>{},canGoBack:()=>false};export const router=routes;export const useRouter=()=>routes;const segments=['(tabs)','profile'];export const useSegments=()=>segments;`,
+ 'expo-router':`export {useFocusEffect} from '@react-navigation/native';const routes={push:()=>{},replace:()=>{},back:()=>{},canGoBack:()=>false};export const router=routes;export const useRouter=()=>routes;const segments=['(tabs)','profile'];export const useSegments=()=>segments;const params={};export const useLocalSearchParams=()=>params;`,
  'expo-notifications':`export const requestPermissionsAsync=async()=>({status:'granted'});`,
  'expo-location':`export const requestForegroundPermissionsAsync=async()=>({status:'denied'});export const geocodeAsync=async()=>[];`,
  'expo-haptics':`export const impactAsync=async()=>{};export const notificationAsync=async()=>{};export const selectionAsync=async()=>{};export const ImpactFeedbackStyle={Light:1};export const NotificationFeedbackType={Success:1};`,
@@ -57,7 +62,7 @@ async function main(){
   const page=await browser.newPage({viewport:{width,height},deviceScaleFactor:1,locale:'es-ES'}),errors=[];
   page.on('pageerror',e=>errors.push(e.message));
   await page.route('**/*',route=>new URL(route.request().url()).hostname==='127.0.0.1'?route.continue():route.abort());
-  for(const view of ['customer','organizer','workers','add','sell','dashboard']){
+  for(const view of (notificationsOnly?['notifications']:['customer','organizer','workers','add','sell','dashboard'])){
    await page.goto(`http://127.0.0.1:${server.address().port}/?view=${view}&inset=${inset}`);await page.waitForLoadState('networkidle');await page.evaluate(()=>document.fonts.ready);
    if(errors.length)throw Error(view+': '+errors.join('; '));
    if(fontScale>1)await page.evaluate(scale=>{for(const el of document.querySelectorAll('[dir="auto"]')){const computed=getComputedStyle(el);el.style.fontSize=parseFloat(computed.fontSize)*scale+'px';if(computed.lineHeight!=='normal')el.style.lineHeight=parseFloat(computed.lineHeight)*scale+'px';}},fontScale);
@@ -83,12 +88,27 @@ async function main(){
     await page.getByRole('button',{name:'Mes',exact:true}).click();
     await page.getByText('500,00 €',{exact:true}).waitFor();
    }
+   if(view==='notifications'){
+    const roleBar=page.getByLabel('Filtrar por perfil',{exact:true});
+    for(const name of ['Todos los perfiles','Cliente','Organizador','Trabajador']){
+     const button=page.getByRole('button',{name,exact:true});await button.scrollIntoViewIfNeeded();
+     const bounds=await button.boundingBox(),bar=await roleBar.boundingBox();
+     if(!bounds||!bar||bounds.height<44||bounds.y<bar.y-1||bounds.y+bounds.height>bar.y+bar.height+1)throw Error(name+': clipped role filter');
+     const label=await button.locator('[dir="auto"]').evaluate(el=>{const r=el.getBoundingClientRect();const p=el.parentElement.getBoundingClientRect();const s=getComputedStyle(el);return {inside:r.top>=p.top&&r.bottom<=p.bottom&&r.left>=p.left&&r.right<=p.right,color:s.color};});
+     if(!label.inside||!['rgb(240, 234, 249)','rgb(255, 255, 255)'].includes(label.color))throw Error(name+': unreadable label');
+    }
+    await page.getByRole('button',{name:'Trabajador',exact:true}).click();
+    await page.getByRole('button',{name:'No leída. Tienes un evento asignado',exact:true}).waitFor();
+    await page.screenshot({path:`${out}/notifications-worker-${width}${suffix}.png`});
+    await page.getByRole('button',{name:'Todos los perfiles',exact:true}).click();
+    await page.screenshot({path:`${out}/notifications-${width}${suffix}.png`});
+   }
    reports.push({view,width,height,fontScale,bodyWidth,checks:'passed'});
   }
   await page.close();
  }
  fs.writeFileSync(out+'/layout-results.json',JSON.stringify(reports,null,2));console.log(JSON.stringify(reports));
- const panels=[['customer-390.png','Perfil cliente'],['organizer-390.png','Perfil organizador'],['organizer-bottom-320.png','Acciones visibles'],['sell-320.png','Taquilla sin recortes']];
+ const panels=notificationsOnly?[['notifications-320.png','Pantalla pequeña'],['notifications-390.png','Todos los perfiles'],['notifications-worker-390.png','Perfil trabajador'],['notifications-320-large-text.png','Letra grande']]:[['customer-390.png','Perfil cliente'],['organizer-390.png','Perfil organizador'],['organizer-bottom-320.png','Acciones visibles'],['sell-320.png','Taquilla sin recortes']];
  fs.writeFileSync(out+'/overview.html',`<!doctype html><meta charset="utf-8"><style>body{margin:0;padding:28px;background:#070713;color:#F8FAFC;font-family:Arial}h1{margin:0 0 8px;font-size:26px}p{color:#A1A1AA;margin:0 0 24px}main{display:grid;grid-template-columns:repeat(4,1fr);gap:18px}h2{font-size:16px;margin:0 0 12px}img{width:100%;border:1px solid #343047;border-radius:16px}</style><h1>Eclipse · Revisión visual</h1><p>Pantallas reales con datos de ejemplo · Vista web para revisión, sin nuevas builds</p><main>${panels.map(([file,title])=>`<section><h2>${title}</h2><img src="${file}"></section>`).join('')}</main>`);
  const overview=await browser.newPage({viewport:{width:1240,height:800},deviceScaleFactor:1});
  await overview.goto(`http://127.0.0.1:${server.address().port}/overview.html`);await overview.screenshot({path:out+'/overview.png',fullPage:true});await overview.close();

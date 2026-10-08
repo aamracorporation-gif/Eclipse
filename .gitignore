@@ -50,3 +50,7 @@ docs/qa/responsive-review/*.js
 docs/qa/responsive-review/*.html
 docs/qa/responsive-review/*.ttf
 docs/qa/responsive-review/Icon-*.png
+docs/qa/notification-review/*.js
+docs/qa/notification-review/*.html
+docs/qa/notification-review/*.ttf
+docs/qa/notification-review/Icon-*.png
