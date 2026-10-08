@@ -1,0 +1,24 @@
+name: Verify notification presentation repair
+on:
+  push:
+    branches: [codex/restore-build65-forms-push]
+    paths:
+      - .github/workflows/verify-notification-presentation.yml
+      - lib/notifications.ts
+      - scripts/tests/notificationPresentation.test.cjs
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: node --test scripts/tests/notificationPresentation.test.cjs scripts/tests/notificationDelivery.test.cjs scripts/tests/notificationOperations.test.cjs
+      - run: npm run typecheck
+      - run: npm run lint
