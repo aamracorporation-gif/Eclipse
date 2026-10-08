@@ -1,0 +1,25 @@
+name: Eclipse build 67 status
+on:
+  push:
+    branches: [codex/eas-build67-status]
+    paths: [.github/workflows/eclipse67-status.yml]
+permissions:
+  contents: read
+jobs:
+  status:
+    runs-on: ubuntu-latest
+    environment: staging
+    timeout-minutes: 3
+    steps:
+      - name: Read build identifiers and state only
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        run: |
+          node - <<'NODE'
+          (async()=>{
+            const query='query{app{byId(appId:"42ebb6eb-62b1-4784-a483-831ae3c804f2"){builds(offset:0,limit:10){id status platform appVersion appBuildVersion gitCommitHash}}}}';
+            const r=await fetch('https://api.expo.dev/graphql',{method:'POST',headers:{'Content-Type':'application/json',authorization:'Bearer '+process.env.EXPO_TOKEN},body:JSON.stringify({query})});
+            const v=await r.json();if(!r.ok||v.errors?.length)throw Error('EAS status unavailable');
+            console.log('EAS_BUILDS='+JSON.stringify(v.data.app.byId.builds.filter(b=>b.gitCommitHash==='de7c4b82b686669d32a6a5d6256dad14a31f407d')));
+          })().catch(()=>{console.error('EAS status unavailable');process.exitCode=1});
+          NODE
