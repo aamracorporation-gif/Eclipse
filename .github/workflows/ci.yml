@@ -43,6 +43,10 @@ jobs:
           node scripts/qa/wallet-pass-regression.cjs
       - name: Validate Expo web bundle
         run: npm run build:web
+      - name: Verify shared push transport and regressions
+        run: |
+          node scripts/build-notification-runtime.cjs --check
+          node --test scripts/tests/notificationDelivery.test.cjs scripts/tests/notificationOperations.test.cjs
       - name: Backend dependencies and tests
         working-directory: backend
         run: npm ci && npm test
