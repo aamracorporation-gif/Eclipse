@@ -11,17 +11,24 @@
     "id": "83e1bc6b-b294-4a39-a287-b511f148e699",
     "profile": "preview",
     "format": "apk",
-    "status": "IN_PROGRESS",
-    "checkedAt": "2026-10-08T16:35:15Z",
+    "status": "FINISHED",
+    "checkedAt": "2026-10-08T16:53:20Z",
     "url": "https://expo.dev/accounts/ashhhhhhhh/projects/Eclipse/builds/83e1bc6b-b294-4a39-a287-b511f148e699",
     "priority": "NORMAL",
     "estimatedWaitTimeLeftSeconds": null,
     "runnerBuild": {
-      "status": "in_progress",
+      "status": "failure",
       "run": "https://github.com/aamracorporation-gif/Eclipse/actions/runs/37809299868",
       "builder": "EAS local on GitHub Actions",
-      "sourceCommit": "55487308c9327eace83c7c5fc7b1afdf66ec566d"
-    }
+      "sourceCommit": "55487308c9327eace83c7c5fc7b1afdf66ec566d",
+      "reason": "Auxiliary runner ran out of memory during Android lint; the separate EAS cloud build succeeded.",
+      "retired": true
+    },
+    "completedAt": "2026-10-08T16:50:17.995Z",
+    "apk": "https://expo.dev/artifacts/eas/tcEir26_3ODFrv8Kr8748oct9cB8Q9Bm61av0aJ7PTU.apk",
+    "version": "1.0.0",
+    "buildNumber": "4",
+    "sourceCommit": "55487308c9327eace83c7c5fc7b1afdf66ec566d"
   },
   "ios": {
     "id": "9b2dc61b-d8f2-4cce-b01e-a7b107c1806d",
@@ -31,24 +38,28 @@
     "buildNumber": "66",
     "completedAt": "2026-10-08T16:15:05.409Z",
     "url": "https://expo.dev/accounts/ashhhhhhhh/projects/Eclipse/builds/9b2dc61b-d8f2-4cce-b01e-a7b107c1806d",
-    "ipa": "https://expo.dev/artifacts/eas/cyWP9vLUENgvGsbsfUouVyttXs9LylOTCJz_E-daHq0.ipa"
+    "ipa": "https://expo.dev/artifacts/eas/cyWP9vLUENgvGsbsfUouVyttXs9LylOTCJz_E-daHq0.ipa",
+    "sourceCommit": "55487308c9327eace83c7c5fc7b1afdf66ec566d"
   },
   "testflightSubmission": {
-    "status": "IN_QUEUE",
+    "status": "FINISHED",
     "buildId": "9b2dc61b-d8f2-4cce-b01e-a7b107c1806d",
     "profile": "testflight",
     "ascAppId": "6773071994",
     "bundleIdentifier": "com.achraf.eclipse",
     "command": "eas submit --platform ios --profile testflight --id 9b2dc61b-d8f2-4cce-b01e-a7b107c1806d --non-interactive --wait",
-    "appleAcceptance": "pending_not_confirmed",
-    "submissionCredentials": "EAS accepted the submission for scheduling; Apple validation pending",
-    "instructions": "Submission has been requested and registered by EAS. Do not submit a duplicate. Wait for the existing submission result, then verify Apple processing and TestFlight availability.",
-    "submissionId": "a1bcdbc3-1d90-4623-aa64-682afb2ef5f2"
+    "appleAcceptance": "processing_and_testflight_availability_not_confirmed",
+    "submissionCredentials": "Existing EAS-managed App Store Connect API key successfully used for upload",
+    "instructions": "Upload to App Store Connect succeeded. Do not submit a duplicate. Apple processing and TestFlight tester availability are not independently confirmed.",
+    "submissionId": "a1bcdbc3-1d90-4623-aa64-682afb2ef5f2",
+    "uploadedAt": "2026-10-08T16:49:47Z",
+    "url": "https://expo.dev/accounts/ashhhhhhhh/projects/Eclipse/submissions/a1bcdbc3-1d90-4623-aa64-682afb2ef5f2",
+    "appStoreConnectUrl": "https://appstoreconnect.apple.com/apps/6773071994/testflight/ios"
   },
   "evidence": {
     "buildRun": "https://github.com/aamracorporation-gif/Eclipse/actions/runs/37805739081",
     "completionMonitor": "https://github.com/aamracorporation-gif/Eclipse/actions/runs/37806758870",
-    "statusSnapshot": "https://github.com/aamracorporation-gif/Eclipse/actions/runs/37809364189",
+    "statusSnapshot": "https://github.com/aamracorporation-gif/Eclipse/actions/runs/37811608925",
     "productionModified": false,
     "submissionRun": "https://github.com/aamracorporation-gif/Eclipse/actions/runs/37808441977"
   }
