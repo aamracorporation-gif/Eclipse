@@ -214,19 +214,19 @@ export function EventProvider({ children }: { children: React.ReactNode }) {
       .catch(() => {});
   }, []);
 
-  const fetchEventsQuery = useCallback(async (includeVerificationStatus: boolean) => {
+  const fetchEventsQuery = useCallback(async (includeVerificationStatus: boolean, includeProfiles = true) => {
     return supabase
       .from('events')
       .select(
         `
           *,
           venues (*),
-          event_ticket_types (*),
+          event_ticket_types (*)${includeProfiles ? `,
           profiles!events_creator_id_fkey_profiles (
             id,
             full_name,
             club_name${includeVerificationStatus ? ',\n            verification_status' : ''}
-          )
+          )` : ''}
         `
       )
       .order('event_date', { ascending: true })
@@ -255,6 +255,12 @@ export function EventProvider({ children }: { children: React.ReactNode }) {
         error = res.error as any;
       }
 
+      // Profiles are private. Their permissions must not block public browsing.
+      if (error?.code === '42501') {
+        const res = await fetchEventsQuery(false, false);
+        data = res.data as any;
+        error = res.error;
+      }
       if (error) throw error;
 
       if (data) {

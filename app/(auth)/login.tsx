@@ -1,6 +1,7 @@
 import { View, Text, StyleSheet, TouchableOpacity, TextInput, Keyboard, ScrollView, KeyboardAvoidingView, Platform } from 'react-native';
 import { useState, useEffect, useRef } from 'react';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
+import { eventReturnPath } from '@/lib/eventLinks';
 import { useAuth } from '@/lib/AuthContext';
 import { getErrorMessage } from '@/lib/errorHelpers';
 import { Mail, Lock, Sparkles, Eye, EyeOff } from '@/lib/icons';
@@ -38,6 +39,7 @@ export default function LoginScreen() {
   const { t } = useTranslation();
   const { show: showDialog } = useAppDialog();
   const router = useRouter();
+  const { returnTo } = useLocalSearchParams<{ returnTo?: string }>();
   
   const passwordInputRef = useRef<TextInput>(null);
 
@@ -237,7 +239,7 @@ export default function LoginScreen() {
 
         if (profileRole === 'admin') router.replace('/(creator)');
         else if (profileRole === 'organizer') router.replace('/(creator)');
-        else router.replace('/(tabs)');
+        else router.replace((eventReturnPath(returnTo) || '/(tabs)') as any);
       } else {
         setLoading(false);
         showDialog({
