@@ -1465,7 +1465,7 @@ export default function ProfileScreen() {
                               <Calendar size={16} color="#0B0B0F" />
                             </View>
                             <Text style={styles.iosButtonText}>{t('profile.organizer.menu.create_event')}</Text>
-                            <ChevronRight size={16} color="#8E8E93" />
+                            <ChevronRight size={16} color="#C4C4D4" />
                           </TouchableOpacity>
                           <View style={styles.iosDivider} />
                           <TouchableOpacity activeOpacity={0.75} onPress={() => router.push('/(creator)/manage-events')} style={styles.iosButtonRow}>
@@ -1473,7 +1473,7 @@ export default function ProfileScreen() {
                               <MapPin size={16} color="#0B0B0F" />
                             </View>
                             <Text style={styles.iosButtonText}>{t('profile.organizer.menu.my_events')}</Text>
-                            <ChevronRight size={16} color="#8E8E93" />
+                            <ChevronRight size={16} color="#C4C4D4" />
                           </TouchableOpacity>
                           <View style={styles.iosDivider} />
                           <TouchableOpacity activeOpacity={0.75} onPress={() => router.push('/(creator)/scan')} style={styles.iosButtonRow}>
@@ -1481,7 +1481,7 @@ export default function ProfileScreen() {
                               <QrCode size={16} color="#FFF" />
                             </View>
                             <Text style={styles.iosButtonText}>{t('profile.organizer.menu.scan')}</Text>
-                            <ChevronRight size={16} color="#8E8E93" />
+                            <ChevronRight size={16} color="#C4C4D4" />
                           </TouchableOpacity>
                           <View style={styles.iosDivider} />
                           <TouchableOpacity activeOpacity={0.75} onPress={() => router.push('/(creator)/workers')} style={styles.iosButtonRow}>
@@ -1489,7 +1489,7 @@ export default function ProfileScreen() {
                               <UserPlus size={16} color="#FFF" />
                             </View>
                             <Text style={styles.iosButtonText}>{t('profile.organizer.menu.staff')}</Text>
-                            <ChevronRight size={16} color="#8E8E93" />
+                            <ChevronRight size={16} color="#C4C4D4" />
                           </TouchableOpacity>
                           <View style={styles.iosDivider} />
                           <TouchableOpacity activeOpacity={0.75} onPress={() => router.push('/(creator)/stats')} style={styles.iosButtonRow}>
@@ -1497,7 +1497,7 @@ export default function ProfileScreen() {
                               <TrendingUp size={16} color="#0B0B0F" />
                             </View>
                             <Text style={styles.iosButtonText}>{t('profile.organizer.menu.stats')}</Text>
-                            <ChevronRight size={16} color="#8E8E93" />
+                            <ChevronRight size={16} color="#C4C4D4" />
                           </TouchableOpacity>
                         </GlassView>
                       </View>
@@ -1538,7 +1538,7 @@ export default function ProfileScreen() {
                                         {e.date} · {e.time} · {t('profile.organizer.sold_pct', { pct })}
                                       </Text>
                                     </View>
-                                    <ChevronRight size={16} color="#8E8E93" />
+                                    <ChevronRight size={16} color="#C4C4D4" />
                                   </TouchableOpacity>
                                   {idx < upcomingOrganizerEvents.length - 1 && <View style={styles.iosDivider} />}
                                 </View>
@@ -1547,7 +1547,7 @@ export default function ProfileScreen() {
                           ) : (
                             <View style={{ paddingVertical: 6 }}>
                               <Text style={{ color: 'rgba(255,255,255,0.70)', fontWeight: '700' }}>{t('profile.organizer.no_upcoming_title')}</Text>
-                              <Text style={{ color: 'rgba(255,255,255,0.55)', marginTop: 4 }}>
+                              <Text style={{ color: '#C4C4D4', marginTop: 4 }}>
                                 {t('profile.organizer.no_upcoming_body')}
                               </Text>
                             </View>
@@ -1607,7 +1607,7 @@ export default function ProfileScreen() {
                                   <Pencil size={16} color="#FFF" />
                                 </View>
                                 <Text style={styles.iosButtonText}>{t('profile.edit_profile')}</Text>
-                                <ChevronRight size={16} color="#8E8E93" />
+                                <ChevronRight size={16} color="#C4C4D4" />
                               </TouchableOpacity>
                             </GlassView>
                           </View>
@@ -1699,7 +1699,7 @@ export default function ProfileScreen() {
                               <ShieldCheck size={16} color="#000" />
                             </View>
                             <Text style={styles.iosButtonText}>{t('profile.organizer.settings.verification_payments')}</Text>
-                            <ChevronRight size={16} color="#8E8E93" />
+                            <ChevronRight size={16} color="#C4C4D4" />
                           </TouchableOpacity>
                           <View style={styles.iosDivider} />
                           <TouchableOpacity onPress={openLanguagePicker} activeOpacity={0.7} style={styles.iosButtonRow}>
@@ -1708,7 +1708,7 @@ export default function ProfileScreen() {
                             </View>
                             <Text style={styles.iosButtonText}>{t('profile.change_language')}</Text>
                             <Text style={[styles.iosValue, { marginRight: 8 }]}>{language.toUpperCase()}</Text>
-                            <ChevronRight size={16} color="#8E8E93" />
+                            <ChevronRight size={16} color="#C4C4D4" />
                           </TouchableOpacity>
                           <View style={styles.iosDivider} />
                           <TouchableOpacity onPress={() => router.push('/notification-preferences')} activeOpacity={0.7} style={styles.iosButtonRow}>
@@ -1716,7 +1716,7 @@ export default function ProfileScreen() {
                               <Sparkles size={16} color="#000" />
                             </View>
                             <Text style={styles.iosButtonText}>{t('profile.notification_preferences')}</Text>
-                            <ChevronRight size={16} color="#8E8E93" />
+                            <ChevronRight size={16} color="#C4C4D4" />
                           </TouchableOpacity>
                           <View style={styles.iosDivider} />
                           <TouchableOpacity onPress={() => router.push('/notifications')} activeOpacity={0.7} style={styles.iosButtonRow}>
@@ -1724,7 +1724,7 @@ export default function ProfileScreen() {
                               <Clock size={16} color="#000" />
                             </View>
                             <Text style={styles.iosButtonText}>{t('profile.notification_center')}</Text>
-                            <ChevronRight size={16} color="#8E8E93" />
+                            <ChevronRight size={16} color="#C4C4D4" />
                           </TouchableOpacity>
                           <View style={styles.iosDivider} />
                           <TouchableOpacity onPress={() => router.push('/legal')} activeOpacity={0.7} style={styles.iosButtonRow}>
@@ -1732,7 +1732,7 @@ export default function ProfileScreen() {
                               <FileText size={16} color="#000" />
                             </View>
                             <Text style={styles.iosButtonText}>{t('profile.legal_info')}</Text>
-                            <ChevronRight size={16} color="#8E8E93" />
+                            <ChevronRight size={16} color="#C4C4D4" />
                           </TouchableOpacity>
                           <View style={styles.iosDivider} />
                           <TouchableOpacity onPress={handleSignOut} activeOpacity={0.7} style={styles.iosButtonRow}>
@@ -1740,7 +1740,7 @@ export default function ProfileScreen() {
                               <LogOut size={16} color="#FFF" />
                             </View>
                             <Text style={styles.iosButtonText}>{t('profile.logout')}</Text>
-                            <ChevronRight size={16} color="#8E8E93" />
+                            <ChevronRight size={16} color="#C4C4D4" />
                           </TouchableOpacity>
                         </GlassView>
                       </View>
@@ -1775,7 +1775,7 @@ export default function ProfileScreen() {
                           <Pencil size={16} color="#FFF" />
                         </View>
                         <Text style={styles.iosButtonText}>{t('profile.edit_profile')}</Text>
-                        <ChevronRight size={16} color="#8E8E93" />
+                        <ChevronRight size={16} color="#C4C4D4" />
                       </TouchableOpacity>
                     </GlassView>
                   </View>
@@ -1788,7 +1788,7 @@ export default function ProfileScreen() {
                           <Wallet size={16} color="#000" />
                         </View>
                         <Text style={styles.iosButtonText}>{t('profile.wallet')}</Text>
-                        <ChevronRight size={16} color="#8E8E93" />
+                        <ChevronRight size={16} color="#C4C4D4" />
                       </TouchableOpacity>
                       <View style={styles.iosDivider} />
                       <TouchableOpacity onPress={() => router.push('/(tabs)/tickets')} activeOpacity={0.7} style={styles.iosButtonRow}>
@@ -1796,7 +1796,7 @@ export default function ProfileScreen() {
                           <Ticket size={16} color="#FFF" />
                         </View>
                         <Text style={styles.iosButtonText}>{t('tickets.my_tickets')}</Text>
-                        <ChevronRight size={16} color="#8E8E93" />
+                        <ChevronRight size={16} color="#C4C4D4" />
                       </TouchableOpacity>
                       <View style={styles.iosDivider} />
                       <TouchableOpacity onPress={() => router.push('/notification-preferences')} activeOpacity={0.7} style={styles.iosButtonRow}>
@@ -1804,7 +1804,7 @@ export default function ProfileScreen() {
                           <Sparkles size={16} color="#000" />
                         </View>
                         <Text style={styles.iosButtonText}>{t('profile.notification_preferences')}</Text>
-                        <ChevronRight size={16} color="#8E8E93" />
+                        <ChevronRight size={16} color="#C4C4D4" />
                       </TouchableOpacity>
                       <View style={styles.iosDivider} />
                       <TouchableOpacity onPress={() => router.push('/notifications')} activeOpacity={0.7} style={styles.iosButtonRow}>
@@ -1812,7 +1812,7 @@ export default function ProfileScreen() {
                           <Clock size={16} color="#000" />
                         </View>
                         <Text style={styles.iosButtonText}>{t('profile.notification_center')}</Text>
-                        <ChevronRight size={16} color="#8E8E93" />
+                        <ChevronRight size={16} color="#C4C4D4" />
                       </TouchableOpacity>
                       <View style={styles.iosDivider} />
                       <TouchableOpacity onPress={() => router.push('/legal')} activeOpacity={0.7} style={styles.iosButtonRow}>
@@ -1820,7 +1820,7 @@ export default function ProfileScreen() {
                           <FileText size={16} color="#000" />
                         </View>
                         <Text style={styles.iosButtonText}>{t('profile.legal_info')}</Text>
-                        <ChevronRight size={16} color="#8E8E93" />
+                        <ChevronRight size={16} color="#C4C4D4" />
                       </TouchableOpacity>
                       {profileRole === 'admin' && (
                         <>
@@ -1830,7 +1830,7 @@ export default function ProfileScreen() {
                               <ShieldCheck size={16} color="#000" />
                             </View>
                             <Text style={styles.iosButtonText}>{t('profile.review_organizers')}</Text>
-                            <ChevronRight size={16} color="#8E8E93" />
+                            <ChevronRight size={16} color="#C4C4D4" />
                           </TouchableOpacity>
                         </>
                       )}
@@ -1850,7 +1850,7 @@ export default function ProfileScreen() {
                           <QrCode size={16} color="#FFF" />
                         </View>
                         <Text style={styles.iosButtonText}>{t('profile.scan_tickets')}</Text>
-                        <ChevronRight size={16} color="#8E8E93" />
+                        <ChevronRight size={16} color="#C4C4D4" />
                       </TouchableOpacity>
                     </GlassView>
                   </View>
@@ -1870,7 +1870,7 @@ export default function ProfileScreen() {
                       <ShieldCheck size={16} color="#FFF" />
                     </View>
                     <Text style={styles.iosButtonText}>Cambiar contraseña</Text>
-                    <ChevronRight size={16} color="#8E8E93" />
+                    <ChevronRight size={16} color="#C4C4D4" />
                   </TouchableOpacity>
                 </GlassView>
               </View>
@@ -1888,7 +1888,7 @@ export default function ProfileScreen() {
                       <MessageCircle size={16} color="#FFF" />
                     </View>
                     <Text style={styles.iosButtonText}>Contactar con soporte</Text>
-                    <ChevronRight size={16} color="#8E8E93" />
+                    <ChevronRight size={16} color="#C4C4D4" />
                   </TouchableOpacity>
                 </GlassView>
               </View>
@@ -1942,9 +1942,9 @@ export default function ProfileScreen() {
                          <Wallet size={22} color="#30D158" />
                        </View>
                        <View style={{ flex: 1 }}>
-                         <Text style={{ color: 'rgba(255,255,255,0.55)', fontSize: 12, fontWeight: '500', marginBottom: 2 }}>Ganancias de reventa</Text>
+                         <Text style={{ color: '#C4C4D4', fontSize: 12, fontWeight: '500', marginBottom: 2 }}>Ganancias de reventa</Text>
                          <Text style={{ color: '#30D158', fontSize: 26, fontWeight: '700' }}>{balanceReal.toFixed(2)} €</Text>
-                         <Text style={{ color: 'rgba(255,255,255,0.4)', fontSize: 11, marginTop: 2 }}>Disponibles en tu wallet</Text>
+                         <Text style={{ color: '#C4C4D4', fontSize: 11, marginTop: 2 }}>Disponibles en tu wallet</Text>
                        </View>
                      </LinearGradient>
                    </GlassView>
@@ -1991,7 +1991,7 @@ export default function ProfileScreen() {
                      ) : (
                        <View style={styles.emptyResaleState}>
                          <GlassView intensity={14} style={[styles.emptyResaleCard, styles.premiumCard]}>
-                           <View style={styles.emptyResaleIcon}><Tag size={28} color="#8E8E93" /></View>
+                           <View style={styles.emptyResaleIcon}><Tag size={28} color="#C4C4D4" /></View>
                            <Text style={styles.emptyResaleText}>{t('profile.resale.empty_active')}</Text>
                          </GlassView>
                        </View>
@@ -2040,7 +2040,7 @@ export default function ProfileScreen() {
                                    </View>
                                  </View>
                                </View>
-                               <Text style={{ color: 'rgba(255,255,255,0.35)', fontSize: 11, paddingHorizontal: 14, paddingBottom: 12 }}>{txDate}</Text>
+                               <Text style={{ color: '#C4C4D4', fontSize: 11, paddingHorizontal: 14, paddingBottom: 12 }}>{txDate}</Text>
                              </GlassView>
                            </View>
                          );
@@ -2048,7 +2048,7 @@ export default function ProfileScreen() {
                      ) : (
                        <View style={styles.emptyResaleState}>
                          <GlassView intensity={14} style={[styles.emptyResaleCard, styles.premiumCard]}>
-                           <View style={styles.emptyResaleIcon}><TrendingUp size={28} color="#8E8E93" /></View>
+                           <View style={styles.emptyResaleIcon}><TrendingUp size={28} color="#C4C4D4" /></View>
                            <Text style={styles.emptyResaleText}>Aún no tienes transacciones de reventa</Text>
                          </GlassView>
                        </View>
@@ -2406,7 +2406,7 @@ export default function ProfileScreen() {
                           </Text>
                         </TouchableOpacity>
                         {profileDraft.birthdate ? (
-                          <Text style={{ color: 'rgba(255,255,255,0.45)', fontSize: 12, marginTop: 4 }}>
+                          <Text style={{ color: '#C4C4D4', fontSize: 12, marginTop: 4 }}>
                             {(() => {
                               const bd = new Date(profileDraft.birthdate + 'T12:00:00');
                               const today = new Date();
@@ -2735,7 +2735,7 @@ const styles = StyleSheet.create({
   premiumCard: {
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.10)',
-    backgroundColor: 'rgba(255,255,255,0.03)',
+    backgroundColor: '#1C1C2E',
     shadowColor: '#000',
     shadowOpacity: 0.22,
     shadowRadius: 16,
@@ -2873,7 +2873,7 @@ const styles = StyleSheet.create({
   },
   premiumSectionSubtitle: {
     marginTop: 3,
-    color: 'rgba(255,255,255,0.65)',
+    color: '#C4C4D4',
     fontWeight: '700',
     fontSize: 12,
   },
@@ -2889,7 +2889,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
   alertText: {
-    color: 'rgba(255,255,255,0.65)',
+    color: '#C4C4D4',
     marginTop: 6,
     fontWeight: '600',
     lineHeight: 18,
@@ -2915,7 +2915,7 @@ const styles = StyleSheet.create({
     fontSize: 13,
   },
   eventMeta: {
-    color: 'rgba(255,255,255,0.55)',
+    color: '#C4C4D4',
     marginTop: 3,
     fontWeight: '700',
     fontSize: 11,
@@ -2977,7 +2977,7 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   modalLabel: {
-    color: 'rgba(255,255,255,0.65)',
+    color: '#C4C4D4',
     fontWeight: '800',
     fontSize: 12,
   },
@@ -3076,7 +3076,7 @@ const styles = StyleSheet.create({
   },
   authPromptText: {
     fontSize: 16,
-    color: '#8E8E93',
+    color: '#C4C4D4',
     textAlign: 'center',
     marginBottom: 30,
     lineHeight: 22,
@@ -3152,7 +3152,7 @@ const styles = StyleSheet.create({
   },
   profileEmail: {
     fontSize: 14,
-    color: '#8E8E93',
+    color: '#C4C4D4',
     marginBottom: 8,
   },
   memberBadge: {
@@ -3322,7 +3322,7 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '700',
     letterSpacing: 0.6,
-    color: 'rgba(255,255,255,0.65)',
+    color: '#C4C4D4',
     textTransform: 'uppercase',
     marginBottom: 6,
   },
@@ -3335,7 +3335,7 @@ const styles = StyleSheet.create({
     marginTop: 10,
     fontSize: 12,
     fontWeight: '600',
-    color: 'rgba(255,255,255,0.45)',
+    color: '#C4C4D4',
   },
   organizerHeroCtaRow: {
     marginTop: 10,
@@ -3348,7 +3348,7 @@ const styles = StyleSheet.create({
   sectionHeader: {
     fontSize: 13,
     fontWeight: '600',
-    color: '#8E8E93',
+    color: '#C4C4D4',
     marginBottom: 8,
     marginLeft: 16,
     textTransform: 'uppercase',
@@ -3397,7 +3397,7 @@ const styles = StyleSheet.create({
   },
   iosValue: {
     fontSize: 16,
-    color: '#8E8E93',
+    color: '#C4C4D4',
     textAlign: 'right',
     flexShrink: 1,
   },
@@ -3433,7 +3433,7 @@ const styles = StyleSheet.create({
   versionText: {
     marginTop: 12,
     fontSize: 12,
-    color: '#48484A',
+    color: '#A8A8BE',
   },
 
   content: {
@@ -3518,7 +3518,7 @@ const styles = StyleSheet.create({
   },
   emptyResaleText: {
     marginTop: 14,
-    color: '#8E8E93',
+    color: '#C4C4D4',
     fontSize: 16,
     fontWeight: '600',
   },
@@ -3558,7 +3558,7 @@ const supportStyles = StyleSheet.create({
     paddingTop: 20,
   },
   label: {
-    color: 'rgba(255,255,255,0.55)',
+    color: '#C4C4D4',
     fontSize: 12,
     fontWeight: '600',
     letterSpacing: 0.6,
@@ -3579,7 +3579,7 @@ const supportStyles = StyleSheet.create({
     backgroundColor: 'rgba(14,165,233,0.18)',
   },
   chipTxt: {
-    color: 'rgba(255,255,255,0.55)',
+    color: '#C4C4D4',
     fontSize: 13,
     fontWeight: '500',
   },
@@ -3599,7 +3599,7 @@ const supportStyles = StyleSheet.create({
     marginBottom: 12,
   },
   hint: {
-    color: 'rgba(255,255,255,0.35)',
+    color: '#C4C4D4',
     fontSize: 12,
     lineHeight: 17,
     marginBottom: 20,
@@ -3645,7 +3645,7 @@ const dobStyles = StyleSheet.create({
   },
   sheetTitle: { color: 'white', fontSize: 16, fontWeight: '700' },
   doneBtn: { paddingVertical: 6, paddingHorizontal: 4 },
-  doneTxt: { color: '#7C3AED', fontSize: 16, fontWeight: '800' },
+  doneTxt: { color: '#C4B5FD', fontSize: 16, fontWeight: '800' },
   picker: { width: '100%', height: 220 },
 });
 
@@ -3689,8 +3689,8 @@ const pwdStyles = StyleSheet.create({
     marginBottom: 4,
   },
   stepTitle: { color: 'white', fontSize: 20, fontWeight: '900', marginBottom: 6 },
-  stepDesc: { color: 'rgba(255,255,255,0.55)', fontSize: 14, lineHeight: 20, marginBottom: 20 },
-  fieldLabel: { color: 'rgba(255,255,255,0.6)', fontSize: 12, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 8, marginTop: 12 },
+  stepDesc: { color: '#C4C4D4', fontSize: 14, lineHeight: 20, marginBottom: 20 },
+  fieldLabel: { color: '#C4C4D4', fontSize: 12, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 8, marginTop: 12 },
   inputWrap: {
     flexDirection: 'row', alignItems: 'center',
     backgroundColor: 'rgba(255,255,255,0.07)',
@@ -3707,7 +3707,7 @@ const pwdStyles = StyleSheet.create({
   reqRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   reqDot: { color: 'rgba(255,255,255,0.3)', fontSize: 14, fontWeight: '700', width: 18 },
   reqDotOk: { color: '#22c55e' },
-  reqTxt: { color: 'rgba(255,255,255,0.45)', fontSize: 13 },
+  reqTxt: { color: '#C4C4D4', fontSize: 13 },
   reqTxtOk: { color: 'rgba(255,255,255,0.8)' },
   errorBox: {
     marginTop: 10,
@@ -3723,7 +3723,7 @@ const pwdStyles = StyleSheet.create({
   doneWrap: { alignItems: 'center', padding: 32, gap: 16 },
   doneIcon: { width: 80, height: 80, borderRadius: 26, alignItems: 'center', justifyContent: 'center' },
   doneTitle: { color: 'white', fontSize: 22, fontWeight: '900', textAlign: 'center' },
-  doneBody: { color: 'rgba(255,255,255,0.55)', fontSize: 14, textAlign: 'center', lineHeight: 21 },
+  doneBody: { color: '#C4C4D4', fontSize: 14, textAlign: 'center', lineHeight: 21 },
   doneBtn: { borderRadius: 16, overflow: 'hidden', width: '100%', marginTop: 8 },
   doneBtnGrad: { paddingVertical: 16, alignItems: 'center' },
   doneBtnTxt: { color: 'white', fontSize: 16, fontWeight: '800' },
