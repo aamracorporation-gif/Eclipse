@@ -6,6 +6,7 @@ import { Buffer } from "node:buffer";
 import { WALLET_THEMES, walletTier, walletDate, walletRgb } from "../_shared/walletDesign.ts";
 import { normalizeWalletPem } from "../_shared/walletPem.ts";
 import { WALLET_ASSETS } from "./bundledAssets.ts";
+import { WALLET_BRANDING } from "./brandingAssets.ts";
 
 // Headers CORS requeridos para Expo/React Native
 const corsHeaders = {
@@ -308,7 +309,8 @@ Deno.serve(async (req) => {
     for (const scale of [1, 2, 3]) {
       const suffix = scale === 1 ? "" : `@${scale}x`;
       for (const name of ["icon", "logo"]) {
-        files[`${name}${suffix}.png`] = Buffer.from(decodeBase64ToUint8Array(WALLET_ASSETS[`${name}${suffix}.png`]));
+        const filename = `${name}${suffix}.png`;
+        files[filename] = Buffer.from(decodeBase64ToUint8Array(WALLET_BRANDING[filename] ?? WALLET_ASSETS[filename]));
       }
       files[`strip${suffix}.png`] = Buffer.from(decodeBase64ToUint8Array(WALLET_ASSETS[`strip_${passVisualTier}${suffix}.png`]));
     }
