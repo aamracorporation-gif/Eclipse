@@ -353,11 +353,7 @@ export default function EventDetailScreen() {
       await Share.share(payload as any);
     };
     try {
-      const result: any = user
-        ? await invokeEdgeFunctionStrict('event-share', { action: 'create', eventId: event.id })
-        : null;
-      const token = String(result?.token || '').trim();
-      const webUrl = eventShareUrl(event.id, token);
+      const webUrl = eventShareUrl(event.id);
 
       const message = `${title}\n\n${webUrl}`;
       await sharePayload(message, webUrl);
