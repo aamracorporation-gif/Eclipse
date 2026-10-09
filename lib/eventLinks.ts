@@ -2,10 +2,10 @@
 // The apex domain is parked; this branded host serves both event routes.
 export const EVENT_LINK_ORIGIN = 'https://api.weareeclipseoficial.com';
 
-export function eventShareUrl(eventId: string, token?: string): string {
-  return token
-    ? `${EVENT_LINK_ORIGIN}/evento/${encodeURIComponent(token)}`
-    : `${EVENT_LINK_ORIGIN}/event/${encodeURIComponent(eventId)}`;
+export function eventShareUrl(eventId: string): string {
+  // Tokens belong to one Supabase environment. The branded host must not
+  // resolve a staging token against production and discard the event ID.
+  return `${EVENT_LINK_ORIGIN}/event/${encodeURIComponent(eventId)}`;
 }
 
 export function eventReturnPath(value: unknown): string | null {
