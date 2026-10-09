@@ -1456,40 +1456,40 @@ export default function ProfileScreen() {
                             }}
                             style={[styles.iosButtonRow, profileAppearance.actionRow]}
                           >
-                            <View style={[styles.iosIcon, { backgroundColor: '#22c55e' }]}>
-                              <Calendar size={16} color="#0B0B0F" />
+                            <View style={[styles.iosIcon, { backgroundColor: '#28243D' }]}>
+                              <Calendar size={16} color="#F4F0FF" />
                             </View>
                             <Text style={styles.iosButtonText}>{t('profile.organizer.menu.create_event')}</Text>
                             <ChevronRight size={16} color="#C4C4D4" />
                           </TouchableOpacity>
                           <View style={styles.iosDivider} />
                           <TouchableOpacity activeOpacity={0.75} onPress={() => router.push('/(creator)/manage-events')} style={[styles.iosButtonRow, profileAppearance.actionRow]}>
-                            <View style={[styles.iosIcon, { backgroundColor: '#38bdf8' }]}>
-                              <MapPin size={16} color="#0B0B0F" />
+                            <View style={[styles.iosIcon, { backgroundColor: '#28243D' }]}>
+                              <MapPin size={16} color="#F4F0FF" />
                             </View>
                             <Text style={styles.iosButtonText}>{t('profile.organizer.menu.my_events')}</Text>
                             <ChevronRight size={16} color="#C4C4D4" />
                           </TouchableOpacity>
                           <View style={styles.iosDivider} />
                           <TouchableOpacity activeOpacity={0.75} onPress={() => router.push('/(creator)/scan')} style={[styles.iosButtonRow, profileAppearance.actionRow]}>
-                            <View style={[styles.iosIcon, { backgroundColor: Colors.dark.primarySoft }]}>
-                              <QrCode size={16} color="#FFF" />
+                            <View style={[styles.iosIcon, { backgroundColor: '#28243D' }]}>
+                              <QrCode size={16} color="#F4F0FF" />
                             </View>
                             <Text style={styles.iosButtonText}>{t('profile.organizer.menu.scan')}</Text>
                             <ChevronRight size={16} color="#C4C4D4" />
                           </TouchableOpacity>
                           <View style={styles.iosDivider} />
                           <TouchableOpacity activeOpacity={0.75} onPress={() => router.push('/(creator)/workers')} style={[styles.iosButtonRow, profileAppearance.actionRow]}>
-                            <View style={[styles.iosIcon, { backgroundColor: '#a855f7' }]}>
-                              <UserPlus size={16} color="#FFF" />
+                            <View style={[styles.iosIcon, { backgroundColor: '#28243D' }]}>
+                              <UserPlus size={16} color="#F4F0FF" />
                             </View>
                             <Text style={styles.iosButtonText}>{t('profile.organizer.menu.staff')}</Text>
                             <ChevronRight size={16} color="#C4C4D4" />
                           </TouchableOpacity>
                           <View style={styles.iosDivider} />
                           <TouchableOpacity activeOpacity={0.75} onPress={() => router.push('/(creator)/stats')} style={[styles.iosButtonRow, profileAppearance.actionRow]}>
-                            <View style={[styles.iosIcon, { backgroundColor: '#30D158' }]}>
-                              <TrendingUp size={16} color="#0B0B0F" />
+                            <View style={[styles.iosIcon, { backgroundColor: '#28243D' }]}>
+                              <TrendingUp size={16} color="#F4F0FF" />
                             </View>
                             <Text style={styles.iosButtonText}>{t('profile.organizer.menu.stats')}</Text>
                             <ChevronRight size={16} color="#C4C4D4" />
@@ -1598,8 +1598,8 @@ export default function ProfileScreen() {
                           <View style={styles.iosGroup}>
                             <GlassView intensity={14} style={[styles.iosGroupContainer, profileAppearance.card]}>
                               <TouchableOpacity onPress={openProfileEdit} activeOpacity={0.7} style={[styles.iosButtonRow, profileAppearance.actionRow]}>
-                                <View style={[styles.iosIcon, { backgroundColor: Colors.dark.primarySoft }]}>
-                                  <Pencil size={16} color="#FFF" />
+                                <View style={[styles.iosIcon, { backgroundColor: '#28243D' }]}>
+                                  <Pencil size={16} color="#F4F0FF" />
                                 </View>
                                 <Text style={styles.iosButtonText}>{t('profile.edit_profile')}</Text>
                                 <ChevronRight size={16} color="#C4C4D4" />
@@ -1690,16 +1690,16 @@ export default function ProfileScreen() {
                       <View style={styles.iosGroup}>
                         <GlassView intensity={14} style={[styles.iosGroupContainer, profileAppearance.card]}>
                           <TouchableOpacity onPress={() => router.push('/(creator)/verification')} activeOpacity={0.7} style={[styles.iosButtonRow, profileAppearance.actionRow]}>
-                            <View style={[styles.iosIcon, { backgroundColor: '#F59E0B' }]}>
-                              <ShieldCheck size={16} color="#000" />
+                            <View style={[styles.iosIcon, { backgroundColor: '#28243D' }]}>
+                              <ShieldCheck size={16} color="#F4F0FF" />
                             </View>
                             <Text style={styles.iosButtonText}>{t('profile.organizer.settings.verification_payments')}</Text>
                             <ChevronRight size={16} color="#C4C4D4" />
                           </TouchableOpacity>
                           <View style={styles.iosDivider} />
                           <TouchableOpacity onPress={openLanguagePicker} activeOpacity={0.7} style={[styles.iosButtonRow, profileAppearance.actionRow]}>
-                            <View style={[styles.iosIcon, { backgroundColor: '#a78bfa' }]}>
-                              <User size={16} color="#000" />
+                            <View style={[styles.iosIcon, { backgroundColor: '#28243D' }]}>
+                              <User size={16} color="#F4F0FF" />
                             </View>
                             <Text style={styles.iosButtonText}>{t('profile.change_language')}</Text>
                             <Text style={[styles.iosValue, { marginRight: 8 }]}>{language.toUpperCase()}</Text>
@@ -1707,32 +1707,32 @@ export default function ProfileScreen() {
                           </TouchableOpacity>
                           <View style={styles.iosDivider} />
                           <TouchableOpacity onPress={() => router.push('/notification-preferences')} activeOpacity={0.7} style={[styles.iosButtonRow, profileAppearance.actionRow]}>
-                            <View style={[styles.iosIcon, { backgroundColor: Colors.dark.primarySoft }]}>
-                              <Sparkles size={16} color="#000" />
+                            <View style={[styles.iosIcon, { backgroundColor: '#28243D' }]}>
+                              <Sparkles size={16} color="#F4F0FF" />
                             </View>
                             <Text style={styles.iosButtonText}>{t('profile.notification_preferences')}</Text>
                             <ChevronRight size={16} color="#C4C4D4" />
                           </TouchableOpacity>
                           <View style={styles.iosDivider} />
                           <TouchableOpacity onPress={() => router.push('/notifications')} activeOpacity={0.7} style={[styles.iosButtonRow, profileAppearance.actionRow]}>
-                            <View style={[styles.iosIcon, { backgroundColor: '#22c55e' }]}>
-                              <Clock size={16} color="#000" />
+                            <View style={[styles.iosIcon, { backgroundColor: '#28243D' }]}>
+                              <Clock size={16} color="#F4F0FF" />
                             </View>
                             <Text style={styles.iosButtonText}>{t('profile.notification_center')}</Text>
                             <ChevronRight size={16} color="#C4C4D4" />
                           </TouchableOpacity>
                           <View style={styles.iosDivider} />
                           <TouchableOpacity onPress={() => router.push('/legal')} activeOpacity={0.7} style={[styles.iosButtonRow, profileAppearance.actionRow]}>
-                            <View style={[styles.iosIcon, { backgroundColor: '#34d399' }]}>
-                              <FileText size={16} color="#000" />
+                            <View style={[styles.iosIcon, { backgroundColor: '#28243D' }]}>
+                              <FileText size={16} color="#F4F0FF" />
                             </View>
                             <Text style={styles.iosButtonText}>{t('profile.legal_info')}</Text>
                             <ChevronRight size={16} color="#C4C4D4" />
                           </TouchableOpacity>
                           <View style={styles.iosDivider} />
                           <TouchableOpacity onPress={handleSignOut} activeOpacity={0.7} style={[styles.iosButtonRow, profileAppearance.actionRow]}>
-                            <View style={[styles.iosIcon, { backgroundColor: '#ef4444' }]}>
-                              <LogOut size={16} color="#FFF" />
+                            <View style={[styles.iosIcon, { backgroundColor: '#28243D' }]}>
+                              <LogOut size={16} color="#F4F0FF" />
                             </View>
                             <Text style={styles.iosButtonText}>{t('profile.logout')}</Text>
                             <ChevronRight size={16} color="#C4C4D4" />
@@ -1766,8 +1766,8 @@ export default function ProfileScreen() {
                       </View>
                       <View style={styles.iosDivider} />
                       <TouchableOpacity onPress={openProfileEdit} activeOpacity={0.7} style={[styles.iosButtonRow, profileAppearance.actionRow]}>
-                        <View style={[styles.iosIcon, { backgroundColor: Colors.dark.primarySoft }]}>
-                          <Pencil size={16} color="#FFF" />
+                        <View style={[styles.iosIcon, { backgroundColor: '#28243D' }]}>
+                          <Pencil size={16} color="#F4F0FF" />
                         </View>
                         <Text style={styles.iosButtonText}>{t('profile.edit_profile')}</Text>
                         <ChevronRight size={16} color="#C4C4D4" />
@@ -1779,40 +1779,40 @@ export default function ProfileScreen() {
                   <View style={styles.iosGroup}>
                     <GlassView intensity={14} style={[styles.iosGroupContainer, profileAppearance.card]}>
                       {LAUNCH_FEATURES.walletCredit && (<><TouchableOpacity onPress={() => router.push('/wallet')} activeOpacity={0.7} style={[styles.iosButtonRow, profileAppearance.actionRow]}>
-                        <View style={[styles.iosIcon, { backgroundColor: '#FFD60A' }]}>
-                          <Wallet size={16} color="#000" />
+                        <View style={[styles.iosIcon, { backgroundColor: '#28243D' }]}>
+                          <Wallet size={16} color="#F4F0FF" />
                         </View>
                         <Text style={styles.iosButtonText}>{t('profile.wallet')}</Text>
                         <ChevronRight size={16} color="#C4C4D4" />
                       </TouchableOpacity>
                       <View style={styles.iosDivider} /></>)}
                       <TouchableOpacity onPress={() => router.push('/(tabs)/tickets')} activeOpacity={0.7} style={[styles.iosButtonRow, profileAppearance.actionRow]}>
-                        <View style={[styles.iosIcon, { backgroundColor: Colors.dark.primarySoft }]}>
-                          <Ticket size={16} color="#FFF" />
+                        <View style={[styles.iosIcon, { backgroundColor: '#28243D' }]}>
+                          <Ticket size={16} color="#F4F0FF" />
                         </View>
                         <Text style={styles.iosButtonText}>{t('tickets.my_tickets')}</Text>
                         <ChevronRight size={16} color="#C4C4D4" />
                       </TouchableOpacity>
                       <View style={styles.iosDivider} />
                       <TouchableOpacity onPress={() => router.push('/notification-preferences')} activeOpacity={0.7} style={[styles.iosButtonRow, profileAppearance.actionRow]}>
-                        <View style={[styles.iosIcon, { backgroundColor: Colors.dark.primarySoft }]}>
-                          <Sparkles size={16} color="#000" />
+                        <View style={[styles.iosIcon, { backgroundColor: '#28243D' }]}>
+                          <Sparkles size={16} color="#F4F0FF" />
                         </View>
                         <Text style={styles.iosButtonText}>{t('profile.notification_preferences')}</Text>
                         <ChevronRight size={16} color="#C4C4D4" />
                       </TouchableOpacity>
                       <View style={styles.iosDivider} />
                       <TouchableOpacity onPress={() => router.push('/notifications')} activeOpacity={0.7} style={[styles.iosButtonRow, profileAppearance.actionRow]}>
-                        <View style={[styles.iosIcon, { backgroundColor: '#22c55e' }]}>
-                          <Clock size={16} color="#000" />
+                        <View style={[styles.iosIcon, { backgroundColor: '#28243D' }]}>
+                          <Clock size={16} color="#F4F0FF" />
                         </View>
                         <Text style={styles.iosButtonText}>{t('profile.notification_center')}</Text>
                         <ChevronRight size={16} color="#C4C4D4" />
                       </TouchableOpacity>
                       <View style={styles.iosDivider} />
                       <TouchableOpacity onPress={() => router.push('/legal')} activeOpacity={0.7} style={[styles.iosButtonRow, profileAppearance.actionRow]}>
-                        <View style={[styles.iosIcon, { backgroundColor: '#34d399' }]}>
-                          <FileText size={16} color="#000" />
+                        <View style={[styles.iosIcon, { backgroundColor: '#28243D' }]}>
+                          <FileText size={16} color="#F4F0FF" />
                         </View>
                         <Text style={styles.iosButtonText}>{t('profile.legal_info')}</Text>
                         <ChevronRight size={16} color="#C4C4D4" />
@@ -1821,8 +1821,8 @@ export default function ProfileScreen() {
                         <>
                           <View style={styles.iosDivider} />
                           <TouchableOpacity onPress={() => router.push('/(creator)/admin-verification')} activeOpacity={0.7} style={[styles.iosButtonRow, profileAppearance.actionRow]}>
-                            <View style={[styles.iosIcon, { backgroundColor: '#F59E0B' }]}>
-                              <ShieldCheck size={16} color="#000" />
+                            <View style={[styles.iosIcon, { backgroundColor: '#28243D' }]}>
+                              <ShieldCheck size={16} color="#F4F0FF" />
                             </View>
                             <Text style={styles.iosButtonText}>{t('profile.review_organizers')}</Text>
                             <ChevronRight size={16} color="#C4C4D4" />
@@ -1841,8 +1841,8 @@ export default function ProfileScreen() {
                   <View style={styles.iosGroup}>
                     <GlassView intensity={14} style={[styles.iosGroupContainer, profileAppearance.card]}>
                        <TouchableOpacity onPress={() => router.push('/(worker)')} activeOpacity={0.7} style={[styles.iosButtonRow, profileAppearance.actionRow]}>
-                        <View style={[styles.iosIcon, { backgroundColor: Colors.dark.primarySoft }]}>
-                          <QrCode size={16} color="#FFF" />
+                        <View style={[styles.iosIcon, { backgroundColor: '#28243D' }]}>
+                          <QrCode size={16} color="#F4F0FF" />
                         </View>
                         <Text style={styles.iosButtonText}>{t('profile.scan_tickets')}</Text>
                         <ChevronRight size={16} color="#C4C4D4" />
@@ -1861,8 +1861,8 @@ export default function ProfileScreen() {
                     onPress={openChangePwd}
                     style={[styles.iosButtonRow, profileAppearance.actionRow]}
                   >
-                    <View style={[styles.iosIcon, { backgroundColor: '#F59E0B' }]}>
-                      <ShieldCheck size={16} color="#FFF" />
+                    <View style={[styles.iosIcon, { backgroundColor: '#28243D' }]}>
+                      <ShieldCheck size={16} color="#F4F0FF" />
                     </View>
                     <Text style={styles.iosButtonText}>Cambiar contraseña</Text>
                     <ChevronRight size={16} color="#C4C4D4" />
@@ -1879,8 +1879,8 @@ export default function ProfileScreen() {
                     onPress={() => setSupportOpen(true)}
                     style={[styles.iosButtonRow, profileAppearance.actionRow]}
                   >
-                    <View style={[styles.iosIcon, { backgroundColor: Colors.dark.primarySoft }]}>
-                      <MessageCircle size={16} color="#FFF" />
+                    <View style={[styles.iosIcon, { backgroundColor: '#28243D' }]}>
+                      <MessageCircle size={16} color="#F4F0FF" />
                     </View>
                     <Text style={styles.iosButtonText}>Contactar con soporte</Text>
                     <ChevronRight size={16} color="#C4C4D4" />
