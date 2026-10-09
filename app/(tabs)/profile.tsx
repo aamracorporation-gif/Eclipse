@@ -1,4 +1,5 @@
 import { profileAppearance } from '@/theme/profileAppearance';
+import { SubscriptionShortcut } from '@/components/SubscriptionShortcut';
 import { LAUNCH_FEATURES } from '@/lib/launchFeatures';
 import { View, Text, StyleSheet, TouchableOpacity, Platform, ScrollView, Image, RefreshControl, StatusBar, Modal, TextInput, KeyboardAvoidingView, Switch, Alert, useWindowDimensions, Pressable } from 'react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
@@ -1437,6 +1438,7 @@ export default function ProfileScreen() {
                           <Text style={styles.premiumSubtitle}>{t('profile.organizer.actions_subtitle')}</Text>
                         </View>
                       </View>
+                      <SubscriptionShortcut />
                       <View style={styles.iosGroup}>
                         <GlassView intensity={14} style={[styles.iosGroupContainer, profileAppearance.card]}>
                           <TouchableOpacity
