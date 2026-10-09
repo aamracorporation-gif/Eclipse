@@ -2,7 +2,7 @@ import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { supabase } from '@/lib/supabase';
-import { ChevronLeft, ScanLine, ShoppingBag, BarChart2, Calendar, Ticket, Mail, RefreshCw } from '@/lib/icons';
+import { ChevronLeft, ScanLine, ShoppingBag, BarChart2, Mail, RefreshCw } from '@/lib/icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Colors } from '@/constants/Colors';
 import { GlassView } from '@/components/ui/GlassView';

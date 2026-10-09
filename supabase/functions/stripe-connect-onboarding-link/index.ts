@@ -17,16 +17,29 @@ function stripeHeaders(secretKey: string) {
   };
 }
 
-function isAllowedReturnUrl(url: string) {
-  const u = url.toLowerCase();
-  return (
-    u.startsWith("eclipse://") || 
-    u.startsWith("partyapp://") || 
-    u.startsWith("exp://") || 
-    u.startsWith("http://localhost") ||
-    u.includes(".supabase.co") ||
-    u.startsWith("https://")
-  );
+function isAllowedReturnUrl(value: string, supabaseUrl: string) {
+  try {
+    if (/[\u0000-\u0020<>"'\\\\]/.test(value)) return false;
+    const url = new URL(value);
+    if (url.username || url.password) return false;
+    if (url.protocol === "eclipse:" || url.protocol === "partyapp:") {
+      return value.startsWith(`${url.protocol}//`);
+    }
+    return url.protocol === "https:" && url.origin === callbackBaseUrl(supabaseUrl);
+  } catch {
+    return false;
+  }
+}
+
+function callbackBaseUrl(supabaseUrl: string) {
+  const projectHost = new URL(supabaseUrl).hostname;
+  if (projectHost === "uhondxttdpvywvkyqlkk.supabase.co") {
+    return "https://eclipse-staging-staging.up.railway.app";
+  }
+  if (projectHost === "zurbdrfmwjqbrscairub.supabase.co") {
+    return "https://api.weareeclipseoficial.com";
+  }
+  throw new Error("Unconfigured Stripe callback environment");
 }
 
 async function stripeCreateAccountLink(params: Record<string, string>) {
@@ -82,7 +95,7 @@ serve(async (req) => {
   const returnUrl = (body?.return_url || "").trim();
   const refreshUrl = (body?.refresh_url || "").trim();
   if (!returnUrl || !refreshUrl) return jsonResponse({ ok: false, error: "Missing return_url/refresh_url" }, 400);
-  if (!isAllowedReturnUrl(returnUrl) || !isAllowedReturnUrl(refreshUrl)) {
+  if (!isAllowedReturnUrl(returnUrl, SUPABASE_URL) || !isAllowedReturnUrl(refreshUrl, SUPABASE_URL)) {
     return jsonResponse({ ok: false, error: "Invalid return_url/refresh_url" }, 400);
   }
 
@@ -97,12 +110,13 @@ serve(async (req) => {
   if (!profile?.stripe_account_id) return jsonResponse({ ok: false, error: "Stripe account not found" }, 404);
   if (profile.role !== "organizer") return jsonResponse({ ok: false, error: "Not an organizer" }, 403);
 
-  const completeUrl = `https://api.weareeclipseoficial.com/stripe/complete?account=${profile.stripe_account_id}&next=${encodeURIComponent(returnUrl)}`;
-
   try {
+    const base = callbackBaseUrl(SUPABASE_URL);
+    const completeUrl = `${base}/stripe/complete?account=${encodeURIComponent(profile.stripe_account_id)}&next=${encodeURIComponent(returnUrl)}`;
+    const retryUrl = `${base}/stripe/complete?account=${encodeURIComponent(profile.stripe_account_id)}&next=${encodeURIComponent(refreshUrl)}`;
     const link = await stripeCreateAccountLink({
       account: profile.stripe_account_id,
-      refresh_url: completeUrl,
+      refresh_url: retryUrl,
       return_url: completeUrl,
       type: "account_onboarding",
     });

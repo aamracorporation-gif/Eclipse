@@ -11,9 +11,11 @@ import { ThemedButton } from '@/components/ui/ThemedButton';
 import { ThemedInput } from '@/components/ui/ThemedInput';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
+import { useBoxOfficeAccess } from '@/hooks/useBoxOfficeAccess';
 
 export default function AddWorker() {
   const { user } = useAuth();
+  const boxOffice = useBoxOfficeAccess(user?.id);
   const router = useRouter();
   const { t } = useTranslation();
   const [loading, setLoading] = useState(false);
@@ -45,7 +47,7 @@ export default function AddWorker() {
       setLoading(true);
       
       const activePermissions = Object.entries(permissions)
-        .filter(([_, active]) => active)
+        .filter(([key, active]) => active && (key !== 'sell' || boxOffice.enabled))
         .map(([key]) => key);
 
       const { data, error } = await supabase.from('workers').insert({
@@ -162,11 +164,12 @@ export default function AddWorker() {
             <View style={styles.permissionRow}>
               <View>
                 <Text style={styles.permTitle}>{t('creator.workers.perm_sell_title')}</Text>
-                <Text style={styles.permDesc}>{t('creator.workers.perm_sell_desc')}</Text>
+                <Text style={styles.permDesc}>{boxOffice.enabled ? t('creator.workers.perm_sell_desc') : 'Requiere Taquilla Premium · 50 €/mes'}</Text>
               </View>
               <Switch
-                value={permissions.sell}
-                onValueChange={(v) => setPermissions({ ...permissions, sell: v })}
+                value={permissions.sell && boxOffice.enabled}
+                disabled={!boxOffice.enabled || boxOffice.checking}
+                onValueChange={(v) => setPermissions({ ...permissions, sell: v && boxOffice.enabled })}
                 trackColor={{ false: '#333', true: Colors.dark.primary }}
               />
             </View>

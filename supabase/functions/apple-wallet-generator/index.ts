@@ -1,17 +1,11 @@
+import { resolveTicketProduct } from '../_shared/ticketProduct.ts';
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 import { PKPass } from "https://esm.sh/passkit-generator@3.1.10";
 import forge from "https://esm.sh/node-forge@1.4.0";
-import JSZip from "https://esm.sh/jszip@3.10.1";
 import { Buffer } from "node:buffer";
-import {
-  BUNDLED_FOOTER_PNG_BASE64,
-  BUNDLED_ICON_PNG_BASE64,
-  BUNDLED_LOGO_PNG_BASE64,
-  BUNDLED_STRIP_PNG_BASE64_GENERAL,
-  BUNDLED_STRIP_PNG_BASE64_VIP,
-  BUNDLED_STRIP_PNG_BASE64_BACKSTAGE,
-  BUNDLED_STRIP_PNG_BASE64_FASTLANE,
-} from "./bundledAssets.ts";
+import { WALLET_THEMES, walletTier, walletDate, walletRgb } from "../_shared/walletDesign.ts";
+import { normalizeWalletPem } from "../_shared/walletPem.ts";
+import { WALLET_ASSETS } from "./bundledAssets.ts";
 
 // Headers CORS requeridos para Expo/React Native
 const corsHeaders = {
@@ -21,35 +15,33 @@ const corsHeaders = {
 
 /**
  * REESCRITURA TOTAL: APPLE WALLET GENERATOR
- * Esta versión incluye logs detallados para el panel de Supabase y validación extrema.
+ * Genera el pase y valida de forma estricta certificados, propiedad y contenido.
  */
 Deno.serve(async (req) => {
   // 1. Manejo de CORS (Preflight)
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
   }
+  if (req.method !== "POST") {
+    return new Response(JSON.stringify({ error: "Método no permitido" }), { status: 405, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+  }
 
   try {
-    console.log("[START] Petición de generación de Wallet recibida.");
-
-    const tryDecodeBase64Text = (value: string) => {
-      try {
-        const cleaned = String(value || "").replace(/\s+/g, "");
-        if (!cleaned || cleaned.includes("-----BEGIN")) return String(value || "");
-        if (!/^[A-Za-z0-9+/=]+$/.test(cleaned) || cleaned.length % 4 !== 0) return String(value || "");
-        return new TextDecoder().decode(Uint8Array.from(atob(cleaned), (c) => c.charCodeAt(0)));
-      } catch {
-        return String(value || "");
-      }
-    };
-
-    const normalizePem = (value: string) =>
-      tryDecodeBase64Text(String(value || ""))
-        .replace(/^\uFEFF/, "")
-        .replace(/\r\n/g, "\n")
-        .replace(/\\n/g, "\n")
-        .replace(/^"+|"+$/g, "")
-        .trim();
+    // Authenticate before parsing signing credentials or disclosing configuration errors.
+    const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
+    const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY")!;
+    const authHeader = req.headers.get("Authorization");
+    if (!authHeader) {
+      return new Response(JSON.stringify({ error: "No Authorization header" }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+    const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+      global: { headers: { Authorization: authHeader } },
+    });
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    if (authError || !user) {
+      return new Response(JSON.stringify({ error: "Invalid session" }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+    const normalizePem = normalizeWalletPem;
 
     const wrapPemBody = (body: string) =>
       body.match(/.{1,64}/g)?.join("\n") || body;
@@ -72,8 +64,6 @@ Deno.serve(async (req) => {
     };
 
     // 2. Validación de Secretos (Entorno)
-    const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
-    const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY")!;
     const RAW_APPLE_PASS_TYPE_ID = String(Deno.env.get("APPLE_PASS_TYPE_ID") || "").trim();
     const RAW_APPLE_TEAM_ID = String(Deno.env.get("APPLE_TEAM_ID") || "").trim();
     const WWDR_CERT = rebuildPemBlock(
@@ -92,15 +82,13 @@ Deno.serve(async (req) => {
       "-----END PRIVATE KEY-----",
     );
     const KEY_PASSWORD = Deno.env.get("APPLE_PASS_KEY_PASSWORD") || "";
-    const PASS_ICON_PNG_BASE64 = String(Deno.env.get("PASS_ICON_PNG_BASE64") || "").trim();
-    const PASS_LOGO_PNG_BASE64 = String(Deno.env.get("PASS_LOGO_PNG_BASE64") || "").trim();
     const PASS_STRIP_PNG_BASE64_VIP = String(Deno.env.get("PASS_STRIP_PNG_BASE64_VIP") || "").trim();
     const PASS_STRIP_PNG_BASE64_PREMIUM = String(Deno.env.get("PASS_STRIP_PNG_BASE64_PREMIUM") || "").trim();
     const PASS_STRIP_PNG_BASE64_GOLD = String(Deno.env.get("PASS_STRIP_PNG_BASE64_GOLD") || "").trim();
 
     if (!WWDR_CERT || !SIGNER_CERT || !SIGNER_KEY) {
       console.error("[ERROR] Certificados Apple no configurados en secretos de Supabase.");
-      throw new Error("Missing Apple Certificates in Environment Variables.");
+      return new Response(JSON.stringify({ error: "Apple Wallet no está configurado en este entorno: faltan certificados de firma.", code: "WALLET_NOT_CONFIGURED" }), { status: 503, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
     const pemSummary = (name: string, value: string) => ({
       name,
@@ -114,15 +102,8 @@ Deno.serve(async (req) => {
       lastLine: String(value.split("\n").slice(-1)[0] || ""),
     });
 
-    console.log("[PEM] Summary:", JSON.stringify({
-      wwdr: pemSummary("wwdr", WWDR_CERT),
-      signerCert: pemSummary("signerCert", SIGNER_CERT),
-      signerKey: pemSummary("signerKey", SIGNER_KEY),
-    }));
-
     try {
       forge.pki.certificateFromPem(WWDR_CERT);
-      console.log("[PEM] WWDR OK");
     } catch (e: any) {
       console.error("[PEM] WWDR INVALID:", String(e?.message || e));
       const summary = pemSummary("wwdr", WWDR_CERT);
@@ -148,19 +129,12 @@ Deno.serve(async (req) => {
     )?.value;
 
     try {
-      console.log("[PEM] PASS CERT SUBJECT:", JSON.stringify({
-        commonName: signerCommonName || null,
-        organizationalUnit: signerOrgUnit || null,
-      }));
-      console.log("[PEM] PASS CERT OK");
-    } catch (e: any) {
-      console.error("[PEM] PASS CERT INVALID:", String(e?.message || e));
-      throw new Error(`APPLE_PASS_CERT inválido: ${String(e?.message || e)}`);
-    }
-
-    try {
-      forge.pki.privateKeyFromPem(SIGNER_KEY);
-      console.log("[PEM] PASS KEY OK");
+      if (KEY_PASSWORD) {
+        const decryptedKey = forge.pki.decryptRsaPrivateKey(SIGNER_KEY, KEY_PASSWORD);
+        if (!decryptedKey) throw new Error("La contraseña no permite abrir la clave de firma.");
+      } else {
+        forge.pki.privateKeyFromPem(SIGNER_KEY);
+      }
     } catch (e: any) {
       console.error("[PEM] PASS KEY INVALID:", String(e?.message || e));
       throw new Error(`APPLE_PASS_KEY inválido: ${String(e?.message || e)}`);
@@ -204,58 +178,6 @@ Deno.serve(async (req) => {
       return out;
     };
 
-    const hexPrefix = (bytes: Uint8Array, length = 8) =>
-      Array.from(bytes.slice(0, length)).map((b) => b.toString(16).padStart(2, "0")).join("");
-
-    const pngInfo = (bytes: Uint8Array | null) => {
-      if (!bytes || bytes.length < 33) return null;
-      const signature = hexPrefix(bytes);
-      if (signature !== "89504e470d0a1a0a") {
-        return {
-          validPng: false,
-          length: bytes.length,
-          hexPrefix: signature,
-        };
-      }
-
-      const width =
-        (bytes[16] << 24) |
-        (bytes[17] << 16) |
-        (bytes[18] << 8) |
-        bytes[19];
-      const height =
-        (bytes[20] << 24) |
-        (bytes[21] << 16) |
-        (bytes[22] << 8) |
-        bytes[23];
-
-      return {
-        validPng: true,
-        length: bytes.length,
-        width: width >>> 0,
-        height: height >>> 0,
-        bitDepth: bytes[24],
-        colorType: bytes[25],
-      };
-    };
-
-    // 3. Validación de JWT (Sesión del Usuario)
-    const authHeader = req.headers.get("Authorization");
-    if (!authHeader) {
-      console.error("[ERROR] No se recibió header de Authorization.");
-      return new Response(JSON.stringify({ error: "No Authorization header" }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
-    }
-
-    const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-      global: { headers: { Authorization: authHeader } },
-    });
-
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
-    if (authError || !user) {
-      console.error("[ERROR] Sesión de usuario inválida o expirada:", authError);
-      return new Response(JSON.stringify({ error: "Invalid session" }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
-    }
-
     // 4. Parámetros del Request
     let ticket_id;
     try {
@@ -271,12 +193,6 @@ Deno.serve(async (req) => {
       return new Response(JSON.stringify({ error: "Missing ticket_id" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    console.log(`[INFO] Generando pase para ticket: ${ticket_id} | Usuario: ${user.id}`);
-    console.log("[INFO] Pass identity:", JSON.stringify({
-      passTypeIdentifier: APPLE_PASS_TYPE_ID,
-      teamIdentifier: APPLE_TEAM_ID,
-    }));
-
     // 5. Query de Base de Datos (Seguridad RLS activa)
     const { data: ticket, error: dbError } = await supabase
       .from("tickets")
@@ -290,6 +206,8 @@ Deno.serve(async (req) => {
         user_id,
         ticket_type,
         ticket_type_id,
+        entry_deadline,
+        product_snapshot,
         event_ticket_types (
           id,
           name,
@@ -312,25 +230,11 @@ Deno.serve(async (req) => {
     }
 
     // 6. Configuración de Passkit
-    console.log("[INFO] Construyendo pass.json...");
-    const iconPng = decodeBase64ToUint8Array(PASS_ICON_PNG_BASE64 || BUNDLED_ICON_PNG_BASE64);
-    if (!iconPng || iconPng.length === 0) {
-      console.error("[ERROR] No se encontró icon.png ni por secret ni empaquetado en el módulo.");
-      throw new Error("Missing PASS_ICON_PNG_BASE64 and bundled icon.png.");
-    }
-
-    const logoPng = decodeBase64ToUint8Array(PASS_LOGO_PNG_BASE64 || BUNDLED_LOGO_PNG_BASE64);
-    const effectiveLogoPng = logoPng || iconPng;
-    const footerPng = decodeBase64ToUint8Array(BUNDLED_FOOTER_PNG_BASE64 || BUNDLED_LOGO_PNG_BASE64 || BUNDLED_ICON_PNG_BASE64);
-
     const ticketTypeObj = Array.isArray((ticket as any).event_ticket_types)
       ? (ticket as any).event_ticket_types[0]
       : (ticket as any).event_ticket_types;
-    const rawCategory = String(
-      ticketTypeObj?.category || (ticket as any).ticket_type || ticketTypeObj?.name || "",
-    )
-      .trim()
-      .toLowerCase();
+    const product = resolveTicketProduct(ticket);
+    const rawCategory = product.category;
 
     const tier =
       rawCategory.includes("backstage") || rawCategory.includes("founder")
@@ -339,39 +243,13 @@ Deno.serve(async (req) => {
           ? "vip"
           : "premium";
 
-    const categorySource = `${rawCategory} ${(ticket.events?.title || "")} ${(ticketTypeObj?.name || "")}`.toLowerCase();
-    const eventStyle =
-      /(conference|summit|corporate|business|forum|networking|expo)/.test(categorySource)
-        ? "corporate"
-        : /(sport|match|game|league|cup|stadium|football|soccer|basket|tennis|padel|ufc|formula|f1)/.test(categorySource)
-          ? "sports"
-          : /(museum|gallery|exhibition|art|installation|editorial)/.test(categorySource)
-            ? "art"
-            : /(concert|music|festival|dj|tour|live|party|show|amapiano)/.test(categorySource)
-              ? "music"
-              : "default";
-
-    const eventTypeLabel =
-      eventStyle === "music"
-        ? "CONCERT"
-        : eventStyle === "sports"
-          ? "SPORT"
-          : eventStyle === "corporate"
-            ? "CONFERENCE"
-            : eventStyle === "art"
-              ? "EXHIBITION"
-              : "EVENT";
-
-
-    // (files + log built below, after stripPng and palette are declared)
-
     const certificates: Record<string, string> = {
       wwdr: WWDR_CERT,
       signerCert: SIGNER_CERT,
       signerKey: SIGNER_KEY,
     };
-    if (KEY_PASSWORD.trim()) {
-      certificates.signerKeyPassphrase = KEY_PASSWORD.trim();
+    if (KEY_PASSWORD) {
+      certificates.signerKeyPassphrase = KEY_PASSWORD;
     }
 
     const eventDate = new Date(ticket.events.event_date);
@@ -379,24 +257,14 @@ Deno.serve(async (req) => {
 
     const title = String(ticket.events?.title || "ECLIPSE").trim();
     const titleDisplay = title.toUpperCase();
-    const ticketTypeMetadata =
-      ticketTypeObj?.metadata && typeof ticketTypeObj.metadata === "object"
-        ? ticketTypeObj.metadata as Record<string, unknown>
-        : {};
+    const ticketTypeMetadata = product.metadata;
     const eventYear = eventDate && Number.isFinite(eventDate.getTime())
       ? String(eventDate.getFullYear())
       : "2026";
-    const dateDisplay = eventDate && Number.isFinite(eventDate.getTime())
-      ? eventDate
-          .toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })
-          .replace(/\./g, "")
-          .toUpperCase()
-      : "TBA";
-    const timeDisplay = eventDate && Number.isFinite(eventDate.getTime())
-      ? eventDate.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })
-      : "TBA";
+    const dateDisplay = walletDate(eventDate);
+    const timeDisplay = walletDate(eventDate, true);
 
-    const venueName = String(ticket.events?.venues?.name || "Venue to be announced");
+    const venueName = String(ticket.events?.venues?.name || "Local por confirmar");
     const venueAddress = String(ticket.events?.venues?.address || "").trim();
     const venueLat = Number.parseFloat(String(ticket.events?.venues?.latitude ?? ""));
     const venueLng = Number.parseFloat(String(ticket.events?.venues?.longitude ?? ""));
@@ -423,7 +291,7 @@ Deno.serve(async (req) => {
       ? ticketTypeMetadata.vipBottles
           .map((item) => {
             if (!item || typeof item !== "object") return null;
-            const label = nonEmpty((item as Record<string, unknown>).label);
+            const label = nonEmpty((item as Record<string, unknown>).brand) || nonEmpty((item as Record<string, unknown>).label);
             const quantity = parsePositiveNumber((item as Record<string, unknown>).quantity);
             if (!label || !quantity) return null;
             return `${label} x${quantity}`;
@@ -431,109 +299,24 @@ Deno.serve(async (req) => {
           .filter(Boolean)
           .join(" • ")
       : null;
-    const tierLabel =
-      tier === "vip" ? "VIP" : tier === "gold" ? "FOUNDERS" : "PREMIUM";
-    const editionLabel = Boolean(ticketTypeMetadata.featured) ? "SIGNATURE" : tierLabel;
-    const ticketTypeName = nonEmpty(ticketTypeObj?.name) || `${tierLabel} ACCESS`;
+    const ticketTypeName = product.name;
 
-    // ── Ticket-type detection ─────────────────────────────────────────────────
-    // Priority: FASTLANE > BACKSTAGE (gold) > VIP > GENERAL
-    // ticketTypeName is now available for name-based detection.
-    const ticketNameLower = ticketTypeName.toLowerCase();
-    const isFastlane  = ticketNameLower.includes("fast") || ticketNameLower.includes("lane") || ticketNameLower.includes("express");
-    const isBackstage = tier === "gold" || ticketNameLower.includes("backstage") || ticketNameLower.includes("back stage");
-    const isVipTier   = tier === "vip"  || ticketNameLower.includes("vip");
-
-    const passVisualTier =
-      isFastlane  ? "fastlane"  :
-      isBackstage ? "backstage" :
-      isVipTier   ? "vip"       :
-                    "general";
-
-    // ── Palette — background matches strip bleed color exactly ───────────────
-    const palette =
-      passVisualTier === "fastlane"
-        ? { name: "fastlane",  backgroundColor: "rgb(0,0,4)",   foregroundColor: "rgb(255,255,255)", labelColor: "rgb(255,255,255)"  }
-        : passVisualTier === "backstage"
-          ? { name: "backstage", backgroundColor: "rgb(5,2,0)",  foregroundColor: "rgb(255,255,255)", labelColor: "rgb(255,115,25)"   }
-          : passVisualTier === "vip"
-            ? { name: "vip",     backgroundColor: "rgb(8,5,0)",  foregroundColor: "rgb(255,255,255)", labelColor: "rgb(255,205,0)"    }
-            : { name: "general", backgroundColor: "rgb(0,5,16)", foregroundColor: "rgb(255,255,255)", labelColor: "rgb(0,220,255)"    };
-
-    // ── Strip art selection ───────────────────────────────────────────────────
-    // Each ticket type gets a completely different visual concept.
-    // general   → bioluminescent deep ocean  (cyan, mysterious)
-    // vip       → liquid gold droplets       (amber, luxury)
-    // backstage → lava field cracks          (orange-red, exclusive)
-    // fastlane  → chromatic light break      (full spectrum, speed)
-    const bundledStripBase64 =
-      passVisualTier === "fastlane"  ? BUNDLED_STRIP_PNG_BASE64_FASTLANE  :
-      passVisualTier === "backstage" ? BUNDLED_STRIP_PNG_BASE64_BACKSTAGE :
-      passVisualTier === "vip"       ? BUNDLED_STRIP_PNG_BASE64_VIP       :
-                                       BUNDLED_STRIP_PNG_BASE64_GENERAL;
-    const stripPng = decodeBase64ToUint8Array(
-      bundledStripBase64 || BUNDLED_LOGO_PNG_BASE64 || BUNDLED_ICON_PNG_BASE64,
-    );
-
-    // ── Asset log + file bundle (all assets now resolved) ────────────────────
-    console.log("[INFO] Asset signatures:", JSON.stringify({
-      iconLength: iconPng.length,
-      iconHexPrefix: hexPrefix(iconPng),
-      logoLength: logoPng?.length || 0,
-      logoHexPrefix: logoPng ? hexPrefix(logoPng) : null,
-      stripLength: stripPng?.length || 0,
-      stripHexPrefix: stripPng ? hexPrefix(stripPng) : null,
-      iconInfo: pngInfo(iconPng),
-      logoInfo: pngInfo(logoPng),
-      effectiveLogoInfo: pngInfo(effectiveLogoPng),
-      footerInfo: pngInfo(footerPng),
-      stripInfo: pngInfo(stripPng),
-      tier,
-      passVisualTier,
-      palette: palette.name,
-    }));
-    const iconBuffer = Buffer.from(iconPng);
-    const logoBuffer = Buffer.from(effectiveLogoPng);
-    const footerBuffer = Buffer.from(footerPng);
-    const files: Record<string, Buffer> = {
-      "icon.png": iconBuffer,
-      "icon@2x.png": iconBuffer,
-      "icon@3x.png": iconBuffer,
-      "logo.png": logoBuffer,
-      "logo@2x.png": logoBuffer,
-      "logo@3x.png": logoBuffer,
-      "footer.png": footerBuffer,
-      "footer@2x.png": footerBuffer,
-      "footer@3x.png": footerBuffer,
-    };
-    if (stripPng && stripPng.length > 0) {
-      const stripBuffer = Buffer.from(stripPng);
-      files["strip.png"] = stripBuffer;
-      files["strip@2x.png"] = stripBuffer;
-      files["strip@3x.png"] = stripBuffer;
+    const passVisualTier = product.visual;
+    const theme = WALLET_THEMES[passVisualTier];
+    const palette = { backgroundColor: walletRgb(theme.background), foregroundColor: walletRgb(theme.foreground), labelColor: walletRgb(theme.accent) };
+    const files: Record<string, Buffer> = {};
+    for (const scale of [1, 2, 3]) {
+      const suffix = scale === 1 ? "" : `@${scale}x`;
+      for (const name of ["icon", "logo"]) {
+        files[`${name}${suffix}.png`] = Buffer.from(decodeBase64ToUint8Array(WALLET_ASSETS[`${name}${suffix}.png`]));
+      }
+      files[`strip${suffix}.png`] = Buffer.from(decodeBase64ToUint8Array(WALLET_ASSETS[`strip_${passVisualTier}${suffix}.png`]));
     }
-    const accessZone =
-      nonEmpty(ticketTypeMetadata.accessZone) ||
-      (tier === "vip"
-        ? "PREMIUM LOUNGE"
-        : tier === "gold"
-          ? "BACKSTAGE SALON"
-          : "MAIN FLOOR");
     const entryLeadMinutes =
       parsePositiveNumber(ticketTypeMetadata.earlyEntryMinutes) ||
-      (tier === "gold" ? 60 : tier === "vip" ? 45 : 30);
-    const entryDisplay =
-      eventDate && Number.isFinite(eventDate.getTime())
-        ? new Date(eventDate.getTime() - entryLeadMinutes * 60 * 1000).toLocaleTimeString("en-GB", {
-            hour: "2-digit",
-            minute: "2-digit",
-          })
-        : "TBA";
-    const dedicatedLane = ticketTypeMetadata.dedicatedLane === true
-      ? "PRIORITY LANE"
-      : tier === "vip" || tier === "gold"
-        ? "VIP PRIORITY"
-        : null;
+      0;
+    const entryDisplay = walletDate(new Date(eventDate.getTime() - entryLeadMinutes * 60 * 1000), true);
+    const dedicatedLane = ticketTypeMetadata.dedicatedLane === true ? "Acceso prioritario" : null;
     const entryDate =
       eventDate && Number.isFinite(eventDate.getTime())
         ? new Date(eventDate.getTime() - entryLeadMinutes * 60 * 1000)
@@ -545,88 +328,35 @@ Deno.serve(async (req) => {
     // ══════════════════════════════════════════════════════════════════════════
 
     const passIdDisplay   = `ECL-${eventYear}-${ticket.id.slice(0,6).toUpperCase()}`;
-    const holderName      = nonEmpty(ticket.buyer_name) || nonEmpty(user.email) || "ECLIPSE MEMBER";
+    const holderName      = nonEmpty(ticket.buyer_name) || nonEmpty(user.email) || "Titular de la entrada";
     const benefits        = nonEmpty(ticketTypeMetadata.benefits);
-    const vipGroupSize    = parsePositiveNumber(ticketTypeMetadata.vipGroupSize);
+    const vipGroupSize    = parsePositiveNumber(ticketTypeMetadata.vipGroupSize) || (Number(ticket.quantity)>1 ? Number(ticket.quantity) : null);
     const backstageHost   = nonEmpty(ticketTypeMetadata.backstageHost);
-    const gateDisplay     = nonEmpty(ticketTypeMetadata.gate) || (dedicatedLane ? "VIP" : "MAIN");
-    const sectionDisplay  = nonEmpty(ticketTypeMetadata.section)
-      || (tier==="gold" ? "BACKSTAGE" : tier==="vip" ? "VIP FLOOR" : "FLOOR");
-    const seatDisplay     = nonEmpty(ticketTypeMetadata.seat) || (!ticket.ticket_type_id ? "OPEN" : "GENERAL");
+    const gateDisplay     = nonEmpty(ticketTypeMetadata.gate);
+    const sectionDisplay  = nonEmpty(ticketTypeMetadata.section) || nonEmpty(ticketTypeMetadata.accessZone);
+    const seatDisplay     = nonEmpty(ticketTypeMetadata.seat);
     const ticketCodeDisplay = passIdDisplay;
     const dateTimeDisplay   = `${dateDisplay} · ${timeDisplay}`;
 
-    // "FRI 20 JUN" — compact, uppercase, scannable at a glance
-    const shortDateDisplay = eventDate && Number.isFinite(eventDate.getTime())
-      ? (() => {
-          const day = eventDate.toLocaleDateString("en-GB", { weekday: "short" }).toUpperCase();
-          const num = String(eventDate.getDate()).padStart(2,"0");
-          const mon = eventDate.toLocaleDateString("en-GB", { month: "short" }).toUpperCase();
-          return `${day} ${num} ${mon}`;
-        })()
-      : "TBA";
-
+    // Compact date in the launch market timezone.
+    const shortDateDisplay = walletDate(eventDate);
     const expirationDate = eventDate && Number.isFinite(eventDate.getTime())
       ? new Date(eventDate.getTime() + 8 * 60 * 60 * 1000).toISOString()
       : undefined;
 
     // ── Tier badge for header field ─────────────────────────────────────────
     // Shown right of the ECLIPSE logo — first thing security sees at the gate.
-    const tierBadge =
-      passVisualTier === "fastlane"  ? "⚡ FASTLANE"  :
-      passVisualTier === "backstage" ? "✦ BACKSTAGE" :
-      passVisualTier === "vip"       ? "★ VIP"       :
-                                       "◇ GENERAL";
-
-    // ── Access label (short, for auxiliary field) ────────────────────────────
-    const accessLabel =
-      passVisualTier === "fastlane"  ? "FASTLANE"  :
-      passVisualTier === "backstage" ? "BACKSTAGE" :
-      passVisualTier === "vip"       ? "VIP"       :
-                                       "GENERAL";
-
-    // ── Primary label = event category (small, in accent/labelColor) ────────
-    // This is the key Apple design trick: the label doubles as a category badge
-    // rendered in the accent color just above the large event name.
-    const categoryLabel = eventTypeLabel;   // "CONCERT" / "SPORT" / "EXHIBITION" etc.
-
-    // ── Venue: truncate at 26 chars for secondary field ─────────────────────
-    const venueShort = venueName.length > 26 ? venueName.slice(0,24) + "…" : venueName;
-
+    const tierBadge = theme.label;
+    const accessLabel = theme.label;
+    const categoryLabel = product.name;
+    const venueShort = venueName;
     const backFields: any[] = [];
     const pushBackField = (key: string, label: string, value: unknown) => {
       const v = nonEmpty(value);
       if (!v) return;
-      backFields.push({ key, label, value: v });
+      backFields.push({ key: `back_${key}`, label, value: v });
     };
 
-    // ══════════════════════════════════════════════════════════════════════════
-    // PASS.JSON — World-class Apple Wallet layout
-    //
-    // Visual hierarchy (what the user sees front-to-back):
-    //
-    // ┌──────────────────────────────────────────┐
-    // │  [ECLIPSE logo]          ✦ LEGENDARY     │  ← header (tier badge)
-    // │══════════ STRIP ART (generative) ════════│
-    // │  CONCERT                                 │  ← primary label (category)
-    // │  TRAVIS SCOTT — CIRCUS MAXIMUS TOUR      │  ← primary value (large bold)
-    // ├──────────────────────────────────────────┤
-    // │  VENUE                      DATE         │  ← secondary
-    // │  Estadio Bernabéu       FRI 20 JUN       │
-    // ├──────────────────────────────────────────┤
-    // │  SECTION          GATE      ENTRY        │  ← auxiliary
-    // │  VIP FLOOR        MAIN      21:00        │
-    // ╞══════════════ QR CODE ══════════════════╡
-    // └──────────────────────────────────────────┘
-    //
-    // Key decisions:
-    // • Header = tier badge (what security needs at a glance)
-    // • Primary label = category (context, rendered in accent color)
-    // • Primary value = event name — the SINGLE most important fact
-    // • Secondary = VENUE + DATE — where/when (navigation-critical)
-    // • Auxiliary = SECTION + GATE + ENTRY — seat-finding info
-    // • QR = PKBarcodeFormatQR — fastest scanning, cleanest appearance
-    // ══════════════════════════════════════════════════════════════════════════
     const passJson = {
       formatVersion:      1,
       passTypeIdentifier: APPLE_PASS_TYPE_ID,
@@ -646,7 +376,7 @@ Deno.serve(async (req) => {
         locations: [{
           latitude:     venueLat,
           longitude:    venueLng,
-          relevantText: `${title} · Your ECLIPSE pass — scan at entry`,
+          relevantText: `${title} · Muestra tu entrada en el acceso`,
         }],
       } : {}),
       barcode:  { ...barcode, altText: ticketCodeDisplay },
@@ -657,52 +387,33 @@ Deno.serve(async (req) => {
         // Shows tier badge — security sees this first at the gate.
         headerFields: [
           { key:  "tier",
-            label: "",
-            value: tierBadge,
-            textAlignment: "PKTextAlignmentRight" },
-        ],
-
-        // ── PRIMARY ── (largest text on the pass)
-        // label = category (in accent/labelColor — acts as a visual badge)
-        // value = event name ALL CAPS — bold, confident, iconic
-        primaryFields: [
-          { key:   "eventName",
-            label: categoryLabel,
-            value: title.toUpperCase(),
-            textAlignment: "PKTextAlignmentLeft" },
-        ],
-
-        // ── SECONDARY ── (two columns, medium weight)
-        // VENUE left — tells you where to go
-        // DATE  right — confirms the day
-        secondaryFields: [
-          { key:   "venue",
-            label: "VENUE",
-            value: venueShort,
-            textAlignment: "PKTextAlignmentLeft" },
-          { key:   "date",
-            label: "DATE",
+            label: tierBadge,
             value: shortDateDisplay,
             textAlignment: "PKTextAlignmentRight" },
         ],
 
-        // ── AUXILIARY ── (three small columns)
-        // SECTION — helps you navigate the venue
-        // GATE    — which entrance to use
-        // ENTRY   — what time doors open for your tier
-        auxiliaryFields: [
-          { key:   "section",
-            label: "SECTION",
-            value: sectionDisplay,
+        // Keep the illustrated strip unobstructed. The event remains native,
+        // accessible and available on Apple Watch, which omits strip artwork.
+        primaryFields: [],
+
+        // ── SECONDARY ── (two columns, medium weight)
+        // Event and time sit on the solid background below the artwork.
+        secondaryFields: [
+          { key:   "eventName",
+            label: categoryLabel,
+            value: title,
             textAlignment: "PKTextAlignmentLeft" },
-          { key:   "gate",
-            label: "GATE",
-            value: gateDisplay,
-            textAlignment: "PKTextAlignmentCenter" },
-          { key:   "entry",
-            label: "ENTRY",
-            value: entryDisplay,
+          { key:   "date",
+            label: "HORA",
+            value: walletDate(eventDate, true),
             textAlignment: "PKTextAlignmentRight" },
+        ],
+
+        // Venue, holder and optional group remain native, never painted in art.
+        auxiliaryFields: [
+          { key: "venue", label: "LOCAL", value: venueShort, textAlignment: "PKTextAlignmentLeft" },
+          { key: "holder", label: "TITULAR", value: holderName, textAlignment: "PKTextAlignmentLeft" },
+          ...(vipGroupSize ? [{ key: "group", label: "GRUPO", value: `${vipGroupSize} personas`, textAlignment: "PKTextAlignmentRight" }] : []),
         ],
 
         backFields,
@@ -710,43 +421,25 @@ Deno.serve(async (req) => {
     };
 
     // ── BACK FIELDS (flip side — complete information) ─────────────────────
-    pushBackField("holder",     "TICKET HOLDER",       holderName.toUpperCase());
-    pushBackField("passId",     "PASS ID",             ticketCodeDisplay);
-    pushBackField("tier",       "ACCESS TIER",         tierBadge);
-    pushBackField("access",     "ACCESS TYPE",         (ticketTypeName || accessLabel).toUpperCase());
-    pushBackField("section",    "SECTION",             sectionDisplay);
-    pushBackField("seat",       "SEAT",                seatDisplay);
-    pushBackField("gate",       "ENTRY GATE",          gateDisplay);
-    pushBackField("entry",      "DOORS OPEN",          entryDisplay);
-    pushBackField("showtime",   "SHOW STARTS",         timeDisplay);
-    pushBackField("datetime",   "DATE & TIME",         dateTimeDisplay);
-    pushBackField("venue",      "VENUE",               venueName);
-    pushBackField("address",    "ADDRESS",             venueAddress);
-    pushBackField("lane",       "PRIORITY LANE",       dedicatedLane);
-    pushBackField("benefits",   "INCLUDED",            benefits);
-    pushBackField("groupSize",  "GROUP SIZE",          vipGroupSize ? `${vipGroupSize} guests` : null);
-    pushBackField("bottles",    "TABLE SERVICE",       bottleSummary);
-    pushBackField("host",       "YOUR HOST",           backstageHost);
-    pushBackField("terms",      "TERMS & CONDITIONS",
-      "This pass is non-transferable and non-refundable. Valid only for the " +
-      "date, venue, and access tier shown. Must be presented at entry. " +
-      "ECLIPSE reserves the right to refuse admission.");
-    pushBackField("support",    "SUPPORT",             "help@eclipse.app");
-    console.log("[INFO] pass.json preview:", JSON.stringify({
-      formatVersion: passJson.formatVersion,
-      passTypeIdentifier: passJson.passTypeIdentifier,
-      teamIdentifier: passJson.teamIdentifier,
-      serialNumber: passJson.serialNumber,
-      description: passJson.description,
-      organizationName: passJson.organizationName,
-      hasEventTicket: !!passJson.eventTicket,
-      primaryFields: passJson.eventTicket?.primaryFields?.length || 0,
-      secondaryFields: passJson.eventTicket?.secondaryFields?.length || 0,
-      auxiliaryFields: passJson.eventTicket?.auxiliaryFields?.length || 0,
-      backFields: passJson.eventTicket?.backFields?.length || 0,
-      barcodeMessageLength: String(passJson.barcodes?.[0]?.message || "").length,
-    }));
-
+    pushBackField("holder",     "TITULAR",       holderName.toUpperCase());
+    pushBackField("passId",     "REFERENCIA",             ticketCodeDisplay);
+    pushBackField("tier",       "CATEGORÍA",         tierBadge);
+    pushBackField("access",     "TIPO DE ENTRADA",         (ticketTypeName || accessLabel).toUpperCase());
+    pushBackField("section",    "ZONA",             sectionDisplay);
+    pushBackField("seat",       "ASIENTO",                seatDisplay);
+    pushBackField("gate",       "PUERTA",          gateDisplay);
+    if (ticket.entry_deadline) pushBackField("deadline", "ACCESO ANTES DE", `${walletDate(new Date(ticket.entry_deadline))} · ${walletDate(new Date(ticket.entry_deadline),true)}`);
+    pushBackField("entry",      "HORA DE ACCESO",          entryDisplay);
+    pushBackField("showtime",   "INICIO",         timeDisplay);
+    pushBackField("datetime",   "FECHA Y HORA · MADRID",         dateTimeDisplay);
+    pushBackField("venue",      "LOCAL",               venueName);
+    pushBackField("address",    "DIRECCIÓN",             venueAddress);
+    pushBackField("lane",       "ACCESO PRIORITARIO",       dedicatedLane);
+    pushBackField("benefits",   "INCLUYE",            benefits);
+    pushBackField("groupSize",  "GRUPO",          vipGroupSize ? `${vipGroupSize} personas` : null);
+    pushBackField("bottles",    "BOTELLAS",       bottleSummary);
+    pushBackField("host",       "ANFITRIÓN",           backstageHost);
+    pushBackField("terms", "INFORMACIÓN", "Presenta el QR en el acceso. Consulta las condiciones de tu compra y los detalles actualizados en Eclipse. No compartas el código de tu entrada.");
     const pass = new PKPass(
       {
         ...files,
@@ -756,59 +449,15 @@ Deno.serve(async (req) => {
     );
 
     // 7. Exportación a Buffer y Base64 Seguro
-    console.log("[INFO] Firmando y exportando .pkpass...");
     const buffer = pass.getAsBuffer();
     
     // Conversión segura de Buffer -> Base64 en Deno Edge Runtime
     const uint8Array = new Uint8Array(buffer);
-    try {
-      const zip = await JSZip.loadAsync(uint8Array);
-      const zipEntries = Object.keys(zip.files).sort();
-      const manifestText = await zip.file("manifest.json")?.async("string");
-      const manifestJson = manifestText ? JSON.parse(manifestText) : null;
-      const signatureBytes = await zip.file("signature")?.async("uint8array");
-      const packedPassJsonText = await zip.file("pass.json")?.async("string");
-      const packedPassJson = packedPassJsonText ? JSON.parse(packedPassJsonText) : null;
-
-      console.log("[INFO] ZIP entries:", JSON.stringify(zipEntries));
-      console.log("[INFO] manifest preview:", JSON.stringify(
-        manifestJson
-          ? Object.fromEntries(
-              Object.entries(manifestJson).map(([key, value]) => [
-                key,
-                String(value).slice(0, 12),
-              ]),
-            )
-          : null,
-      ));
-      console.log("[INFO] signature info:", JSON.stringify({
-        length: signatureBytes?.length || 0,
-        hexPrefix: signatureBytes
-          ? Array.from(signatureBytes.slice(0, 8)).map((b) => b.toString(16).padStart(2, "0")).join("")
-          : null,
-      }));
-      console.log("[INFO] packed pass.json preview:", JSON.stringify(
-        packedPassJson
-          ? {
-              passTypeIdentifier: packedPassJson.passTypeIdentifier || null,
-              teamIdentifier: packedPassJson.teamIdentifier || null,
-              serialNumber: packedPassJson.serialNumber || null,
-              hasEventTicketObject: !!packedPassJson.eventTicket,
-              topLevelKeys: Object.keys(packedPassJson).sort(),
-            }
-          : null,
-      ));
-    } catch (zipDebugError: any) {
-      console.error("[ZIP DEBUG] No se pudo inspeccionar el pkpass generado:", String(zipDebugError?.message || zipDebugError));
-    }
-
     let binaryString = "";
     for (let i = 0; i < uint8Array.byteLength; i++) {
       binaryString += String.fromCharCode(uint8Array[i]);
     }
     const base64 = btoa(binaryString);
-
-    console.log("[SUCCESS] Pase generado correctamente en Base64.");
 
     // 8. Respuesta Exitosa
     return new Response(JSON.stringify({ base64 }), {

@@ -79,15 +79,7 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
     if (!user) return;
     try {
       const { error } = await supabase.rpc('mark_all_notifications_read', { p_user_id: user.id });
-
-      if (error) {
-        const now = new Date().toISOString();
-        const fallback = await supabase
-          .from('notifications')
-          .update({ read: true, read_at: now, status: 'read' })
-          .eq('user_id', user.id);
-        if (fallback.error) throw fallback.error;
-      }
+      if (error) throw error;
       setNotifications(prev => prev.map(n => ({ ...n, read: true })));
     } catch (error) {
       console.error('Error marking all notifications as read:', error);

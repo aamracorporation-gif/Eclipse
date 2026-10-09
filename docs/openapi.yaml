@@ -120,7 +120,7 @@ paths:
         "404": { description: Ticket o evento no encontrado }
   /stripe/webhook:
     post:
-      summary: Stripe webhook (payment_intent.succeeded, payment_intent.payment_failed, account.updated)
+      summary: Stripe webhook (payment intents, account updates, refund updates and failures)
       description: Requiere body raw y Stripe-Signature.
       responses:
         "200": { description: Acknowledge }

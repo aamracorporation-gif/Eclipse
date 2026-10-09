@@ -1,3 +1,5 @@
+import { Redirect } from 'expo-router';
+import { LAUNCH_FEATURES } from '@/lib/launchFeatures';
 import { View, Text, StyleSheet, FlatList, Image, TouchableOpacity, RefreshControl, StatusBar, Animated, Easing } from 'react-native';
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
@@ -34,10 +36,8 @@ type ResaleListing = {
   seller_id: string;
   seller?: {
     full_name: string;
-    email: string;
   };
   ticket: {
-    id: string;
     type: string;
     ticket_type_id?: string | null;
     quantity?: number | null;
@@ -55,7 +55,11 @@ type ResaleListing = {
   }
 };
 
-export default function ResaleScreen() {
+export default function ResaleScreenRoute() {
+  return LAUNCH_FEATURES.resale ? <ResaleScreen /> : <Redirect href="/(tabs)/tickets" />;
+}
+
+function ResaleScreen() {
   const insets = useSafeAreaInsets();
   const { t } = useTranslation();
   const { language } = useI18n();
@@ -219,36 +223,36 @@ export default function ResaleScreen() {
     try {
       setLoading(true);
       
-      const { data, error } = await supabase
-        .from('resale_listings')
+      const { data, error } = await (supabase as any)
+        .from('public_resale_cards')
         .select(`
-          id,
+          listing_id,
           price,
           seller_id,
           created_at,
-          ticket:tickets (
+          ticket_type_id,
+          quantity,
+          total_price,
+          event:events (
             id,
-            ticket_type_id,
-            quantity,
-            total_price,
-            event:events (
+            title,
+            event_date,
+            end_datetime,
+            allow_resale,
+            is_cancelled,
+            status,
+            description,
+            reservados_vip (
               id,
-              title,
-              event_date,
-              description,
-              reservados_vip (
-                id,
-                name,
-                base_price,
-                capacity_people,
-                included_bottles,
-                extra_bottle_price
-              ),
-              poster_url
-            )
+              name,
+              base_price,
+              capacity_people,
+              included_bottles,
+              extra_bottle_price
+            ),
+            poster_url
           )
         `)
-        .eq('status', 'active')
         .order('created_at', { ascending: false })
         .limit(100);
 
@@ -256,14 +260,27 @@ export default function ResaleScreen() {
         throw error;
       }
       
-      // FETCH PROFILES MANUALLY
-      const sellerIds = [...new Set((data || []).map((item: any) => item.seller_id))];
+      const safeListings = (data || []).map((item: any) => ({
+        id: item.listing_id,
+        price: item.price,
+        seller_id: item.seller_id,
+        created_at: item.created_at,
+        ticket: {
+          ticket_type_id: item.ticket_type_id,
+          quantity: item.quantity,
+          total_price: item.total_price,
+          event: item.event,
+        },
+      }));
+
+      // Fetch only the deliberately public seller card.
+      const sellerIds = [...new Set(safeListings.map((item: any) => item.seller_id))];
       let profilesMap: Record<string, any> = {};
       
       if (sellerIds.length > 0) {
-        const { data: profilesData } = await supabase
-          .from('profiles')
-          .select('id, full_name, email')
+        const { data: profilesData } = await (supabase as any)
+          .from('public_profile_cards')
+          .select('id, full_name')
           .in('id', sellerIds);
           
         if (profilesData) {
@@ -273,7 +290,7 @@ export default function ResaleScreen() {
         }
       }
 
-      const formattedData = (data || []).map((item: any) => {
+      const formattedData = safeListings.map((item: any) => {
         const ticket = Array.isArray(item.ticket) ? item.ticket[0] : item.ticket;
         const sellerProfile = profilesMap[item.seller_id];
         
@@ -281,16 +298,15 @@ export default function ResaleScreen() {
 
         const event = Array.isArray(ticket?.event) ? ticket.event[0] : ticket?.event;
         
-        if (!event) return null;
+        if (!event || event.allow_resale === false || event.is_cancelled
+          || ['cancelled', 'deleted'].includes(String(event.status || ''))) return null;
 
-        let eventDate = new Date();
-        if (event.event_date) {
-            try {
-                eventDate = new Date(event.event_date);
-            } catch {
-                console.warn('Invalid date format:', event.event_date);
-            }
-        }
+        const eventDate = new Date(event.event_date);
+        const endDate = event.end_datetime
+          ? new Date(event.end_datetime)
+          : new Date(eventDate.getTime() + 5 * 60 * 60 * 1000);
+        if (!Number.isFinite(eventDate.getTime()) || !Number.isFinite(endDate.getTime())
+          || endDate.getTime() <= Date.now()) return null;
         
         const dateStr = eventDate.toLocaleDateString();
         const timeStr = eventDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
@@ -314,7 +330,7 @@ export default function ResaleScreen() {
           }
         };
       })
-      .filter((item): item is ResaleListing => item !== null);
+      .filter((item: any): item is ResaleListing => item !== null);
 
       setAllListings(formattedData);
       setListings(formattedData);
@@ -398,6 +414,10 @@ export default function ResaleScreen() {
               });
 
               if (result.status === 'canceled') return;
+          if (result.status === 'pending') {
+            showDialog({ title: 'Compra pendiente', message: result.message });
+            return;
+          }
               if (result.status !== 'succeeded') {
                 throw new Error(result.message || t('resale.payment_failed'));
               }
@@ -731,7 +751,11 @@ export default function ResaleScreen() {
 
                     <TouchableOpacity
                       activeOpacity={0.85}
-                      onPress={() => { Haptics.selectionAsync(); hasActiveFilters ? clearFilters() : router.push('/(tabs)'); }}
+                      onPress={() => {
+                        void Haptics.selectionAsync();
+                        if (hasActiveFilters) clearFilters();
+                        else router.push('/(tabs)');
+                      }}
                       style={styles.emptyCtaOuter}
                     >
                       <LinearGradient
@@ -1118,3 +1142,4 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(10, 132, 255, 0.1)',
   },
 });
+

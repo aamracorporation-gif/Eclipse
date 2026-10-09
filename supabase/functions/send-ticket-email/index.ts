@@ -1,6 +1,13 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 
 serve(async (req) => {
+  const internalKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  if (!internalKey || req.headers.get("Authorization") !== `Bearer ${internalKey}`) {
+    return new Response(JSON.stringify({ ok: false, error: "Forbidden" }), {
+      status: 403, headers: { "Content-Type": "application/json" },
+    });
+  }
+  if (req.method !== "POST") return new Response("Method not allowed", { status: 405 });
   try {
     const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY");
     if (!RESEND_API_KEY) {

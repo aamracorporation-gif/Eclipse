@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useRef, useState, useMemo } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useFilters } from '@/lib/FilterContext';
 import {
-  View, Text, StyleSheet, Pressable, StatusBar, Platform,
+  View, Text, StyleSheet, Pressable, StatusBar,
   Image, TextInput, Keyboard, FlatList, TouchableOpacity,
   ScrollView,
 } from 'react-native';
@@ -15,7 +15,6 @@ import type { AppEvent } from '@/lib/EventContext';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Search, X, MapPin, Calendar, Flame, Music, Sparkles, Tag } from '@/lib/icons';
 import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
-import { useTranslation } from 'react-i18next';
 import Animated, { FadeIn, FadeOut, SlideInDown, SlideOutDown } from 'react-native-reanimated';
 import WebView from 'react-native-webview';
 
@@ -30,7 +29,7 @@ const VIEWPORT_DEBOUNCE_MS  = 600;
 
 // ─── Leaflet HTML ─────────────────────────────────────────────────────────────
 // ── Replace YOUR_MAPTILER_KEY with your free key from cloud.maptiler.com ──
-const MAPTILER_KEY = 'F74nnnjzsxrsuFtO0Xf6';
+const MAPTILER_KEY = process.env.EXPO_PUBLIC_MAPTILER_KEY || '';
 
 const buildMapHtml = (lat: number, lng: number) => `<!DOCTYPE html>
 <html>
@@ -52,6 +51,7 @@ html,body{width:100%;height:100%;background:#0d1117;overflow:hidden;-webkit-tap-
 <script>
 var RN=window.ReactNativeWebView;
 function post(o){try{RN.postMessage(JSON.stringify(o));}catch(e){}}
+window.addEventListener('error',function(){post({type:'mapError'});});
 
 function eventColor(type){
   if(!type)return'#A78BFA';
@@ -76,13 +76,14 @@ var sc=new Supercluster({radius:55,maxZoom:PRICE_ZOOM-1,minPoints:2});
 
 var map=new maplibregl.Map({
   container:'map',
-  style:'https://api.maptiler.com/maps/streets-v4/style.json?key=${MAPTILER_KEY}',
+  style:'https://api.maptiler.com/maps/streets-v4/style.json?key=${encodeURIComponent(MAPTILER_KEY)}',
   center:[${lng},${lat}],
   zoom:13,
   attributionControl:false,
   fadeDuration:200,
 });
 
+map.on('error',function(){if(!map.isStyleLoaded())post({type:'mapError'});});
 map.on('load',function(){
   scheduleRefresh();
   map.on('moveend',scheduleRefresh);
@@ -256,7 +257,6 @@ const EVENT_TYPES = [
 
 // ─── Main component ───────────────────────────────────────────────────────────
 export default function PartyMapScreen() {
-  const { t } = useTranslation();
   const insets  = useSafeAreaInsets();
   const tabBarH = useBottomTabBarHeight();
   const params  = useLocalSearchParams<{ q?: string }>();
@@ -279,9 +279,9 @@ export default function PartyMapScreen() {
   const currentRegionRef = useRef({ lat: 40.4168, lng: -3.7038, zoom: 13 });
 
   // ── State ─────────────────────────────────────────────────────────────────────
-  const [mapReady,      setMapReady]      = useState(false);
-  const [locPerm,       setLocPerm]       = useState<'loading' | 'granted' | 'denied'>('loading');
-  const [initialCenter, setInitialCenter] = useState({ lat: 40.4168, lng: -3.7038 });
+  const [, setMapReady] = useState(false);
+  const [, setLocPerm] = useState<'loading' | 'granted' | 'denied'>('loading');
+  const [, setInitialCenter] = useState({ lat: 40.4168, lng: -3.7038 });
   const [selectedEvent, setSelectedEvent] = useState<EventWithGeo | null>(null);
   const [searchText,    setSearchText]    = useState('');
   const [searchFocused, setSearchFocused] = useState(false);
@@ -290,17 +290,12 @@ export default function PartyMapScreen() {
   const activeFilterRef = useRef('all');
   const [isSearching,   setIsSearching]   = useState(false);
   const [htmlContent,   setHtmlContent]   = useState<string | null>(null);
+  const [mapError, setMapError] = useState(!MAPTILER_KEY.trim());
 
   // ── Shared filters (from feed) ────────────────────────────────────────────────
   const { filters: sharedFilters } = useFilters();
   const sharedFiltersRef = useRef(sharedFilters);
   useEffect(() => { sharedFiltersRef.current = sharedFilters; }, [sharedFilters]);
-
-  // Keep ref in sync with activeFilter state so sendEventsToMap can read it synchronously
-  useEffect(() => {
-    activeFilterRef.current = activeFilter;
-    if (mapReadyRef.current) sendEventsToMap();
-  }, [activeFilter, sendEventsToMap]);
 
   // ── Helpers ───────────────────────────────────────────────────────────────────
   const haversineKm = useCallback((lat1: number, lon1: number, lat2: number, lon2: number) => {
@@ -374,6 +369,12 @@ export default function PartyMapScreen() {
     }
     webViewRef.current?.injectJavaScript(`window.setEvents(${JSON.stringify(json)});true;`);
   }, []);
+
+  // Keep ref in sync after the callback has been initialized.
+  useEffect(() => {
+    activeFilterRef.current = activeFilter;
+    if (mapReadyRef.current) sendEventsToMap();
+  }, [activeFilter, sendEventsToMap]);
 
   // ── Fetch events for viewport ─────────────────────────────────────────────────
   const fetchForRegion = useCallback(async (minLat: number, maxLat: number, minLng: number, maxLng: number) => {
@@ -475,12 +476,17 @@ export default function PartyMapScreen() {
     try {
       const msg = JSON.parse(event.nativeEvent.data);
       if (msg.type === 'ready') {
+        setMapError(false);
         mapReadyRef.current = true;
         setMapReady(true);
         if (pendingEventsRef.current) {
           webViewRef.current?.injectJavaScript(`window.setEvents(${JSON.stringify(pendingEventsRef.current)});true;`);
           pendingEventsRef.current = null;
+        } else {
+          sendEventsToMap();
         }
+      } else if (msg.type === 'mapError') {
+        setMapError(true);
       } else if (msg.type === 'regionChange') {
         currentRegionRef.current = { lat: msg.lat, lng: msg.lng, zoom: msg.zoom };
         if (debounceRef.current) clearTimeout(debounceRef.current);
@@ -496,7 +502,7 @@ export default function PartyMapScreen() {
         setSelectedEvent(null);
       }
     } catch {}
-  }, [fetchForRegion]);
+  }, [fetchForRegion, sendEventsToMap]);
 
   // ── Location permission ───────────────────────────────────────────────────────
   useEffect(() => {
@@ -674,7 +680,7 @@ export default function PartyMapScreen() {
           originWhitelist={['*']}
           mixedContentMode="always"
           androidLayerType="hardware"
-          onError={() => {}}
+          onError={() => setMapError(true)}
           renderLoading={() => (
             <View style={[StyleSheet.absoluteFill, styles.center]}>
               <DiscoLoader size={60} />
@@ -687,6 +693,22 @@ export default function PartyMapScreen() {
         <View style={[StyleSheet.absoluteFill, styles.center]}>
           <DiscoLoader size={60} />
           <Text style={styles.loadingTxt}>Obteniendo ubicación…</Text>
+        </View>
+      )}
+
+      {mapError && (
+        <View style={[StyleSheet.absoluteFill, styles.center, { backgroundColor: '#08080F', zIndex: 50 }]}>
+          <MapPin size={32} color={Colors.dark.primary} />
+          <Text style={{ color: 'white', fontWeight: '700', textAlign: 'center' }}>No se ha podido cargar el mapa.</Text>
+          <Text style={{ color: 'rgba(255,255,255,0.65)', textAlign: 'center' }}>Puedes seguir consultando los eventos en la lista.</Text>
+          <Pressable accessibilityRole="button" onPress={() => {
+            setMapError(!MAPTILER_KEY.trim());
+            mapReadyRef.current = false;
+            webViewRef.current?.reload();
+          }}><Text style={{ color: Colors.dark.primary, padding: 12 }}>Reintentar</Text></Pressable>
+          <Pressable accessibilityRole="button" onPress={() => router.push('/(tabs)')}>
+            <Text style={{ color: 'white', padding: 12 }}>Ver eventos</Text>
+          </Pressable>
         </View>
       )}
 
@@ -776,7 +798,7 @@ export default function PartyMapScreen() {
                 searchText.trim().length > 1 ? (
                   <TouchableOpacity onPress={() => void geocodeSearch(searchText)} style={styles.geocodeRow}>
                     <MapPin size={14} color={Colors.dark.primary} />
-                    <Text style={styles.geocodeTxt}>Buscar "{searchText}" en el mapa</Text>
+                    <Text style={styles.geocodeTxt}>{`Buscar "${searchText}" en el mapa`}</Text>
                   </TouchableOpacity>
                 ) : null
               }
@@ -786,7 +808,7 @@ export default function PartyMapScreen() {
 
         {showResults && searchResults.length === 0 && searchText.trim().length > 1 && (
           <Animated.View entering={FadeIn.duration(180)} style={styles.noResults}>
-            <Text style={styles.noResultsTxt}>Sin resultados para "{searchText}"</Text>
+            <Text style={styles.noResultsTxt}>{`Sin resultados para "${searchText}"`}</Text>
             <TouchableOpacity onPress={() => void geocodeSearch(searchText)}>
               <Text style={styles.noResultsSearch}>Buscar ubicación en el mapa →</Text>
             </TouchableOpacity>
@@ -868,7 +890,54 @@ export default function PartyMapScreen() {
 }
 
 // ─── Export for tests ─────────────────────────────────────────────────────────
-export function __test_clusterForRegion() { return []; }
+type TestRegion = { latitude: number; longitude: number; latitudeDelta: number; longitudeDelta: number };
+type TestMarker =
+  | { kind: 'event'; key: string; event: AppEvent; latitude: number; longitude: number; color: string }
+  | { kind: 'cluster'; key: string; count: number; latitude: number; longitude: number; color: string };
+
+/** Deterministic, dependency-free clustering used by unit/stress tests. */
+export function __test_clusterForRegion(
+  events: EventWithGeo[],
+  region: TestRegion,
+  getColor: (event: AppEvent) => string,
+): TestMarker[] {
+  if (!events.length || region.latitudeDelta <= 0 || region.longitudeDelta <= 0) return [];
+  const minLat = region.latitude - region.latitudeDelta / 2;
+  const maxLat = region.latitude + region.latitudeDelta / 2;
+  const minLng = region.longitude - region.longitudeDelta / 2;
+  const maxLng = region.longitude + region.longitudeDelta / 2;
+  const visible = events.filter((event) =>
+    event._lat >= minLat && event._lat <= maxLat && event._lng >= minLng && event._lng <= maxLng,
+  );
+  if (!visible.length) return [];
+
+  const columns = 16;
+  const rows = 16;
+  const buckets = new Map<string, EventWithGeo[]>();
+  for (const event of visible) {
+    const x = Math.min(columns - 1, Math.max(0, Math.floor(((event._lng - minLng) / region.longitudeDelta) * columns)));
+    const y = Math.min(rows - 1, Math.max(0, Math.floor(((event._lat - minLat) / region.latitudeDelta) * rows)));
+    const key = `${x}:${y}`;
+    const bucket = buckets.get(key) ?? [];
+    bucket.push(event);
+    buckets.set(key, bucket);
+  }
+
+  return [...buckets.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([key, bucket]) => {
+    if (bucket.length === 1) {
+      const event = bucket[0];
+      return { kind: 'event' as const, key: `event:${event.id}`, event, latitude: event._lat, longitude: event._lng, color: getColor(event) };
+    }
+    return {
+      kind: 'cluster' as const,
+      key: `cluster:${key}`,
+      count: bucket.length,
+      latitude: bucket.reduce((sum, event) => sum + event._lat, 0) / bucket.length,
+      longitude: bucket.reduce((sum, event) => sum + event._lng, 0) / bucket.length,
+      color: getColor(bucket[0]),
+    };
+  });
+}
 
 const styles = StyleSheet.create({
   container:  { flex: 1, backgroundColor: '#08080F' },

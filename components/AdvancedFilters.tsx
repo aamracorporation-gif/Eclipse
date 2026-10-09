@@ -47,10 +47,6 @@ export default function AdvancedFilters({ filters, onFilterChange }: Props) {
     setOpen(false);
   };
 
-  const toggle = <K extends 'minAge' | 'dressCode' | 'musicType'>(
-    key: K, value: FilterState[K],
-  ) => setTemp(prev => ({ ...prev, [key]: prev[key] === value ? null : value }));
-
   // Quick toggles (apply instantly, outside modal)
   const quickMusic = (m: string) => onFilterChange({ ...filters, musicType: filters.musicType === m ? null : m });
   const quickAge   = (a: number) => onFilterChange({ ...filters, minAge:   filters.minAge   === a ? null : a });

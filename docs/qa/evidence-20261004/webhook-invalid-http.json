@@ -1,0 +1,8 @@
+{
+  "at": "2026-10-04T21:34:21.998749+00:00",
+  "url": "https://eclipse-staging-staging.up.railway.app/api/stripe/webhook",
+  "method": "POST",
+  "credential": "none; intentionally invalid signature",
+  "status": 400,
+  "body": "{\"received\":false,\"error\":\"Invalid webhook signature\"}"
+}

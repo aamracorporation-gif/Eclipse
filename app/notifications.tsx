@@ -1,4 +1,4 @@
-﻿import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, StatusBar } from 'react-native';
 import { useRouter } from 'expo-router';
 import { ArrowLeft, CheckCheck, Bell, Clock, Trash2 } from '@/lib/icons';
@@ -108,7 +108,7 @@ export default function NotificationsScreen() {
             onPress={() => {
               showDialog({
                 title: t('common.confirm', { defaultValue: 'Confirmar' }),
-                message: t('notifications.confirm_delete_one', { defaultValue: 'Â¿Eliminar esta notificaciÃ³n?' }),
+                  message: t('notifications.confirm_delete_one', { defaultValue: '¿Eliminar esta notificación?' }),
                 actions: [
                   { label: t('common.delete', { defaultValue: 'Eliminar' }), variant: 'primary', onPress: () => void deleteNotification(item.id) },
                   { label: t('common.cancel', { defaultValue: 'Cancelar' }), variant: 'outline' },
@@ -128,7 +128,7 @@ export default function NotificationsScreen() {
     <View style={styles.container}>
       <StatusBar barStyle="light-content" />
       <LinearGradient
-        colors={['#0F0F1A', '#1A1025', '#0F0F1A']}
+        colors={Colors.dark.backgroundGradient}
         style={StyleSheet.absoluteFill}
       />
 
@@ -146,7 +146,7 @@ export default function NotificationsScreen() {
               onPress={() => {
                 showDialog({
                   title: t('common.confirm', { defaultValue: 'Confirmar' }),
-                  message: t('notifications.confirm_delete_all', { defaultValue: 'Â¿Eliminar todas las notificaciones?' }),
+                  message: t('notifications.confirm_delete_all', { defaultValue: '¿Eliminar todas las notificaciones?' }),
                   actions: [
                     { label: t('common.delete_all', { defaultValue: 'Eliminar todas' }), variant: 'primary', onPress: () => void deleteAllNotifications() },
                     { label: t('common.cancel', { defaultValue: 'Cancelar' }), variant: 'outline' },
@@ -196,7 +196,7 @@ export default function NotificationsScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#0F0F1A',
+    backgroundColor: Colors.dark.background,
   },
   safeArea: {
     flex: 1,
@@ -218,7 +218,7 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 20,
     fontWeight: 'bold',
-    color: 'white',
+    color: Colors.dark.text,
   },
   headerActions: {
     flexDirection: 'row',
@@ -256,7 +256,7 @@ const styles = StyleSheet.create({
     fontWeight: '800',
   },
   filterChipTextActive: {
-    color: 'white',
+    color: Colors.dark.text,
   },
   listContent: {
     padding: 20,
@@ -320,7 +320,7 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   unreadMessage: {
-    color: 'white',
+    color: Colors.dark.text,
     fontWeight: '600',
   },
   footer: {
@@ -361,7 +361,7 @@ const styles = StyleSheet.create({
   emptyTitle: {
     fontSize: 20,
     fontWeight: 'bold',
-    color: 'white',
+    color: Colors.dark.text,
     marginBottom: 8,
   },
   emptyText: {
@@ -371,4 +371,3 @@ const styles = StyleSheet.create({
     paddingHorizontal: 40,
   },
 });
-

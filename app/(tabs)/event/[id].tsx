@@ -1,3 +1,6 @@
+import { offerUnavailableReason } from '@/supabase/functions/_shared/ticketProduct';
+import { OFFER_CATEGORIES } from '@/lib/createEventTicketConfig';
+import { LAUNCH_FEATURES } from '@/lib/launchFeatures';
 import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, Linking, Platform, KeyboardAvoidingView, Modal, Switch, Animated, Easing, Share, Alert, TextInput } from 'react-native';
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { router, useLocalSearchParams, useSegments } from 'expo-router';
@@ -42,6 +45,7 @@ export default function EventDetailScreen() {
   const [buyerEmail, setBuyerEmail] = useState('');
   const [quantity, setQuantity] = useState('1');
   const [purchasing, setPurchasing] = useState(false);
+  const freeClaimRef = useRef<{ signature: string; id: string } | null>(null);
   const [vipPurchasing, setVipPurchasing] = useState(false);
   const [selectedTicketType, setSelectedTicketType] = useState<string | null>(null);
   const [selectedVipReservadoId, setSelectedVipReservadoId] = useState<string | null>(null);
@@ -115,10 +119,11 @@ export default function EventDetailScreen() {
     // Select first AVAILABLE ticket type by default
     if (event?.event_ticket_types && event.event_ticket_types.length > 0 && !selectedTicketType) {
       // Find the first type that has availability
-      const firstAvailable = event.event_ticket_types.find(t => (t.quantity - (t.sold || 0)) > 0);
+      const firstAvailable = event.event_ticket_types.find(t => !offerUnavailableReason({...t,event_date:event.event_date},Number((t as any).metadata?.minPerOrder||1)));
       
       if (firstAvailable) {
         setSelectedTicketType(firstAvailable.id);
+        setQuantity(String((firstAvailable as any).metadata?.minPerOrder||1));
       } else {
         // If ALL are sold out, fallback to the first one (so the user sees "Sold Out")
         setSelectedTicketType(event.event_ticket_types[0].id);
@@ -134,9 +139,10 @@ export default function EventDetailScreen() {
 
   useEffect(() => {
     if (!event?.reservados_vip?.length || selectedVipReservadoId) return;
+    if (!event.event_ticket_types?.length) setPurchaseTab('vip');
     const firstAvailable = event.reservados_vip.find((v) => (v.quantity_available ?? 0) > 0);
     setSelectedVipReservadoId((firstAvailable || event.reservados_vip[0])?.id ?? null);
-  }, [event?.reservados_vip, selectedVipReservadoId]);
+  }, [event?.reservados_vip, event?.event_ticket_types?.length, selectedVipReservadoId]);
 
   useEffect(() => {
     if (purchaseTab !== 'vip') return;
@@ -250,16 +256,6 @@ export default function EventDetailScreen() {
         normalizedEvent.event_ticket_types = normalizedEvent.event_ticket_types.filter(
           (t: any) => !t?.deleted_at && (t?.is_active ?? true)
         );
-      }
-
-      if (__DEV__) {
-        try {
-          console.log('[EVENT]', {
-            id: String(normalizedEvent?.id || ''),
-            event_type: normalizedEvent?.event_type,
-            theme: normalizedEvent?.theme,
-          });
-        } catch {}
       }
 
       setEvent({ ...normalizedEvent, reservados_vip: vipRows } as any);
@@ -452,8 +448,8 @@ export default function EventDetailScreen() {
     }
 
     // Check event is not in the past
-    const eventDateTime = new Date(event?.event_date);
-    if (eventDateTime < new Date()) {
+    const eventDateTime = event?.event_date ? new Date(event.event_date) : new Date(NaN);
+    if (new Date(event?.end_datetime || new Date(eventDateTime.getTime()+5*3600000).toISOString()) < new Date()) {
       Alert.alert('Evento finalizado', 'No es posible comprar entradas para un evento que ya ha tenido lugar.');
       return;
     }
@@ -470,7 +466,8 @@ export default function EventDetailScreen() {
       return;
     }
 
-    const qty = parseInt(quantity);
+    const chosen = event?.event_ticket_types?.find(t => t.id === selectedTicketType);
+    const qty = Math.max(Number((chosen as any)?.metadata?.minPerOrder||1), Math.min(Number((chosen as any)?.metadata?.maxPerOrder||10), parseInt(quantity)||1));
     if (isNaN(qty) || qty < 1) {
       showDialog({ title: t('common.error'), message: t('event.purchase.invalid_quantity') });
       return;
@@ -487,6 +484,8 @@ export default function EventDetailScreen() {
       return;
     }
 
+    const reason = selectedType ? offerUnavailableReason({...selectedType,event_date:event.event_date},qty) : null;
+    if (reason) { showDialog({title:"Oferta no disponible",message:reason}); return; }
     // Check specific ticket type availability
     if (selectedType) {
         if ((selectedType.quantity - (selectedType.sold || 0)) < qty) {
@@ -552,6 +551,10 @@ export default function EventDetailScreen() {
         });
 
         if (result.status === 'canceled') return { paid: false as const };
+        if (result.status === 'pending') {
+          showDialog({ title: 'Compra pendiente', message: result.message });
+          return { paid: false as const };
+        }
         if (result.status !== 'succeeded') {
           throw new Error(result.message || 'El pago no se pudo completar.');
         }
@@ -560,32 +563,33 @@ export default function EventDetailScreen() {
 
       // Service fee — integer-cent arithmetic, identical to create-payment-intent-v2
       const _totalPriceCents = Math.round(totalPrice * 100);
-      const _svcFeeCents = Math.max(Math.round((_totalPriceCents * 0.015 + 25) / 0.985), 50);
+      const _svcFeeCents = Number(pricePerTicket) === 0 ? 0 : Math.max(Math.round((_totalPriceCents * 0.015 + 25) / 0.985), 50);
       const serviceFeeForPurchase = _svcFeeCents / 100;
       const grandTotalForPurchase = (_totalPriceCents + _svcFeeCents) / 100;
 
       const payTicketsWithWalletOnly = async () => {
         setPurchasing(true);
-
-        const qrCode = 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
-          const r = (Math.random() * 16) | 0;
-          const v = c === 'x' ? r : (r & 0x3) | 0x8;
-          return v.toString(16);
-        });
-
         await buyTicketWithCredit({
           p_event_id: event.id,
           p_buyer_name: buyerName,
           p_buyer_email: buyerEmail || user.email || '',
           p_quantity: qty,
-          p_total_price: totalPrice,
-          p_qr_code: qrCode,
           p_ticket_type_id: selectedTicketType,
-          p_service_fee: serviceFeeForPurchase,
+          p_discount_code_id: appliedDiscount?.id ?? null,
         });
       };
 
-      if (!payWithWallet) {
+      if (Number(pricePerTicket) === 0) {
+        const signature = JSON.stringify([event.id, selectedTicketType, qty, buyerName, user.id]);
+        if (freeClaimRef.current?.signature !== signature) freeClaimRef.current = { signature, id: 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => { const n = Math.floor(Math.random() * 16); return (c === 'x' ? n : (n & 3) | 8).toString(16); }) };
+        const { data, error } = await supabase.rpc('claim_free_tickets', {
+          p_event_id: event.id, p_ticket_type_id: selectedTicketType,
+          p_quantity: qty, p_buyer_name: buyerName, p_request_id: freeClaimRef.current.id,
+        });
+        if (error) throw error;
+        if (!data?.success) throw new Error('No se pudo obtener la entrada gratuita.');
+        freeClaimRef.current = null;
+      } else if (!LAUNCH_FEATURES.walletCredit || !payWithWallet) {
         const r = await payTicketsWithCard();
         if (!r.paid) return;
       } else {
@@ -625,16 +629,8 @@ export default function EventDetailScreen() {
       await refreshEvents(); // Update global context so dashboards reflect the sale immediately
       await fetchEvent();
 
-      // Consume discount code atomically after successful purchase
-      if (appliedDiscount) {
-        await supabase.rpc('consume_discount_code', {
-          p_code_id: appliedDiscount.id,
-          p_buyer_name: buyerName || null,
-          p_buyer_email: buyerEmail || null,
-        }).catch(() => {});
-        setAppliedDiscount(null);
-        setDiscountCode('');
-      }
+      setAppliedDiscount(null);
+      setDiscountCode('');
 
       const msg =
         qty === 1
@@ -678,8 +674,8 @@ export default function EventDetailScreen() {
     }
 
     // Check event is not in the past
-    const vipEventDateTime = new Date(event?.event_date);
-    if (vipEventDateTime < new Date()) {
+    const vipEventDateTime = event?.event_date ? new Date(event.event_date) : new Date(NaN);
+    if (new Date(event?.end_datetime || new Date(vipEventDateTime.getTime()+5*3600000).toISOString()) < new Date()) {
       Alert.alert('Evento finalizado', 'No es posible comprar entradas para un evento que ya ha tenido lugar.');
       return;
     }
@@ -713,7 +709,7 @@ export default function EventDetailScreen() {
         showDialog({ title: 'Cartera', message: 'Estamos cargando tu saldo. Espera un momento y vuelve a intentarlo.' });
         return;
       }
-      if (payVipWithWallet) {
+      if (LAUNCH_FEATURES.walletCredit && payVipWithWallet) {
         const vipServiceFee = Math.round(((vip.base_price * 0.015 + 0.25) / 0.985) * 100) / 100;
         const vipGrandTotal = vip.base_price + vipServiceFee;
         const walletDebit = Math.min(Math.max(creditBalance, 0), vip.base_price);
@@ -729,6 +725,10 @@ export default function EventDetailScreen() {
         } else if (walletDebit <= 0) {
           const result = await present({ kind: 'vip_table', reference_id: vip.id, buyer_name: buyerName, buyer_email: buyerEmail || user.email || '' });
           if (result.status === 'canceled') return;
+          if (result.status === 'pending') {
+            showDialog({ title: 'Compra pendiente', message: result.message });
+            return;
+          }
           if (result.status !== 'succeeded') {
             throw new Error(result.message || 'El pago no se pudo completar.');
           }
@@ -754,6 +754,10 @@ export default function EventDetailScreen() {
             buyer_email: buyerEmail || user.email || '',
           });
           if (result.status === 'canceled') return;
+          if (result.status === 'pending') {
+            showDialog({ title: 'Compra pendiente', message: result.message });
+            return;
+          }
           if (result.status !== 'succeeded') {
             throw new Error(result.message || 'El pago no se pudo completar.');
           }
@@ -762,6 +766,10 @@ export default function EventDetailScreen() {
       } else {
         const result = await present({ kind: 'vip_table', reference_id: vip.id, buyer_name: buyerName, buyer_email: buyerEmail || user.email || '' });
         if (result.status === 'canceled') return;
+          if (result.status === 'pending') {
+            showDialog({ title: 'Compra pendiente', message: result.message });
+            return;
+          }
         if (result.status !== 'succeeded') {
           throw new Error(result.message || 'El pago no se pudo completar.');
         }
@@ -895,12 +903,15 @@ export default function EventDetailScreen() {
   }
 
   const selectedType = event.event_ticket_types?.find(t => t.id === selectedTicketType);
+  const minOrder = Number(selectedType?.metadata?.minPerOrder || 1);
+  const maxOrder = Number(selectedType?.metadata?.maxPerOrder || 10);
   const currentPrice = selectedType ? selectedType.price : event.ticket_price;
   const currentAvailable = selectedType 
     ? (selectedType.quantity - (selectedType.sold || 0))
     : event.available_tickets;
 
-  const safeQty = Math.max(1, parseInt(quantity || '1') || 1);
+  const safeQty = Math.max(minOrder, Math.min(maxOrder, parseInt(quantity || String(minOrder)) || minOrder));
+  const saleUnavailable = selectedType ? offerUnavailableReason({ ...selectedType, event_date:event.event_date }, safeQty) : null;
   const total = currentPrice * safeQty;
   const discountedTotal = appliedDiscount
     ? appliedDiscount.type === 'percentage'
@@ -911,7 +922,7 @@ export default function EventDetailScreen() {
 
   // Service fee — integer-cent arithmetic, identical to create-payment-intent-v2
   const _discountedCents = Math.round(discountedTotal * 100);
-  const _serviceFeeCents = Math.max(Math.round((_discountedCents * 0.015 + 25) / 0.985), 50);
+  const _serviceFeeCents = Number(currentPrice) === 0 ? 0 : Math.max(Math.round((_discountedCents * 0.015 + 25) / 0.985), 50);
   const estimatedServiceFee = _serviceFeeCents / 100;
   const grandTotal = (_discountedCents + _serviceFeeCents) / 100;
 
@@ -942,6 +953,8 @@ export default function EventDetailScreen() {
   const hasVip = !!(event.reservados_vip && event.reservados_vip.length > 0);
   const selectedVip = event.reservados_vip?.find((v) => v.id === selectedVipReservadoId) ?? null;
   const vipAvailable = selectedVip ? (selectedVip.quantity_available ?? 0) : 0;
+  const vipSaleUnavailable = selectedVip ? offerUnavailableReason({...selectedVip,category:'table',quantity:vipAvailable,sold:0,event_date:event.event_date},1) : null;
+  const vipServiceFee = selectedVip ? Math.max(Math.round((Math.round(selectedVip.base_price * 100) * .015 + 25) / .985), 50) / 100 : 0;
   const formatEuro = (value: any): string => {
     if (value === null || value === undefined) return '—';
     const n = typeof value === 'number' ? value : Number(value);
@@ -988,7 +1001,7 @@ export default function EventDetailScreen() {
             </GlassView>
           </TouchableOpacity>
 
-          {event.available_tickets <= 0 && (
+          {event.available_tickets <= 0 && !event.reservados_vip?.some(v=>v.quantity_available>0) && (
             <View style={[styles.soldBadgeContainer, { right: horizontalPadding }]}>
               <GlassView intensity={40} style={[styles.soldBadge, { backgroundColor: Colors.dark.error }]}>
                 <Text style={[styles.soldText, { color: 'white' }]}>SOLD OUT</Text>
@@ -1190,7 +1203,7 @@ export default function EventDetailScreen() {
                     >
                       <View style={styles.segmentVipPill}>
                         <Sparkles size={14} color={purchaseTab === 'vip' ? '#0b1020' : '#fef3c7'} />
-                        <Text style={[styles.segmentText, purchaseTab === 'vip' && styles.segmentTextActive]}>{t('event.purchase.tab_vip')}</Text>
+                        <Text style={[styles.segmentText, purchaseTab === 'vip' && styles.segmentTextActive]}>Reservados de mesa</Text>
                       </View>
                     </TouchableOpacity>
                   )}
@@ -1202,7 +1215,7 @@ export default function EventDetailScreen() {
                   <View style={styles.vipHeaderRow}>
                     <Text style={styles.inputLabel}>{t('event.vip.section_title')}</Text>
                     <View style={styles.vipBadge}>
-                      <Text style={styles.vipBadgeText}>PREMIUM</Text>
+                      <Text style={styles.vipBadgeText}>MESA COMPLETA</Text>
                     </View>
                   </View>
 
@@ -1359,7 +1372,7 @@ export default function EventDetailScreen() {
                         )}
                       </View>
                       <View style={styles.vipCheckoutRight}>
-                        <Text style={styles.vipCheckoutLabel}>{t('event.purchase.total')}</Text>
+                        <Text style={styles.vipCheckoutLabel}>Mesa completa</Text>
                         <Text style={styles.vipCheckoutPrice}>{selectedVip ? formatEuro(selectedVip.base_price) : '—'}</Text>
                         {!!selectedVip && (
                           <View style={[styles.vipCheckoutStatusPill, vipAvailable > 0 ? null : styles.vipCheckoutStatusPillSoldOut]}>
@@ -1391,7 +1404,16 @@ export default function EventDetailScreen() {
                     )}
                   </View>
 
-                  {user && !!selectedVip && (
+                  <View style={styles.inputsContainer}>
+                    <ThemedInput label="Nombre del titular" placeholder="Nombre y apellidos" value={buyerName} onChangeText={setBuyerName} icon={UserIcon} editable={!!user && vipAvailable > 0} style={styles.purchaseInput}/>
+                    <ThemedInput label="Correo para recibir la entrada" placeholder="tu@email.com" value={buyerEmail} onChangeText={setBuyerEmail} icon={Mail} keyboardType="email-address" autoCapitalize="none" editable={!!user && vipAvailable > 0} style={styles.purchaseInput}/>
+                  </View>
+                  {!!selectedVip && <View style={{gap:8,paddingVertical:16}}>
+                    <View style={{flexDirection:'row',justifyContent:'space-between'}}><Text style={{color:'#BDAECF',fontSize:12}}>Mesa para {selectedVip.capacity_people} personas</Text><Text style={{color:'#BDAECF',fontSize:12}}>{formatEuro(selectedVip.base_price)}</Text></View>
+                    <View style={{flexDirection:'row',justifyContent:'space-between'}}><Text style={{color:'#BDAECF',fontSize:12}}>Tasa de servicio</Text><Text style={{color:'#BDAECF',fontSize:12}}>{formatEuro(vipServiceFee)}</Text></View>
+                    <View style={styles.totalContainer}><Text style={styles.totalLabel}>Total</Text><Text style={styles.totalAmount}>{formatEuro(selectedVip.base_price + vipServiceFee)}</Text></View>
+                  </View>}
+                  {LAUNCH_FEATURES.walletCredit && user && !!selectedVip && (
                     <View style={[styles.walletPayContainer, styles.walletPayContainerVip]}>
                       <View style={styles.walletPayHeader}>
                         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
@@ -1420,6 +1442,7 @@ export default function EventDetailScreen() {
                     </View>
                   )}
 
+                  {!!vipSaleUnavailable&&<Text style={styles.insufficientFundsText}>{vipSaleUnavailable}</Text>}
                   <ThemedButton
                     title={
                       vipAvailable <= 0
@@ -1438,7 +1461,7 @@ export default function EventDetailScreen() {
                       vipPurchasing ||
                       stripeLoading ||
                       !selectedVipReservadoId ||
-                      vipAvailable <= 0
+                      vipAvailable <= 0 || !!vipSaleUnavailable
                     }
                     style={styles.vipBuyButton}
                     variant="primary"
@@ -1452,7 +1475,7 @@ export default function EventDetailScreen() {
               )}
 
               {/* Resale prohibited banner */}
-              {purchaseTab === 'tickets' && (event as any).allow_resale === false && (
+              {LAUNCH_FEATURES.resale && purchaseTab === 'tickets' && (event as any).allow_resale === false && (
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: 'rgba(255,255,255,0.04)', borderRadius: 12, paddingHorizontal: 14, paddingVertical: 10, borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)', marginBottom: 12 }}>
                   <Text style={{ fontSize: 14 }}>🔒</Text>
                   <Text style={{ flex: 1, fontSize: 12, color: 'rgba(255,255,255,0.40)', fontWeight: '600', lineHeight: 17 }}>
@@ -1471,13 +1494,15 @@ export default function EventDetailScreen() {
                        const isExpanded = expandedTicketId === type.id;
                        const available = type.quantity - (type.sold || 0);
                        const meta = (type as any).metadata ?? {};
-                       const catLabel = type.category === 'vip' ? 'VIP' : type.category === 'early' ? 'Early Access' : type.category === 'backstage' ? 'Backstage' : 'General';
+                       const catLabel = OFFER_CATEGORIES.find(c=>c.key===type.category)?.label || 'Entrada';
+                       const unavailable = offerUnavailableReason({...type,event_date:event.event_date},Number(meta.minPerOrder||1));
                        const catColor = type.category === 'vip' ? '#fbbf24' : type.category === 'early' ? Colors.dark.secondary : type.category === 'backstage' ? '#F472B6' : Colors.dark.primary;
                        return (
                          <TouchableOpacity
                            key={type.id}
                            onPress={() => {
                              setSelectedTicketType(type.id);
+                             setQuantity(String(meta.minPerOrder||1));
                              setExpandedTicketId(isExpanded ? null : type.id);
                            }}
                            style={[
@@ -1485,7 +1510,7 @@ export default function EventDetailScreen() {
                              isSelected && styles.ticketTypeCardSelected,
                              available <= 0 && styles.ticketTypeCardDisabled
                            ]}
-                           disabled={available <= 0}
+                           disabled={!!unavailable}
                            activeOpacity={0.9}
                          >
                            <LinearGradient
@@ -1499,7 +1524,7 @@ export default function EventDetailScreen() {
                              style={StyleSheet.absoluteFill}
                            />
                            <View style={styles.ticketTypeTopRow}>
-                             <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                             <View style={{ flex: 1, minWidth: 0, gap: 8, alignItems: 'flex-start' }}>
                                <View style={[styles.ticketCatBadge, { backgroundColor: catColor + '22', borderColor: catColor + '55' }]}>
                                  <Text style={[styles.ticketCatBadgeText, { color: catColor }]}>{catLabel}</Text>
                                </View>
@@ -1532,9 +1557,16 @@ export default function EventDetailScreen() {
                              <Text style={[styles.ticketTypePrice, isSelected && styles.ticketTypePriceSelected]}>
                                {formatEuro(type.price)}
                              </Text>
-                             <Text style={styles.ticketTypeUnit}>{t('event.tickets.per_ticket')}</Text>
+                             <Text style={styles.ticketTypeUnit}>{Number(meta.admissionsPerUnit)>1 ? 'por pack de '+meta.admissionsPerUnit+' personas' : 'por persona'}</Text>
                            </View>
 
+                           <View style={{gap:5,paddingTop:8}}>
+                             {!!meta.salePhase&&<Text style={{fontSize:11,color:'#BDABD8'}}>{meta.salePhase}</Text>}
+                             {Number(meta.includedDrinks)>0&&<Text style={{fontSize:12,color:'#D9CFE5'}}>{meta.includedDrinks} {Number(meta.includedDrinks)===1?'consumición':'consumiciones'} por persona</Text>}
+                             {Number(meta.admissionsPerUnit)>1&&<Text style={{fontSize:12,color:'#D9CFE5'}}>Acceso conjunto de {meta.admissionsPerUnit} personas por pack</Text>}
+                             {!!meta.entryDeadlineMinutes&&<Text style={{fontSize:12,color:'#DEC49B'}}>Acceso antes de {new Date(new Date(event.event_date).getTime()+Number(meta.entryDeadlineMinutes)*60000).toLocaleString('es-ES')}</Text>}
+                             {!!unavailable&&<Text style={{fontSize:12,color:'#C0B5CA'}}>{unavailable}</Text>}
+                           </View>
                            {isExpanded && (
                              <View style={styles.ticketExpandBody}>
                                <View style={styles.ticketExpandDivider} />
@@ -1562,7 +1594,7 @@ export default function EventDetailScreen() {
                                  </View>
                                )}
 
-                               {type.category === 'general' && !!meta.accessZone && (
+                               {!!meta.accessZone && (
                                  <View style={styles.ticketExpandRow}>
                                    <MapPin size={14} color={catColor} />
                                    <Text style={styles.ticketExpandText}>Zona: {meta.accessZone}</Text>
@@ -1583,7 +1615,7 @@ export default function EventDetailScreen() {
                                  </View>
                                )}
 
-                               {type.category === 'early' && meta.dedicatedLane && (
+                               {meta.dedicatedLane && (
                                  <View style={styles.ticketExpandRow}>
                                    <UserIcon size={14} color={catColor} />
                                    <Text style={styles.ticketExpandText}>Carril prioritario</Text>
@@ -1620,6 +1652,7 @@ export default function EventDetailScreen() {
 
                   <View style={styles.inputsContainer}>
                     <ThemedInput
+                      label="Nombre del titular"
                       placeholder={t('event.tickets.full_name_placeholder')}
                       value={buyerName}
                       onChangeText={setBuyerName}
@@ -1629,6 +1662,7 @@ export default function EventDetailScreen() {
                     />
 
                     <ThemedInput
+                      label="Correo para recibir la entrada"
                       placeholder={t('event.tickets.email_placeholder')}
                       value={buyerEmail}
                       onChangeText={setBuyerEmail}
@@ -1640,12 +1674,12 @@ export default function EventDetailScreen() {
                     />
 
                     <View style={styles.stepperRow}>
-                      <Text style={styles.stepperLabel}>{t('event.tickets.quantity')}</Text>
+                      <Text style={styles.stepperLabel}>{Number(selectedType?.metadata?.admissionsPerUnit)>1 ? 'Número de packs' : t('event.tickets.quantity')}</Text>
                       <View style={styles.stepper}>
                         <TouchableOpacity
-                          style={[styles.stepperButton, (safeQty <= 1 || currentAvailable <= 0) && styles.stepperButtonDisabled]}
-                          onPress={() => setQuantity(String(Math.max(1, safeQty - 1)))}
-                          disabled={safeQty <= 1 || currentAvailable <= 0}
+                          style={[styles.stepperButton, (safeQty <= minOrder || currentAvailable <= 0) && styles.stepperButtonDisabled]}
+                          onPress={() => setQuantity(String(Math.max(minOrder, safeQty - 1)))}
+                          disabled={safeQty <= minOrder || currentAvailable <= 0}
                           activeOpacity={0.85}
                         >
                           <Minus size={16} color="white" />
@@ -1654,15 +1688,16 @@ export default function EventDetailScreen() {
                           <Text style={styles.stepperValueText}>{safeQty}</Text>
                         </View>
                         <TouchableOpacity
-                          style={[styles.stepperButton, (safeQty >= Math.min(10, currentAvailable) || currentAvailable <= 0) && styles.stepperButtonDisabled]}
-                          onPress={() => setQuantity(String(Math.min(Math.min(10, currentAvailable), safeQty + 1)))}
-                          disabled={safeQty >= Math.min(10, currentAvailable) || currentAvailable <= 0}
+                          style={[styles.stepperButton, (safeQty >= Math.min(maxOrder, currentAvailable) || currentAvailable <= 0) && styles.stepperButtonDisabled]}
+                          onPress={() => setQuantity(String(Math.min(Math.min(maxOrder, currentAvailable), safeQty + 1)))}
+                          disabled={safeQty >= Math.min(maxOrder, currentAvailable) || currentAvailable <= 0}
                           activeOpacity={0.85}
                         >
                           <Plus size={16} color="white" />
                         </TouchableOpacity>
                       </View>
                     </View>
+                    {Number(selectedType?.metadata?.admissionsPerUnit)>1 && <Text style={{color:'#C7B5DC',fontSize:12}}>Acceso para {safeQty * Number(selectedType?.metadata?.admissionsPerUnit)} personas en total. Cada pack entra junto con su QR.</Text>}
                   </View>
 
                   {/* Discount code field */}
@@ -1710,7 +1745,7 @@ export default function EventDetailScreen() {
                     </View>
                   )}
 
-                  {user && (
+                  {LAUNCH_FEATURES.walletCredit && user && (
                     <View style={styles.walletPayContainer}>
                       <View style={styles.walletPayHeader}>
                         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
@@ -1769,10 +1804,10 @@ export default function EventDetailScreen() {
 
                   <ThemedButton
                     title={
-                      currentAvailable <= 0
+                      saleUnavailable ? 'Oferta no disponible' : currentAvailable <= 0
                         ? t('event.tickets.sold_out')
                         : user
-                          ? payWithWallet
+                          ? Number(currentPrice) === 0 ? 'Obtener entrada gratis' : payWithWallet
                             ? creditBalance > 0 && creditBalance < grandTotal
                               ? t('event.purchase.pay_split')
                               : t('event.purchase.pay_wallet')
@@ -1781,7 +1816,7 @@ export default function EventDetailScreen() {
                     }
                     onPress={handlePurchase}
                     loading={purchasing || stripeLoading}
-                    disabled={purchasing || stripeLoading || currentAvailable <= 0 || (payWithWallet && creditLoading)}
+                    disabled={purchasing || stripeLoading || currentAvailable <= 0 || !!saleUnavailable || (payWithWallet && creditLoading)}
                     style={[styles.confirmButton, currentAvailable <= 0 && { opacity: 0.5 }]}
                     variant={user ? 'secondary' : 'primary'}
                   />

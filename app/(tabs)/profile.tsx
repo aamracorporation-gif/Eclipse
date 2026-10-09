@@ -1,10 +1,11 @@
+import { LAUNCH_FEATURES } from '@/lib/launchFeatures';
 import { View, Text, StyleSheet, TouchableOpacity, Platform, ScrollView, Image, RefreshControl, StatusBar, Modal, TextInput, KeyboardAvoidingView, Switch, Alert, useWindowDimensions, Pressable } from 'react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { router, useSegments } from 'expo-router';
 import { useAuth } from '@/lib/AuthContext';
 import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
-import { User, Ticket, ChevronRight, Tag, TrendingUp, UserPlus, Calendar, Sparkles, CheckCircle2, ShieldCheck, Wallet, QrCode, Clock, MapPin, Pencil, X, FileText, LogOut, Eye, EyeOff, MessageCircle } from '@/lib/icons';
+import { User, Ticket, ChevronRight, Tag, TrendingUp, UserPlus, Calendar, Sparkles, ShieldCheck, Wallet, QrCode, Clock, MapPin, Pencil, X, FileText, LogOut, Eye, EyeOff, MessageCircle } from '@/lib/icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Colors } from '@/constants/Colors';
 import { GlassView } from '@/components/ui/GlassView';
@@ -74,19 +75,14 @@ export default function ProfileScreen() {
     }
     setSupportSending(true);
     try {
-      const userName = profileDraft.full_name || profileDraft.first_name || user?.user_metadata?.full_name || 'Usuario';
-      const userEmail = user?.email || 'sin email';
-      const userId = user?.id || 'desconocido';
-
       const { data, error } = await supabase.functions.invoke('send-support-email', {
-        body: { userName, userEmail, userId, category: supportCategory, message: supportMessage.trim() },
+        body: { category: supportCategory, message: supportMessage.trim() },
       });
 
       if (error) throw error;
       if (data && !data.ok) {
-        const detail = JSON.stringify(data.data || data.error || data);
-        console.error('[Support] Resend error:', detail);
-        Alert.alert('Error al enviar', 'Resend rechazó el email:\n' + detail);
+        console.error('[Support] Email service rejected the request');
+        Alert.alert('Error al enviar', 'No se pudo enviar el mensaje. Inténtalo de nuevo.');
         return;
       }
 
@@ -169,10 +165,7 @@ export default function ProfileScreen() {
       }
     }, [refreshEvents, profileRole, inCreator])
   );
-  const soldListings = useMemo(() => resaleListings.filter(l => l.status === 'sold'), [resaleListings]);
 
-  const adminEmail = ((process.env.EXPO_PUBLIC_ADMIN_EMAIL as any) ?? '').toString().trim().toLowerCase() || 'aamracorporation@gmail.com';
-  const isAdminEmail = !!user?.email && user.email.toLowerCase() === adminEmail;
   const isOrganizer = profileRole === 'organizer';
   const isOrganizerSuspended = !!organizerMeta?.is_suspended;
   const canOrganizerPublish = isOrganizer && verificationStatus === 'verified' && !isOrganizerSuspended;
@@ -670,6 +663,7 @@ export default function ProfileScreen() {
 
   // Animation for tab switching
   const handleTabChange = (tab: 'profile' | 'panel' | 'account' | 'resale') => {
+    if (tab === 'resale' && !LAUNCH_FEATURES.resale) return;
     Haptics.selectionAsync();
     // LayoutAnimation can conflict with Reanimated on some devices, removing for stability
     // LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut); 
@@ -680,7 +674,7 @@ export default function ProfileScreen() {
     if (profileRole === 'organizer' && !inCreator && activeTab === 'profile') {
       setActiveTab('panel');
     }
-  }, []);
+  }, [activeTab, inCreator, profileRole]);
 
   // Fetch Profile Stats
   useEffect(() => {
@@ -840,7 +834,7 @@ export default function ProfileScreen() {
 
   // Fetch Resale Listings + Transaction History
   const fetchResales = useCallback(async () => {
-    if (!user) return;
+    if (!LAUNCH_FEATURES.resale || !user) return;
     try {
       setLoadingResales(true);
 
@@ -894,7 +888,7 @@ export default function ProfileScreen() {
   }, [fetchResales, user]);
 
   useEffect(() => {
-    if (!user) return;
+    if (!LAUNCH_FEATURES.resale || !user) return;
 
     const channel = supabase
       .channel(`profile_resales_${user.id}`)
@@ -1221,7 +1215,7 @@ export default function ProfileScreen() {
                   </TouchableOpacity>
                 )}
 
-                {profileRole === 'organizer' && !isAdminEmail && (
+                {profileRole === 'organizer' && (
                   <TouchableOpacity
                     activeOpacity={0.85}
                     onPress={() => {
@@ -1326,7 +1320,7 @@ export default function ProfileScreen() {
                       )}
                       <Text style={[styles.segmentText, activeTab === 'profile' && styles.segmentTextActive]}>{t('profile.segment_my_profile')}</Text>
                     </TouchableOpacity>
-                    <TouchableOpacity
+                    {LAUNCH_FEATURES.resale && (<TouchableOpacity
                       style={styles.segmentButtonWrapper}
                       onPress={() => handleTabChange('resale')}
                       activeOpacity={0.8}
@@ -1338,7 +1332,7 @@ export default function ProfileScreen() {
                         />
                       )}
                       <Text style={[styles.segmentText, activeTab === 'resale' && styles.segmentTextActive]}>{t('tabs.resale')}</Text>
-                    </TouchableOpacity>
+                    </TouchableOpacity>)}
                     <TouchableOpacity
                       style={styles.segmentButtonWrapper}
                       onPress={() => handleTabChange('account')}
@@ -1368,7 +1362,7 @@ export default function ProfileScreen() {
                   )}
                   <Text style={[styles.segmentText, activeTab === 'profile' && styles.segmentTextActive]}>{t('tabs.profile')}</Text>
                 </TouchableOpacity>
-                <TouchableOpacity 
+                {LAUNCH_FEATURES.resale && (<TouchableOpacity 
                   style={styles.segmentButtonWrapper}
                   onPress={() => handleTabChange('resale')}
                   activeOpacity={0.8}
@@ -1380,7 +1374,7 @@ export default function ProfileScreen() {
                     />
                   )}
                   <Text style={[styles.segmentText, activeTab === 'resale' && styles.segmentTextActive]}>{t('tabs.resale')}</Text>
-                </TouchableOpacity>
+                </TouchableOpacity>)}
                   </>
                 )}
                 </View>
@@ -1783,14 +1777,14 @@ export default function ProfileScreen() {
                   <Text style={styles.sectionHeader}>{t('profile.section_management')}</Text>
                   <View style={styles.iosGroup}>
                     <GlassView intensity={14} style={[styles.iosGroupContainer, styles.premiumCard]}>
-                      <TouchableOpacity onPress={() => router.push('/wallet')} activeOpacity={0.7} style={styles.iosButtonRow}>
+                      {LAUNCH_FEATURES.walletCredit && (<><TouchableOpacity onPress={() => router.push('/wallet')} activeOpacity={0.7} style={styles.iosButtonRow}>
                         <View style={[styles.iosIcon, { backgroundColor: '#FFD60A' }]}>
                           <Wallet size={16} color="#000" />
                         </View>
                         <Text style={styles.iosButtonText}>{t('profile.wallet')}</Text>
                         <ChevronRight size={16} color="#8E8E93" />
                       </TouchableOpacity>
-                      <View style={styles.iosDivider} />
+                      <View style={styles.iosDivider} /></>)}
                       <TouchableOpacity onPress={() => router.push('/(tabs)/tickets')} activeOpacity={0.7} style={styles.iosButtonRow}>
                         <View style={[styles.iosIcon, { backgroundColor: '#BF5AF2' }]}>
                           <Ticket size={16} color="#FFF" />
@@ -3728,3 +3722,4 @@ const pwdStyles = StyleSheet.create({
   doneBtnGrad: { paddingVertical: 16, alignItems: 'center' },
   doneBtnTxt: { color: 'white', fontSize: 16, fontWeight: '800' },
 });
+

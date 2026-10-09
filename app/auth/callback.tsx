@@ -1,25 +1,18 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { useLocalSearchParams, router } from 'expo-router';
 import * as Linking from 'expo-linking';
 import { supabase } from '@/lib/supabase';
 import { Colors } from '@/constants/Colors';
 import { invokeEdgeFunctionStrict } from '@/lib/edgeFunctions';
-
-function parseFragment(url: string) {
-  const hashIndex = url.indexOf('#');
-  if (hashIndex < 0) return new URLSearchParams();
-  const hash = url.slice(hashIndex + 1);
-  return new URLSearchParams(hash);
-}
-
-function parseQuery(url: string) {
-  const qIdx = url.indexOf('?');
-  if (qIdx < 0) return new URLSearchParams();
-  const endIdx = url.indexOf('#', qIdx);
-  const raw = endIdx > qIdx ? url.slice(qIdx + 1, endIdx) : url.slice(qIdx + 1);
-  return new URLSearchParams(raw);
-}
+import { parseAuthLinkParams } from '@/lib/authDeepLinks';
+import { createAuthExchange } from '@/lib/authExchange';
+import { LinearGradient } from 'expo-linear-gradient';
+import { GlassView } from '@/components/ui/GlassView';
+import { DiscoLoader } from '@/components/ui/DiscoLoader';
+import { ThemedButton } from '@/components/ui/ThemedButton';
+import { Sparkles } from '@/lib/icons';
+import { theme } from '@/theme/styles';
 
 async function recordLegalNonBlocking() {
   try {
@@ -35,7 +28,9 @@ async function routeByRole(uid: string) {
     const { data: profile } = await supabase.from('profiles').select('role').eq('id', uid).maybeSingle();
     role = (profile?.role as string) ?? null;
   } catch {}
-  if (role === 'admin' || role === 'organizer') {
+  if (role === 'admin') {
+    router.replace('/(creator)');
+  } else if (role === 'organizer') {
     router.replace('/(creator)/verification');
   } else {
     router.replace('/(tabs)');
@@ -44,6 +39,7 @@ async function routeByRole(uid: string) {
 
 export default function AuthCallbackScreen() {
   const params = useLocalSearchParams<Record<string, string | string[]>>();
+  const exchange = useRef(createAuthExchange());
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   const normalized = useMemo(() => {
@@ -63,53 +59,61 @@ export default function AuthCallbackScreen() {
     let cancelled = false;
 
     const finish = async () => {
+      setErrorMsg(null);
       try {
         if (normalized.error || normalized.error_description) {
           throw new Error(normalized.error_description || normalized.error || 'No se pudo verificar el email.');
         }
 
         const initialUrl = await Linking.getInitialURL();
-        const fragmentParams = initialUrl ? parseFragment(initialUrl) : new URLSearchParams();
-        const queryParams = initialUrl ? parseQuery(initialUrl) : new URLSearchParams();
-
-        const code = normalized.code || queryParams.get('code') || fragmentParams.get('code') || null;
-        const accessToken = normalized.access_token || queryParams.get('access_token') || fragmentParams.get('access_token') || null;
-        const refreshToken = normalized.refresh_token || queryParams.get('refresh_token') || fragmentParams.get('refresh_token') || null;
-        const tokenHash = normalized.token_hash || queryParams.get('token_hash') || fragmentParams.get('token_hash') || null;
-        const otpType = normalized.type || queryParams.get('type') || fragmentParams.get('type') || null;
-
-        let sessionCreatedOk = false;
-        if (tokenHash && otpType) {
-          const { error } = await supabase.auth.verifyOtp({
-            token_hash: tokenHash,
-            type: otpType as any,
-          });
-          if (error) throw error;
-          sessionCreatedOk = true;
-        } else if (code) {
-          const { error } = await supabase.auth.exchangeCodeForSession(code);
-          if (error) throw error;
-          sessionCreatedOk = true;
-        } else if (accessToken && refreshToken) {
-          const { error } = await supabase.auth.setSession({
-            access_token: accessToken,
-            refresh_token: refreshToken,
-          });
-          if (error) throw error;
-          sessionCreatedOk = true;
-        } else {
-          const { data: currentSession } = await supabase.auth.getSession();
-          if (!currentSession.session) {
-            throw new Error('No se encontró código de verificación en el enlace.');
-          }
+        // A warm link must not inherit credentials/type from the cold-start URL.
+        const hasRouteParams = Object.values(normalized).some(Boolean);
+        const linkParams = !hasRouteParams && initialUrl ? parseAuthLinkParams(initialUrl) : {};
+        if (linkParams.error || linkParams.error_description) {
+          throw new Error(linkParams.error_description || linkParams.error);
         }
 
-        // Password recovery flow — take user to reset screen, not the app.
+        const code = normalized.code || linkParams.code || null;
+        const accessToken = normalized.access_token || linkParams.access_token || null;
+        const refreshToken = normalized.refresh_token || linkParams.refresh_token || null;
+        const tokenHash = normalized.token_hash || linkParams.token_hash || null;
+        const otpType = normalized.type || linkParams.type || null;
+
         if (otpType === 'recovery') {
           if (cancelled) return;
-          router.replace('/auth/reset-password');
+          router.replace({ pathname: '/auth/reset-password', params: {
+            ...linkParams,
+            ...Object.fromEntries(Object.entries(normalized).filter(([, value]) => value !== undefined)),
+          } });
           return;
         }
+
+        await exchange.current(
+          JSON.stringify([code, accessToken, refreshToken, tokenHash, otpType]),
+          async () => {
+            if (tokenHash && otpType) {
+              const { error } = await supabase.auth.verifyOtp({
+                token_hash: tokenHash,
+                type: otpType as any,
+              });
+              if (error) throw error;
+            } else if (code) {
+              const { error } = await supabase.auth.exchangeCodeForSession(code);
+              if (error) throw error;
+            } else if (accessToken && refreshToken) {
+              const { error } = await supabase.auth.setSession({
+                access_token: accessToken,
+                refresh_token: refreshToken,
+              });
+              if (error) throw error;
+            } else {
+              const { data: currentSession } = await supabase.auth.getSession();
+              if (!currentSession.session) {
+                throw new Error('No se encontró código de verificación en el enlace.');
+              }
+            }
+          },
+        );
 
         const { data: userData } = await supabase.auth.getUser();
         const uid = userData.user?.id;
@@ -133,15 +137,20 @@ export default function AuthCallbackScreen() {
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>Verificando tu cuenta...</Text>
-      <Text style={styles.subtitle}>
-        {errorMsg || 'Estamos validando tu enlace de confirmación y abriendo tu sesión.'}
-      </Text>
-      {errorMsg ? (
-        <Text style={styles.link} onPress={() => router.replace('/(auth)/login')}>
-          Volver al login
+      <LinearGradient colors={Colors.dark.backgroundGradient} style={StyleSheet.absoluteFill} />
+      <GlassView style={styles.card}>
+        <View style={styles.iconContainer}>
+          <Sparkles size={32} color={Colors.dark.primary} />
+        </View>
+        {!errorMsg ? <DiscoLoader size={72} /> : null}
+        <Text style={styles.title}>{errorMsg ? 'No pudimos verificar el enlace' : 'Verificando tu cuenta…'}</Text>
+        <Text style={styles.subtitle}>
+          {errorMsg || 'Estamos validando tu enlace de confirmación y abriendo tu sesión.'}
         </Text>
-      ) : null}
+        {errorMsg ? (
+          <ThemedButton title="Volver al inicio de sesión" onPress={() => router.replace('/(auth)/login')} style={styles.button} />
+        ) : null}
+      </GlassView>
     </View>
   );
 }
@@ -149,19 +158,20 @@ export default function AuthCallbackScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    padding: 24,
+    padding: theme.space[6],
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: Colors.dark.background,
   },
-  title: { color: '#fff', fontSize: 22, fontWeight: '800', textAlign: 'center' },
+  card: { width: '100%', maxWidth: 440, alignItems: 'center' },
+  iconContainer: { width: 72, height: 72, borderRadius: 36, alignItems: 'center', justifyContent: 'center', backgroundColor: Colors.dark.primarySoft, borderWidth: 1, borderColor: Colors.dark.primary, marginBottom: theme.space[5] },
+  title: { color: Colors.dark.text, fontSize: theme.typography.size.xl, fontWeight: theme.typography.weight.black, textAlign: 'center', marginTop: theme.space[4] },
   subtitle: {
     marginTop: 10,
-    color: 'rgba(255,255,255,0.8)',
-    fontSize: 14,
+    color: Colors.dark.textSecondary,
+    fontSize: theme.typography.size.sm,
     lineHeight: 20,
     textAlign: 'center',
   },
-  link: { marginTop: 16, color: Colors.dark.primary, fontWeight: '700' },
+  button: { marginTop: theme.space[5] },
 });
-

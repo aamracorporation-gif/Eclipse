@@ -80,7 +80,6 @@ export default function WorkerQRScreen() {
 
   const handleShare = async () => {
     if (!token) return;
-    const qrContent = buildQRContent(event_id!, token);
     try {
       await Share.share({
         message: `🎪 ${eventTitle}\n\nAcceso Workers — Eclipse\nCódigo de invitación: ${token}\n\nEscanea el QR desde la app de Eclipse para unirte como worker a este evento.`,

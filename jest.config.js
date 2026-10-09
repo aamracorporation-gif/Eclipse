@@ -3,6 +3,7 @@ module.exports = {
   testMatch: ['**/__tests__/**/*.test.(ts|tsx|js)'],
   moduleNameMapper: {
     '^@/(.*)$': '<rootDir>/$1',
+    '^react-native-webview$': '<rootDir>/__mocks__/react-native-webview.js',
   },
   collectCoverage: true,
   collectCoverageFrom: [

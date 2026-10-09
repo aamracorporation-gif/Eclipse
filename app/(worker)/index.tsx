@@ -11,6 +11,7 @@ import { DiscoLoader } from '@/components/ui/DiscoLoader';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Location from 'expo-location';
 import { useResponsive } from '@/lib/responsive';
+import { useBoxOfficeAccess } from '@/hooks/useBoxOfficeAccess';
 
 // Helper to calculate distance in km
 function getDistanceFromLatLonInKm(lat1: number, lon1: number, lat2: number, lon2: number) {
@@ -32,6 +33,7 @@ function deg2rad(deg: number) {
 
 export default function WorkerDashboard() {
   const { workerProfile, signOut } = useAuth();
+  const boxOffice = useBoxOfficeAccess(workerProfile?.organizer_id);
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const [refreshing, setRefreshing] = useState(false);
@@ -52,8 +54,8 @@ export default function WorkerDashboard() {
         latitude: loc.coords.latitude,
         longitude: loc.coords.longitude
       });
-    } catch (e) {
-      console.log('Error getting location:', e);
+    } catch {
+      console.warn('No se pudo obtener la ubicación del trabajador.');
     }
   }, []);
 
@@ -229,7 +231,7 @@ export default function WorkerDashboard() {
             </LinearGradient>
           </TouchableOpacity>
 
-          <TouchableOpacity
+          {boxOffice.can_sell && <TouchableOpacity
             style={styles.actionButton}
             onPress={() => router.push('/(worker)/sell')}
             activeOpacity={0.8}
@@ -237,10 +239,10 @@ export default function WorkerDashboard() {
             <GlassView intensity={30} style={styles.actionGlass}>
               <Ticket size={32} color="white" />
               <Text style={[styles.actionText, { fontSize: scaleFont(16) }]} numberOfLines={1} adjustsFontSizeToFit>
-                Venta Manual
+                Vender en taquilla
               </Text>
             </GlassView>
-          </TouchableOpacity>
+          </TouchableOpacity>}
 
           <TouchableOpacity
             style={[styles.actionButton, { width: '100%' }]}
@@ -257,6 +259,7 @@ export default function WorkerDashboard() {
         </View>
 
         {/* Assigned Events */}
+        {!boxOffice.checking && !boxOffice.can_sell && <Text style={{color:'#BBA9D1',fontSize:12,lineHeight:19,marginBottom:20,width:'100%',maxWidth:maxContentWidth}}>{boxOffice.error || (boxOffice.enabled ? 'El organizador debe darte permiso de venta. Puedes seguir escaneando entradas.' : 'Modo escáner · Para vender en taquilla, el organizador debe activar Taquilla Premium (50 €/mes).')}</Text>}
         <View style={[styles.eventsHeader, { width: '100%', maxWidth: maxContentWidth }]}>
           <Text style={[styles.sectionTitle, { fontSize: scaleFont(20) }]} numberOfLines={1}>
             Mis Eventos Asignados

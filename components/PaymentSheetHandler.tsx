@@ -1,19 +1,23 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import { Alert, Platform } from 'react-native';
 import { useStripe } from '@stripe/stripe-react-native';
 import * as Linking from 'expo-linking';
 import Constants from 'expo-constants';
 import { confirmPayment, createPaymentIntent } from '@/lib/payments/api';
 import type { ConfirmPaymentResponse, CreatePaymentIntentRequest } from '@/lib/payments/types';
+import { getRefundMessage, waitForFulfillment } from '@/lib/payments/waitForFulfillment';
 
 type PaymentSheetResult =
   | { status: 'canceled' }
   | { status: 'failed'; message: string }
+  | { status: 'pending'; message: string }
   | { status: 'succeeded'; fulfillment: ConfirmPaymentResponse };
 
 export function usePaymentSheetHandler() {
   const stripe = useStripe();
   const [loading, setLoading] = useState(false);
+  const active = useRef(false);
+  const checkout = useRef<{ fingerprint: string; key: string; intentId?: string; submitted?: boolean } | null>(null);
 
   const merchantDisplayName = useMemo(() => {
     return ((Constants.expoConfig?.extra as any)?.stripe as any)?.merchantDisplayName ?? 'Eclipse';
@@ -22,7 +26,7 @@ export function usePaymentSheetHandler() {
   const present = useCallback(
     async (purchase: CreatePaymentIntentRequest): Promise<PaymentSheetResult> => {
       if (Platform.OS === 'web') {
-        return { status: 'failed', message: 'Payments are not supported on web.' };
+        return { status: 'failed', message: 'Las compras están disponibles en la app para iOS y Android.' };
       }
 
       const isExpoGo = (Constants as any)?.appOwnership === 'expo';
@@ -35,6 +39,8 @@ export function usePaymentSheetHandler() {
         };
       }
 
+      if (active.current) return { status: 'pending', message: 'La compra ya está en curso.' };
+      active.current = true;
       setLoading(true);
       try {
         const publishableKey =
@@ -59,7 +65,26 @@ export function usePaymentSheetHandler() {
           };
         }
 
-        const intent = await createPaymentIntent(purchase);
+        const fingerprint = JSON.stringify(purchase);
+        if (checkout.current?.submitted && checkout.current.intentId) {
+          const current = await waitForFulfillment(() => confirmPayment({ payment_intent_id: checkout.current!.intentId! }));
+          const refundMessage = getRefundMessage(current?.status);
+          if (refundMessage) {
+            checkout.current = null;
+            return { status: 'failed', message: refundMessage };
+          }
+          if (!current?.fulfilled) {
+            return { status: 'pending', message: 'Estamos confirmando tu compra anterior. Revisa Mis entradas antes de volver a pagar.' };
+          }
+          const previousFingerprint = checkout.current.fingerprint;
+          checkout.current = null;
+          if (fingerprint === previousFingerprint) return { status: 'succeeded', fulfillment: current };
+        }
+        if (!checkout.current || checkout.current.fingerprint !== fingerprint) {
+          checkout.current = { fingerprint, key: purchase.idempotency_key || `eclipse_${Date.now()}_${Math.random().toString(36).slice(2)}_${Math.random().toString(36).slice(2)}` };
+        }
+        const intent = await createPaymentIntent({ ...purchase, idempotency_key: checkout.current.key });
+        checkout.current.intentId = intent.payment_intent_id;
         if (!intent?.client_secret || typeof intent.client_secret !== 'string' || !intent.client_secret.trim()) {
           return { status: 'failed', message: 'No se pudo inicializar Stripe: falta client_secret del PaymentIntent.' };
         }
@@ -81,14 +106,14 @@ export function usePaymentSheetHandler() {
             : Platform.OS === 'ios'
             ? { applePay: { merchantCountryCode: 'ES' } }
             : Platform.OS === 'android'
-              ? { googlePay: { merchantCountryCode: 'ES', testEnv: __DEV__ } }
+              ? { googlePay: { merchantCountryCode: 'ES', testEnv: publishableMode === 'test' } }
               : {};
 
         const { error: initError } = await stripe.initPaymentSheet({
           merchantDisplayName,
           paymentIntentClientSecret: intent.client_secret,
           returnURL,
-          allowsDelayedPaymentMethods: true,
+          allowsDelayedPaymentMethods: false,
           ...platformPayConfig,
           style: 'automatic',
         });
@@ -145,23 +170,23 @@ export function usePaymentSheetHandler() {
           return { status: 'failed', message: presentError.message };
         }
 
-        const fulfillment = await confirmPayment({ payment_intent_id: intent.payment_intent_id });
-        if (!fulfillment.fulfilled) {
-          const details =
-            (typeof (fulfillment as any)?.error === 'string' && (fulfillment as any).error.trim()
-              ? (fulfillment as any).error.trim()
-              : '') ||
-            (typeof (fulfillment as any)?.status === 'string' && (fulfillment as any).status.trim()
-              ? `Estado del pago: ${(fulfillment as any).status.trim()}`
-              : '');
-          return { status: 'failed', message: details || 'Payment succeeded but fulfillment failed.' };
+        checkout.current.submitted = true;
+        const fulfillment = await waitForFulfillment(() => confirmPayment({ payment_intent_id: intent.payment_intent_id }));
+        const refundMessage = getRefundMessage(fulfillment?.status);
+        if (refundMessage) {
+          checkout.current = null;
+          return { status: 'failed', message: refundMessage };
         }
-
+        if (!fulfillment?.fulfilled) {
+          return { status: 'pending', message: 'El pago se está confirmando. Tu entrada aparecerá en Mis entradas. No necesitas volver a pagar.' };
+        }
+        checkout.current = null;
         return { status: 'succeeded', fulfillment };
       } catch (e: any) {
-        const message = e?.message || 'Payment failed.';
+        const message = e?.message || 'No se pudo completar el pago.';
         return { status: 'failed', message };
       } finally {
+        active.current = false;
         setLoading(false);
       }
     },
@@ -172,6 +197,10 @@ export function usePaymentSheetHandler() {
     async (purchase: CreatePaymentIntentRequest): Promise<ConfirmPaymentResponse | null> => {
       const result = await present(purchase);
       if (result.status === 'canceled') return null;
+      if (result.status === 'pending') {
+        Alert.alert('Compra pendiente', result.message);
+        return null;
+      }
       if (result.status === 'failed') {
         Alert.alert('Error de pago', result.message);
         return null;

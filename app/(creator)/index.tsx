@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, StatusBar, AppState, Linking, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Calendar, Plus, Ticket, BarChart3, ScanLine, Users, CreditCard, ArrowUpRight, Flame, ChevronRight, Activity, Trash2, FileText, LogOut } from '@/lib/icons';
+import { Calendar, Ticket, BarChart3, Users, CreditCard, ArrowUpRight, Flame, ChevronRight, Activity, LogOut } from '@/lib/icons';
 import { router, useFocusEffect } from 'expo-router';
 import { useAuth } from '@/lib/AuthContext';
 import { useEvents } from '@/lib/EventContext';
@@ -21,7 +21,7 @@ import { scheduleLocalNotification, registerForPushNotifications } from '@/lib/n
 
 
 import { getStripeAccountStats, StripeAccountStats, createStripeConnectOnboardingLink, createStripeConnectAccount } from '@/lib/payments/api';
-import { invokeEdgeFunction } from '@/lib/edgeFunctions';
+import { LAUNCH_FEATURES } from '@/lib/launchFeatures';
 import { useTranslation } from 'react-i18next';
 
 export default function CreatorDashboard() {
@@ -37,22 +37,19 @@ export default function CreatorDashboard() {
     scaleFont,
   } = useResponsive();
   const userId = user?.id ?? null;
-  const metadataRole = useMemo(() => ((user?.user_metadata as any)?.role as any) ?? null, [user?.user_metadata]);
   const [timeRange, setTimeRange] = useState<TimeRange>('month');
   const [salesData, setSalesData] = useState<{ date: string; amount: number; qty: number }[]>([]);
   const [loadingStats, setLoadingStats] = useState(true);
   const [verificationStatus, setVerificationStatus] = useState<'pending_verification' | 'verified' | 'rejected' | 'needs_correction' | null>(null);
   const [profileRole, setProfileRole] = useState<'organizer' | 'attendee' | 'admin' | null>(
-    (user?.user_metadata as any)?.role ?? null
+    null
   );
   const [stripeStats, setStripeStats] = useState<StripeAccountStats | null>(null);
   const [stripeAccountId, setStripeAccountId] = useState<string | null>(null);
   const [onboardingCompleted, setOnboardingCompleted] = useState(false);
   const [loadingOnboarding, setLoadingOnboarding] = useState(false);
+  const [adminError, setAdminError] = useState<string | null>(null);
   const [loadingAdminOverview, setLoadingAdminOverview] = useState(false);
-  const [cleaningSystem, setCleaningSystem] = useState(false);
-  const [bootstrappingAdmin, setBootstrappingAdmin] = useState(false);
-  const [deletingAccount, setDeletingAccount] = useState(false);
   const pendingStripeReturnRef = useRef(false);
   const stripeAutoRefreshRef = useRef<{ accountId: string | null; attemptedAt: number }>({ accountId: null, attemptedAt: 0 });
   const salesDataRef = useRef(salesData);
@@ -95,11 +92,7 @@ export default function CreatorDashboard() {
     reports7d: null,
   });
 
-  const adminEmail = ((process.env.EXPO_PUBLIC_ADMIN_EMAIL as any) ?? '').toString().trim().toLowerCase() || 'aamracorporation@gmail.com';
-  const isAdminEmail = !!user?.email && user.email.toLowerCase() === adminEmail;
-
-  const canCreateEvents = profileRole === 'organizer' && verificationStatus === 'verified';
-  const isAdmin = profileRole === 'admin' || isAdminEmail;
+  const isAdmin = profileRole === 'admin';
 
   useEffect(() => {
     eventsRef.current = events;
@@ -163,7 +156,7 @@ export default function CreatorDashboard() {
       if (error) throw error;
 
       setVerificationStatus((data?.verification_status as any) ?? null);
-      const role = (data?.role as any) ?? metadataRole ?? null;
+      const role = (data?.role as any) ?? null;
       setProfileRole(role);
       setStripeAccountId(data?.stripe_account_id || null);
       
@@ -181,19 +174,14 @@ export default function CreatorDashboard() {
 
         if (shouldAttempt) {
           stripeAutoRefreshRef.current = { accountId: data.stripe_account_id, attemptedAt: now };
-          console.log('[DEBUG] Checking real Stripe status...');
           try {
             const { refreshStripeConnectStatus } = await import('@/lib/payments/api');
             const status = await refreshStripeConnectStatus();
-            console.log('[DEBUG] Stripe real status:', status);
 
             if (status.stripe_charges_enabled || status.stripe_onboarding_completed) {
-              console.log('[DEBUG] Stripe status is now COMPLETED/ENABLED');
               setOnboardingCompleted(true);
             }
-          } catch (e) {
-            console.error('[DEBUG] Failed to auto-refresh Stripe status:', e);
-          }
+          } catch {}
         }
       }
 
@@ -202,9 +190,7 @@ export default function CreatorDashboard() {
         const shouldFetchStripe = force || now - lastStripeStatsFetchAtRef.current > 5 * 60_000;
         if (shouldFetchStripe) {
           try {
-            console.log('[DEBUG] Fetching Stripe stats...');
             const stats = await getStripeAccountStats();
-            console.log('[DEBUG] Stripe stats received:', stats);
             setStripeStats(stats);
             lastStripeStatsFetchAtRef.current = Date.now();
           } catch (e) {
@@ -218,7 +204,7 @@ export default function CreatorDashboard() {
     } finally {
       fetchProfileInFlightRef.current = false;
     }
-  }, [metadataRole, userId]);
+  }, [userId]);
 
   useEffect(() => {
     if (!userId) return;
@@ -238,8 +224,6 @@ export default function CreatorDashboard() {
     if (loadingOnboarding) return;
     setLoadingOnboarding(true);
     try {
-      console.log('[DEBUG] Generating Stripe onboarding link...');
-
       if (!stripeAccountId) {
         const created = await createStripeConnectAccount();
         if (!created?.stripe_account_id) {
@@ -257,121 +241,30 @@ export default function CreatorDashboard() {
         refresh_url,
       });
       
-      console.log('[DEBUG] Stripe response:', res);
-      
       if (!res?.url) {
         throw new Error(t('creator.stripe.invalid_url'));
       }
 
-      console.log('[DEBUG] Opening browser with URL:', res.url);
       pendingStripeReturnRef.current = true;
       const can = await Linking.canOpenURL(res.url);
       if (!can) throw new Error(t('creator.stripe.cannot_open_link'));
       await Linking.openURL(res.url);
     } catch (e: any) {
-      console.error('[DEBUG] Onboarding error:', e);
       Alert.alert(t('common.error'), e.message || t('creator.stripe.link_failed'));
     } finally {
       setLoadingOnboarding(false);
     }
   };
 
-  const bootstrapAdminRole = useCallback(async () => {
-    if (!isAdminEmail) return;
-    if (bootstrappingAdmin) return;
-    try {
-      setBootstrappingAdmin(true);
-      const { error } = await supabase.rpc('bootstrap_set_me_admin', { p_admin_email: adminEmail });
-      if (error) throw error;
-      await fetchMyProfile();
-      Alert.alert(t('common.ok'), t('creator.admin.admin_enabled'));
-    } catch {
-      Alert.alert(t('common.error'), t('creator.admin.admin_enable_failed'));
-    } finally {
-      setBootstrappingAdmin(false);
-    }
-  }, [adminEmail, bootstrappingAdmin, fetchMyProfile, isAdminEmail, t]);
-
   const fetchAdminOverview = useCallback(async () => {
     setLoadingAdminOverview(true);
     try {
-      const now = new Date();
-      const since30d = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString();
-      const since7d = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString();
-
-      const [
-        users,
-        organizers,
-        pending,
-        needsCorrection,
-        verified,
-        rejected,
-        suspended,
-        eventsTotal,
-        upcomingEvents,
-        eventsForSales,
-        activeResales,
-        auditActions7d,
-      ] = await Promise.all([
-        supabase.from('profiles').select('id', { count: 'exact', head: true }),
-        supabase.from('profiles').select('id', { count: 'exact', head: true }).or('role.eq.organizer,club_name.not.is.null,business_email.not.is.null,instagram_account.not.is.null'),
-        supabase.from('profiles').select('id', { count: 'exact', head: true }).or('role.eq.organizer,club_name.not.is.null,business_email.not.is.null,instagram_account.not.is.null').eq('verification_status', 'pending_verification'),
-        supabase.from('profiles').select('id', { count: 'exact', head: true }).or('role.eq.organizer,club_name.not.is.null,business_email.not.is.null,instagram_account.not.is.null').eq('verification_status', 'needs_correction'),
-        supabase.from('profiles').select('id', { count: 'exact', head: true }).or('role.eq.organizer,club_name.not.is.null,business_email.not.is.null,instagram_account.not.is.null').eq('verification_status', 'verified'),
-        supabase.from('profiles').select('id', { count: 'exact', head: true }).or('role.eq.organizer,club_name.not.is.null,business_email.not.is.null,instagram_account.not.is.null').eq('verification_status', 'rejected'),
-        supabase.from('profiles').select('id', { count: 'exact', head: true }).or('role.eq.organizer,club_name.not.is.null,business_email.not.is.null,instagram_account.not.is.null').eq('is_suspended', true),
-        supabase.from('events').select('id', { count: 'exact', head: true }),
-        supabase.from('events').select('id', { count: 'exact', head: true }).gte('event_date', now.toISOString()),
-        supabase.from('events').select('sold_tickets, ticket_price, event_date').gte('event_date', since30d),
-        supabase.from('resale_listings').select('id', { count: 'exact', head: true }).eq('status', 'active'),
-        supabase.from('admin_audit_logs').select('id', { count: 'exact', head: true }).gte('created_at', since7d),
-      ]);
-
-      const salesRows = (eventsForSales.data ?? []) as any[];
-      const ticketsSold30d = salesRows.reduce((acc, r) => acc + (Number(r.sold_tickets) || 0), 0);
-      const estRevenue30d = salesRows.reduce((acc, r) => acc + (Number(r.sold_tickets) || 0) * (Number(r.ticket_price) || 0), 0);
-
-      let reports7d: number | null = null;
-      try {
-        const res = await supabase.from('event_reports').select('id', { count: 'exact', head: true }).gte('created_at', since7d);
-        reports7d = res.count ?? 0;
-      } catch {
-        reports7d = null;
-      }
-
-      setAdminOverview({
-        users: users.count ?? 0,
-        organizers: organizers.count ?? 0,
-        pending: pending.count ?? 0,
-        needsCorrection: needsCorrection.count ?? 0,
-        verified: verified.count ?? 0,
-        rejected: rejected.count ?? 0,
-        suspended: suspended.count ?? 0,
-        eventsTotal: eventsTotal.count ?? 0,
-        upcomingEvents: upcomingEvents.count ?? 0,
-        ticketsSold30d,
-        estRevenue30d,
-        activeResales: activeResales.count ?? 0,
-        auditActions7d: auditActions7d.count ?? 0,
-        reports7d,
-      });
+      const { data, error } = await supabase.rpc('admin_launch_overview');
+      if (error) throw error;
+      setAdminOverview(data);
+      setAdminError(null);
     } catch {
-      setAdminOverview({
-        users: 0,
-        organizers: 0,
-        pending: 0,
-        needsCorrection: 0,
-        verified: 0,
-        rejected: 0,
-        suspended: 0,
-        eventsTotal: 0,
-        upcomingEvents: 0,
-        ticketsSold30d: 0,
-        estRevenue30d: 0,
-        activeResales: 0,
-        auditActions7d: 0,
-        reports7d: null,
-      });
+      setAdminError('No se pudieron actualizar los datos. Reintenta con Actualizar.');
     } finally {
       setLoadingAdminOverview(false);
     }
@@ -384,66 +277,6 @@ export default function CreatorDashboard() {
     } catch (error) {
       console.error('Error logging out:', error);
     }
-  };
-
-  const handleDeleteAccount = () => {
-    if (deletingAccount) return;
-    Alert.alert(
-      t('profile.delete_account_title'),
-      t('profile.delete_account_body'),
-      [
-        { text: t('common.cancel'), style: 'cancel' },
-        {
-          text: t('profile.delete_account_confirm'),
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              setDeletingAccount(true);
-              const { error } = await invokeEdgeFunction('delete-account', {});
-              if (error) throw new Error(String(error.message || t('profile.delete_account_failed')));
-              await signOut();
-              router.replace('/(auth)/login');
-            } catch (e: any) {
-              Alert.alert(t('common.error'), String(e?.message || t('profile.delete_account_failed')));
-            } finally {
-              setDeletingAccount(false);
-            }
-          },
-        },
-      ]
-    );
-  };
-
-  const runSystemCleanup = async () => {
-    if (cleaningSystem) return;
-    if (isAdminEmail && profileRole !== 'admin') {
-      Alert.alert(t('creator.admin.insufficient_permissions_title'), t('creator.admin.insufficient_permissions_body'));
-      return;
-    }
-    Alert.alert(
-      t('creator.admin.cleanup_title'),
-      t('creator.admin.cleanup_body'),
-      [
-        { text: t('common.cancel'), style: 'cancel' },
-        {
-          text: t('creator.admin.cleanup_confirm'),
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              setCleaningSystem(true);
-              const { error } = await supabase.rpc('cleanup_old_events');
-              if (error) throw error;
-              await Promise.all([fetchAdminOverview(), refreshEvents()]);
-              Alert.alert(t('common.ok'), t('creator.admin.cleanup_done'));
-            } catch {
-              Alert.alert(t('common.error'), t('creator.admin.cleanup_failed'));
-            } finally {
-              setCleaningSystem(false);
-            }
-          },
-        },
-      ]
-    );
   };
 
   useFocusEffect(
@@ -467,7 +300,7 @@ export default function CreatorDashboard() {
     async function requestPermissions() {
       const { status } = await Notifications.requestPermissionsAsync();
       if (status !== 'granted') {
-        console.log('Notification permissions not granted');
+        console.warn('Permiso de notificaciones no concedido.');
       }
     }
     requestPermissions();
@@ -738,7 +571,7 @@ export default function CreatorDashboard() {
                     }}
                     style={styles.adminRefreshButton}
                   >
-                    <GlassView intensity={22} style={styles.adminRefreshInner}>
+                    <GlassView intensity={22} style={styles.adminRefreshInner} contentContainerStyle={{ padding: 0 }}>
                       <Text style={styles.adminRefreshText}>
                         {loadingAdminOverview ? t('creator.admin.refreshing') : t('creator.admin.refresh')}
                       </Text>
@@ -751,22 +584,7 @@ export default function CreatorDashboard() {
                 {t('creator.admin.subtitle')}
               </Text>
 
-              {isAdminEmail && profileRole !== 'admin' && (
-                <GlassView intensity={18} style={{ padding: 16, borderRadius: 18, marginTop: 14, borderWidth: 1, borderColor: 'rgba(96, 165, 250, 0.28)' }}>
-                  <Text style={{ color: 'white', fontSize: 14, fontWeight: '800' }}>{t('creator.admin.pending_permissions_title')}</Text>
-                  <Text style={{ color: Colors.dark.textSecondary, marginTop: 6, fontSize: 13, lineHeight: 18 }}>
-                    {t('creator.admin.pending_permissions_body')}
-                  </Text>
-                  <View style={{ marginTop: 12 }}>
-                    <ThemedButton
-                      title={bootstrappingAdmin ? t('creator.admin.activating') : t('creator.admin.activate')}
-                      onPress={bootstrapAdminRole}
-                      disabled={bootstrappingAdmin}
-                    />
-                  </View>
-                </GlassView>
-              )}
-
+              {adminError && <Text accessibilityRole="alert" style={{ color: "#fb7185", marginVertical: 12 }}>{adminError}</Text>}
               <View style={styles.adminKpiGrid}>
                 <AdminKpiCard label={t('creator.admin.kpi.users')} value={adminOverview.users} tint="#60a5fa" icon={Users} />
                 <AdminKpiCard label={t('creator.admin.kpi.organizers')} value={adminOverview.organizers} tint="#a78bfa" icon={Users} />
@@ -777,13 +595,13 @@ export default function CreatorDashboard() {
                 <AdminKpiCard label={t('creator.admin.kpi.upcoming')} value={adminOverview.upcomingEvents} tint="#38bdf8" icon={Calendar} />
                 <AdminKpiCard label={t('creator.admin.kpi.sales_30d')} value={adminOverview.ticketsSold30d} tint="#f472b6" icon={Ticket} />
                 <AdminKpiCard
-                  label={t('creator.admin.kpi.revenue_30d')}
+                  label="Importe de entradas · 30 días"
                   value={adminOverview.estRevenue30d.toLocaleString(localeTag, { style: 'currency', currency: 'EUR' })}
                   tint="#34d399"
                   icon={CreditCard}
                   style={{ flexBasis: '100%' }}
                 />
-                <AdminKpiCard label={t('creator.admin.kpi.active_resale')} value={adminOverview.activeResales} tint="#eab308" icon={CreditCard} />
+                {LAUNCH_FEATURES.resale && <AdminKpiCard label={t('creator.admin.kpi.active_resale')} value={adminOverview.activeResales} tint="#eab308" icon={CreditCard} />}
                 <AdminKpiCard label={t('creator.admin.kpi.audit_7d')} value={adminOverview.auditActions7d} tint="#94a3b8" icon={Activity} />
                 {adminOverview.reports7d !== null && (
                   <AdminKpiCard label={t('creator.admin.kpi.reports_7d')} value={adminOverview.reports7d} tint="#f97316" icon={Activity} />
@@ -819,14 +637,6 @@ export default function CreatorDashboard() {
                     onPress={() => router.push('/(creator)/admin-tickets')}
                     style={{ flex: 1 }}
                   />
-                  <ActionCard
-                    title={t('creator.admin.actions.cleanup_title')}
-                    description={cleaningSystem ? t('creator.admin.actions.cleanup_running') : t('creator.admin.actions.cleanup_desc')}
-                    icon={Trash2}
-                    color="#ef4444"
-                    onPress={runSystemCleanup}
-                    style={{ flex: 1 }}
-                  />
                 </View>
               </View>
 
@@ -842,7 +652,7 @@ export default function CreatorDashboard() {
             </>
           ) : (
             <>
-              {!isAdminEmail && profileRole === 'organizer' && (
+              {profileRole === 'organizer' && (
                 <View style={{ gap: 12, marginTop: 12 }}>
                   {verificationStatus !== 'verified' && (
                     <GlassView intensity={15} style={{ padding: 16, borderRadius: 18 }}>

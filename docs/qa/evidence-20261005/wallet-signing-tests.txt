@@ -1,0 +1,21 @@
+PASS ios: missing JWT
+PASS ios: invalid session
+PASS ios: other owner
+PASS ios: missing ticket
+PASS ios: reject GET
+PASS android: missing JWT
+PASS android: invalid session
+PASS android: other owner
+PASS android: missing ticket
+PASS android: reject GET
+PASS Apple signed pkpass: PEM
+PASS Apple signed pkpass: encrypted key and spaced password
+PASS Apple signed pkpass: base64 PEM
+PASS Apple missing certificates -> explicit503
+PASS Apple wrong key password rejected
+PASS Google real RS256 signature: multiline
+PASS Google real RS256 signature: escaped newlines
+PASS Google real RS256 signature: JSON quoted
+PASS Google real RS256 signature: base64 PEM
+PASS Google missing configuration -> explicit503
+TOTAL 20 passed; real signing libraries, fixture credentials, no provider calls. Does not validate Apple trust chain or device installation.

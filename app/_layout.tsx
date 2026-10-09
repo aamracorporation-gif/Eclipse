@@ -1,5 +1,6 @@
+import { LAUNCH_FEATURES } from '@/lib/launchFeatures';
 import 'react-native-url-polyfill/auto';
-import { Component, type ReactNode, useEffect, useRef, useState } from 'react';
+import { Component, type ReactNode, useCallback, useEffect, useRef, useState } from 'react';
 import { AppState, Modal, StyleSheet, Text, View } from 'react-native';
 import { router, Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
@@ -24,10 +25,10 @@ import { AppDialogProvider } from '@/components/ui/AppDialog';
 import { FilterProvider } from '@/lib/FilterContext';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { supabase } from '@/lib/supabase';
-import { invokeEdgeFunctionStrict } from '@/lib/edgeFunctions';
 
 import * as Notifications from 'expo-notifications';
 import * as ExpoLinking from 'expo-linking';
+import { isPasswordRecovery, parseAuthLinkParams } from '@/lib/authDeepLinks';
 
 // Notification handler set via initNotifications() after app is ready
 
@@ -60,14 +61,14 @@ function OfflineGuard({ children }: { children: ReactNode }) {
   const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const offlineSinceRef = useRef<number | null>(null);
 
-  const clearGrace = () => {
+  const clearGrace = useCallback(() => {
     if (graceTimerRef.current) { clearTimeout(graceTimerRef.current); graceTimerRef.current = null; }
     if (countdownRef.current) { clearInterval(countdownRef.current); countdownRef.current = null; }
     offlineSinceRef.current = null;
     setCountdown(0);
-  };
+  }, []);
 
-  const ping = async () => {
+  const ping = useCallback(async () => {
     const online = await checkOnline();
 
     if (online) {
@@ -96,7 +97,7 @@ function OfflineGuard({ children }: { children: ReactNode }) {
         setShowOffline(true);
       }, OFFLINE_GRACE_MS);
     }
-  };
+  }, [clearGrace, showOffline]);
 
   useEffect(() => {
     ping();
@@ -111,7 +112,7 @@ function OfflineGuard({ children }: { children: ReactNode }) {
       clearGrace();
       sub.remove();
     };
-  }, []);
+  }, [clearGrace, ping]);
 
   return (
     <View style={{ flex: 1 }}>
@@ -285,36 +286,6 @@ function RootLayoutNav({ fontsLoaded }: { fontsLoaded: boolean }) {
   useEffect(() => {
     if (!isAppReady) return;
 
-    const afterAuthRedirect = async () => {
-      try {
-        void (async () => {
-          try {
-            await invokeEdgeFunctionStrict('record-legal-acceptance', {});
-          } catch (e) {
-            console.warn('[linking] record-legal-acceptance failed (non-blocking):', e);
-          }
-        })();
-
-        const { data: userData } = await supabase.auth.getUser();
-        const uid = userData?.user?.id;
-        let role: string | null = null;
-        if (uid) {
-          try {
-            const { data: profile } = await supabase.from('profiles').select('role').eq('id', uid).maybeSingle();
-            role = (profile?.role as string) ?? null;
-          } catch {}
-        }
-        if (role === 'admin' || role === 'organizer') {
-          router.replace('/(creator)/verification');
-        } else {
-          router.replace('/(tabs)');
-        }
-      } catch (e) {
-        console.warn('[linking] afterAuthRedirect fallback to /(tabs):', e);
-        router.replace('/(tabs)');
-      }
-    };
-
     const handleUrl = async (url: string | null | undefined) => {
       if (!url) return;
 
@@ -342,9 +313,7 @@ function RootLayoutNav({ fontsLoaded }: { fontsLoaded: boolean }) {
 
       if (url.includes('auth/reset-password')) {
         try {
-          const parsed = ExpoLinking.parse(url);
-          const qp = (parsed.queryParams as Record<string, string>) ?? {};
-          router.push({ pathname: '/auth/reset-password', params: qp });
+          router.replace({ pathname: '/auth/reset-password', params: parseAuthLinkParams(url) });
         } catch (e) {
           console.warn('[linking] auth/reset-password error:', e);
         }
@@ -352,56 +321,13 @@ function RootLayoutNav({ fontsLoaded }: { fontsLoaded: boolean }) {
       }
 
       if (url.includes('auth/callback')) {
-        try {
-          const parsed = ExpoLinking.parse(url);
-          const queryParams = (parsed.queryParams as Record<string, string>) ?? {};
-
-          let hashParams: Record<string, string> = {};
-          try {
-            const hashIdx = url.indexOf('#');
-            if (hashIdx >= 0) {
-              const raw = url.slice(hashIdx + 1);
-              for (const kv of raw.split('&')) {
-                const [k, ...rest] = kv.split('=');
-                if (k) hashParams[decodeURIComponent(k)] = decodeURIComponent(rest.join('='));
-              }
-            }
-          } catch {}
-
-          const params = { ...hashParams, ...queryParams };
-
-          const tokenHash = params.token_hash;
-          const otpType = params.type;
-          if (tokenHash && otpType) {
-            const { data, error } = await supabase.auth.verifyOtp({
-              token_hash: tokenHash,
-              type: otpType as any,
-            });
-            if (!error && data?.session) {
-              await afterAuthRedirect();
-            } else if (error) {
-              console.warn('[linking] verifyOtp failed:', error?.message);
-            }
-            return;
-          }
-
-          const accessToken = params.access_token;
-          const refreshToken = params.refresh_token;
-          if (accessToken && refreshToken) {
-            const { error } = await supabase.auth.setSession({
-              access_token: accessToken,
-              refresh_token: refreshToken,
-            });
-            if (!error) {
-              await afterAuthRedirect();
-            } else {
-              console.warn('[linking] setSession failed:', error?.message);
-            }
-            return;
-          }
-        } catch (e) {
-          console.warn('[linking] auth/callback handled with error:', e);
-        }
+        // The destination screen owns the one-use exchange. Exchanging here as
+        // well races Expo Router's callback mount and can consume the code twice.
+        const params = parseAuthLinkParams(url);
+        router.replace({
+          pathname: isPasswordRecovery(params) ? '/auth/reset-password' : '/auth/callback',
+          params,
+        });
         return;
       }
 
@@ -459,7 +385,7 @@ function RootLayoutNav({ fontsLoaded }: { fontsLoaded: boolean }) {
       // Resale notifications → resale screen
       const resaleTypes = ['resale_sold', 'resale_purchased', 'resale_update', 'resale_purchase', 'compra_reventa'];
       if (resaleTypes.some(t => type.includes(t))) {
-        router.push('/(tabs)/resale' as any);
+        router.push((LAUNCH_FEATURES.resale ? '/(tabs)/resale' : '/(tabs)/tickets') as any);
         return;
       }
 
@@ -653,3 +579,4 @@ const errorStyles = StyleSheet.create({
   title: { color: Colors.dark.text, fontWeight: '900', fontSize: 18 },
   body: { marginTop: 10, color: Colors.dark.textSecondary, fontWeight: '700', lineHeight: 20 },
 });
+

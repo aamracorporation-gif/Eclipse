@@ -76,8 +76,6 @@ serve(async (req) => {
     const onboardingCompleted = !!acct.charges_enabled;
     const justCompleted = onboardingCompleted && !profile.stripe_onboarding_completed;
 
-    console.log(`[REFRESH] Account ${acct.id}: charges_enabled=${acct.charges_enabled}, details_submitted=${acct.details_submitted}`);
-
     const { error: updateError } = await serviceClient
       .from("profiles")
       .update({

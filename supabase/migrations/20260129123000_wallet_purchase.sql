@@ -12,6 +12,7 @@ CREATE OR REPLACE FUNCTION buy_ticket_with_wallet(
 RETURNS json
 LANGUAGE plpgsql
 SECURITY DEFINER
+SET search_path = public, pg_temp
 AS $$
 DECLARE
   v_wallet wallets%ROWTYPE;
@@ -57,3 +58,8 @@ BEGIN
   RETURN v_result;
 END;
 $$;
+
+-- Legacy implementation: only trusted server code may call it. Newer wallet
+-- purchase functions validate ownership and pricing before any mutation.
+REVOKE ALL ON FUNCTION buy_ticket_with_wallet(uuid, uuid, text, text, integer, numeric, text, uuid) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION buy_ticket_with_wallet(uuid, uuid, text, text, integer, numeric, text, uuid) TO service_role;

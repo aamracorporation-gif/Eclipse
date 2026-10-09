@@ -1,4 +1,4 @@
-﻿import { TextInput, View, StyleSheet, TextInputProps, Text, StyleProp, ViewStyle, TextStyle } from 'react-native';
+import { TextInput, View, StyleSheet, TextInputProps, Text, StyleProp, ViewStyle, TextStyle, Platform } from 'react-native';
 import { Colors } from '@/constants/Colors';
 import { AlertCircle, CheckCircle2, AppIconComponent } from '@/lib/icons';
 import React, { forwardRef, isValidElement } from 'react';
@@ -6,6 +6,7 @@ import { theme } from '@/theme/styles';
 
 interface ThemedInputProps extends Omit<TextInputProps, 'style'> {
   icon?: AppIconComponent | React.ReactNode;
+  leftIcon?: AppIconComponent | React.ReactNode;
   rightIcon?: React.ReactNode;
   error?: string;
   success?: boolean;
@@ -15,7 +16,8 @@ interface ThemedInputProps extends Omit<TextInputProps, 'style'> {
   inputStyle?: StyleProp<TextStyle>;
 }
 
-export const ThemedInput = forwardRef<TextInput, ThemedInputProps>(({ icon: Icon, rightIcon, error, success, label, style, containerStyle, inputStyle, ...props }, ref) => {
+export const ThemedInput = forwardRef<TextInput, ThemedInputProps>(({ icon, leftIcon, rightIcon, error, success, label, style, containerStyle, inputStyle, accessibilityLabel, ...props }, ref) => {
+  const Icon = icon ?? leftIcon;
   const resolvedRightIcon =
     rightIcon ??
     (error
@@ -40,7 +42,10 @@ export const ThemedInput = forwardRef<TextInput, ThemedInputProps>(({ icon: Icon
         <TextInput
           ref={ref}
           style={[styles.input, !Icon && styles.noIconInput, !!resolvedRightIcon && styles.inputWithRightIcon, inputStyle]}
+          underlineColorAndroid="transparent"
           placeholderTextColor={Colors.dark.textSecondary}
+          accessibilityLabel={accessibilityLabel ?? label}
+          accessibilityState={{ disabled: props.editable === false }}
           {...props}
         />
         {resolvedRightIcon && (
@@ -49,7 +54,11 @@ export const ThemedInput = forwardRef<TextInput, ThemedInputProps>(({ icon: Icon
           </View>
         )}
       </View>
-      {error && <Text style={styles.errorText}>{error}</Text>}
+      {error && (
+        <Text style={styles.errorText} accessibilityRole="alert" accessibilityLiveRegion="polite">
+          {error}
+        </Text>
+      )}
     </View>
   );
 });
@@ -71,16 +80,16 @@ const styles = StyleSheet.create({
   container: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.075)',
-    borderRadius: 18,
+    backgroundColor: Colors.dark.surfaceSubtle,
+    borderRadius: theme.components.input.borderRadius,
     borderWidth: theme.components.input.borderWidth,
-    borderColor: 'rgba(255,255,255,0.12)',
+    borderColor: Colors.dark.border,
     minHeight: theme.components.input.minHeight,
     shadowColor: Colors.dark.primary,
     shadowOpacity: 0.14,
     shadowRadius: 12,
     shadowOffset: { width: 0, height: 6 },
-    elevation: 4,
+    elevation: Platform.OS === 'android' ? 0 : 4,
   },
   errorBorder: {
     borderColor: Colors.dark.error,
@@ -101,7 +110,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   input: {
+    backgroundColor: 'transparent',
     flex: 1,
+    minWidth: 0,
     color: Colors.dark.text,
     fontSize: 15,
     minHeight: theme.components.input.minHeight,

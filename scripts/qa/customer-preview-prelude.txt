@@ -1,0 +1,19 @@
+import React,{useState,useRef} from 'react';
+import {View,Text,StyleSheet,ScrollView,TouchableOpacity,Platform,KeyboardAvoidingView,Switch,Animated,TextInput} from 'react-native';
+import {LinearGradient} from 'expo-linear-gradient';
+import {GlassView} from '@/components/ui/GlassView';
+import {ThemedInput} from '@/components/ui/ThemedInput';
+import {ThemedButton} from '@/components/ui/ThemedButton';
+import {Colors} from '@/constants/Colors';
+import {Ticket,User as UserIcon,Sparkles,Users,Euro,Wallet,CreditCard,MapPin,Clock,Minus,Plus,Mail,Tag} from '@/lib/icons';
+import {offerUnavailableReason} from '@/supabase/functions/_shared/ticketProduct';
+import {OFFER_CATEGORIES} from '@/lib/createEventTicketConfig';
+import es from '@/src/i18n/locales/es.json';
+const t=(key,vars={})=>{const read=k=>k.split('.').reduce((v,k)=>v?.[k],es);const plural=typeof vars.count==='number'?read(`${key}_${new Intl.PluralRules('es').select(vars.count)}`):undefined;const value=plural||read(key)||key;return String(value).replace(/{{(\w+)}}/g,(_,k)=>String(vars[k]??''));};
+export function DemoPurchase({event,initialTab='tickets'}){
+ const [purchaseTab,setPurchaseTab]=useState(initialTab),[selectedTicketType,setSelectedTicketType]=useState(event.event_ticket_types[0].id),[expandedTicketId,setExpandedTicketId]=useState(null),[selectedVipReservadoId,setSelectedVipReservadoId]=useState(event.reservados_vip[0].id),[quantity,setQuantity]=useState('1');
+ const [buyerName,setBuyerName]=useState(''),[buyerEmail,setBuyerEmail]=useState(''),[discountCode,setDiscountCode]=useState(''),[appliedDiscount,setAppliedDiscount]=useState(null),[payWithWallet,setPayWithWallet]=useState(false),[payVipWithWallet,setPayVipWithWallet]=useState(false),[notice,setNotice]=useState('');
+ const user={id:'preview'},vipLoadError=null,LAUNCH_FEATURES={resale:false,walletCredit:false},creditBalance=0,creditLoading=false,purchasing=false,stripeLoading=false,vipPurchasing=false,checkingCode=false;
+ const scaleFont=n=>n,vipGlow=useRef(new Animated.Value(0)).current,vipShimmer=useRef(new Animated.Value(0)).current;
+ const handlePurchase=()=>setNotice(!buyerName.trim()||!buyerEmail.includes('@')?'Completa tu nombre y correo para continuar.':'Previsualización: aquí se abre el pago seguro con el importe indicado. No se realizará ningún cobro.');
+ const handleVipPurchase=handlePurchase,applyDiscountCode=()=>setNotice('En la app se comprobará el código del organizador. Esta vista usa datos de ejemplo.');

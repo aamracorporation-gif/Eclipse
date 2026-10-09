@@ -1,12 +1,12 @@
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Colors } from '@/constants/Colors';
-import { ThemedButton } from '@/components/ui/ThemedButton';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useResponsive } from '@/lib/responsive';
 import type { AppIconComponent } from '@/lib/icons';
 import { ChevronRight } from '@/lib/icons';
+import { theme } from '@/theme/styles';
 
 type AuthRequiredScreenProps = {
   title: string;
@@ -18,13 +18,13 @@ type AuthRequiredScreenProps = {
   eyebrow?: string;
 };
 
-export function AuthRequiredScreen({ title, subtitle, ctaLabel, secondaryCtaLabel, Icon, variant = 'simple', eyebrow }: AuthRequiredScreenProps) {
+export function AuthRequiredScreen({ title, subtitle, ctaLabel, secondaryCtaLabel, Icon, eyebrow }: AuthRequiredScreenProps) {
   const insets = useSafeAreaInsets();
   const { horizontalPadding, maxContentWidth, scaleFont } = useResponsive();
 
   return (
     <View style={styles.container}>
-      <LinearGradient colors={[Colors.dark.background, '#0f172a']} style={StyleSheet.absoluteFill} />
+      <LinearGradient colors={Colors.dark.backgroundGradient} style={StyleSheet.absoluteFill} />
       <View
         style={[
           styles.content,
@@ -56,7 +56,7 @@ export function AuthRequiredScreen({ title, subtitle, ctaLabel, secondaryCtaLabe
                 style={styles.iconRing}
               >
                 <View style={styles.iconInner}>
-                  <Icon size={28} color="white" />
+                  <Icon size={28} color={Colors.dark.text} />
                 </View>
               </LinearGradient>
             ) : null}
@@ -68,6 +68,8 @@ export function AuthRequiredScreen({ title, subtitle, ctaLabel, secondaryCtaLabe
               activeOpacity={0.85}
               onPress={() => router.push('/(auth)/login')}
               style={styles.ctaOuter}
+              accessibilityRole="button"
+              accessibilityLabel={ctaLabel}
             >
               <LinearGradient
                 colors={[Colors.dark.primary, Colors.dark.secondary]}
@@ -75,7 +77,7 @@ export function AuthRequiredScreen({ title, subtitle, ctaLabel, secondaryCtaLabe
                 style={styles.ctaInner}
               >
                 <Text style={styles.ctaText}>{ctaLabel}</Text>
-                <ChevronRight size={16} color="white" />
+                <ChevronRight size={16} color={Colors.dark.text} />
               </LinearGradient>
             </TouchableOpacity>
 
@@ -84,6 +86,8 @@ export function AuthRequiredScreen({ title, subtitle, ctaLabel, secondaryCtaLabe
                 activeOpacity={0.75}
                 onPress={() => router.push('/(auth)/register')}
                 style={styles.ctaSecondary}
+                accessibilityRole="button"
+                accessibilityLabel={secondaryCtaLabel}
               >
                 <Text style={styles.ctaSecondaryText}>{secondaryCtaLabel}</Text>
               </TouchableOpacity>
@@ -106,11 +110,11 @@ const styles = StyleSheet.create({
   eyebrow: { fontWeight: '700', color: 'rgba(255,255,255,0.40)', letterSpacing: 3, textTransform: 'uppercase', marginBottom: 20 },
   iconRing: { width: 80, height: 80, borderRadius: 40, alignItems: 'center', justifyContent: 'center', marginBottom: 4 },
   iconInner: { width: 64, height: 64, borderRadius: 32, backgroundColor: 'rgba(0,0,0,0.40)', alignItems: 'center', justifyContent: 'center' },
-  title: { fontWeight: '900', color: '#FFFFFF', marginTop: 20, textAlign: 'center', letterSpacing: -0.5 },
-  subtitle: { color: 'rgba(255,255,255,0.60)', marginTop: 10, textAlign: 'center', lineHeight: 21, maxWidth: 300 },
+  title: { fontWeight: theme.typography.weight.black, color: Colors.dark.text, marginTop: 20, textAlign: 'center', letterSpacing: -0.5 },
+  subtitle: { color: Colors.dark.textSecondary, marginTop: 10, textAlign: 'center', lineHeight: 21, maxWidth: 300 },
   ctaOuter: { marginTop: 28, borderRadius: 16, overflow: 'hidden', alignSelf: 'center', minWidth: 200 },
   ctaInner: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 14, paddingHorizontal: 24, gap: 6 },
-  ctaText: { color: 'white', fontSize: 15, fontWeight: '800', letterSpacing: -0.2 },
+  ctaText: { color: Colors.dark.text, fontSize: 15, fontWeight: '800', letterSpacing: -0.2 },
   ctaSecondary: { marginTop: 14, alignSelf: 'center', padding: 8 },
-  ctaSecondaryText: { color: 'rgba(255,255,255,0.50)', fontSize: 14, fontWeight: '600', textDecorationLine: 'underline' },
+  ctaSecondaryText: { color: Colors.dark.textMuted, fontSize: 14, fontWeight: theme.typography.weight.semibold, textDecorationLine: 'underline' },
 });

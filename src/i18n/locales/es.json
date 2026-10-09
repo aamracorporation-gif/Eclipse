@@ -855,7 +855,7 @@
     },
     "purchase": {
       "title": "Comprar",
-      "subtitle_tickets_vip": "Entradas y VIP",
+      "subtitle_tickets_vip": "Entradas y reservados de mesa",
       "subtitle_tickets": "Entradas",
       "sign_in_to_buy": "Inicia sesión para comprar",
       "tab_tickets": "Entradas",
@@ -890,7 +890,11 @@
       "available": "Disponible",
       "people": "{{count}} personas",
       "bottles": "{{count}} botellas",
+      "bottles_one": "{{count}} botella",
+      "bottles_other": "{{count}} botellas",
       "bottles_included": "{{count}} botellas incluidas",
+      "bottles_included_one": "{{count}} botella incluida",
+      "bottles_included_other": "{{count}} botellas incluidas",
       "extra_bottle": "Extra botella {{price}}",
       "not_available": "Este reservado VIP ya no está disponible.",
       "load_failed": "No se pudieron cargar los reservados VIP."

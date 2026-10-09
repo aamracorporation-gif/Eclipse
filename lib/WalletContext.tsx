@@ -1,7 +1,7 @@
+import { LAUNCH_FEATURES } from '@/lib/launchFeatures';
 import { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from './AuthContext';
-import { invokeEdgeFunction } from '@/lib/edgeFunctions';
 
 type LedgerMovimiento = {
   id: string;
@@ -51,23 +51,8 @@ export function CreditProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
   const refreshTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  useEffect(() => {
-    if (user) {
-      refreshCredit();
-    } else {
-      setCreditBalance(0);
-      setBalanceReal(0);
-      setBalancePromo(0);
-      setMovimientos([]);
-      setLoading(false);
-      if (refreshTimeoutRef.current) {
-        clearTimeout(refreshTimeoutRef.current);
-        refreshTimeoutRef.current = null;
-      }
-    }
-  }, [user]);
-
   const refreshCredit = useCallback(async () => {
+    if (!LAUNCH_FEATURES.walletCredit) { setLoading(false); return; }
     if (!user) return;
     try {
       // Leer saldo del sistema unificado user_credit
@@ -110,6 +95,22 @@ export function CreditProvider({ children }: { children: React.ReactNode }) {
     }
   }, [user]);
 
+  useEffect(() => {
+    if (user) {
+      void refreshCredit();
+    } else {
+      setCreditBalance(0);
+      setBalanceReal(0);
+      setBalancePromo(0);
+      setMovimientos([]);
+      setLoading(false);
+      if (refreshTimeoutRef.current) {
+        clearTimeout(refreshTimeoutRef.current);
+        refreshTimeoutRef.current = null;
+      }
+    }
+  }, [refreshCredit, user]);
+
   const scheduleRefresh = useCallback(() => {
     if (!user) return;
     if (refreshTimeoutRef.current) clearTimeout(refreshTimeoutRef.current);
@@ -119,7 +120,7 @@ export function CreditProvider({ children }: { children: React.ReactNode }) {
   }, [refreshCredit, user]);
 
   useEffect(() => {
-    if (!user) return;
+    if (!LAUNCH_FEATURES.walletCredit || !user) return;
 
     const channel = supabase
       .channel(`credito_${user.id}`)
@@ -146,6 +147,7 @@ export function CreditProvider({ children }: { children: React.ReactNode }) {
   }, [scheduleRefresh, user]);
 
   const createResaleListing = async (ticketId: string, price: number) => {
+    if (!LAUNCH_FEATURES.resale) throw new Error('Función no disponible en esta versión.');
     if (!user) throw new Error('Usuario no autenticado');
 
     try {
@@ -210,24 +212,7 @@ export function CreditProvider({ children }: { children: React.ReactNode }) {
 
     try {
       const { error } = await supabase.rpc('cancel_resale_listing_secure', { p_ticket_id: ticketId });
-      if (error) {
-        const { error: directError } = await supabase
-          .from('resale_listings')
-          .delete()
-          .eq('ticket_id', ticketId)
-          .eq('seller_id', user.id)
-          .eq('status', 'active');
-
-        if (directError) throw error;
-
-        const { error: ticketUpdateError } = await supabase
-          .from('tickets')
-          .update({ status: 'valid', ticket_status: 'active' })
-          .eq('id', ticketId)
-          .eq('user_id', user.id);
-
-        if (ticketUpdateError) throw ticketUpdateError;
-      }
+      if (error) throw error;
 
       await refreshCredit();
     } catch (error) {
@@ -237,6 +222,7 @@ export function CreditProvider({ children }: { children: React.ReactNode }) {
   };
 
   const buyResaleTicketWithCredit = async (listingId: string) => {
+    if (!LAUNCH_FEATURES.walletCredit) throw new Error('Función no disponible en esta versión.');
     if (!user) throw new Error('Usuario no autenticado');
 
     try {
@@ -249,9 +235,6 @@ export function CreditProvider({ children }: { children: React.ReactNode }) {
 
       await refreshCredit();
       scheduleRefresh();
-      try {
-        await invokeEdgeFunction('send-push', { limit: 25 });
-      } catch {}
     } catch (error) {
       console.error('Error buying resale ticket with credit:', error);
       throw error;
@@ -259,22 +242,17 @@ export function CreditProvider({ children }: { children: React.ReactNode }) {
   };
 
   const buyTicketWithCredit = async (params: any) => {
+    if (!LAUNCH_FEATURES.walletCredit) throw new Error('Función no disponible en esta versión.');
     if (!user) throw new Error('User not logged in');
 
     try {
-      const { data, error } = await supabase.rpc('buy_ticket_with_credito', {
-        ...params,
-        p_user_id: user.id
-      });
+      const { data, error } = await supabase.rpc('buy_ticket_with_credito_v2', params);
 
       if (error) throw error;
       
       await refreshCredit();
       scheduleRefresh();
 
-      try {
-        await invokeEdgeFunction('send-push', { limit: 25 });
-      } catch {}
       return data;
     } catch (error) {
       console.error('Error buying ticket with credit:', error);
@@ -283,6 +261,7 @@ export function CreditProvider({ children }: { children: React.ReactNode }) {
   };
 
   const buyVipWithCredit = async (params: { p_vip_reservado_id: string; p_buyer_name: string; p_buyer_email: string }) => {
+    if (!LAUNCH_FEATURES.walletCredit) throw new Error('Función no disponible en esta versión.');
     if (!user) throw new Error('User not logged in');
 
     try {
@@ -297,9 +276,6 @@ export function CreditProvider({ children }: { children: React.ReactNode }) {
 
       await refreshCredit();
       scheduleRefresh();
-      try {
-        await invokeEdgeFunction('send-push', { limit: 25 });
-      } catch {}
       return data;
     } catch (error) {
       console.error('Error buying VIP with credit:', error);
@@ -313,3 +289,4 @@ export function CreditProvider({ children }: { children: React.ReactNode }) {
     </CreditContext.Provider>
   );
 }
+

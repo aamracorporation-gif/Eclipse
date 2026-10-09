@@ -1,5 +1,6 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert } from 'react-native';
-import { useMemo, useState, useEffect, useCallback } from 'react';
+import { useMemo, useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'expo-router';
 import { useAuth } from '@/lib/AuthContext';
 import { supabase } from '@/lib/supabase';
@@ -14,10 +15,12 @@ import * as Print from 'expo-print';
 import * as MailComposer from 'expo-mail-composer';
 import QRCodeSVG from 'qrcode-svg';
 import * as Sharing from 'expo-sharing';
+import { useBoxOfficeAccess } from '@/hooks/useBoxOfficeAccess';
 // import * as MailComposer from 'expo-mail-composer';
 
 export default function WorkerSell() {
   const { workerProfile } = useAuth();
+  const boxOffice = useBoxOfficeAccess(workerProfile?.organizer_id);
   const router = useRouter();
   const [events, setEvents] = useState<any[]>([]);
   const [selectedEvent, setSelectedEvent] = useState<any>(null);
@@ -26,6 +29,7 @@ export default function WorkerSell() {
   const [vipReservados, setVipReservados] = useState<any[]>([]);
   const [vipQty, setVipQty] = useState(0);
   const [selectedVipId, setSelectedVipId] = useState<string | null>(null);
+  const submittingRef = useRef(false);
   const [processing, setProcessing] = useState(false);
   const [lastSaleTickets, setLastSaleTickets] = useState<any[] | null>(null);
 
@@ -95,26 +99,9 @@ export default function WorkerSell() {
       if (error) throw error;
 
       if (data && data.length > 0) {
-        const { data: ticketsRows } = await supabase
-          .from('tickets')
-          .select('ticket_type_id, quantity, status, ticket_status')
-          .eq('event_id', event.id);
-
-        const soldByType = new Map<string, number>();
-        for (const row of (ticketsRows || []) as any[]) {
-          if (row?.status === 'cancelled' || row?.ticket_status === 'invalidated') continue;
-          const tid = row?.ticket_type_id ? String(row.ticket_type_id) : null;
-          if (!tid) continue;
-          soldByType.set(tid, (soldByType.get(tid) || 0) + (Number(row?.quantity) || 1));
-        }
-
         const activeTypes = (data as any[]).filter((t) => !t?.deleted_at && (t?.is_active ?? true));
-        setTicketTypes(
-          activeTypes.map((t: any) => ({
-            ...t,
-            sold: soldByType.get(String(t.id)) ?? Number(t.sold || 0),
-          }))
-        );
+        // Inventory counts sale units. A four-person pack is still one sold unit.
+        setTicketTypes(activeTypes);
         const initialQty: any = {};
         data.forEach((t: any) => (initialQty[t.id] = 0));
         setQuantities(initialQty);
@@ -151,19 +138,17 @@ export default function WorkerSell() {
   const fetchAssignedEvents = useCallback(async () => {
     if (!workerProfile) return;
     try {
-      const { data, error } = await supabase
-        .from('events')
-        .select(`
-          id, title, event_date, poster_url, age_restriction,
-          venues (name)
-        `)
-        .eq('creator_id', workerProfile.organizer_id)
-        // Show only future or today's events
-        .gte('event_date', new Date().toISOString())
-        .order('event_date', { ascending: true });
+      const { data: assignments, error } = await supabase
+        .from('worker_event_assignments')
+        .select('events!inner (id,title,event_date,end_datetime,poster_url,age_restriction,creator_id,venues(name))')
+        .eq('worker_id', workerProfile.id).eq('status', 'active')
+        .eq('events.creator_id', workerProfile.organizer_id);
 
       if (error) throw error;
 
+      const data = (assignments || []).map((a: any) => a.events).filter((event: any) => event &&
+        new Date(event.end_datetime || new Date(new Date(event.event_date).getTime() + 5*3600000)).getTime() > Date.now())
+        .sort((a: any,b: any) => String(a.event_date).localeCompare(String(b.event_date)));
       if (data) {
         setEvents(data);
         if (data.length > 0) {
@@ -199,6 +184,10 @@ export default function WorkerSell() {
   };
 
   const handleSale = async () => {
+    if (!boxOffice.can_sell) {
+      Alert.alert('Venta no disponible', 'El organizador debe tener Taquilla Premium activa y autorizarte para vender. Puedes seguir escaneando entradas.');
+      return;
+    }
     const total = calculateTotal();
     setSubmitAttempted(true);
     touch('buyer.name');
@@ -334,60 +323,43 @@ export default function WorkerSell() {
 
   // Process Sale
   const processSale = async () => {
-    if (!workerProfile || !selectedEvent) return;
-
+    if (!workerProfile || !selectedEvent || submittingRef.current) return;
+    submittingRef.current = true;
     setProcessing(true);
 
     try {
-      // Create tickets in DB
-      const ticketsToCreate = [];
-      for (const type of ticketTypes) {
-        const qty = quantities[type.id] || 0;
-        for (let i = 0; i < qty; i++) {
-          ticketsToCreate.push({
-            event_id: selectedEvent.id,
-            ticket_type: type.name, // Matches organizer's ticket name
-            ticket_type_id: type.id, // Link to exact ticket type
-            price: type.price,
-            quantity: 1,
-            total_price: type.price,
-            status: 'valid',
-            payment_status: 'paid', // Cash
-            sold_by_worker_id: workerProfile.id,
-            purchase_date: new Date().toISOString(), // Ensure purchase date is set
-            // Buyer Details
-            attendee_name: buyerDetails.name,
-            attendee_email: buyerDetails.email,
-            attendee_age: parseInt(buyerDetails.age) || 0,
-            // Fallback columns if schema requires them (backward compatibility)
-            buyer_name: buyerDetails.name, 
-            buyer_email: buyerDetails.email
-            
-            // qr_token and qr_code omitted to let Postgres generate them correctly
-          });
-        }
-      }
+      const saleItems = ticketTypes
+        .map((type) => ({
+          ticket_type_id: type.id,
+          quantity: quantities[type.id] || 0,
+        }))
+        .filter((item) => item.quantity > 0);
 
-      const { data, error } = await supabase.from('tickets').insert(ticketsToCreate).select();
-      if (error) throw error;
-
-      let allTickets = data || [];
-
-      if (selectedVipId && vipQty > 0) {
-        const { data: vipResult, error: vipError } = await supabase.rpc('sell_vip_manual', {
-          p_worker_id: workerProfile.id,
-          p_vip_reservado_id: selectedVipId,
-          p_quantity: vipQty,
-          p_buyer_name: buyerDetails.name,
-          p_buyer_email: buyerDetails.email,
-          p_buyer_age: parseInt(buyerDetails.age) || 0,
-        });
-        if (vipError) throw vipError;
-        if (vipResult?.ticket_ids?.length) {
-          const { data: vipTickets } = await supabase.from('tickets').select('*').in('id', vipResult.ticket_ids);
-          if (vipTickets?.length) allTickets = [...allTickets, ...vipTickets];
-        }
-      }
+      const payload = {
+        p_worker_id: workerProfile.id, p_event_id: selectedEvent.id, p_items: saleItems,
+        p_vip_id: selectedVipId, p_vip_quantity: vipQty,
+        p_buyer_name: buyerDetails.name.trim(), p_buyer_email: buyerDetails.email.trim(),
+        p_buyer_age: parseInt(buyerDetails.age, 10),
+      };
+      const storageKey = `manual-sale:${workerProfile.id}`;
+      const serialized = JSON.stringify(payload);
+      const saved = await AsyncStorage.getItem(storageKey);
+      const prior = saved ? JSON.parse(saved) : null;
+      // Persist before sending: a lost response or process restart can replay safely.
+      const requestKey = prior?.payload === serialized ? prior.key
+        : `${Date.now()}-${Math.random().toString(36).slice(2)}-${Math.random().toString(36).slice(2)}`;
+      await AsyncStorage.setItem(storageKey, JSON.stringify({ key: requestKey, payload: serialized }));
+      const { data: saleResult, error: saleError } = await supabase.rpc('sell_manual_order', {
+        ...payload, p_request_key: requestKey,
+      });
+      if (saleError) throw saleError;
+      if (!saleResult?.success || !Array.isArray(saleResult.tickets)) throw new Error('Respuesta de venta inválida');
+      const allTickets = saleResult.tickets;
+      setQuantities({});
+      setVipQty(0);
+      setSelectedVipId(null);
+      // The sale is confirmed even if local cleanup fails.
+      await AsyncStorage.removeItem(storageKey).catch(() => {});
 
       setLastSaleTickets(allTickets);
       
@@ -415,6 +387,7 @@ export default function WorkerSell() {
       console.error('Error processing sale:', JSON.stringify(error, null, 2));
       Alert.alert('Error', 'No se pudo registrar la venta: ' + (error.message || 'Error desconocido') + (error.details ? `\n\n${error.details}` : ''));
     } finally {
+      submittingRef.current = false;
       setProcessing(false);
     }
   };
@@ -430,7 +403,7 @@ export default function WorkerSell() {
           <TouchableOpacity onPress={safeBack} style={styles.backButton}>
             <ChevronLeft size={24} color="white" />
           </TouchableOpacity>
-          <Text style={styles.title}>Venta Manual</Text>
+          <Text style={styles.title}>Vender en taquilla</Text>
           <View style={{ width: 24 }} />
         </View>
 

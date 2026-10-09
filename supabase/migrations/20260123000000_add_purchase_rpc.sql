@@ -11,6 +11,7 @@ CREATE OR REPLACE FUNCTION purchase_ticket(
 RETURNS json
 LANGUAGE plpgsql
 SECURITY DEFINER -- Runs with privileges of the function creator (postgres)
+SET search_path = public, pg_temp
 AS $$
 DECLARE
   v_event_available integer;
@@ -61,3 +62,8 @@ BEGIN
   RETURN json_build_object('ticket_id', v_ticket_id);
 END;
 $$;
+
+-- Legacy RPC retained only for migration compatibility. Purchases are fulfilled
+-- by the signed Stripe webhook using the service role, never by a mobile client.
+REVOKE ALL ON FUNCTION purchase_ticket(uuid, uuid, text, text, integer, numeric, text) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION purchase_ticket(uuid, uuid, text, text, integer, numeric, text) TO service_role;

@@ -1,4 +1,6 @@
-﻿import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { SalesOfferForm } from '@/components/SalesOfferForm';
+import { LAUNCH_FEATURES } from '@/lib/launchFeatures';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
   Image,
@@ -26,14 +28,14 @@ import { ThemedInput } from '@/components/ui/ThemedInput';
 import WebView from 'react-native-webview';
 import {
   buildTicketName,
+  offerFromRow,
+  OFFER_CATEGORIES,
   createEmptyTicketDraft,
   getTicketDraftErrors,
   parsePositiveInt,
   parsePositiveNumber,
   serializeTicketMetadata,
-  type TicketCategory,
   type TicketDraft,
-  type FreeBottleEntry,
 } from '@/lib/createEventTicketConfig';
 import { uploadImage } from '@/lib/storage';
 import { useAuth } from '@/lib/AuthContext';
@@ -45,12 +47,10 @@ import {
   Camera,
   Check,
   Clock,
-  DollarSign,
   Image as ImageIcon,
   Lock,
   MapPin,
   Navigation,
-  Plus,
   Sparkles,
   Tag,
   Ticket,
@@ -74,7 +74,7 @@ type EventDraft = {
   coordinates: { latitude: number; longitude: number } | null;
 };
 
-const MAPTILER_KEY = 'F74nnnjzsxrsuFtO0Xf6';
+const MAPTILER_KEY = process.env.EXPO_PUBLIC_MAPTILER_KEY || '';
 
 function buildLocationPickerHtml(
   centerLat: number,
@@ -193,7 +193,7 @@ export default function CreateEventScreen() {
     dressCode: '',
     ageRestriction: '18',
     eventType: 'party',
-    allowResale: true,
+    allowResale: LAUNCH_FEATURES.resale,
     dateTime: null,
     endDateTime: null,
     coordinates: null,
@@ -220,12 +220,12 @@ export default function CreateEventScreen() {
   const [isResolvingAddress, setIsResolvingAddress] = useState(false);
 
   const [locationQuery, setLocationQuery] = useState('');
-  const [locationSuggestions, setLocationSuggestions] = useState<Array<{ id: string; name: string; lat: number; lng: number }>>([]);
+  const [locationSuggestions, setLocationSuggestions] = useState<{ id: string; name: string; lat: number; lng: number }[]>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const geocodeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const [mapSearchQuery, setMapSearchQuery] = useState('');
-  const [mapSearchSuggestions, setMapSearchSuggestions] = useState<Array<{ id: string; name: string; lat: number; lng: number }>>([]);
+  const [mapSearchSuggestions, setMapSearchSuggestions] = useState<{ id: string; name: string; lat: number; lng: number }[]>([]);
   const mapGeoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
 
@@ -236,10 +236,15 @@ export default function CreateEventScreen() {
       try {
         const { data, error } = await supabase
           .from('events')
-          .select('*, venues(*), event_ticket_types(*)')
+          .select('*, venues(*), event_ticket_types(*), reservados_vip(*)')
           .eq('id', eventId)
           .single();
-        if (error || !data) { console.log('[edit] error', error); return; }
+        if (error || !data) {
+          Alert.alert('No se pudo cargar el evento', 'Inténtalo de nuevo en unos segundos.', [
+            { text: 'Volver', onPress: () => router.back() },
+          ]);
+          return;
+        }
         const rawDate = data.event_date ? new Date(data.event_date) : null;
         const rawEnd = data.end_datetime ? new Date(data.end_datetime) : null;
         setDraft({
@@ -260,30 +265,17 @@ export default function CreateEventScreen() {
             : null,
         });
         if (data.venues?.name) setLocationQuery(data.venues.name);
-        if (Array.isArray(data.event_ticket_types) && data.event_ticket_types.length > 0) {
-          const validCats = ['general', 'vip', 'early', 'backstage'];
-          const active = data.event_ticket_types.filter((t) => !t.deleted_at && (t.is_active ?? true));
-          setTicketTypes(active.map((t) => ({
-            id: t.id,
-            name: t.name ?? '',
-            category: (validCats.includes(t.category ?? '') ? t.category : 'general'),
-            price: String(t.price ?? 0),
-            quantity: String(t.quantity ?? 0),
-            benefits: '',
-            featured: false,
-            vipGroupSize: '',
-            vipFreeBottles: [],
-            generalAccessZone: '',
-            generalNumberedSeat: false,
-            earlyEntryMinutes: '',
-            earlyDedicatedLane: false,
-            backstageMeetGreet: false,
-            backstageHost: '',
-          })));
-        }
-      } catch (err) { console.log('[edit] catch', err); }
+        setTicketTypes([
+          ...(data.event_ticket_types || []).filter((t:any)=>!t.deleted_at && t.is_active!==false && t.category!=='vip').map((t:any)=>offerFromRow(t)),
+          ...(data.reservados_vip || []).filter((t:any)=>!t.deleted_at && t.is_active!==false).map((t:any)=>offerFromRow(t,true)),
+        ]);
+      } catch {
+        Alert.alert('No se pudo cargar el evento', 'Comprueba tu conexión e inténtalo de nuevo.', [
+          { text: 'Volver', onPress: () => router.back() },
+        ]);
+      }
     })();
-  }, [isEditing, eventId]);;
+  }, [eventId, isEditing, router]);
   const eventTypeOptions = useMemo(
     () => [
       { key: 'party', label: 'Fiesta', Icon: Sparkles },
@@ -295,23 +287,13 @@ export default function CreateEventScreen() {
     []
   );
 
-  const ticketCategories = useMemo(
-    () => [
-      { key: 'general' as const, label: 'General' },
-      { key: 'vip' as const, label: 'VIP' },
-      { key: 'early' as const, label: 'Early' },
-      { key: 'backstage' as const, label: 'Backstage' },
-    ],
-    []
-  );
-
   const metrics = useMemo(() => {
     const parsed = ticketTypes
       .map((ticket) => ({
         price: parsePositiveNumber(ticket.price),
         quantity: parsePositiveInt(ticket.quantity),
       }))
-      .filter((ticket) => ticket.price !== null && ticket.quantity !== null) as Array<{ price: number; quantity: number }>;
+      .filter((ticket) => ticket.price !== null && ticket.quantity !== null) as { price: number; quantity: number }[];
 
     const capacity = parsed.reduce((sum, ticket) => sum + ticket.quantity, 0);
     const minPrice = parsed.length ? Math.min(...parsed.map((ticket) => ticket.price)) : null;
@@ -368,7 +350,7 @@ export default function CreateEventScreen() {
     }
 
     return e;
-  }, [draft, minDateTime, ticketTypes.length]);
+  }, [draft, isEditing, minDateTime, ticketTypes.length]);
 
   const getError = useCallback(
     (key: string) => {
@@ -467,10 +449,10 @@ export default function CreateEventScreen() {
     setShowMapModal(true);
   }, [draft.coordinates]);
 
-  const searchGeocode = useCallback(async (q: string): Promise<Array<{ id: string; name: string; lat: number; lng: number }>> => {
+  const searchGeocode = useCallback(async (q: string): Promise<{ id: string; name: string; lat: number; lng: number }[]> => {
     if (q.trim().length < 3) return [];
     try {
-      const res = await fetch(`https://api.maptiler.com/geocoding/${encodeURIComponent(q.trim())}.json?key=F74nnnjzsxrsuFtO0Xf6&language=es&limit=5`);
+      const res = await fetch(`https://api.maptiler.com/geocoding/${encodeURIComponent(q.trim())}.json?key=${MAPTILER_KEY}&language=es&limit=5`);
       const json = await res.json() as { features?: any[] };
       return (json.features ?? []).map((f: any) => ({
         id: String(f.id),
@@ -680,14 +662,14 @@ export default function CreateEventScreen() {
 
     const entry: TicketDraft = {
       ...newTicket,
-      id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      id: newTicket.id === 'draft' ? `${Date.now()}-${Math.random().toString(36).slice(2, 8)}` : newTicket.id,
       name,
       price: String(price),
       quantity: String(quantity),
       benefits: newTicket.benefits.trim(),
     };
 
-    setTicketTypes((prev) => [...prev, entry]);
+    setTicketTypes((prev) => [...prev.filter(t=>t.id!==entry.id), entry]);
     setNewTicket(createEmptyTicketDraft());
   }, [newTicket]);
 
@@ -697,6 +679,10 @@ export default function CreateEventScreen() {
 
   const submit = useCallback(async () => {
     setSubmitAttempted(true);
+    if (newTicket.name.trim() || newTicket.price.trim() || newTicket.quantity.trim()) {
+      Alert.alert('Oferta pendiente', 'Añade o guarda la oferta que estás editando antes de publicar el evento.');
+      return;
+    }
     if (Object.keys(errors).length > 0) {
       Alert.alert('Revisa el formulario', 'Hay campos pendientes o inválidos.');
       return;
@@ -725,7 +711,7 @@ export default function CreateEventScreen() {
       }
 
       const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-      const mappedTicketTypes = ticketTypes.map((ticket) => ({
+      const mappedTicketTypes = ticketTypes.filter(t=>t.category!=='vip_table').map((ticket) => ({
         id: ticket.id,
         // Existing tickets (UUID id) already have the formatted name stored in the DB.
         // Only new tickets (temp id) need buildTicketName to generate one.
@@ -750,10 +736,18 @@ export default function CreateEventScreen() {
         allowResale: draft.allowResale,
         date: toYMD(draft.dateTime),
         time: toHM(draft.dateTime),
-        endDatetime: draft.endDateTime ? draft.endDateTime.toISOString() : null,
+        endDatetime: draft.endDateTime ? draft.endDateTime.toISOString() : undefined,
         price: String(metrics.minPrice ?? 0),
         capacity: metrics.capacity,
         ticketTypes: mappedTicketTypes,
+        vipTables: ticketTypes.filter(t=>t.category==='vip_table').map(t=>({
+          id:t.id,name:buildTicketName(t),description:t.benefits,base_price:parsePositiveNumber(t.price),
+          quantity_available:Number(t.quantity),capacity_people:Number(t.vipGroupSize),
+          included_bottles:t.vipFreeBottles.reduce((n,b)=>n+Number(b.quantity),0),
+          extra_bottle_price:t.extraBottlePrice?parsePositiveNumber(t.extraBottlePrice):null,
+          expected_available:t.originalMetadata?.catalogAvailable,
+          metadata:serializeTicketMetadata(t),
+        })),
         venues: {
           latitude: draft.coordinates.latitude,
           longitude: draft.coordinates.longitude,
@@ -774,7 +768,7 @@ export default function CreateEventScreen() {
       setLoading(false);
       Alert.alert('Error', String(e?.message || 'No se pudo crear el evento.'));
     }
-  }, [addEvent, updateEvent, isEditing, eventId, draft, errors, metrics.capacity, metrics.minPrice, safeBack, ticketTypes, user?.id]);
+  }, [addEvent, updateEvent, isEditing, eventId, draft, errors, metrics.capacity, metrics.minPrice, safeBack, ticketTypes, newTicket, user?.id]);
 
   return (
     <View style={styles.container}>
@@ -856,7 +850,7 @@ export default function CreateEventScreen() {
               </View>
             </TouchableOpacity>
             <Text style={{ color: 'rgba(255,255,255,0.4)', fontSize: 12, marginTop: 8, lineHeight: 16 }}>
-              Al finalizar el evento se eliminarán automáticamente las entradas y ofertas de reventa.
+              Al finalizar el evento se eliminarán automáticamente las entradas caducadas.
             </Text>
           </GlassView>
 
@@ -953,229 +947,7 @@ export default function CreateEventScreen() {
           </GlassView>
 
           <GlassView intensity={14} style={[styles.card, styles.cardBorder]}>
-            <Text style={styles.sectionTitle}>Tipos de entrada</Text>
-            <Text style={styles.helperText}>
-              Configura entradas generales, VIP, early access o backstage con nombre, precio, cupo y beneficios.
-            </Text>
-
-            <Text style={styles.fieldLabel}>Categoría</Text>
-            <View style={styles.chipsRow}>
-              {ticketCategories.map((category) => {
-                const selected = newTicket.category === category.key;
-                return (
-                  <Pressable
-                    key={category.key}
-                    onPress={() => setNewTicket((prev) => ({ ...prev, category: category.key }))}
-                    style={[styles.chip, selected ? styles.chipActive : null]}
-                  >
-                    <Text style={[styles.chipText, selected ? styles.chipTextActive : null]}>{category.label}</Text>
-                  </Pressable>
-                );
-              })}
-            </View>
-
-            <ThemedInput
-              label="Nombre de la entrada"
-              placeholder="Ej: Acceso front stage"
-              value={newTicket.name}
-              onChangeText={(value) => setNewTicket((prev) => ({ ...prev, name: value }))}
-              error={newTicketErrors.name}
-              icon={<Ticket size={20} color={Colors.dark.textSecondary} />}
-            />
-
-            <View style={styles.row}>
-              <View style={styles.half}>
-                <ThemedInput
-                  label="Precio (€)"
-                  placeholder="Ej: 30"
-                  value={newTicket.price}
-                  onChangeText={(value) => setNewTicket((prev) => ({ ...prev, price: value }))}
-                  error={newTicketErrors.price}
-                  keyboardType="numeric"
-                  icon={<DollarSign size={20} color={Colors.dark.textSecondary} />}
-                />
-              </View>
-              <View style={styles.half}>
-                <ThemedInput
-                  label="Cantidad"
-                  placeholder="Ej: 150"
-                  value={newTicket.quantity}
-                  onChangeText={(value) => setNewTicket((prev) => ({ ...prev, quantity: value }))}
-                  error={newTicketErrors.quantity}
-                  keyboardType="numeric"
-                />
-              </View>
-            </View>
-
-            <ThemedInput
-              label="Beneficios / preferencias"
-              placeholder="Ej: Fast lane, copa incluida, zona reservada"
-              value={newTicket.benefits}
-              onChangeText={(value) => setNewTicket((prev) => ({ ...prev, benefits: value }))}
-              icon={<Sparkles size={20} color={Colors.dark.textSecondary} />}
-            />
-
-            {newTicket.category === 'vip' ? (
-              <View style={styles.conditionalCard}>
-                <Text style={styles.conditionalTitle}>Configuración VIP</Text>
-                <ThemedInput
-                  label="Personas incluidas"
-                  placeholder="Ej: 5"
-                  value={newTicket.vipGroupSize}
-                  onChangeText={(value) => setNewTicket((prev) => ({ ...prev, vipGroupSize: value }))}
-                  error={newTicketErrors.vipGroupSize}
-                  keyboardType="numeric"
-                />
-
-                <Text style={styles.fieldLabel}>Botellas incluidas</Text>
-                {(newTicket.vipFreeBottles || []).map((bottle, idx) => (
-                  <View key={idx} style={styles.bottleRow}>
-                    <View style={{ flex: 1 }}>
-                      <ThemedInput
-                        label="Marca"
-                        placeholder="Ej: Belvedere, Moët..."
-                        value={bottle.brand}
-                        onChangeText={(v) =>
-                          setNewTicket((prev) => {
-                            const arr = [...(prev.vipFreeBottles || [])];
-                            arr[idx] = { ...arr[idx], brand: v };
-                            return { ...prev, vipFreeBottles: arr };
-                          })
-                        }
-                      />
-                    </View>
-                    <View style={styles.bottleQty}>
-                      <ThemedInput
-                        label="Uds"
-                        placeholder="1"
-                        value={bottle.quantity}
-                        onChangeText={(v) =>
-                          setNewTicket((prev) => {
-                            const arr = [...(prev.vipFreeBottles || [])];
-                            arr[idx] = { ...arr[idx], quantity: v };
-                            return { ...prev, vipFreeBottles: arr };
-                          })
-                        }
-                        error={newTicketErrors[`bottle.${idx}.quantity`]}
-                        keyboardType="numeric"
-                      />
-                    </View>
-                    <TouchableOpacity
-                      onPress={() =>
-                        setNewTicket((prev) => ({
-                          ...prev,
-                          vipFreeBottles: (prev.vipFreeBottles || []).filter((_, i) => i !== idx),
-                        }))
-                      }
-                      style={styles.bottleRemoveBtn}
-                    >
-                      <Trash2 size={18} color={Colors.dark.error} />
-                    </TouchableOpacity>
-                  </View>
-                ))}
-                <TouchableOpacity
-                  onPress={() =>
-                    setNewTicket((prev) => ({
-                      ...prev,
-                      vipFreeBottles: [...(prev.vipFreeBottles || []), { brand: '', quantity: '1' }],
-                    }))
-                  }
-                  style={styles.addBottleBtn}
-                >
-                  <Plus size={15} color={Colors.dark.primary} />
-                  <Text style={styles.addBottleTxt}>Añadir botella</Text>
-                </TouchableOpacity>
-              </View>
-            ) : null}
-
-            {newTicket.category === 'general' ? (
-              <View style={styles.conditionalCard}>
-                <Text style={styles.conditionalTitle}>Configuración general</Text>
-                <ThemedInput
-                  label="Zona de acceso"
-                  placeholder="Ej: Pista principal"
-                  value={newTicket.generalAccessZone}
-                  onChangeText={(value) => setNewTicket((prev) => ({ ...prev, generalAccessZone: value }))}
-                  error={newTicketErrors.generalAccessZone}
-                  icon={<MapPin size={20} color={Colors.dark.textSecondary} />}
-                />
-                <View style={styles.toggleRow}>
-                  <Text style={styles.toggleLabel}>Asiento numerado</Text>
-                  <Pressable
-                    onPress={() => setNewTicket((prev) => ({ ...prev, generalNumberedSeat: !prev.generalNumberedSeat }))}
-                    style={[styles.switchPill, newTicket.generalNumberedSeat ? styles.switchPillOn : null]}
-                  >
-                    <Text style={styles.switchPillText}>{newTicket.generalNumberedSeat ? 'Sí' : 'No'}</Text>
-                  </Pressable>
-                </View>
-              </View>
-            ) : null}
-
-            {newTicket.category === 'early' ? (
-              <View style={styles.conditionalCard}>
-                <Text style={styles.conditionalTitle}>Configuración early access</Text>
-                <ThemedInput
-                  label="Minutos de antelación"
-                  placeholder="Ej: 45"
-                  value={newTicket.earlyEntryMinutes}
-                  onChangeText={(value) => setNewTicket((prev) => ({ ...prev, earlyEntryMinutes: value }))}
-                  error={newTicketErrors.earlyEntryMinutes}
-                  keyboardType="numeric"
-                  icon={<Clock size={20} color={Colors.dark.textSecondary} />}
-                />
-                <View style={styles.toggleRow}>
-                  <Text style={styles.toggleLabel}>Carril prioritario</Text>
-                  <Pressable
-                    onPress={() => setNewTicket((prev) => ({ ...prev, earlyDedicatedLane: !prev.earlyDedicatedLane }))}
-                    style={[styles.switchPill, newTicket.earlyDedicatedLane ? styles.switchPillOn : null]}
-                  >
-                    <Text style={styles.switchPillText}>{newTicket.earlyDedicatedLane ? 'Sí' : 'No'}</Text>
-                  </Pressable>
-                </View>
-              </View>
-            ) : null}
-
-            {newTicket.category === 'backstage' ? (
-              <View style={styles.conditionalCard}>
-                <Text style={styles.conditionalTitle}>Configuración backstage</Text>
-                <View style={styles.toggleRow}>
-                  <Text style={styles.toggleLabel}>Meet & greet</Text>
-                  <Pressable
-                    onPress={() => setNewTicket((prev) => ({ ...prev, backstageMeetGreet: !prev.backstageMeetGreet }))}
-                    style={[styles.switchPill, newTicket.backstageMeetGreet ? styles.switchPillOn : null]}
-                  >
-                    <Text style={styles.switchPillText}>{newTicket.backstageMeetGreet ? 'Sí' : 'No'}</Text>
-                  </Pressable>
-                </View>
-                {newTicket.backstageMeetGreet ? (
-                  <ThemedInput
-                    label="Artista / anfitrión"
-                    placeholder="Ej: DJ principal"
-                    value={newTicket.backstageHost}
-                    onChangeText={(value) => setNewTicket((prev) => ({ ...prev, backstageHost: value }))}
-                    error={newTicketErrors.backstageHost}
-                    icon={<Sparkles size={20} color={Colors.dark.textSecondary} />}
-                  />
-                ) : null}
-              </View>
-            ) : null}
-
-            <View style={styles.toggleRow}>
-              <Text style={styles.toggleLabel}>Destacar esta entrada</Text>
-              <Pressable
-                onPress={() => setNewTicket((prev) => ({ ...prev, featured: !prev.featured }))}
-                style={[styles.switchPill, newTicket.featured ? styles.switchPillOn : null]}
-              >
-                <Text style={styles.switchPillText}>{newTicket.featured ? 'Sí' : 'No'}</Text>
-              </Pressable>
-            </View>
-
-            <ThemedButton
-              title="Añadir tipo de entrada"
-              onPress={addTicketType}
-              variant="outline"
-              icon={<Plus size={18} color={Colors.dark.primary} />}
-            />
+            <SalesOfferForm value={newTicket} onChange={setNewTicket} errors={newTicketErrors} showErrors={submitAttempted} onAdd={addTicketType} onCancel={()=>setNewTicket(createEmptyTicketDraft())} eventDate={draft.dateTime}/>
             {getError('ticketTypes') ? <Text style={styles.errorText}>{getError('ticketTypes')}</Text> : null}
 
             {ticketTypes.length ? (
@@ -1188,15 +960,12 @@ export default function CreateEventScreen() {
                         {Number(ticket.price).toFixed(2)}€ • {ticket.quantity} uds
                       </Text>
                       <Text style={styles.ticketMeta}>
-                        {ticket.category === 'vip'
-                          ? `VIP · ${ticket.vipGroupSize || '-'} personas`
-                          : ticket.category === 'general'
-                            ? `General · ${ticket.generalAccessZone || 'Zona libre'}`
-                            : ticket.category === 'early'
-                              ? `Early · ${ticket.earlyEntryMinutes || '0'} min antes`
-                              : `Backstage${ticket.backstageMeetGreet ? ' · Meet & greet' : ''}`}
+                        {ticket.category==='vip_table' ? 'Mesa VIP · '+ticket.vipGroupSize+' personas' : OFFER_CATEGORIES.find(c=>c.key===ticket.category)?.label}
                       </Text>
                     </View>
+                    <TouchableOpacity accessibilityLabel="Editar oferta" onPress={() => setNewTicket({...ticket})} style={styles.deleteButton}>
+                      <Text style={{color:Colors.dark.secondary}}>Editar</Text>
+                    </TouchableOpacity>
                     <TouchableOpacity onPress={() => removeTicketType(ticket.id)} style={styles.deleteButton}>
                       <Trash2 size={18} color={Colors.dark.error} />
                     </TouchableOpacity>
@@ -1208,7 +977,7 @@ export default function CreateEventScreen() {
             <View style={styles.metricsCard}>
               <Text style={styles.metricsTitle}>Resumen automático</Text>
               <Text style={styles.metricsText}>Precio base desde: {metrics.minPrice !== null ? `${metrics.minPrice.toFixed(2)}€` : '--'}</Text>
-              <Text style={styles.metricsText}>Aforo total: {metrics.capacity}</Text>
+              <Text style={styles.metricsText}>Unidades configuradas: {metrics.capacity}</Text>
             </View>
           </GlassView>
 
@@ -1240,15 +1009,15 @@ export default function CreateEventScreen() {
               icon={<Lock size={20} color={Colors.dark.textSecondary} />}
             />
 
-            <View style={styles.toggleRow}>
+            {LAUNCH_FEATURES.resale && (<View style={styles.toggleRow}>
               <Text style={styles.toggleLabel}>Permitir reventa</Text>
               <Pressable onPress={() => updateDraft('allowResale', !draft.allowResale)} style={[styles.switchPill, draft.allowResale ? styles.switchPillOn : null]}>
                 <Text style={styles.switchPillText}>{draft.allowResale ? 'Sí' : 'No'}</Text>
               </Pressable>
-            </View>
+            </View>)}
           </GlassView>
 
-          <ThemedButton title="Publicar evento" onPress={submit} loading={loading} icon={<Check size={18} color="white" />} />
+          <ThemedButton title={isEditing ? "Guardar evento y catálogo" : "Publicar evento"} onPress={submit} loading={loading} icon={<Check size={18} color="white" />} />
           <View style={{ height: 28 }} />
         </ScrollView>
 
@@ -1586,5 +1355,4 @@ const styles = StyleSheet.create({
     zIndex: 10,
   },
 });
-
 

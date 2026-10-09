@@ -1,0 +1,9 @@
+{
+  "expected_commit": "ab9e191193e9735fd64d053a4e5e0790c5abfc60",
+  "actual_live_commit": "b6b9bbbdca896dd690f388047371b0d64d6164ea",
+  "actual_deployment_id": "6e8e510b-6760-4a4a-8b62-391a56f8fe2f",
+  "configuration_commit": "ab9e191193e9735fd64d053a4e5e0790c5abfc60",
+  "result": "failed",
+  "blocking_ui": "Limited Access. Your trial has expired. Upgrade your plan to continue deploying. Subscription unpaid.",
+  "staging_only": true
+}

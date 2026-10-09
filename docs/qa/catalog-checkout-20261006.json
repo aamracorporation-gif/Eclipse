@@ -1,0 +1,64 @@
+{
+  "tested_at": "2026-10-06T15:10:49.723Z",
+  "environment": "staging",
+  "test_payments_only": true,
+  "checks": [
+    {
+      "kind": "event_ticket",
+      "confirmation": {
+        "status": "succeeded",
+        "livemode": false
+      },
+      "fulfillment": {
+        "fulfilled": true,
+        "kind": "event_ticket",
+        "status": "fulfilled"
+      },
+      "transaction_id": "b8473a85-8305-4a9a-815e-d3116dd7bcb5"
+    },
+    {
+      "kind": "vip_table",
+      "confirmation": {
+        "status": "succeeded",
+        "livemode": false
+      },
+      "fulfillment": {
+        "fulfilled": true,
+        "kind": "vip_table",
+        "status": "fulfilled"
+      },
+      "transaction_id": "52c80ab4-483a-4d93-ba1d-4a49fec0abe2"
+    },
+    {
+      "category": "free",
+      "kind": "admission",
+      "quantity": 1,
+      "entry_deadline": "2026-12-19T23:00:00+01:00",
+      "apple_label": "ENTRADA",
+      "apple_name": "[QA] INVITACIÓN ANTES DE LAS 01:00",
+      "google_blocker": "HTTP 503 {\"ok\":false,\"platform\":\"android\",\"error\":\"Google Wallet no está configurado (faltan GOOGLE_WALLET_ISSUER_ID / GOOGLE_WALLET_CLASS_ID / GOOGLE_WALLET_SERVICE_ACCOUNT_EMAIL / GOOGLE_WALLET_PRIVATE_KEY).\"}"
+    },
+    {
+      "category": "group",
+      "kind": "admission",
+      "quantity": 4,
+      "entry_deadline": "2026-12-19T23:00:00+01:00",
+      "apple_label": "ENTRADA",
+      "apple_name": "[QA] PACK DE 4 + CONSUMICIÓN",
+      "google_blocker": "HTTP 503 {\"ok\":false,\"platform\":\"android\",\"error\":\"Google Wallet no está configurado (faltan GOOGLE_WALLET_ISSUER_ID / GOOGLE_WALLET_CLASS_ID / GOOGLE_WALLET_SERVICE_ACCOUNT_EMAIL / GOOGLE_WALLET_PRIVATE_KEY).\"}"
+    },
+    {
+      "category": "vip_table",
+      "kind": "vip_table",
+      "quantity": 6,
+      "entry_deadline": null,
+      "apple_label": "MESA VIP",
+      "apple_name": "MESA VIP — PRUEBA",
+      "google_blocker": "HTTP 503 {\"ok\":false,\"platform\":\"android\",\"error\":\"Google Wallet no está configurado (faltan GOOGLE_WALLET_ISSUER_ID / GOOGLE_WALLET_CLASS_ID / GOOGLE_WALLET_SERVICE_ACCOUNT_EMAIL / GOOGLE_WALLET_PRIVATE_KEY).\"}"
+    }
+  ],
+  "limitations": [
+    "Google Wallet staging generation returned 503 because issuer credentials are missing. Google payloads, signatures and existing-object updates were verified with fixture credentials only.",
+    "Apple signed passes were generated for actual staging purchases; device installation was not verified."
+  ]
+}

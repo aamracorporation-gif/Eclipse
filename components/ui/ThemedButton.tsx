@@ -15,6 +15,9 @@ interface ThemedButtonProps {
   textStyle?: StyleProp<TextStyle>;
   icon?: React.ReactNode;
   iconPosition?: 'left' | 'right';
+  accessibilityLabel?: string;
+  accessibilityHint?: string;
+  testID?: string;
 }
 
 export function ThemedButton({ 
@@ -26,17 +29,29 @@ export function ThemedButton({
   style,
   textStyle,
   icon,
-  iconPosition = 'left'
+  iconPosition = 'left',
+  accessibilityLabel,
+  accessibilityHint,
+  testID,
 }: ThemedButtonProps) {
+  const isDisabled = disabled || loading;
+  const accessibilityProps = {
+    accessibilityRole: 'button' as const,
+    accessibilityLabel: accessibilityLabel ?? title,
+    accessibilityHint,
+    accessibilityState: { disabled: isDisabled, busy: loading },
+    testID,
+  };
   
   if (variant === 'outline') {
     return (
       <TouchableOpacity
         onPress={onPress}
-        disabled={disabled || loading}
+        disabled={isDisabled}
         style={[styles.outlineButton, disabled && styles.disabled, style]}
         activeOpacity={0.7}
         hitSlop={theme.layout.minTapSize >= 44 ? 6 : 0}
+        {...accessibilityProps}
       >
         {loading ? (
           <DiscoLoader size={18} />
@@ -54,18 +69,19 @@ export function ThemedButton({
   return (
     <TouchableOpacity
       onPress={onPress}
-      disabled={disabled || loading}
+      disabled={isDisabled}
       activeOpacity={0.8}
       style={[styles.container, disabled && styles.disabled, style]}
       hitSlop={theme.layout.minTapSize >= 44 ? 6 : 0}
+      {...accessibilityProps}
     >
       <LinearGradient
         colors={
           disabled 
             ? ['rgba(15, 23, 42, 0.25)', 'rgba(15, 23, 42, 0.18)'] 
             : variant === 'secondary' 
-              ? ['#B39DFF', '#6B4EFF'] 
-              : ['#6B4EFF', '#5B38FF']
+              ? Colors.dark.secondaryGradient
+              : Colors.dark.buttonGradient
         }
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
@@ -105,7 +121,7 @@ const styles = StyleSheet.create({
   },
   // Removed contentContainer as it is no longer needed
   text: {
-    color: 'white',
+    color: Colors.dark.text,
     fontSize: theme.typography.size.md,
     fontWeight: theme.typography.weight.bold,
     letterSpacing: 0.2,

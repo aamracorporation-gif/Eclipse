@@ -11,9 +11,12 @@ import { ThemedButton } from '@/components/ui/ThemedButton';
 import { DiscoLoader } from '@/components/ui/DiscoLoader';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
+import { useBoxOfficeAccess } from '@/hooks/useBoxOfficeAccess';
 
 export default function ManageWorkers() {
   const { user } = useAuth();
+  const boxOffice = useBoxOfficeAccess(user?.id);
+  const [permissionBusy, setPermissionBusy] = useState<string | null>(null);
   const router = useRouter();
   const { t } = useTranslation();
   const [workers, setWorkers] = useState<any[]>([]);
@@ -114,9 +117,10 @@ export default function ManageWorkers() {
 
   const permissionTags = (permissions: any) => {
     if (!permissions) return [];
+    if (Array.isArray(permissions)) permissions = Object.fromEntries(permissions.map((key: string) => [key, true]));
     const tags: { label: string; icon: string; color: string }[] = [];
     if (permissions.scan)  tags.push({ label: 'Scan',  icon: '🔍', color: 'rgba(59,130,246,0.22)' });
-    if (permissions.sell)  tags.push({ label: 'Venta', icon: '💰', color: 'rgba(245,158,11,0.22)' });
+    if (permissions.sell && boxOffice.enabled) tags.push({ label: 'Taquilla', icon: '💰', color: 'rgba(245,158,11,0.22)' });
     if (permissions.stats) tags.push({ label: 'Stats', icon: '📊', color: 'rgba(139,92,246,0.22)' });
     return tags;
   };
@@ -125,6 +129,20 @@ export default function ManageWorkers() {
     const tags = permissionTags(item.permissions);
     const scans = scanCounts[item.id] || 0;
     const sales = saleCounts[item.id] || 0;
+    const salePermission = Array.isArray(item.permissions) ? item.permissions.includes('sell') : item.permissions?.sell === true;
+    const toggleSales = async () => {
+      if (!boxOffice.enabled || permissionBusy || !user) return;
+      setPermissionBusy(item.id);
+      try {
+        const permissions = Array.isArray(item.permissions)
+          ? salePermission ? item.permissions.filter((p: string) => p !== 'sell') : [...item.permissions, 'sell']
+          : { ...item.permissions, sell: !salePermission };
+        const { error } = await supabase.from('workers').update({ permissions }).eq('id', item.id).eq('organizer_id', user.id);
+        if (error) throw error;
+        await fetchWorkers(true);
+      } catch { Alert.alert('No se pudo cambiar el permiso', 'Inténtalo de nuevo.'); }
+      finally { setPermissionBusy(null); }
+    };
 
     return (
       <GlassView intensity={15} style={styles.workerCard}>
@@ -177,6 +195,7 @@ export default function ManageWorkers() {
         </View>
 
         {/* Footer: date + stats button */}
+        {boxOffice.enabled && <TouchableOpacity accessibilityRole="button" disabled={!!permissionBusy} onPress={()=>void toggleSales()} style={{paddingVertical:12}}><Text style={{color: salePermission ? '#C7B8DC' : '#E0C28C',fontSize:12,fontWeight:'700'}}>{permissionBusy===item.id ? 'Guardando…' : salePermission ? 'Retirar permiso de venta en taquilla' : 'Autorizar venta en taquilla'}</Text></TouchableOpacity>}
         <View style={styles.cardFooter}>
           <Text style={styles.dateText}>
             Añadido: {new Date(item.created_at).toLocaleDateString('es-ES')}
@@ -216,6 +235,7 @@ export default function ManageWorkers() {
             renderItem={renderWorker}
             keyExtractor={item => item.id}
             contentContainerStyle={styles.listContent}
+            ListHeaderComponent={<TouchableOpacity accessibilityRole="button" onPress={()=>router.push('/(creator)/box-office')} style={{padding:20,borderRadius:18,backgroundColor:'#261B35',borderWidth:1,borderColor:'#564065',gap:7,marginBottom:12}}><Text style={{color:'#E0C28C',fontSize:10,fontWeight:'800',letterSpacing:1.5}}>TAQUILLA PREMIUM · {boxOffice.enabled ? 'ACTIVA' : '50 €/MES'}</Text><Text style={{color:'white',fontSize:17,fontWeight:'700'}}>{boxOffice.enabled ? 'Gestionar suscripción' : 'Desbloquea la venta para tu equipo'}</Text><Text style={{color:'#BCACCE',fontSize:12,lineHeight:18}}>El escáner está incluido. La suscripción permite vender entradas y mesas desde la app.</Text></TouchableOpacity>}
             refreshControl={
               <RefreshControl
                 refreshing={refreshing}

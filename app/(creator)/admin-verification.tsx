@@ -67,13 +67,9 @@ export default function AdminVerificationScreen() {
   const { user } = useAuth();
   const { horizontalPadding, maxContentWidth, scaleFont } = useResponsive();
 
-  const adminEmail = ((process.env.EXPO_PUBLIC_ADMIN_EMAIL as any) ?? '').toString().trim().toLowerCase() || 'aamracorporation@gmail.com';
-  const isAdminEmail = !!user?.email && user.email.toLowerCase() === adminEmail;
-
   const [checkingAdmin, setCheckingAdmin] = useState(true);
   const [isAdmin, setIsAdmin] = useState(false);
   const [isAdminDb, setIsAdminDb] = useState(false);
-  const [bootstrappingAdmin, setBootstrappingAdmin] = useState(false);
 
   const [loadingStats, setLoadingStats] = useState(true);
   const [loadingList, setLoadingList] = useState(true);
@@ -157,30 +153,14 @@ export default function AdminVerificationScreen() {
       if (error) throw error;
       const dbAdmin = data?.role === 'admin';
       setIsAdminDb(dbAdmin);
-      setIsAdmin(dbAdmin || isAdminEmail);
+      setIsAdmin(dbAdmin);
     } catch {
       setIsAdminDb(false);
       setIsAdmin(false);
     } finally {
       setCheckingAdmin(false);
     }
-  }, [isAdminEmail, user?.id]);
-
-  const bootstrapRole = useCallback(async () => {
-    if (!isAdminEmail) return;
-    if (bootstrappingAdmin) return;
-    try {
-      setBootstrappingAdmin(true);
-      const { error } = await supabase.rpc('bootstrap_set_me_admin', { p_admin_email: adminEmail });
-      if (error) throw error;
-      await fetchAdminStatus();
-      Alert.alert('Listo', 'Permisos de administrador activados.');
-    } catch {
-      Alert.alert('Error', 'No se pudo activar el rol de administrador.');
-    } finally {
-      setBootstrappingAdmin(false);
-    }
-  }, [adminEmail, bootstrappingAdmin, fetchAdminStatus, isAdminEmail]);
+  }, [user?.id]);
 
   const fetchStats = useCallback(async () => {
     setLoadingStats(true);
@@ -367,12 +347,14 @@ export default function AdminVerificationScreen() {
       pageRef.current = nextPage;
       setOrganizers((prev) => (opts.reset ? rows : [...prev, ...rows]));
     } catch (e: any) {
+      if (requestKey !== listRequestKeyRef.current) return;
       if (opts.reset) {
         setOrganizers([]);
         setTotalCount(null);
       }
       Alert.alert('Error', e?.message ? `No se pudieron cargar los perfiles.\n\n${e.message}` : 'No se pudieron cargar los perfiles.');
     } finally {
+      if (requestKey !== listRequestKeyRef.current) return;
       if (opts.reset) {
         setLoadingList(false);
       } else {
@@ -477,7 +459,9 @@ export default function AdminVerificationScreen() {
     }
   }, [isAdminDb]);
 
+  const globalRequestRef = useRef(0);
   const fetchGlobalMatches = useCallback(async () => {
+    const requestKey = ++globalRequestRef.current;
     if (!isAdmin) return;
     const raw = (searchDebounced || '').trim();
     const looksLikeEmail = raw.includes('@');
@@ -505,11 +489,12 @@ export default function AdminVerificationScreen() {
         .order(orderColumn, { ascending: false })
         .limit(12);
       if (error) throw error;
+      if (requestKey !== globalRequestRef.current) return;
       setGlobalMatches((data ?? []) as any);
     } catch {
-      setGlobalMatches([]);
+      if (requestKey === globalRequestRef.current) setGlobalMatches([]);
     } finally {
-      setGlobalLoading(false);
+      if (requestKey === globalRequestRef.current) setGlobalLoading(false);
     }
   }, [isAdmin, searchDebounced]);
 
@@ -522,6 +507,18 @@ export default function AdminVerificationScreen() {
     if (checkingAdmin || !isAdmin) return;
     fetchAuditLogs();
   }, [checkingAdmin, fetchAuditLogs, isAdmin]);
+
+  const applyConfirmedReview = (id: string, status: OrganizerRow['verification_status'], reason: string | null) => {
+    // Invalidate reads started before the successful mutation.
+    ++listRequestKeyRef.current;
+    ++globalRequestRef.current;
+    const patch = (row: OrganizerRow): OrganizerRow => row.id === id
+      ? { ...row, verification_status: status, verification_rejection_reason: reason }
+      : row;
+    setGlobalMatches(rows => rows.map(patch));
+    setOrganizers(rows => rows.map(patch).filter(row => row.id !== id ||
+      activeFilter === 'all' || activeFilter === 'suspended' || activeFilter === status));
+  };
 
   const approve = async (targetUserId: string) => {
     if (!isAdminDb) {
@@ -536,8 +533,10 @@ export default function AdminVerificationScreen() {
         p_reason: null,
       });
       if (error) throw error;
+      applyConfirmedReview(targetUserId, 'verified', null);
       await fetchStats();
       await fetchOrganizers({ reset: true });
+      await fetchGlobalMatches();
       await fetchAuditLogs();
     } catch {
       Alert.alert('Error', 'No se pudo aprobar al organizador.');
@@ -560,10 +559,12 @@ export default function AdminVerificationScreen() {
         p_reason: reviewReason?.trim() || null,
       });
       if (error) throw error;
+      applyConfirmedReview(reviewUserId, reviewMode, reviewReason?.trim() || null);
       setReviewUserId(null);
       setReviewReason('');
       await fetchStats();
       await fetchOrganizers({ reset: true });
+      await fetchGlobalMatches();
       await fetchAuditLogs();
     } catch (e: any) {
       const msg = (e?.message || e?.details || e?.hint || '').toString().trim();
@@ -586,17 +587,20 @@ export default function AdminVerificationScreen() {
         p_reason: reason,
       });
       if (error) throw error;
-      if (isSuspended) {
-        const suspensionNote = reason ? `Cuenta suspendida: ${reason}` : 'Cuenta suspendida';
-        const r = await supabase.rpc('admin_set_organizer_verification', {
-          p_user_id: targetUserId,
-          p_status: 'rejected',
-          p_reason: suspensionNote,
-        });
-        if (r.error) throw r.error;
-      }
+      // The RPC updates suspension, verification and audit in one transaction.
+      ++listRequestKeyRef.current;
+      ++globalRequestRef.current;
+      const patchSuspension = (row: OrganizerRow): OrganizerRow => row.id === targetUserId
+        ? { ...row, is_suspended: isSuspended, suspended_reason: reason,
+            ...(isSuspended && row.role === 'organizer' ? {
+              verification_status: 'rejected', verification_rejection_reason: reason || 'Cuenta suspendida',
+            } : {}) }
+        : row;
+      setGlobalMatches(rows => rows.map(patchSuspension));
+      setOrganizers(rows => rows.map(patchSuspension));
       await fetchStats();
       await fetchOrganizers({ reset: true });
+      await fetchGlobalMatches();
       await fetchAuditLogs();
     } catch (e: any) {
       const msg = (e?.message || e?.details || e?.hint || '').toString().trim();
@@ -724,20 +728,6 @@ export default function AdminVerificationScreen() {
           showsVerticalScrollIndicator={false}
         >
           <View style={{ width: '100%', maxWidth: maxContentWidth }}>
-            {isAdminEmail && !isAdminDb && (
-              <GlassView intensity={10} style={[styles.alertCard, { borderColor: 'rgba(96, 165, 250, 0.35)' }]}>
-                <Text style={styles.alertTitle}>Permisos de administrador pendientes</Text>
-                <Text style={styles.alertText}>Activa tu rol de admin en la base de datos para poder realizar acciones.</Text>
-                <View style={{ marginTop: 12, flexDirection: 'row', gap: 10 }}>
-                  <ThemedButton
-                    title={bootstrappingAdmin ? 'Activando...' : 'Activar rol admin'}
-                    onPress={bootstrapRole}
-                    disabled={bootstrappingAdmin}
-                  />
-                </View>
-              </GlassView>
-            )}
-
             <View style={styles.statsGrid}>
               <GlassView intensity={12} style={styles.statCard}>
                 <Text style={styles.statLabel}>Pendientes</Text>

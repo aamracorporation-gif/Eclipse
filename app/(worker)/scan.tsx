@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import {
   StyleSheet, Text, View, TouchableOpacity, Modal, Alert,
-  Vibration, TextInput, ScrollView, KeyboardAvoidingView, Platform,
+  Vibration, TextInput, KeyboardAvoidingView, Platform,
 } from 'react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { router } from 'expo-router';
@@ -72,8 +72,8 @@ export default function WorkerScanScreen() {
           const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
           userLoc = { lat: loc.coords.latitude, lon: loc.coords.longitude };
         }
-      } catch (e) {
-        console.log('Could not get location:', e);
+      } catch {
+        console.warn('No se pudo obtener la ubicación para el escaneo.');
       }
 
       // Include events from the last 12 hours so overnight parties still show up
@@ -446,6 +446,8 @@ export default function WorkerScanScreen() {
 
                     <Text style={styles.detailLabel}>Tipo:</Text>
                     <Text style={styles.detailValue}>{result.ticket_type || 'General'}</Text>
+                    <Text style={styles.detailLabel}>Personas incluidas:</Text>
+                    <Text style={styles.detailValue}>{result.quantity || 1}</Text>
 
                     {result.scanned_at && (
                       <Text style={styles.scannedAtText}>

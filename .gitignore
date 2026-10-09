@@ -15,6 +15,24 @@ coverage/
 # Local env files (never commit secrets)
 .env
 backend/.env
+.env.*
+!.env.example
+backend/.env.*
+!backend/.env.example
+.dbg/
+*.jks
+*.keystore
+*.p8
+*.p12
+*.pem
+GoogleService-Info.plist
+google-services.json
+dist/
+dist-staging/
+docs/qa/sales-preview/
+scripts/qa/.preview-card.tsx
+scripts/qa/.preview-purchase.tsx
+android_backup/
 
 # OS / editor
 .DS_Store

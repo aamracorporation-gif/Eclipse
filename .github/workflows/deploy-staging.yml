@@ -1,0 +1,54 @@
+name: Deploy Supabase staging
+
+on:
+  workflow_dispatch:
+    inputs:
+      run_smoke_tests:
+        description: Run staging smoke tests after deploy
+        required: true
+        default: true
+        type: boolean
+concurrency:
+  group: supabase-staging
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: staging
+    steps:
+      - uses: actions/checkout@v4
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+      - name: Require a reviewed schema baseline
+        run: |
+          if [ -f supabase/migrations/99999999999999_full_schema_fix.sql ]; then
+            echo 'Staging schema has drifted. The legacy full_schema_fix migration can reopen RLS policies.' >&2
+            echo 'Create and verify a clean production-schema baseline before running this workflow.' >&2
+            exit 1
+          fi
+      - name: Link staging project
+        run: supabase link --project-ref "$SUPABASE_PROJECT_REF"
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+          SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_STAGING_PROJECT_REF }}
+      - name: Apply migrations
+        run: supabase db push --include-all
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+      - name: Deploy authenticated payment and Wallet functions
+        run: |
+          supabase functions deploy create-payment-intent-v2
+          supabase functions deploy confirm-payment
+          supabase functions deploy apple-wallet-generator
+          supabase functions deploy generate-wallet-pass
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      - name: Smoke test health
+        if: ${{ inputs.run_smoke_tests }}
+        run: curl --fail --retry 3 --max-time 15 "$STAGING_API_URL/health"
+        env:
+          STAGING_API_URL: ${{ secrets.STAGING_API_URL }}

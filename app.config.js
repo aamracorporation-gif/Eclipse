@@ -1,4 +1,5 @@
 const appJson = require('./app.json');
+const { validateBuildEnvironment } = require('./scripts/buildEnvironment.cjs');
 
 const PASSKITE_PLUGIN_PATH = './plugins/withPasskite';
 
@@ -25,14 +26,23 @@ const getHttpsHost = () => {
 };
 
 module.exports = () => {
+  validateBuildEnvironment();
   const host = getHttpsHost();
   const expoConfig = appJson.expo;
   const plugins = normalizePlugins(expoConfig.plugins);
+  const googleMapsApiKey = process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY;
+  const android = {
+    ...expoConfig.android,
+    ...(googleMapsApiKey
+      ? { config: { ...expoConfig.android?.config, googleMaps: { apiKey: googleMapsApiKey } } }
+      : {}),
+  };
 
   if (!host) {
     return {
       ...expoConfig,
       plugins,
+      android,
     };
   }
 
@@ -50,6 +60,11 @@ module.exports = () => {
           host,
           pathPrefix: '/evento',
         },
+        {
+          scheme: 'https',
+          host,
+          pathPrefix: '/auth',
+        },
       ],
       category: ['BROWSABLE', 'DEFAULT'],
       autoVerify: false,
@@ -60,7 +75,7 @@ module.exports = () => {
     ...expoConfig,
     plugins,
     android: {
-      ...expoConfig.android,
+      ...android,
       intentFilters,
     },
     ios: {

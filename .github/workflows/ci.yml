@@ -1,0 +1,58 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Validate release environment guards
+        run: node --test scripts/tests/buildEnvironment.test.cjs scripts/tests/stagingServices.test.cjs
+      - name: Audit production dependencies
+        run: npm audit --omit=dev --audit-level=critical
+      - name: Validate Expo dependency alignment
+        run: npx expo install --check
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm test -- --runInBand
+      - name: Validate Wallet signing and authorization with fixture credentials
+        run: |
+          export WALLET_TEST_DEPS="$(mktemp -d "$RUNNER_TEMP/eclipse-wallet.XXXXXX")"
+          npm install --prefix "$WALLET_TEST_DEPS" --ignore-scripts --no-audit --no-fund passkit-generator@3.1.10 jose@5.9.6
+          node scripts/qa/wallet-pass-regression.cjs
+      - name: Validate Expo web bundle
+        run: npm run build:web
+      - name: Backend dependencies and tests
+        working-directory: backend
+        run: npm ci && npm test
+
+  secret-scan:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

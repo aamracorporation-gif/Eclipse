@@ -4,6 +4,7 @@ import { View } from 'react-native';
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { DiscoLoader } from '@/components/ui/DiscoLoader';
+import { Colors } from '@/constants/Colors';
 
 export default function Index() {
   const { session, loading, user } = useAuth();
@@ -39,7 +40,7 @@ export default function Index() {
 
   if (loading || !resolvedHref) {
     return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#050510' }}>
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: Colors.dark.background }}>
         <DiscoLoader size={120} />
       </View>
     );

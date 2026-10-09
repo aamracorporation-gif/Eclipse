@@ -1,0 +1,25 @@
+{
+  "project": "Eclipse Staging",
+  "projectId": "uhondxttdpvywvkyqlkk",
+  "reviewedCommit": "72be44fcb59310e310ce1640b272f3639ec53706",
+  "functions": [
+    {
+      "slug": "generate-wallet-pass",
+      "status": "ACTIVE",
+      "version": 7,
+      "verify_jwt": true,
+      "ezbr_sha256": "3fb5f6c83dd173c14150786a5961f0a18b9578e00ff2695e6c8e49e92810c2a5"
+    },
+    {
+      "slug": "apple-wallet-generator",
+      "status": "ACTIVE",
+      "version": 4,
+      "verify_jwt": true,
+      "ezbr_sha256": "6667fdeb1dd0f647dd51ccdaa0c89d958e07fa2bb6d58b2bbc41703c99a24bff"
+    }
+  ],
+  "localRegressionTestsPassed": 24,
+  "googleSourceReadbackMatches": true,
+  "appleSourceReadback": "Unavailable: connector returned an internal error on both attempts. Deployment returned ACTIVE; subsequent inventory confirms version 4.",
+  "deviceInstallationVerified": false
+}

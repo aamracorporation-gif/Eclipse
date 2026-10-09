@@ -208,7 +208,10 @@ function createApp() {
       credentials: true,
     })
   );
-  app.use(morgan(env.nodeEnv === 'production' ? 'combined' : 'dev'));
+  // Auth query strings may contain one-time codes. Never write them to access logs.
+  app.use(morgan(env.nodeEnv === 'production' ? 'combined' : 'dev', {
+    skip: req => req.path.startsWith('/auth/'),
+  }));
 
   app.get('/', (req, res) => res.send('Eclipse API viva 🚀'));
   app.get('/health', (req, res) => {
@@ -271,56 +274,34 @@ function createApp() {
   // into the Eclipse app via deep link. URLs must be whitelisted in Supabase
   // Dashboard → Auth → URL Configuration → Redirect URLs.
 
-  function authRedirectHtml(title, heading, body, deepLink) {
-    return `<!doctype html>
-<html lang="es">
-<head>
-  <meta charset="utf-8"/>
-  <meta name="viewport" content="width=device-width,initial-scale=1"/>
-  <title>${title}</title>
-  <style>
-    *{box-sizing:border-box}
-    body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Arial,sans-serif;
-         background:#0b0b0f;color:#fff;margin:0;display:flex;align-items:center;
-         justify-content:center;min-height:100vh;padding:24px}
-    .card{max-width:440px;width:100%;background:rgba(255,255,255,.06);
-          border:1px solid rgba(255,255,255,.12);border-radius:18px;padding:28px;text-align:center}
-    h2{margin:0 0 10px;font-size:22px}
-    p{color:rgba(255,255,255,.7);font-size:15px;line-height:1.5;margin:0 0 20px}
-    .btn{display:inline-block;padding:14px 28px;border-radius:12px;background:#7C3AED;
-         color:#fff;font-weight:700;font-size:16px;text-decoration:none;margin:4px}
-    .spinner{width:40px;height:40px;border:3px solid rgba(255,255,255,.15);
-             border-top-color:#7C3AED;border-radius:50%;animation:spin .8s linear infinite;margin:0 auto 16px}
-    @keyframes spin{to{transform:rotate(360deg)}}
-    .logo{font-size:28px;margin-bottom:12px}
-  </style>
-</head>
-<body>
-  <div class="card">
-    <div class="logo">☀️</div>
-    <div class="spinner"></div>
-    <h2>${heading}</h2>
-    <p>${body}</p>
-    <a class="btn" id="openBtn" href="${deepLink}">Abrir Eclipse</a>
-  </div>
-  <script>
-    (function(){
-      var deep = ${JSON.stringify(deepLink)};
-      // Pick up any hash fragment tokens (legacy implicit flow)
-      var hash = window.location.hash;
-      if (hash && hash.length > 1) {
-        deep = deep + (deep.includes('?') ? '&' : '?') + hash.slice(1);
-        document.getElementById('openBtn').href = deep;
-      }
-      try { window.location.href = deep; } catch(e){}
-    })();
-  </script>
-</body>
-</html>`;
+  function escapeAuthHtml(value) {
+    return String(value).replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
   }
 
-  const SUPABASE_URL_CONST = process.env.SUPABASE_URL || 'https://zurbdrfmwjqbrscairub.supabase.co';
-  const ANON_CONST = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp1cmJkcmZtd2pxYnJzY2FpcnViIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjcyODgyNTcsImV4cCI6MjA4Mjg2NDI1N30.e81tNdU21I67m9UleGKf5t4n6vy8dGdLuJIJtSPFDIQ';
+  // External script is compatible with Helmet's script-src 'self' policy.
+  app.get('/auth/open.js', (_req, res) => {
+    res.type('application/javascript').send(`
+      (function () {
+        var button = document.getElementById('openBtn');
+        if (!button) return;
+        var base = button.getAttribute('href');
+        var hash = window.location.hash.slice(1);
+        var params = new URLSearchParams(hash);
+        if (params.get('type') === 'recovery') {
+          base = 'eclipse://auth/reset-password' + (base.includes('?') ? base.slice(base.indexOf('?')) : '');
+        }
+        var deep = hash ? base + (base.includes('?') ? '&' : '?') + hash : base;
+        button.href = deep;
+        var spinner = document.getElementById('sp');
+        if (spinner) spinner.style.display = 'none';
+        try { window.location.href = deep; } catch (_) {}
+      })();
+    `);
+  });
+  app.use('/auth', (_req, res, next) => {
+    res.setHeader('Referrer-Policy', 'no-referrer');
+    next();
+  });
 
   function deepLinkPage(deepLink, title, subtitle) {
     return `<!doctype html>
@@ -347,19 +328,10 @@ p{color:rgba(255,255,255,.55);font-size:15px;line-height:1.5;margin-bottom:28px}
   <div class="sp" id="sp"></div>
   <h2>${title}</h2>
   <p>${subtitle}</p>
-  <a class="open-btn" href="${deepLink}" id="openBtn">Abrir Eclipse</a>
+  <a class="open-btn" href="${escapeAuthHtml(deepLink)}" id="openBtn">Abrir Eclipse</a>
   <p class="hint">Si no se abre, asegúrate de tener Eclipse instalado.</p>
 </div>
-<script>
-window.addEventListener('load', function(){
-  var deep = ${JSON.stringify(deepLink)};
-  document.getElementById('sp').style.display = 'none';
-  try { window.location.href = deep; } catch(e){}
-  setTimeout(function(){
-    document.getElementById('openBtn').style.display = 'block';
-  }, 800);
-});
-</script>
+<script src="/auth/open.js" defer></script>
 </body></html>`;
   }
 
@@ -370,8 +342,6 @@ window.addEventListener('load', function(){
     res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
     res.setHeader('Pragma', 'no-cache');
     const tokenHash = req.query.token_hash || '';
-    const SUPABASE_URL = SUPABASE_URL_CONST;
-
     if (!tokenHash) {
       return res.status(200).send(deepLinkPage(
         'eclipse://auth/reset-password',
@@ -428,19 +398,10 @@ p{color:rgba(255,255,255,.55);font-size:15px;line-height:1.5;margin-bottom:28px}
   <div class="sp"></div>
   <h2>${title}</h2>
   <p>${subtitle}</p>
-  <a class="open-btn" id="openBtn" href="${deepLink}">Abrir Eclipse</a>
+  <a class="open-btn" id="openBtn" href="${escapeAuthHtml(deepLink)}">Abrir Eclipse</a>
   <p class="hint">Si no se abre, asegúrate de tener Eclipse instalado.</p>
 </div>
-<script>
-window.addEventListener('load', function(){
-  var base = ${JSON.stringify(deepLink)};
-  // Añadir hash fragment si existe (access_token en implicit flow)
-  var hash = window.location.hash;
-  var deep = hash && hash.length > 1 ? base + (base.includes('?') ? '&' : '?') + hash.slice(1) : base;
-  document.getElementById('openBtn').href = deep;
-  try { window.location.href = deep; } catch(e){}
-});
-</script>
+<script src="/auth/open.js" defer></script>
 </body></html>`);
   });
   // ────────────────────────────────────────────────────────────────────────────
@@ -613,9 +574,18 @@ window.addEventListener('load', function(){
 </html>`);
   });
   app.get('/qa', (req, res) => {
+    if (process.env.QA_BOARD_ENABLED !== 'true') return res.status(404).send('Not found');
+    const expectedUser = String(process.env.QA_BOARD_USER || '');
+    const expectedPassword = String(process.env.QA_BOARD_PASSWORD || '');
+    const [scheme, encoded] = String(req.headers.authorization || '').split(' ');
+    const credentials = scheme === 'Basic' && encoded ? Buffer.from(encoded, 'base64').toString('utf8') : '';
+    if (!expectedUser || !expectedPassword || credentials !== `${expectedUser}:${expectedPassword}`) {
+      res.setHeader('WWW-Authenticate', 'Basic realm="Eclipse QA"');
+      return res.status(401).send('Authentication required');
+    }
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
-    const SB_URL  = 'https://zurbdrfmwjqbrscairub.supabase.co';
-    const SB_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp1cmJkcmZtd2pxYnJzY2FpcnViIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjcyODgyNTcsImV4cCI6MjA4Mjg2NDI1N30.e81tNdU21I67m9UleGKf5t4n6vy8dGdLuJIJtSPFDIQ';
+    const SB_URL = env.supabaseUrl;
+    const SB_ANON = env.supabaseAnonKey;
     return res.status(200).send(buildQaHtml(SB_URL, SB_ANON));
   });
 

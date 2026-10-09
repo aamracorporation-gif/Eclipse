@@ -110,6 +110,7 @@ CREATE OR REPLACE FUNCTION ensure_wallet_exists(p_user_id uuid)
 RETURNS json
 LANGUAGE plpgsql
 SECURITY DEFINER
+SET search_path = public, pg_temp
 AS $$
 DECLARE
   v_wallet_id uuid;
@@ -122,6 +123,9 @@ BEGIN
   RETURN json_build_object('wallet_id', v_wallet_id);
 END;
 $$;
+
+REVOKE ALL ON FUNCTION ensure_wallet_exists(uuid) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION ensure_wallet_exists(uuid) TO service_role;
 
 -- 7. Función de compra actualizada (Lógica de entradas individuales + Bloqueo Estricto)
 CREATE OR REPLACE FUNCTION purchase_ticket(
@@ -137,6 +141,7 @@ CREATE OR REPLACE FUNCTION purchase_ticket(
 RETURNS json
 LANGUAGE plpgsql
 SECURITY DEFINER
+SET search_path = public, pg_temp
 AS $$
 DECLARE
   v_event_available integer;
@@ -231,6 +236,9 @@ BEGIN
   RETURN json_build_object('ticket_ids', v_ticket_ids);
 END;
 $$;
+
+REVOKE ALL ON FUNCTION purchase_ticket(uuid, uuid, text, text, integer, numeric, text, uuid) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION purchase_ticket(uuid, uuid, text, text, integer, numeric, text, uuid) TO service_role;
 
 -- 8. Función de compra con wallet actualizada
 CREATE OR REPLACE FUNCTION buy_ticket_with_wallet(
