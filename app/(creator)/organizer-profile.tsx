@@ -1,5 +1,6 @@
 import { GlassView } from '@/components/ui/GlassView';
 import { profileAppearance } from '@/theme/profileAppearance';
+import { SubscriptionShortcut } from '@/components/SubscriptionShortcut';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, KeyboardAvoidingView, Modal, Platform, Pressable, RefreshControl, ScrollView, StatusBar, StyleSheet, Switch, Text, TextInput, View, useWindowDimensions } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -604,6 +605,7 @@ export default function OrganizerProfileTab() {
             </View>
           </GlassView>
 
+          <SubscriptionShortcut />
           {banner && (
             <View style={[ui.banner, bannerStyle]} accessibilityRole="alert">
               <Text style={ui.bannerText}>{banner.text}</Text>
