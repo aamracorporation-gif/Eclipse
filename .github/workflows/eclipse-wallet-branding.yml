@@ -1,0 +1,81 @@
+name: Deploy Eclipse Wallet branding staging
+on:
+  push:
+    branches: [release/testflight-apk-20261009]
+    paths: [.github/workflows/eclipse-wallet-branding.yml]
+permissions:
+  contents: read
+concurrency:
+  group: supabase-staging
+  cancel-in-progress: false
+jobs:
+  branding:
+    runs-on: ubuntu-latest
+    environment: staging
+    timeout-minutes: 15
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: cccd8d2c6d13827388a631fc62e755b67db68923
+          persist-credentials: false
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+      - name: Check CLI and project access
+        run: |
+          test -n "$SUPABASE_ACCESS_TOKEN"
+          supabase functions download --help
+          supabase functions deploy --help
+          node - <<'NODE'
+          (async()=>{
+            const r=await fetch('https://api.supabase.com/v1/projects/uhondxttdpvywvkyqlkk/functions',{headers:{Authorization:'Bearer '+process.env.SUPABASE_ACCESS_TOKEN}});
+            if(!r.ok)throw Error('Staging function inventory unavailable: '+r.status);
+            const f=(await r.json()).find(f=>f.slug==='apple-wallet-generator'||f.name==='apple-wallet-generator');
+            if(!f||f.version!==16||f.verify_jwt!==true)throw Error('Wallet version changed; inspect before deploying');
+            console.log('WALLET_BEFORE='+JSON.stringify({version:f.version,verify_jwt:f.verify_jwt,status:f.status}));
+          })().catch(e=>{console.error(e.message);process.exitCode=1});
+          NODE
+      - name: Download current Wallet implementation
+        run: |
+          mkdir -p "$RUNNER_TEMP/eclipse-wallet-deploy"
+          cd "$RUNNER_TEMP/eclipse-wallet-deploy"
+          supabase functions download apple-wallet-generator --project-ref uhondxttdpvywvkyqlkk --use-api
+      - name: Apply only the tested icon override
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import os
+          root=Path(os.environ['RUNNER_TEMP'])/'eclipse-wallet-deploy'
+          p=root/'supabase/functions/apple-wallet-generator/index.ts'
+          s=p.read_text()
+          expected='import { WALLET_ASSETS } from "./bundledAssets.ts";'
+          if s.count(expected)!=1 or 'WALLET_BRANDING' in s:
+              raise RuntimeError('Unexpected deployed module; inspection required')
+          s=s.replace(expected, expected+'\nimport { WALLET_BRANDING } from "./brandingAssets.ts";\nconst PASS_ARTWORK = { ...WALLET_ASSETS, ...WALLET_BRANDING };')
+          if 'WALLET_ASSETS[' not in s:
+              raise RuntimeError('Expected image lookup missing')
+          s=s.replace('WALLET_ASSETS[','PASS_ARTWORK[')
+          p.write_text(s)
+          (p.parent/'brandingAssets.ts').write_bytes(Path('supabase/functions/apple-wallet-generator/brandingAssets.ts').read_bytes())
+          (root/'supabase/config.toml').write_text('project_id = "eclipse-wallet-staging"\n[functions.apple-wallet-generator]\nverify_jwt = true\n')
+          print('Only pass image lookup and branded icon module changed; existing dependencies retained.')
+          PY
+      - name: Deploy Wallet only
+        run: |
+          cd "$RUNNER_TEMP/eclipse-wallet-deploy"
+          supabase functions deploy apple-wallet-generator --project-ref uhondxttdpvywvkyqlkk --use-api
+      - name: Verify deployment and authentication gate
+        run: |
+          node - <<'NODE'
+          (async()=>{
+            const r=await fetch('https://api.supabase.com/v1/projects/uhondxttdpvywvkyqlkk/functions',{headers:{Authorization:'Bearer '+process.env.SUPABASE_ACCESS_TOKEN}});
+            if(!r.ok)throw Error('Cannot verify deployed function');
+            const f=(await r.json()).find(f=>f.slug==='apple-wallet-generator'||f.name==='apple-wallet-generator');
+            if(!f||f.version<=16||f.verify_jwt!==true||f.status!=='ACTIVE')throw Error('Deployment verification failed');
+            const response=await fetch('https://uhondxttdpvywvkyqlkk.supabase.co/functions/v1/apple-wallet-generator',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});
+            if(response.status!==401)throw Error('Expected anonymous request rejection');
+            console.log('WALLET_DEPLOYED='+JSON.stringify({version:f.version,status:f.status,verify_jwt:f.verify_jwt,anonymousStatus:response.status}));
+          })().catch(e=>{console.error(e.message);process.exitCode=1});
+          NODE
