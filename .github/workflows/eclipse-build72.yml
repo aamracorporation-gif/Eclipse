@@ -87,7 +87,7 @@ jobs:
             process.env.ECLIPSE_BUILD_ENV='staging';
             require('./scripts/buildEnvironment.cjs').validateBuildEnvironment();
             const config=require('./eas.json');
-            if(config.build.preview.android.buildType!=='apk'||config.build.preview.environment!=='preview'||config.build.testflight.extends!=='preview'||config.submit.testflight.ios.ascAppId!=='6773072994')throw Error('Unexpected release profile');
+            if(config.build.preview.android.buildType!=='apk'||config.build.preview.environment!=='preview'||config.build.testflight.extends!=='preview'||config.submit.testflight.ios.ascAppId!=='6773071994')throw Error('Unexpected release profile');
             let app=await snapshot();
             app=await snapshot();let ios=candidate(app,'IOS','testflight','72');
             if(!ios){
@@ -98,7 +98,7 @@ jobs:
               if(!id||ios?.id!==id)throw Error('iOS creation requires inspection');
             }
             console.log('IOS_BUILD='+JSON.stringify(safe(ios)));
-            if(ios.submissions?.some(s=>s.iosConfig?.ascAppIdentifier!=='6773072994'))throw Error('Unexpected submission target');
+            if(ios.submissions?.some(s=>s.iosConfig?.ascAppIdentifier!=='6773071994'))throw Error('Unexpected submission target');
             console.log('APPLE_ACCEPTANCE_CONFIRMED=false');
             const deadline=Date.now()+45*60*1000;
             while(Date.now()<deadline){
