@@ -4,6 +4,7 @@ import { Session, User } from '@supabase/supabase-js';
 import { unregisterPushNotifications } from './notifications';
 import * as Linking from 'expo-linking';
 import { resolveAuthRedirect } from './authRedirect';
+import { signupResultError } from './signupResult';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { invokeEdgeFunctionStrict } from '@/lib/edgeFunctions';
 
@@ -203,7 +204,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         'Sign up'
       );
 
-      return { data, error };
+      return { data, error: error || signupResultError(data) };
     } catch (err: any) {
       return { data: null, error: err };
     }
