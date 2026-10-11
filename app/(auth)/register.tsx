@@ -533,13 +533,21 @@ export default function RegisterScreen() {
 
       showDialog({
         title: 'Confirma tu email',
-        message: 'Te enviamos un enlace de confirmación. Revisa tu correo electrónico y confirma tu cuenta para continuar.',
+        message: 'Revisa tu correo para confirmar el registro. Si ya tienes una cuenta con este email, inicia sesión o recupera tu contraseña.',
         actions: [{ label: 'Continuar', onPress: () => setStep(5), variant: 'primary' }],
       });
 
     } catch (error: any) {
       const msg = error?.message ? String(error.message) : 'Ocurrió un error.';
       const lower = msg.toLowerCase();
+      if (error?.code === 'SIGNUP_NOT_CREATED' || error?.code === 'user_already_exists' || lower.includes('already registered')) {
+        showDialog({
+          title: 'No se ha creado una cuenta nueva',
+          message: 'Si ya tienes una cuenta con este correo, inicia sesión con tu contraseña o usa «He olvidado mi contraseña».',
+          actions: [{ label: 'Ir a iniciar sesión', onPress: () => router.replace('/(auth)/login'), variant: 'primary' }],
+        });
+        return;
+      }
       if (lower.includes('error sending confirmation email') || lower.includes('error sending email') || lower.includes('smtp')) {
         showDialog({
           title: 'No se pudo enviar el correo de confirmación',
@@ -963,6 +971,10 @@ export default function RegisterScreen() {
           return;
         }
         throw signInError;
+      }
+
+      if (!signInData?.user?.id || !signInData?.session?.access_token) {
+        throw new Error('No se pudo verificar el acceso. Inicia sesión de nuevo.');
       }
 
       signInOk = true;
