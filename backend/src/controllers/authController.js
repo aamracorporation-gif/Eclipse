@@ -47,6 +47,15 @@ const register = asyncHandler(async (req, res) => {
     return res.status(status).json({ ok: false, error: msg || 'Failed to register' });
   }
 
+  // Supabase can return an obfuscated user for an existing confirmed email.
+  // This is not a new account and must not be advertised as successful signup.
+  if (!data?.user?.id || (!data?.session && Array.isArray(data.user.identities) && data.user.identities.length === 0)) {
+    return res.status(400).json({
+      ok: false, code: 'SIGNUP_NOT_CREATED',
+      error: 'No se ha creado una cuenta nueva. Si ya tienes cuenta, inicia sesión o recupera tu contraseña.',
+    });
+  }
+
   const userId = String(data?.user?.id || '');
   const accessToken = String(data?.session?.access_token || '');
 
