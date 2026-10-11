@@ -57,3 +57,18 @@ test('signup keeps ordinary errors unsuccessful', async () => {
   assert.equal(result.status, 400);
   assert.equal(result.body.ok, false);
 });
+
+test('obfuscated duplicate signup never returns success or a token', async () => {
+  auth.signUp = async () => ({ data: { user: { id: 'fake', identities: [] }, session: null }, error: null });
+  const result = await request();
+  assert.equal(result.status, 400);
+  assert.equal(result.body.code, 'SIGNUP_NOT_CREATED');
+  assert.equal(result.body.access_token, undefined);
+});
+
+test('missing signup user fails closed', async () => {
+  auth.signUp = async () => ({ data: { user: null, session: null }, error: null });
+  const result = await request();
+  assert.equal(result.status, 400);
+  assert.equal(result.body.ok, false);
+});
