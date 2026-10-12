@@ -473,7 +473,7 @@ export default function RegisterScreen() {
     }
 
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(email)) {
+    if (!emailRegex.test(email.trim())) {
       showDialog({ title: 'Email inválido', message: 'Por favor ingresa un correo válido.' });
       return;
     }
@@ -533,13 +533,21 @@ export default function RegisterScreen() {
 
       showDialog({
         title: 'Confirma tu email',
-        message: 'Revisa tu correo para confirmar el registro. Si ya tienes una cuenta con este email, inicia sesión o recupera tu contraseña.',
+        message: 'Revisa tu correo para confirmar el registro. Debes verificarlo antes de acceder a tu cuenta.',
         actions: [{ label: 'Continuar', onPress: () => setStep(5), variant: 'primary' }],
       });
 
     } catch (error: any) {
       const msg = error?.message ? String(error.message) : 'Ocurrió un error.';
       const lower = msg.toLowerCase();
+      if (['EMAIL_ALREADY_REGISTERED', 'user_already_exists', 'email_exists'].includes(error?.code) || lower.includes('already registered')) {
+        showDialog({
+          title: 'Este correo ya está registrado',
+          message: 'No puedes crear otra cuenta con este correo. Inicia sesión con tu contraseña o recupérala si la has olvidado.',
+          actions: [{ label: 'Ir a iniciar sesión', onPress: () => router.replace('/(auth)/login'), variant: 'primary' }],
+        });
+        return;
+      }
       if (error?.code === 'SIGNUP_NOT_CREATED' || error?.code === 'user_already_exists' || lower.includes('already registered')) {
         showDialog({
           title: 'No se ha creado una cuenta nueva',
