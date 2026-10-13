@@ -1,4 +1,4 @@
-name: Eclipse build 73 and TestFlight
+name: Eclipse auth fix and TestFlight
 on:
   push:
     branches: [release/testflight-apk-20261009]
@@ -39,7 +39,7 @@ jobs:
         with:
           eas-version: 18.0.1
           token: ${{ secrets.EXPO_TOKEN }}
-      - name: Queue iOS 73 with automatic TestFlight submission
+      - name: Queue iOS auth fix with automatic TestFlight submission
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
         run: |
@@ -89,12 +89,19 @@ jobs:
             const config=require('./eas.json');
             if(config.build.preview.android.buildType!=='apk'||config.build.preview.environment!=='preview'||config.build.testflight.extends!=='preview'||config.submit.testflight.ios.ascAppId!=='6773071994')throw Error('Unexpected release profile');
             let app=await snapshot();
-            app=await snapshot();let ios=candidate(app,'IOS','testflight','73');
+            console.log('PREBUILD_STATE='+JSON.stringify({ios:app.ios,builds:app.builds.filter(b=>b.platform==='IOS').map(safe)}));
+            const existing=app.builds.filter(b=>b.gitCommitHash===sha&&b.platform==='IOS'&&b.buildProfile==='testflight');
+            if(existing.length>1)throw Error('Multiple source builds require inspection');
+            const latest=String(app.ios?.buildVersion);
+            const version=existing[0]?String(existing[0].appBuildVersion):String(Number(latest)+1);
+            if(!['73','74'].includes(version))throw Error('Unexpected next version requires inspection');
+            let ios=candidate(app,'IOS','testflight',version);
             if(!ios){
-              if(String(app.ios?.buildVersion)!=='72')throw Error('Expected iOS version 72 before creating 73');
-              const raw=JSON.parse(eas(['build','--platform','ios','--profile','testflight','--auto-submit-with-profile','testflight','--message','Eclipse 73: block duplicate email registration','--non-interactive','--no-wait','--json']));
+              if(!['72','73'].includes(latest))throw Error('Unexpected remote version');
+              if(latest==='73'&&app.builds.some(b=>b.platform==='IOS'&&String(b.appBuildVersion)==='73'))throw Error('Build 73 exists; inspect before creating another');
+              const raw=JSON.parse(eas(['build','--platform','ios','--profile','testflight','--auto-submit-with-profile','testflight','--message','Eclipse '+version+': block duplicate email registration','--non-interactive','--no-wait','--json']));
               const id=(Array.isArray(raw)?raw[0]:raw)?.id;
-              app=await snapshot();ios=candidate(app,'IOS','testflight','73');
+              app=await snapshot();ios=candidate(app,'IOS','testflight',version);
               if(!id||ios?.id!==id)throw Error('iOS creation requires inspection');
             }
             console.log('IOS_BUILD='+JSON.stringify(safe(ios)));
@@ -103,7 +110,7 @@ jobs:
             const deadline=Date.now()+45*60*1000;
             while(Date.now()<deadline){
               app=await snapshot();
-              ios=candidate(app,'IOS','testflight','73');
+              ios=candidate(app,'IOS','testflight',version);
               console.log('RELEASE_STATUS='+JSON.stringify({ios:safe(ios)}));
               if(ios.submissions?.some(s=>['ERRORED','CANCELED'].includes(s.status)))throw Error('iOS submission failed');
               if(ios.status==='FINISHED'&&ios.submissions?.some(s=>s.status==='FINISHED')){
