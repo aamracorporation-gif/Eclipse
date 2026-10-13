@@ -15,7 +15,7 @@ test('database preserves ticket and payment history when deleting events', async
     CREATE TABLE payment_transactions(id uuid PRIMARY KEY DEFAULT gen_random_uuid(), status text, metadata jsonb NOT NULL DEFAULT '{}');
     INSERT INTO payment_transactions(status,metadata) VALUES('created','{"event_id":"${orphan}"}');
   `);
-  await db.exec(fs.readFileSync(path.join(__dirname,'../../supabase/migrations/20261013224156_protect_event_purchase_history.sql'),'utf8'));
+  await db.exec(fs.readFileSync(path.join(__dirname,'../../supabase/migrations/20261013224912_protect_event_purchase_history.sql'),'utf8'));
   const event = async sold => (await db.query('INSERT INTO events(sold_tickets) VALUES($1) RETURNING id',[sold||0])).rows[0].id;
   const remove = id => db.query('DELETE FROM events WHERE id=$1',[id]);
   const present = async id => assert.equal((await db.query('SELECT count(*)::int n FROM events WHERE id=$1',[id])).rows[0].n,1);
