@@ -4,6 +4,7 @@ import { Session, User } from '@supabase/supabase-js';
 import { unregisterPushNotifications } from './notifications';
 import * as Linking from 'expo-linking';
 import { resolveAuthRedirect } from './authRedirect';
+import { normalizeSignupEmail, signupResultError } from './signupResult';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { invokeEdgeFunctionStrict } from '@/lib/edgeFunctions';
 
@@ -192,7 +193,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       const { data, error } = await withTimeout(
         supabase.auth.signUp({
-          email,
+          email: normalizeSignupEmail(email),
           password,
           options: {
             data: metadata,
@@ -203,7 +204,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         'Sign up'
       );
 
-      return { data, error };
+      const signupError = error || signupResultError(data);
+      return { data: signupError ? null : data, error: signupError };
     } catch (err: any) {
       return { data: null, error: err };
     }

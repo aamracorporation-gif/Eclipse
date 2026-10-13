@@ -637,9 +637,6 @@ export default function TicketsScreen() {
               <Text style={{color:'#17101E',fontSize:11,fontWeight:'900',letterSpacing:3}}>E C L I P S E</Text>
               <Text style={{color:'#17101E',fontSize:10,fontWeight:'800',letterSpacing:1}}>{tierConfig.label}</Text>
             </View>
-            <View style={{position:'absolute',top:153,left:20,paddingHorizontal:10,paddingVertical:6,backgroundColor:'#14101F',borderWidth:1,borderColor:theme.accent,borderRadius:4}}>
-              <Text style={{color:theme.accent,fontSize:10,fontWeight:'700',letterSpacing:1}}>{product.metadata.salePhase||'NIGHT ACCESS'} / {(item.short_code||item.id.slice(0,6)).toUpperCase()}</Text>
-            </View>
             {/* ── Status stamp top-right ── */}
             {(isResale || isUsed) && (
               <View style={[styles.tcStamp, isUsed ? styles.tcStampUsed : styles.tcStampResale]}>
@@ -651,12 +648,14 @@ export default function TicketsScreen() {
 
             {/* ── Event info bottom ── */}
             <View style={styles.tcPosterInfo}>
-              <Text style={styles.tcEventName} numberOfLines={2}>{item.events?.title || '—'}</Text>
+              <View style={[styles.tcAccessBadge, { borderColor: theme.accent }]}>
+                <Text style={{color:theme.accent,fontSize:10,fontWeight:'700',letterSpacing:1}}>{product.metadata.salePhase||'NIGHT ACCESS'} / {(item.short_code||item.id.slice(0,6)).toUpperCase()}</Text>
+              </View>
+              <Text style={styles.tcEventName}>{item.events?.title || '—'}</Text>
+              <Text style={[styles.tcMetaText, styles.tcVenue]}>
+                {item.events?.venues?.name || t('tickets_pdf.location_tbd')}
+              </Text>
               <View style={styles.tcMetaRow}>
-                <Text style={styles.tcMetaText} numberOfLines={1}>
-                  {item.events?.venues?.name || t('tickets_pdf.location_tbd')}
-                </Text>
-                <View style={[styles.tcMetaDot, { backgroundColor: tierConfig.accent }]} />
                 <Text style={styles.tcMetaText}>{shortDate}</Text>
                 <View style={[styles.tcMetaDot, { backgroundColor: tierConfig.accent }]} />
                 <Text style={styles.tcMetaText}>{time}</Text>
@@ -697,9 +696,6 @@ export default function TicketsScreen() {
                 </View>
               ) : null}
             </View>
-
-            {/* Divider */}
-            <View style={[styles.tcVertDivider, { backgroundColor: `${tierConfig.accent}30` }]} />
 
             {/* QR */}
             <View style={styles.tcQrWrap}>
@@ -1051,7 +1047,7 @@ const styles = StyleSheet.create({
 
   // Poster
   tcPoster: {
-    minHeight: 302,
+    paddingTop: 153,
     overflow: 'hidden',
     backgroundColor: '#07070F',
   },
@@ -1089,7 +1085,7 @@ const styles = StyleSheet.create({
   },
   tcStamp: {
     position: 'absolute',
-    top: 14,
+    top: 60,
     right: 14,
     borderWidth: 1.5,
     paddingHorizontal: 9,
@@ -1108,20 +1104,29 @@ const styles = StyleSheet.create({
     letterSpacing: 1.8,
   },
   tcPosterInfo: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
     paddingHorizontal: 16,
     paddingBottom: 16,
     zIndex: 5,
   },
+  tcAccessBadge: {
+    alignSelf: 'flex-start',
+    maxWidth: '100%',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    marginBottom: 14,
+    backgroundColor: '#14101F',
+    borderWidth: 1,
+    borderRadius: 4,
+  },
+  tcVenue: {
+    marginTop: 10,
+  },
   tcEventName: {
-    fontSize: 27,
+    fontSize: 24,
     fontWeight: '800',
     color: '#FFFFFF',
     letterSpacing: -0.9,
-    lineHeight: 31,
+    lineHeight: 30,
     textShadowColor: 'rgba(0,0,0,0.8)',
     textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 6,
@@ -1186,6 +1191,8 @@ const styles = StyleSheet.create({
   // Lower body
   tcBody: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
     paddingHorizontal: 16,
     paddingVertical: 18,
     gap: 14,
@@ -1193,6 +1200,7 @@ const styles = StyleSheet.create({
   },
   tcFields: {
     flex: 1,
+    minWidth: 120,
     gap: 12,
   },
   tcField: {},
@@ -1221,12 +1229,14 @@ const styles = StyleSheet.create({
     borderRadius: 1,
   },
   tcQrWrap: {
+    width: 132,
+    flexShrink: 0,
     alignItems: 'center',
     gap: 8,
   },
   tcQrBox: {
-    width: 116,
-    height: 116,
+    width: 124,
+    height: 124,
     borderRadius: 12,
     borderWidth: 1,
     overflow: 'hidden',
@@ -1254,6 +1264,7 @@ const styles = StyleSheet.create({
     borderRadius: 3,
   },
   tcScanHint: {
+    textAlign: 'center',
     fontSize: 9,
     fontWeight: '600',
     letterSpacing: 0.8,
@@ -1270,7 +1281,8 @@ const styles = StyleSheet.create({
   },
   tcActionBtn: {
     flex: 1,
-    height: 38,
+    minHeight: 44,
+    paddingVertical: 8,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',

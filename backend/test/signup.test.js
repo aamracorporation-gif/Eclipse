@@ -44,7 +44,7 @@ for (const error of [
 }
 
 test('signup awaiting confirmation never claims an authenticated session', async () => {
-  auth.signUp = async () => ({ data: { user: { id: 'qa-user', email: 'qa@example.test' }, session: null }, error: null });
+  auth.signUp = async () => ({ data: { user: { id: 'qa-user', identities: [{}], email: 'qa@example.test' }, session: null }, error: null });
   const result = await request();
   assert.equal(result.status, 201);
   assert.equal(result.body.requires_email_verification, true);
@@ -56,4 +56,45 @@ test('signup keeps ordinary errors unsuccessful', async () => {
   const result = await request();
   assert.equal(result.status, 400);
   assert.equal(result.body.ok, false);
+});
+
+test('obfuscated duplicate signup never returns success or a token', async () => {
+  auth.signUp = async () => ({ data: { user: { id: 'fake', identities: [] }, session: null }, error: null });
+  const result = await request();
+  assert.equal(result.status, 409);
+  assert.equal(result.body.code, 'EMAIL_ALREADY_REGISTERED');
+  assert.equal(result.body.access_token, undefined);
+});
+
+test('missing signup user fails closed', async () => {
+  auth.signUp = async () => ({ data: { user: null, session: null }, error: null });
+  const result = await request();
+  assert.equal(result.status, 400);
+  assert.equal(result.body.ok, false);
+});
+
+for (const code of ['user_already_exists', 'email_exists']) {
+  test(`explicit duplicate ${code} returns conflict without authentication`, async () => {
+    auth.signUp = async () => ({ data: null, error: { code, message: 'Already registered' } });
+    const result = await request();
+    assert.equal(result.status, 409);
+    assert.equal(result.body.code, 'EMAIL_ALREADY_REGISTERED');
+    assert.equal(result.body.access_token, undefined);
+  });
+}
+
+test('normalizes email before calling the identity provider', async () => {
+  auth.signUp = async (input) => {
+    assert.equal(input.email, 'qa@example.test');
+    return { data: { user: { id: 'duplicate', identities: [] } }, error: null };
+  };
+  const result = await request({ email: '  QA@EXAMPLE.TEST  ' });
+  assert.equal(result.status, 409);
+});
+
+test('missing identities and session fail closed', async () => {
+  auth.signUp = async () => ({ data: { user: { id: 'unknown' } }, error: null });
+  const result = await request();
+  assert.equal(result.status, 400);
+  assert.equal(result.body.access_token, undefined);
 });

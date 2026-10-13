@@ -4,13 +4,13 @@ const { supabaseAnon } = require('../services/supabaseService');
 
 const registerSchema = z.object({
   name: z.string().min(1).max(120),
-  email: z.string().email(),
+  email: z.string().trim().toLowerCase().email(),
   password: z.string().min(8).max(200),
   role: z.enum(['CLIENT', 'ORGANIZER']),
 });
 
 const loginSchema = z.object({
-  email: z.string().email(),
+  email: z.string().trim().toLowerCase().email(),
   password: z.string().min(1).max(200),
 });
 
@@ -43,8 +43,25 @@ const register = asyncHandler(async (req, res) => {
       });
     }
 
+    if (['user_already_exists', 'email_exists'].includes(error.code) || lower.includes('already registered')) {
+      return res.status(409).json({ ok: false, code: 'EMAIL_ALREADY_REGISTERED', error: 'Este correo ya está registrado. Inicia sesión o recupera tu contraseña.' });
+    }
     const status = lower.includes('already') ? 409 : 400;
     return res.status(status).json({ ok: false, error: msg || 'Failed to register' });
+  }
+
+  // Supabase can return an obfuscated user for an existing confirmed email.
+  // This is not a new account and must not be advertised as successful signup.
+  if (data?.user?.id && Array.isArray(data.user.identities) && data.user.identities.length === 0) {
+    return res.status(409).json({ ok: false, code: 'EMAIL_ALREADY_REGISTERED', error: 'Este correo ya está registrado. Inicia sesión o recupera tu contraseña.' });
+  }
+  const hasIdentity = Array.isArray(data?.user?.identities) && data.user.identities.length > 0;
+  const hasSession = !!data?.session?.access_token && data.session.user?.id === data?.user?.id;
+  if (!data?.user?.id || (!hasIdentity && !hasSession)) {
+    return res.status(400).json({
+      ok: false, code: 'SIGNUP_NOT_CREATED',
+      error: 'No se ha creado una cuenta nueva. Si ya tienes cuenta, inicia sesión o recupera tu contraseña.',
+    });
   }
 
   const userId = String(data?.user?.id || '');

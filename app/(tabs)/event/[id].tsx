@@ -26,7 +26,7 @@ import { useTranslation } from 'react-i18next';
 import { invokeEdgeFunctionStrict } from '@/lib/edgeFunctions';
 import { useAppDialog } from '@/components/ui/AppDialog';
 import { useFocusEffect } from '@react-navigation/native';
-import * as ExpoLinking from 'expo-linking';
+import { eventShareUrl } from '@/lib/eventLinks';
 
 export default function EventDetailScreen() {
   const { id } = useLocalSearchParams();
@@ -40,6 +40,7 @@ export default function EventDetailScreen() {
   const { show: showDialog } = useAppDialog();
   const [event, setEvent] = useState<Event | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
   const [countdown, setCountdown] = useState<{ hours: number; minutes: number } | null>(null);
   const [vipLoadError, setVipLoadError] = useState<string | null>(null);
   const [buyerName, setBuyerName] = useState('');
@@ -154,21 +155,11 @@ export default function EventDetailScreen() {
     setPurchaseTab('tickets');
   }, [event, purchaseTab]);
 
-  const fetchEventQuery = useCallback(async (includeVerificationStatus: boolean) => {
+  // Public event content must not join private customer/organizer profiles.
+  const fetchEventQuery = useCallback(async () => {
     return supabase
       .from('events')
-      .select(
-        `
-          *,
-          venues (*),
-          event_ticket_types (*),
-          profiles!events_creator_id_fkey_profiles (
-            id,
-            full_name,
-            club_name${includeVerificationStatus ? ',\n            verification_status' : ''}
-          )
-        `
-      )
+      .select('*, venues (*), event_ticket_types (*)')
       .eq('id', eventId)
       .maybeSingle();
   }, [eventId]);
@@ -176,28 +167,17 @@ export default function EventDetailScreen() {
   const fetchEvent = useCallback(async () => {
     setLoading(true);
     setVipLoadError(null);
+    setLoadError(false);
+    setEvent(null);
     try {
       if (!eventId) {
         setEvent(null);
         return;
       }
 
-      let data: any = null;
-      let error: any = null;
-
-      {
-        const res = await fetchEventQuery(true);
-        data = res.data as any;
-        error = res.error as any;
-      }
-
-      if (error?.code === '42703' && String(error?.message || '').includes('verification_status')) {
-        const res = await fetchEventQuery(false);
-        data = res.data as any;
-        error = res.error as any;
-      }
-
+      const { data, error } = await fetchEventQuery();
       if (error) throw error;
+      if (!data) return;
 
       let vipRows: any[] = [];
       try {
@@ -241,6 +221,7 @@ export default function EventDetailScreen() {
 
       setEvent({ ...normalizedEvent, reservados_vip: vipRows } as any);
     } catch (error) {
+      setLoadError(true);
       console.error('Error fetching event:', error);
     } finally {
       setLoading(false);
@@ -252,7 +233,7 @@ export default function EventDetailScreen() {
     if (user?.user_metadata?.full_name) {
       setBuyerName(user.user_metadata.full_name);
     }
-  }, [fetchEvent, user?.user_metadata?.full_name]);
+  }, [fetchEvent, user?.id, user?.user_metadata?.full_name]);
 
   // ── Realtime: actualiza aforo sin recargar toda la pantalla ──────────────────
   const refreshTicketCounts = useCallback(async () => {
@@ -365,19 +346,6 @@ export default function EventDetailScreen() {
   const shareEvent = async () => {
     if (!event?.id) return;
     const title = String(event.title || '').trim() || 'Evento';
-    const normalizeHttpsBase = (input: string) => {
-      const raw = String(input || '').trim().replace(/\/$/, '');
-      if (!raw) return '';
-      if (/^https:\/\//i.test(raw)) return raw;
-      if (/^http:\/\//i.test(raw)) return raw.replace(/^http:\/\//i, 'https://');
-      if (/^[a-z0-9.-]+\.[a-z]{2,}(?::\d+)?(\/.*)?$/i.test(raw)) return `https://${raw.replace(/\/$/, '')}`;
-      return '';
-    };
-    const webBaseUrl = normalizeHttpsBase(
-      String((process.env.EXPO_PUBLIC_WEB_BASE_URL as any) || (process.env.EXPO_PUBLIC_API_URL as any) || '')
-    );
-    const supabaseUrl = String(process.env.EXPO_PUBLIC_SUPABASE_URL || '').replace(/\/$/, '');
-
     const sharePayload = async (message: string, primaryUrl?: string) => {
       const url = String(primaryUrl || '').trim();
       const isHttpUrl = /^https?:\/\//i.test(url);
@@ -385,24 +353,15 @@ export default function EventDetailScreen() {
       await Share.share(payload as any);
     };
     try {
-      const result: any = await invokeEdgeFunctionStrict('event-share', { action: 'create', eventId: event.id });
-      const token = String(result?.token || '').trim();
-      const webUrl =
-        token && webBaseUrl
-          ? `${webBaseUrl}/evento/${token}`
-          : token && supabaseUrl
-          ? `${supabaseUrl}/functions/v1/event-share/evento/${token}`
-          : String(result?.url || '').trim();
-      if (!webUrl) throw new Error('No se pudo generar el enlace.');
+      const webUrl = eventShareUrl(event.id);
 
       const message = `${title}\n\n${webUrl}`;
       await sharePayload(message, webUrl);
       return;
     } catch (e) {
       try {
-        const fallbackWebUrl = webBaseUrl ? `${webBaseUrl}/event/${event.id}` : '';
-        const fallbackDeepLink = ExpoLinking.createURL(`event/${event.id}`);
-        const url = fallbackWebUrl || fallbackDeepLink;
+        const fallbackWebUrl = eventShareUrl(event.id);
+        const url = fallbackWebUrl;
         const message = `${title}\n\n${url}`;
         await sharePayload(message, fallbackWebUrl || undefined);
       } catch (inner) {
@@ -421,7 +380,7 @@ export default function EventDetailScreen() {
         title: t('auth.login'),
         message: t('event.purchase.login_required'),
         actions: [
-          { label: t('auth.login'), onPress: () => router.push('/(auth)/login'), variant: 'primary' },
+          { label: t('auth.login'), onPress: () => router.push({ pathname: '/(auth)/login', params: { returnTo: `/(tabs)/event/${eventId}` } }), variant: 'primary' },
           { label: t('common.cancel'), variant: 'outline' },
         ],
       });
@@ -622,7 +581,7 @@ export default function EventDetailScreen() {
           title: t('common.session'),
           message: msg,
           actions: [
-            { label: t('auth.login'), onPress: () => router.push('/(auth)/login'), variant: 'primary' },
+            { label: t('auth.login'), onPress: () => router.push({ pathname: '/(auth)/login', params: { returnTo: `/(tabs)/event/${eventId}` } }), variant: 'primary' },
             { label: t('common.cancel'), variant: 'outline' },
           ],
         });
@@ -642,7 +601,7 @@ export default function EventDetailScreen() {
         title: 'Inicia sesión',
         message: 'Debes iniciar sesión para comprar reservados VIP',
         actions: [
-          { label: 'Iniciar sesión', onPress: () => router.push('/(auth)/login'), variant: 'primary' },
+          { label: 'Iniciar sesión', onPress: () => router.push({ pathname: '/(auth)/login', params: { returnTo: `/(tabs)/event/${eventId}` } }), variant: 'primary' },
           { label: 'Cancelar', variant: 'outline' },
         ],
       });
@@ -770,7 +729,7 @@ export default function EventDetailScreen() {
           title: 'Sesión',
           message: msg,
           actions: [
-            { label: 'Iniciar sesión', onPress: () => router.push('/(auth)/login'), variant: 'primary' },
+            { label: 'Iniciar sesión', onPress: () => router.push({ pathname: '/(auth)/login', params: { returnTo: `/(tabs)/event/${eventId}` } }), variant: 'primary' },
             { label: 'Cancelar', variant: 'outline' },
           ],
         });
@@ -856,7 +815,7 @@ export default function EventDetailScreen() {
             marginBottom: 12,
             letterSpacing: -0.3,
           }}>
-            Esta fiesta ya no está disponible
+            {loadError ? 'No hemos podido cargar el evento' : 'Esta fiesta ya no está disponible'}
           </Text>
           <Text style={{
             color: 'rgba(255,255,255,0.50)',
@@ -865,11 +824,11 @@ export default function EventDetailScreen() {
             lineHeight: 22,
             marginBottom: 32,
           }}>
-            El evento al que intentas acceder ha caducado o ha sido eliminado por el organizador.
+            {loadError ? 'Comprueba tu conexión e inténtalo de nuevo.' : 'No hemos encontrado este evento. Puede haberse retirado.'}
           </Text>
           <ThemedButton
-            title="Explorar eventos"
-            onPress={() => router.replace('/(tabs)')}
+            title={loadError ? "Reintentar" : "Explorar eventos"}
+            onPress={loadError ? fetchEvent : () => router.replace('/(tabs)')}
             style={{ width: '100%', marginBottom: 12 }}
           />
           <ThemedButton

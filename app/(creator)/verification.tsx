@@ -438,6 +438,10 @@ export default function OrganizerVerificationScreen() {
       <LinearGradient colors={['#050510', '#0b1020', '#111b3a']} style={StyleSheet.absoluteFill} />
 
       <SafeAreaView style={styles.safeArea}>
+        <ScrollView
+          contentContainerStyle={styles.content}
+          showsVerticalScrollIndicator={false}
+        >
         <View style={[styles.header, { paddingHorizontal: horizontalPadding }]}>
           <View style={styles.headerTopRow}>
             <View style={{ flex: 1 }}>
@@ -477,26 +481,24 @@ export default function OrganizerVerificationScreen() {
           </View>
         </View>
 
-        <ScrollView
-          contentContainerStyle={[styles.content, { paddingHorizontal: horizontalPadding, alignItems: 'center' }]}
-          showsVerticalScrollIndicator={false}
-        >
-          <View style={{ width: '100%', maxWidth: maxContentWidth }}>
-            <GlassView intensity={10} style={styles.card}>
+          <View style={{ width: '100%', maxWidth: maxContentWidth, alignSelf: 'center', paddingHorizontal: horizontalPadding }}>
+            <GlassView intensity={10} style={styles.card} contentContainerStyle={styles.cardContent}>
               <Text style={[styles.sectionTitle, { fontSize: scaleFont(16) }]}>{t('creator.verification.documents.title')}</Text>
 
               <View style={styles.itemRow}>
                 <View style={styles.itemLeft}>
                   <FileText size={18} color={Colors.dark.text} />
-                  <View>
+                  <View style={styles.itemText}>
                     <Text style={styles.itemTitle}>{t('creator.verification.documents.business_license')}</Text>
-                    <Text style={styles.itemSubtitle}>
+                    <Text style={styles.itemSubtitle} numberOfLines={2} ellipsizeMode="middle">
                       {pickedBusinessLicense?.name || (docs?.business_license_path ? t('creator.verification.documents.uploaded') : t('creator.verification.documents.pdf_or_image'))}
                     </Text>
                   </View>
                 </View>
                 <View style={styles.itemActions}>
                   <TouchableOpacity
+                    accessibilityRole="button"
+                    accessibilityLabel={`Adjuntar: ${t('creator.verification.documents.business_license')}`}
                     onPress={() => pickBusinessDoc('business_license')}
                     style={[styles.smallButton, (!canUpload || saving) && { opacity: 0.45 }]}
                     disabled={!canUpload || saving}
@@ -514,15 +516,17 @@ export default function OrganizerVerificationScreen() {
               <View style={styles.itemRow}>
                 <View style={styles.itemLeft}>
                   <FileText size={18} color={Colors.dark.text} />
-                  <View>
+                  <View style={styles.itemText}>
                     <Text style={styles.itemTitle}>CIF / NIF</Text>
-                    <Text style={styles.itemSubtitle}>
+                    <Text style={styles.itemSubtitle} numberOfLines={2} ellipsizeMode="middle">
                       {pickedTaxId?.name || (docs?.tax_id_path ? t('creator.verification.documents.uploaded') : t('creator.verification.documents.pdf_or_image'))}
                     </Text>
                   </View>
                 </View>
                 <View style={styles.itemActions}>
                   <TouchableOpacity
+                    accessibilityRole="button"
+                    accessibilityLabel={`Adjuntar: ${'CIF / NIF'}`}
                     onPress={() => pickBusinessDoc('tax_id')}
                     style={[styles.smallButton, (!canUpload || saving) && { opacity: 0.45 }]}
                     disabled={!canUpload || saving}
@@ -540,15 +544,17 @@ export default function OrganizerVerificationScreen() {
               <View style={styles.itemRow}>
                 <View style={styles.itemLeft}>
                   <ImageIcon size={18} color={Colors.dark.text} />
-                  <View>
+                  <View style={styles.itemText}>
                     <Text style={styles.itemTitle}>{t('creator.verification.documents.venue_photo')}</Text>
-                    <Text style={styles.itemSubtitle}>
+                    <Text style={styles.itemSubtitle} numberOfLines={2} ellipsizeMode="middle">
                       {pickedVenuePhoto?.name || (docs?.venue_photo_path ? t('creator.verification.documents.uploaded') : t('creator.verification.documents.image'))}
                     </Text>
                   </View>
                 </View>
                 <View style={styles.itemActions}>
                   <TouchableOpacity
+                    accessibilityRole="button"
+                    accessibilityLabel={`Adjuntar: ${t('creator.verification.documents.venue_photo')}`}
                     onPress={pickVenuePhoto}
                     style={[styles.smallButton, (!canUpload || saving) && { opacity: 0.45 }]}
                     disabled={!canUpload || saving}
@@ -580,12 +586,12 @@ export default function OrganizerVerificationScreen() {
             </GlassView>
 
             {verificationStatus === 'verified' && (
-              <GlassView intensity={10} style={[styles.card, { marginTop: 14 }]}>
+              <GlassView intensity={10} style={[styles.card, { marginTop: 14 }]} contentContainerStyle={styles.cardContent}>
                 <Text style={[styles.sectionTitle, { fontSize: scaleFont(16) }]}>{t('creator.verification.stripe.title')}</Text>
 
                 <View style={[styles.itemRow, { borderTopWidth: 0 }]}>
                   <View style={styles.itemLeft}>
-                    <View>
+                    <View style={styles.itemText}>
                       <Text style={styles.itemTitle}>{t('creator.verification.stripe.status_label')}</Text>
                       <Text style={styles.itemSubtitle}>
                         {stripeStatus.stripe_onboarding_completed
@@ -663,14 +669,14 @@ const styles = StyleSheet.create({
   headerTopRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   headerTitle: { color: Colors.dark.text, fontWeight: '900', letterSpacing: -0.4 },
   headerSubtitle: { marginTop: 4, color: 'rgba(255,255,255,0.6)', fontSize: 13, fontWeight: '600' },
-  statusRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 12 },
-  statusPill: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 999, borderWidth: 1 },
+  statusRow: { alignItems: 'flex-start', gap: 10, marginTop: 12 },
+  statusPill: { maxWidth: '100%', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 999, borderWidth: 1 },
   statusText: { fontSize: 12, fontWeight: '800', letterSpacing: 0.5 },
-  pendingText: { flex: 1, color: 'rgba(255,255,255,0.72)', fontSize: 12, fontWeight: '600' },
-  correctionText: { flex: 1, color: 'rgba(245,158,11,0.95)', fontSize: 12, fontWeight: '700' },
-  rejectedText: { flex: 1, color: 'rgba(251,113,133,0.9)', fontSize: 12, fontWeight: '600' },
-  verifiedText: { flex: 1, color: 'rgba(74,222,128,0.85)', fontSize: 12, fontWeight: '700' },
-  logoutButton: { width: 44, height: 44 },
+  pendingText: { flexShrink: 1, color: 'rgba(255,255,255,0.72)', fontSize: 12, fontWeight: '600' },
+  correctionText: { flexShrink: 1, color: 'rgba(245,158,11,0.95)', fontSize: 12, fontWeight: '700' },
+  rejectedText: { flexShrink: 1, color: 'rgba(251,113,133,0.9)', fontSize: 12, fontWeight: '600' },
+  verifiedText: { flexShrink: 1, color: 'rgba(74,222,128,0.85)', fontSize: 12, fontWeight: '700' },
+  logoutButton: { width: 44, height: 44, flexShrink: 0 },
   logoutButtonContainer: {
     width: 44,
     height: 44,
@@ -683,7 +689,6 @@ const styles = StyleSheet.create({
   content: { paddingTop: 10, paddingBottom: 28 },
   card: {
     borderRadius: 28,
-    padding: 18,
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.10)',
     shadowColor: '#000',
@@ -692,22 +697,24 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 10 },
     elevation: 8,
   },
+  cardContent: { padding: 16 },
+  itemText: { flex: 1, minWidth: 0 },
   sectionTitle: { color: Colors.dark.text, fontWeight: '900', marginBottom: 12, letterSpacing: -0.2 },
   itemRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    alignItems: 'stretch',
+    gap: 12,
     paddingVertical: 12,
     borderTopWidth: 1,
     borderTopColor: 'rgba(255,255,255,0.06)',
   },
-  itemLeft: { flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1 },
+  itemLeft: { flexDirection: 'row', alignItems: 'flex-start', gap: 10, minWidth: 0 },
   itemTitle: { color: Colors.dark.text, fontWeight: '900', letterSpacing: -0.2 },
   itemSubtitle: { color: 'rgba(255,255,255,0.55)', marginTop: 2, fontSize: 12 },
-  itemActions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  itemActions: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'flex-end', alignItems: 'center', gap: 8 },
   smallButton: {
     width: 44,
     height: 44,
+    flexShrink: 0,
     borderRadius: 14,
     backgroundColor: Colors.dark.primary,
     justifyContent: 'center',
@@ -720,14 +727,16 @@ const styles = StyleSheet.create({
   },
   smallButtonOutline: {
     paddingHorizontal: 14,
-    height: 44,
+    paddingVertical: 10,
+    minHeight: 44,
+    maxWidth: '100%',
     borderRadius: 14,
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.18)',
     justifyContent: 'center',
     backgroundColor: 'rgba(255,255,255,0.04)',
   },
-  smallButtonText: { color: 'white', fontWeight: '800', fontSize: 12 },
+  smallButtonText: { textAlign: 'center', flexShrink: 1, color: 'white', fontWeight: '800', fontSize: 12 },
   modalBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.85)', justifyContent: 'center', alignItems: 'center', padding: 16 },
   modalContent: { width: '100%', maxWidth: 520, aspectRatio: 1, borderRadius: 18, overflow: 'hidden', backgroundColor: 'rgba(0,0,0,0.6)' },
   modalClose: { position: 'absolute', top: 12, right: 12, zIndex: 2, width: 36, height: 36, borderRadius: 18, backgroundColor: 'rgba(255,255,255,0.12)', justifyContent: 'center', alignItems: 'center' },

@@ -1,0 +1,28 @@
+name: Inspect Eclipse 69 artifacts
+on:
+  push:
+    branches: [release/testflight-apk-20261009]
+    paths: [.github/workflows/eclipse-build69-status.yml]
+permissions:
+  contents: read
+jobs:
+  status:
+    runs-on: ubuntu-latest
+    environment: staging
+    timeout-minutes: 5
+    steps:
+      - name: Read build and submission status
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        run: |
+          node - <<'NODE'
+          (async()=>{
+            const project='42ebb6eb-62b1-4784-a483-831ae3c804f2';
+            const sha='e069d18dc9b8d5313e435eaf4d62ba07e8297841';
+            const query='query($id:String!){app{byId(appId:$id){id builds(offset:0,limit:20){id status platform buildProfile appVersion appBuildVersion gitCommitHash artifacts{applicationArchiveUrl} submissions{id status iosConfig{ascAppIdentifier}}}}}}';
+            const r=await fetch('https://api.expo.dev/graphql',{method:'POST',headers:{'Content-Type':'application/json',authorization:'Bearer '+process.env.EXPO_TOKEN},body:JSON.stringify({query,variables:{id:project}})});
+            const d=await r.json();
+            if(!r.ok||d.errors?.length||d.data?.app?.byId?.id!==project)throw Error('Unable to verify release status');
+            console.log('RELEASE_STATUS='+JSON.stringify(d.data.app.byId.builds.filter(b=>b.gitCommitHash===sha)));
+          })().catch(e=>{console.error(e.message);process.exitCode=1});
+          NODE

@@ -88,6 +88,7 @@ async function invoke(platform, options = {}) {
     },
   };
   const imports = {
+    './brandingAssets.ts': loadModule(path.join(root, 'supabase/functions/apple-wallet-generator/brandingAssets.ts'), {}),
     '../_shared/googleWalletApi.ts': loadModule(path.join(root, 'supabase/functions/_shared/googleWalletApi.ts'), {}, { fetch: providerFetch }),
     '../_shared/ticketProduct.ts': loadModule(path.join(root, 'supabase/functions/_shared/ticketProduct.ts'), {}),
     'https://esm.sh/@supabase/supabase-js@2.49.1': { createClient: () => client },
@@ -95,6 +96,14 @@ async function invoke(platform, options = {}) {
       constructor(files, certificates) {
         const content = JSON.parse(files['pass.json'].toString('utf8'));
         passData = content; passFiles = files;
+        const branding = loadModule(path.join(root, 'supabase/functions/apple-wallet-generator/brandingAssets.ts'), {});
+        assert.equal(branding.APP_ICON_SHA256, crypto.createHash('sha256').update(fs.readFileSync(path.join(root, 'assets/images/Icon.png'))).digest('hex'), 'Wallet logo must match the current app brand');
+        for (const scale of [1, 2, 3]) {
+          const name = `icon${scale === 1 ? '' : '@' + scale + 'x'}.png`;
+          assert.deepEqual(files[name], Buffer.from(branding.WALLET_BRANDING[name], 'base64'), 'Pass must contain the Eclipse icon');
+          assert.equal(files[name].readUInt32BE(16), 29 * scale);
+          assert.equal(files[name].readUInt32BE(20), 29 * scale);
+        }
         const style = content.eventTicket || content.generic;
         const fields = Object.values(style).filter(Array.isArray).flat();
         assert.equal(new Set(fields.map(field => field.key)).size, fields.length, 'Apple field keys must be unique across front and back');

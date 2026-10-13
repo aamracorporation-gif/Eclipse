@@ -1,5 +1,6 @@
 import { GlassView } from '@/components/ui/GlassView';
 import { profileAppearance } from '@/theme/profileAppearance';
+import { SubscriptionShortcut } from '@/components/SubscriptionShortcut';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, KeyboardAvoidingView, Modal, Platform, Pressable, RefreshControl, ScrollView, StatusBar, StyleSheet, Switch, Text, TextInput, View, useWindowDimensions } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -604,6 +605,7 @@ export default function OrganizerProfileTab() {
             </View>
           </GlassView>
 
+          <SubscriptionShortcut />
           {banner && (
             <View style={[ui.banner, bannerStyle]} accessibilityRole="alert">
               <Text style={ui.bannerText}>{banner.text}</Text>
@@ -710,7 +712,7 @@ export default function OrganizerProfileTab() {
           <View style={suppStyles.sheet}>
             <View style={suppStyles.handle} />
             <View style={suppStyles.header}>
-              <View style={suppStyles.headerIcon}><MessageCircle size={20} color="#0EA5E9" /></View>
+              <View style={[suppStyles.headerIcon, { backgroundColor: '#28243D' }]}><MessageCircle size={20} color="#F4F0FF" /></View>
               <Text style={suppStyles.headerTitle}>Contactar con soporte</Text>
               <Pressable onPress={() => setSupportOpen(false)} style={suppStyles.closeBtn} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
                 <X size={20} color="#A1A1AA" />
@@ -730,7 +732,7 @@ export default function OrganizerProfileTab() {
                 value={supportMessage}
                 onChangeText={setSupportMessage}
                 placeholder="Describe tu problema o pregunta con el mayor detalle posible..."
-                placeholderTextColor="rgba(255,255,255,0.35)"
+                placeholderTextColor="#B8B8CC"
                 multiline
                 numberOfLines={6}
                 textAlignVertical="top"
@@ -983,7 +985,7 @@ const suppStyles = StyleSheet.create({
   chipTxt: { fontSize: 13, color: 'rgba(255,255,255,0.55)', fontWeight: '600' },
   chipTxtActive: { color: '#0EA5E9' },
   textarea: { backgroundColor: 'rgba(255,255,255,0.06)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.12)', borderRadius: 12, padding: 14, color: '#fff', fontSize: 15, minHeight: 120, marginBottom: 14 },
-  hint: { fontSize: 12, color: 'rgba(255,255,255,0.35)', marginBottom: 20, lineHeight: 17 },
+  hint: { fontSize: 12, color: '#B8B8CC', marginBottom: 20, lineHeight: 17 },
   sendBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: '#0EA5E9', borderRadius: 14, paddingVertical: 14 },
   sendTxt: { fontSize: 15, fontWeight: '700', color: '#fff' },
 });
