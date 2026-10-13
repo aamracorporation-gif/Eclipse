@@ -7,6 +7,10 @@ export function normalizeSignupEmail(email: string) {
   return email.trim().toLowerCase();
 }
 
+export function isValidSignupEmail(email: string) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(normalizeSignupEmail(email));
+}
+
 /** Only an explicit new identity or a matching authenticated session is success. */
 export function signupResultError(data: SignupData) {
   if (data?.user?.id && Array.isArray(data.user.identities) && data.user.identities.length === 0) {

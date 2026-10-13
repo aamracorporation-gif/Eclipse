@@ -1,4 +1,11 @@
-import { normalizeSignupEmail, signupResultError } from '../lib/signupResult';
+import { isValidSignupEmail, normalizeSignupEmail, signupResultError } from '../lib/signupResult';
+
+it.each(['  New@Example.COM  ', '\tOwner@example.test\n', 'owner@example.test'])('accepts normalized signup email %j',email=>{
+  expect(isValidSignupEmail(email)).toBe(true);
+});
+it.each(['   ', 'own er@example.test', 'owner@exa mple.test', 'owner@example', 'owner@example.c'])('rejects invalid signup email %j',email=>{
+  expect(isValidSignupEmail(email)).toBe(false);
+});
 
 describe('signup result handling', () => {
   it('does not advance for an obfuscated existing account', () => {

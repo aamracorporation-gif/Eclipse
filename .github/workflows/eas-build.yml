@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       platform:
-        description: Platform to build (TestFlight requires ios)
+        description: Platform to build (all + testflight builds iOS TestFlight and Android APK together)
         required: true
         default: all
         type: choice
@@ -41,8 +41,8 @@ jobs:
         run: |
           case "$BUILD_PLATFORM" in all|android|ios) ;; *) exit 1 ;; esac
           case "$BUILD_PROFILE" in preview|testflight|production) ;; *) exit 1 ;; esac
-          if [ "$BUILD_PROFILE" = testflight ] && [ "$BUILD_PLATFORM" != ios ]; then
-            echo '::error::Select ios for the TestFlight profile.'
+          if [ "$BUILD_PROFILE" = testflight ] && [ "$BUILD_PLATFORM" = android ]; then
+            echo '::error::Select ios or all for the TestFlight profile.'
             exit 1
           fi
       - uses: actions/checkout@v4
@@ -72,8 +72,26 @@ jobs:
           eas-version: 18.0.1
           token: ${{ secrets.EXPO_TOKEN }}
       - name: Queue signed build
-        run: eas build --platform "$BUILD_PLATFORM" --profile "$BUILD_PROFILE" --non-interactive --no-wait
+        run: |
+          mkdir -p build-receipts
+          git rev-parse HEAD > build-receipts/source-commit.txt
+          if [ "$BUILD_PROFILE" = testflight ] && [ "$BUILD_PLATFORM" = all ]; then
+            eas build --platform ios --profile testflight --non-interactive --no-wait --json > build-receipts/ios.json
+            eas build --platform android --profile preview --non-interactive --no-wait --json > build-receipts/android.json
+          else
+            eas build --platform "$BUILD_PLATFORM" --profile "$BUILD_PROFILE" --non-interactive --no-wait --json > build-receipts/builds.json
+          fi
+      - name: Preserve build identifiers and source commit
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-receipts-${{ github.sha }}
+          path: build-receipts/
+          if-no-files-found: ignore
       - name: Record build scope
         run: |
-          echo 'A build has been queued; this does not confirm successful compilation or submission to Apple.' >> "$GITHUB_STEP_SUMMARY"
+          echo 'Builds queued. Verify both are FINISHED and match the recorded source commit and intended environment before acceptance. This does not confirm installation, QA or store submission.' >> "$GITHUB_STEP_SUMMARY"
           echo "Source commit: $GITHUB_SHA; profile: $BUILD_PROFILE; platform: $BUILD_PLATFORM" >> "$GITHUB_STEP_SUMMARY"
+          if [ "$BUILD_PROFILE" = testflight ] && [ "$BUILD_PLATFORM" = all ]; then
+            echo 'Pair: iOS TestFlight + Android preview APK, both staging, from this same commit.' >> "$GITHUB_STEP_SUMMARY"
+          fi
