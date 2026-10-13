@@ -650,12 +650,18 @@ export function EventProvider({ children }: { children: React.ReactNode }) {
 
   const deleteEvent = async (id: string) => {
     try {
-      const { error } = await supabase
+      const { data: deletedEvent, error } = await supabase
         .from('events')
         .delete()
-        .eq('id', id);
+        .eq('id', id)
+        .select('id')
+        .maybeSingle();
 
+      if (error?.code === 'PT409' || error?.code === '23503') {
+        throw new Error('Este evento tiene entradas o pagos asociados y no se puede eliminar. Contacta con soporte para gestionar su cancelación y las devoluciones.');
+      }
       if (error) throw error;
+      if (!deletedEvent) throw new Error('No se pudo eliminar el evento. Actualiza la lista y comprueba tus permisos.');
 
       setEvents((prev) => prev.filter((e) => e.id !== id));
       try {

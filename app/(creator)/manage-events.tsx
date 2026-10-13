@@ -112,9 +112,12 @@ export default function ManageEventsScreen() {
         {
           text: t('profile.delete_account_confirm'),
           style: 'destructive',
-          onPress: () => {
-            deleteEvent(id);
-            // Alert.alert('Eliminado', 'El evento ha sido cancelado');
+          onPress: async () => {
+            try {
+              await deleteEvent(id);
+            } catch (error) {
+              Alert.alert('No se pudo eliminar el evento', error instanceof Error ? error.message : 'Inténtalo de nuevo.');
+            }
           },
         },
       ]

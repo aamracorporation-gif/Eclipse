@@ -1,4 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
+import { cancelBoxOfficeForDeletion } from '../_shared/cancelBoxOfficeForDeletion.ts';
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -67,6 +68,28 @@ Deno.serve(async (req) => {
   }
 
   const stripeAccountId = String(profile?.stripe_account_id || "").trim();
+  // Fail closed: retain the account and billing references unless billing is stopped.
+  const { data: billing, error: billingError } = await admin.from('organizer_box_office_subscriptions')
+    .select('stripe_customer_id,stripe_subscription_id').eq('organizer_id', userId).maybeSingle();
+  if (billingError) {
+    return new Response(JSON.stringify({ ok: false, error: 'No se pudo comprobar tu suscripción. La cuenta no se ha eliminado.' }), {
+      status: 503, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
+  }
+  try {
+    await cancelBoxOfficeForDeletion(billing, userId, STRIPE_SECRET_KEY, SUPABASE_URL);
+    if (billing?.stripe_subscription_id) {
+      const checkedAt = new Date().toISOString();
+      const { error: billingUpdateError } = await admin.from('organizer_box_office_subscriptions')
+        .update({ status: 'canceled', paid_through: null, cancel_at_period_end: false, synced_at: checkedAt, updated_at: checkedAt })
+        .eq('organizer_id', userId).eq('stripe_subscription_id', billing.stripe_subscription_id);
+      if (billingUpdateError) throw billingUpdateError;
+    }
+  } catch {
+    return new Response(JSON.stringify({ ok: false, error: 'No se pudo cancelar la suscripción de taquilla. La cuenta no se ha eliminado. Inténtalo de nuevo o contacta con soporte.' }), {
+      status: 503, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
+  }
   if (stripeAccountId) {
     if (!STRIPE_SECRET_KEY) {
       return new Response(JSON.stringify({ ok: false, error: "Missing STRIPE_SECRET_KEY." }), {

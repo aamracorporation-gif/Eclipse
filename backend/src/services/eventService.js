@@ -96,8 +96,18 @@ async function deleteEvent({ eventId, creatorId }) {
     throw err;
   }
 
-  const { error } = await supabaseAdmin.from('events').delete().eq('id', eventId);
+  const { data, error } = await supabaseAdmin.from('events').delete().eq('id', eventId).eq('creator_id', creatorId).select('id').maybeSingle();
+  if (error?.code === 'PT409' || error?.code === '23503') {
+    const blocked = new Error('Este evento tiene entradas o pagos asociados y no se puede eliminar. Contacta con soporte para gestionar su cancelación y las devoluciones.');
+    blocked.status = 409;
+    throw blocked;
+  }
   if (error) throw error;
+  if (!data) {
+    const missing = new Error('El evento ya no está disponible o han cambiado sus permisos.');
+    missing.status = 409;
+    throw missing;
+  }
   return { ok: true };
 }
 

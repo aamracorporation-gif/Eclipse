@@ -3,6 +3,7 @@ import { useMemo, useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '@/lib/AuthContext';
+import { isValidSignupEmail, normalizeSignupEmail } from '@/lib/signupResult';
 import { supabase } from '@/lib/supabase';
 import { Mail, Lock, Eye, EyeOff, ArrowRight, User, MapPin, Calendar, Building2, PartyPopper, Edit2, RefreshCw, Check, Building, CreditCard } from '@/lib/icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -354,7 +355,7 @@ export default function RegisterScreen() {
 
     if (step === 4) {
       required('email', formData.email, 'El email es obligatorio.');
-      if (formData.email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(formData.email)) errors.email = 'Formato de email inválido.';
+      if (formData.email.trim() && !isValidSignupEmail(formData.email)) errors.email = 'Formato de email inválido.';
 
       required('password', formData.password, 'La contraseña es obligatoria.');
       if (formData.password && !passwordStrong) errors.password = 'La contraseña debe cumplir todos los requisitos.';
@@ -464,7 +465,8 @@ export default function RegisterScreen() {
   };
 
   const handleRegister = async () => {
-    const { email, password, confirmPassword, role } = formData;
+    const { password, confirmPassword, role } = formData;
+    const email = normalizeSignupEmail(formData.email);
     const safeRole = role === 'organizer' ? 'organizer' : 'attendee';
 
     if (!email.trim()) {
@@ -472,8 +474,7 @@ export default function RegisterScreen() {
       return;
     }
 
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(email.trim())) {
+    if (!isValidSignupEmail(email)) {
       showDialog({ title: 'Email inválido', message: 'Por favor ingresa un correo válido.' });
       return;
     }
