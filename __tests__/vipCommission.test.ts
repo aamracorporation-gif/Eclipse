@@ -10,7 +10,7 @@ const compiled = ts.transpileModule(fs.readFileSync(sourcePath, 'utf8'), {
   compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
 }).outputText;
 
-async function checkout(price: number, options: { kind?: string; rate?: string; capacity?: number; previous?: boolean } = {}) {
+async function checkout(price: number, options: { kind?: string; rate?: string; capacity?: number; previous?: boolean; billing?: 'ready' | 'missing' | 'wrong_mode' | 'debt' } = {}) {
   let handler: any;
   let stripeParams: URLSearchParams | undefined;
   let transaction: any;
@@ -18,6 +18,7 @@ async function checkout(price: number, options: { kind?: string; rate?: string; 
     SUPABASE_URL: 'https://db.example.test', SUPABASE_ANON_KEY: 'anon-fixture',
     SUPABASE_SERVICE_ROLE_KEY: 'service-fixture', STRIPE_SECRET_KEY: 'sk_test_fixture',
     REQUIRE_ORGANIZER_STRIPE_CONNECT: 'true', STRIPE_PLATFORM_FEE_BPS: options.rate || '1000',
+    ...(options.billing ? { ORGANIZER_CANCELLATION_BILLING_ENABLED: 'true', ORGANIZER_BILLING_STRIPE_MODE: 'test' } : {}),
   };
   const fetch = jest.fn(async (url: string, init: any = {}) => {
     const reply = (data: unknown) => new Response(JSON.stringify(data), { status: 200 });
@@ -38,6 +39,10 @@ async function checkout(price: number, options: { kind?: string; rate?: string; 
       event_date: '2099-01-01T00:00:00Z', ticket_price: price, available_tickets: 5,
     }]);
     if (url.includes('/rest/v1/profiles')) return reply([{ stripe_account_id: 'acct_fixture', stripe_charges_enabled: true }]);
+    if (url.includes('/rest/v1/organizer_billing_accounts')) return reply(options.billing === 'missing' ? [] : [{
+      ready: true, livemode: options.billing === 'wrong_mode', policy_version: 'organizer-cancellation-full-refund-v1',
+    }]);
+    if (url.includes('/rest/v1/event_cancellations')) return reply(options.billing === 'debt' ? [{ id: 'pending-cancellation' }] : []);
     if (url.includes('/v1/accounts/acct_fixture')) return reply({ id: 'acct_fixture' });
     if (url.includes('/v1/payment_intents/pi_old')) return reply({ id: 'pi_old', amount: 51000, client_secret: 'fixture', currency: 'eur' });
     if (url.endsWith('/v1/payment_intents')) {
@@ -93,4 +98,21 @@ it('retries reuse the original payment without repricing or creating a new trans
   expect(a.body.amount_cents).toBe(51000);
   expect(a.transaction).toBeUndefined();
   expect(a.stripeParams).toBeUndefined();
+});
+it.each(['event_ticket', 'vip_table'])('%s keeps funds on the platform until post-event settlement when authorized', async kind => {
+  const result = await checkout(20, { kind, billing: 'ready' });
+  expect(result.body.ok).toBe(true);
+  expect(result.stripeParams?.has('application_fee_amount')).toBe(false);
+  expect(result.stripeParams?.has('transfer_data[destination]')).toBe(false);
+  expect(result.stripeParams?.get('transfer_group')).toBe('event_event-fixture');
+  expect(result.transaction.metadata.settlement_model).toBe('after_event_v1');
+  expect(result.transaction.metadata.cancellation_policy).toBe('organizer-cancellation-full-refund-v1');
+  expect(result.transaction.destination_account_id).toBe('acct_fixture');
+  expect(result.transaction.destination_amount_cents).toBe(kind === 'event_ticket' ? 1800 : 1900);
+});
+it.each(['missing', 'wrong_mode', 'debt'] as const)('does not create a charge when billing has %s', async billing => {
+  const result = await checkout(20, { billing });
+  expect(result.body.ok).toBe(false);
+  expect(result.stripeParams).toBeUndefined();
+  expect(result.transaction).toBeUndefined();
 });

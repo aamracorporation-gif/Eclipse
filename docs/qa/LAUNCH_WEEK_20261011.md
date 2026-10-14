@@ -53,3 +53,9 @@ Los seis bloqueos permanecen abiertos. Trabajo aislado en `codex/build74-deletio
 - Registro: correo con espacios exteriores normalizado tanto en formulario como en envío; rechazo de correo ya registrado comprobado en el formulario.
 - Candidatos: preparado workflow para compilar iOS TestFlight y Android APK desde el mismo commit. No se han creado nuevos binarios; permanecen pendientes las pruebas QA-302–319 y la aceptación del candidato de producción.
 - Taquilla, Wallet, publicación y política de devoluciones conservan sus comprobaciones pendientes. Ninguna prueba automática cierra estos puntos por sí sola.
+
+## Decisión vigente y candidato de cancelación — 14 de octubre
+
+Achraf confirma **cobro posterior sin fianza inicial**: devolución íntegra al comprador, comisión Eclipse y costes reales no recuperados a cargo del organizador mediante tarjeta autorizada. Sustituye las anteriores propuestas de retenciones al comprador, renuncia de comisión o fianza. Se mantienen la liquidación después del evento y la ausencia de devolución voluntaria por cambio de opinión, respetando derechos obligatorios. El riesgo de impago fue explicado y aceptado.
+
+Candidato desactivado preparado sobre PR39: mandato, cancelación persistente, devoluciones/reintentos, cargo separado, autenticación/impago, nuevas ventas con liquidación posterior y pantallas. Estado y pruebas: `DEFERRED_CANCELLATION_BILLING_20261014.md`. Política actual: `../REFUND_POLICY_20261014.md`. Pendientes: ensayo Stripe y móviles, esquema real, conciliación de informes/costes del cobro, avisos y legales definitivos. No desplegado ni ejecutado dinero real. **Los seis bloqueos siguen abiertos.**

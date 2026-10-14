@@ -11,6 +11,7 @@ import { ThemedButton } from '@/components/ui/ThemedButton';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useTranslation } from 'react-i18next';
+import { organizerBillingVisible } from '@/lib/payments/organizerBilling';
 
 export default function ManageEventsScreen() {
   const router = useRouter();
@@ -187,6 +188,8 @@ export default function ManageEventsScreen() {
           </View>
 
           {/* Row 2: secondary actions */}
+          {organizerBillingVisible && !isAdmin && <ThemedButton title="Cancelación y devoluciones" variant="outline"
+            onPress={() => router.push({ pathname: '/(creator)/cancellation-billing', params: { event_id: item.id } })} />}
           <View style={styles.actionsRow}>
             <TouchableOpacity
               style={[styles.actionBtn, styles.actionBtnSecondary]}

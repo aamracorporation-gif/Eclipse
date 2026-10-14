@@ -22,6 +22,7 @@ import { registerForPushNotifications } from '@/lib/notifications';
 
 import { getStripeAccountStats, StripeAccountStats, createStripeConnectOnboardingLink, createStripeConnectAccount } from '@/lib/payments/api';
 import { LAUNCH_FEATURES } from '@/lib/launchFeatures';
+import { organizerBillingVisible } from '@/lib/payments/organizerBilling';
 import { useTranslation } from 'react-i18next';
 
 export default function CreatorDashboard() {
@@ -681,6 +682,8 @@ export default function CreatorDashboard() {
             </>
           )}
 
+          {organizerBillingVisible && !isAdmin && <ThemedButton title="Cancelaciones y autorización de cobro" variant="outline"
+            onPress={() => router.push('/(creator)/cancellation-billing')} />}
         </ScrollView>
       </SafeAreaView>
     </View>
