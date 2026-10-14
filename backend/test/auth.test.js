@@ -182,3 +182,25 @@ test('Token malformado devuelve 401 MALFORMED_TOKEN', async () => {
     await new Promise((resolve) => server.close(resolve));
   }
 });
+
+test('Supabase validates rotated ES256 tokens when the local HS256 secret is absent', async () => {
+  const {generateKeyPairSync}=require('node:crypto');
+  const {privateKey}=generateKeyPairSync('ec',{namedCurve:'prime256v1'});
+  const userId='66666666-6666-4666-8666-666666666666';
+  const token=jwt.sign({role:'authenticated',user_metadata:{role:'admin'}},privateKey,{algorithm:'ES256',subject:userId,issuer:issuer(),audience:'authenticated',expiresIn:'5m'});
+  const secret=process.env.JWT_SECRET, prior=supabaseAnon.auth.getUser;
+  const {server,port}=await startServer();
+  try {
+    process.env.JWT_SECRET='';roleByUserId.set(userId,'organizer');
+    let calls=0;
+    supabaseAnon.auth.getUser=async received=>{calls++;assert.equal(received,token);return {data:{user:{id:userId,user_metadata:{role:'admin'}}},error:null};};
+    const allowed=await requestJson({port,path:'/organizer',token});
+    assert.equal(allowed.status,200);assert.equal(allowed.body.auth.role,'organizer');assert.equal(calls,1);
+    // A provider rejection must never fall back to trusting decoded claims.
+    supabaseAnon.auth.getUser=async()=>({data:{user:null},error:new Error('invalid JWT')});
+    assert.equal((await requestJson({port,path:'/organizer',token})).status,401);
+    process.env.JWT_SECRET=secret;
+    supabaseAnon.auth.getUser=async()=>({data:{user:{id:userId}},error:null});
+    assert.equal((await requestJson({port,path:'/organizer',token})).status,200);
+  } finally {process.env.JWT_SECRET=secret;supabaseAnon.auth.getUser=prior;await new Promise(resolve=>server.close(resolve));}
+});

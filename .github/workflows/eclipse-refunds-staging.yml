@@ -8,7 +8,7 @@ permissions:
 concurrency:
   group: eclipse-refunds-staging
   cancel-in-progress: false
-# Supabase checkout v20 and dispatch v5 deployed through the authenticated project connection.
+# Supabase checkout and dispatch deployed through the authenticated staging connection.
 jobs:
   mobile-staging:
     runs-on: ubuntu-latest
@@ -40,9 +40,28 @@ jobs:
         run: |
           mkdir -p build-receipts
           git rev-parse HEAD > build-receipts/source-commit.txt
-          ECLIPSE_BUILD_ENV=staging eas update --branch staging --platform all --environment preview --message "Staging refunds and cancellation billing" --non-interactive --json > build-receipts/update.json
-          eas build --platform ios --profile testflight --non-interactive --no-wait --json > build-receipts/ios.json
-          eas build --platform android --profile preview --non-interactive --no-wait --json > build-receipts/android.json
+          node - <<'NODE'
+          const fs=require('node:fs');
+          const {spawnSync}=require('node:child_process');
+          const vars=require('dotenv').parse(fs.readFileSync('.env.local'));
+          for(const [name,value] of Object.entries(vars))if(name.startsWith('EXPO_PUBLIC_'))process.env[name]=value;
+          process.env.ECLIPSE_BUILD_ENV='staging';
+          require('./scripts/buildEnvironment.cjs').validateBuildEnvironment();
+          function run(name,args){
+            const result=spawnSync('eas',args,{encoding:'utf8',maxBuffer:32*1024*1024});
+            fs.writeFileSync('build-receipts/'+name+'.json',result.stdout||'');
+            if(result.status!==0){
+              let diagnostic=result.stderr||'';
+              for(const value of Object.values(process.env))if(value&&value.length>8)diagnostic=diagnostic.split(value).join('[masked]');
+              console.error(diagnostic.slice(-8000));
+              throw Error('EAS '+name+' failed; inspect existing candidates before retrying');
+            }
+            console.log(name+' completed; receipt saved');
+          }
+          run('update',['update','--branch','staging','--platform','all','--environment','preview','--message','Staging refunds and cancellation billing','--non-interactive','--json']);
+          run('ios',['build','--platform','ios','--profile','testflight','--non-interactive','--no-wait','--json']);
+          run('android',['build','--platform','android','--profile','preview','--non-interactive','--no-wait','--json']);
+          NODE
       - uses: actions/upload-artifact@v4
         if: always()
         with:
