@@ -16,7 +16,6 @@ jobs:
     timeout-minutes: 45
     env:
       EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
-      ECLIPSE_BUILD_ENV: staging
     steps:
       - uses: actions/checkout@v4
         with:
@@ -36,11 +35,12 @@ jobs:
           eas env:create --help
           eas env:create --environment preview --name EXPO_PUBLIC_ORGANIZER_CANCELLATION_BILLING --value true --visibility plaintext --force --non-interactive
           eas env:create --environment preview --name EXPO_PUBLIC_API_URL --value https://eclipse-staging-staging.up.railway.app --visibility plaintext --force --non-interactive
+          eas env:pull --environment preview --path .env.local --non-interactive
       - name: Publish staging update and queue matching mobile candidates
         run: |
           mkdir -p build-receipts
           git rev-parse HEAD > build-receipts/source-commit.txt
-          eas update --branch staging --platform all --environment preview --message "Staging refunds and cancellation billing" --non-interactive --json > build-receipts/update.json
+          ECLIPSE_BUILD_ENV=staging eas update --branch staging --platform all --environment preview --message "Staging refunds and cancellation billing" --non-interactive --json > build-receipts/update.json
           eas build --platform ios --profile testflight --non-interactive --no-wait --json > build-receipts/ios.json
           eas build --platform android --profile preview --non-interactive --no-wait --json > build-receipts/android.json
       - uses: actions/upload-artifact@v4
@@ -49,4 +49,6 @@ jobs:
           name: refund-staging-receipts-${{ github.sha }}
           path: build-receipts/
           if-no-files-found: ignore
-
+      - name: Remove local environment copy
+        if: always()
+        run: rm -f .env.local
