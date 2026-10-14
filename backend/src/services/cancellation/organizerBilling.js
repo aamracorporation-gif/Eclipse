@@ -8,7 +8,10 @@ const CONSENT_TEXT = 'Autorizo a Eclipse a guardar mi tarjeta mediante Stripe, s
   + 'más los costes reales no recuperados de Stripe por esas ventas, sus devoluciones y la gestión del cobro. '
   + 'Recibiré el desglose antes del cargo. El importe depende de las ventas y de los costes confirmados por Stripe; '
   + 'no es una tarifa fija ni el cargo de servicio del comprador. Los costes confirmados después se comunicarán por separado '
-  + 'y no generarán una cadena de cargos automáticos. Si el banco rechaza el pago o pide confirmación, deberé completarlo en Eclipse. '
+  + 'y se compensarán con mis siguientes liquidaciones, sin generar nuevos cargos automáticos a la tarjeta. '
+  + 'Cualquier ajuste a mi favor también se reflejará en mi saldo. Si no hay liquidaciones suficientes, el saldo seguirá pendiente; '
+  + 'podré solicitar a soporte el pago o la devolución de ese saldo. Si el banco rechaza el pago o pide confirmación, deberé completarlo en Eclipse. '
+  + 'Los importes inferiores al mínimo de cobro de Stripe también se compensarán con mis liquidaciones, sin redondearlos al alza. '
   + 'Puedo revocar esta autorización para nuevos cargos contactando con soporte; la revocación no extingue las deudas existentes. '
   + 'Las ganancias de las nuevas ventas acogidas a esta política se liquidarán después del evento.';
 const CONSENT_SHA256 = createHash('sha256').update(CONSENT_TEXT).digest('hex');
@@ -59,7 +62,7 @@ function createOrganizerBilling({ db, stripe, livemode }) {
       policy_version: policy.version, consent_text: policy.text, consent_sha256: policy.sha256 }).select('*').single());
     // SetupIntents authorize saving a method; they never collect a deposit.
     const intent = await stripe.setupIntents.create({ customer: billing.stripe_customer_id, usage: 'off_session',
-      automatic_payment_methods: { enabled: true, allow_redirects: 'never' },
+      allowed_payment_method_types: ['card'],
       metadata: { eclipse_organizer_id: userId, eclipse_billing_setup_id: setup.id, eclipse_policy: policy.version } },
     { idempotencyKey: `organizer-billing-setup:${setup.id}` });
     if (intent.livemode !== livemode) throw failure('STRIPE_SETUP_MODE_MISMATCH');
@@ -90,15 +93,35 @@ function createOrganizerBilling({ db, stripe, livemode }) {
     await organizer(userId);
     const billing = await account(userId);
     const cancellations = await checked(db.from('event_cancellations')
-      .select('id,event_id,status,created_at,reason,cancellation_refunds(status,amount_cents,commission_cents),cancellation_collections(id,amount_cents,commission_cents,stripe_costs_cents,status,residual_costs_status)')
+      .select('id,event_id,status,created_at,reason,cancellation_refunds(status,amount_cents,commission_cents),cancellation_collections(id,amount_cents,commission_cents,stripe_costs_cents,status,residual_costs_status,collection_costs_cents,reconciled_total_costs_cents)')
       .eq('organizer_id', userId).order('created_at', { ascending: false }).limit(100));
-    return { policy, ready: billing?.ready === true && billing.policy_version === policy.version,
+    const costEntries = await checked(db.from('organizer_cost_entries')
+      .select('id,amount_cents,notice_delivered_at,created_at,organizer_cost_allocations(amount_cents,organizer_settlement_transfers(status))')
+      .eq('organizer_id', userId).eq('livemode', livemode).order('created_at').limit(1000));
+    const costs = costEntries.map(entry => {
+      let settled = 0, reserved = 0;
+      for (const a of asList(entry.organizer_cost_allocations)) {
+        const status = asList(a.organizer_settlement_transfers)[0]?.status;
+        if (['transferred','offset'].includes(status)) settled += a.amount_cents; else reserved += a.amount_cents;
+      }
+      return { id: entry.id, amountCents: entry.amount_cents, settledCents: settled, reservedCents: reserved,
+        outstandingCents: entry.amount_cents - settled, noticeAcknowledged: Boolean(entry.notice_delivered_at) };
+    });
+    return { policy, ready: billing?.ready === true && billing.policy_version === policy.version && billing.consent_sha256 === policy.sha256, costs,
       cancellations: cancellations.map(row => ({ ...row, cancellation_collections: asList(row.cancellation_collections) })) };
+  }
+  async function acknowledgeCost(userId, id) {
+    await organizer(userId);
+    const row = await checked(db.from('organizer_cost_entries').select('id').eq('id', id).eq('organizer_id', userId).eq('livemode', livemode).maybeSingle());
+    if (!row) throw failure('COST_NOT_FOUND', 404);
+    await checked(db.from('organizer_cost_entries').update({ notice_delivered_at: new Date().toISOString() })
+      .eq('id', id).eq('organizer_id', userId).is('notice_delivered_at', null));
+    return { acknowledged: true };
   }
   async function requestCancellation(userId, eventId, reason) {
     await organizer(userId);
     return checked(db.rpc('request_event_cancellation', { p_event: eventId, p_organizer: userId, p_reason: reason, p_livemode: livemode }));
   }
-  return { beginSetup, confirmSetup, overview, requestCancellation, account };
+  return { beginSetup, confirmSetup, overview, requestCancellation, account, acknowledgeCost };
 }
 module.exports = { policy, failure, checked, idOf, asList, billingRuntime, createOrganizerBilling };

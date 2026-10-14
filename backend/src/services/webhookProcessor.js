@@ -8,7 +8,7 @@ function createWebhookHandler({ db, verify, getTransaction, fulfill, markStatus,
     } catch {
       return { status: 400, json: { received: false, error: 'Invalid webhook signature' } };
     }
-    if (!['payment_intent.succeeded', 'payment_intent.payment_failed', 'payment_intent.requires_action', 'setup_intent.succeeded', 'account.updated', 'refund.updated', 'refund.failed'].includes(event.type)) {
+    if (!['payment_intent.succeeded', 'payment_intent.payment_failed', 'payment_intent.requires_action', 'setup_intent.succeeded', 'account.updated', 'refund.updated', 'refund.failed', 'charge.refunded', 'charge.dispute.created', 'charge.dispute.updated', 'charge.dispute.closed'].includes(event.type)) {
       return { status: 200, json: { received: true, ignored: true } };
     }
 
@@ -27,6 +27,9 @@ function createWebhookHandler({ db, verify, getTransaction, fulfill, markStatus,
         // The cancellation service validates ownership and retrieves Stripe state.
       } else if (event.type === 'setup_intent.succeeded') {
         // Unrelated SetupIntents do not issue tickets.
+      } else if (event.type.startsWith('charge.')) {
+        // The cancellation service handles its own reversed/disputed charges.
+        // Other charge events are not purchase PaymentIntents.
       } else if (event.type === 'payment_intent.requires_action') {
         // Buyer authentication is completed by PaymentSheet.
       } else if (event.type === 'account.updated') {

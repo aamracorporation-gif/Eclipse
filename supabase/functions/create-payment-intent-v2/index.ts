@@ -277,7 +277,7 @@ Deno.serve(async (req) => {
 
     const requireOrganizerConnect = (Deno.env.get("REQUIRE_ORGANIZER_STRIPE_CONNECT") ?? "").trim().toLowerCase() === "true";
     const deferredBillingEnabled = Deno.env.get('ORGANIZER_CANCELLATION_BILLING_ENABLED') === 'true';
-    const deferredPolicy = 'organizer-cancellation-full-refund-v1';
+    const deferredPolicy = 'organizer-cancellation-full-refund-v2';
     const requireDeferredBilling = async (organizerId: string, hasConnect: boolean, creditCents: number) => {
       if (!deferredBillingEnabled) return false;
       if (!hasConnect || creditCents !== 0) throw new Error('Esta compra necesita una cuenta de cobro válida y pago completo con tarjeta.');

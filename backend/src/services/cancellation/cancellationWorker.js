@@ -66,6 +66,17 @@ function createCancellationWorker({ db, stripe, livemode }) {
     await saveRefund(tx.id, { refund_id: own?.id || row.refund_id || null, status, fee_evidence: evidence, last_error: null });
     if (status === 'succeeded') {
       await checked(db.from('payment_transactions').update({ status: 'refunded' }).eq('id', tx.id));
+      if (intent.transfer_data?.destination) {
+        // A historical partial refund may have omitted transfer/application-fee
+        // reversal. The buyer is fully refunded, but accounting is not closed.
+        const settled = await stripe.paymentIntents.retrieve(intent.id, { expand: ['latest_charge.transfer','latest_charge.application_fee'] });
+        const transfer = settled.latest_charge?.transfer, fee = settled.latest_charge?.application_fee;
+        if (!transfer || transfer.amount_reversed !== transfer.amount ||
+          (intent.application_fee_amount && (!fee || fee.amount_refunded !== fee.amount))) {
+          await saveRefund(tx.id, { status: 'attention', last_error: 'LEGACY_ALLOCATION_NOT_RECOVERED' });
+          throw failure('LEGACY_ALLOCATION_NOT_RECOVERED');
+        }
+      }
     }
   }
   async function run(id) {
@@ -109,7 +120,8 @@ function createCancellationWorker({ db, stripe, livemode }) {
           await refundPurchase(job, tx, row);
         } catch (e) {
           // Network failures stay retryable. Failed transfers/refunds remain visible for support.
-          await saveRefund(row.transaction_id, { last_error: e.code || 'REFUND_RETRY_REQUIRED' });
+          const needsReview = ['FAILED_REFUND_REQUIRES_REVIEW','REFUND_AMOUNT_MISMATCH','STRIPE_PAYMENT_MISMATCH','STRIPE_RECEIVED_AMOUNT_MISMATCH'].includes(e.code);
+          await saveRefund(row.transaction_id, { last_error: e.code || 'REFUND_RETRY_REQUIRED', ...(needsReview ? { status: 'attention' } : {}) });
           error = e.code || 'REFUND_RETRY_REQUIRED';
         }
       }
@@ -121,7 +133,7 @@ function createCancellationWorker({ db, stripe, livemode }) {
       }
       const refundsFinished = states.every(r => ['succeeded','not_paid'].includes(r.status));
       if (['refunding','reconciliation','attention'].includes(job.status)) {
-        await checked(db.from('event_cancellations').update({ status: refundsFinished ? (states.every(r => r.status === 'not_paid') ? 'collected' : 'reconciliation') : 'refunding' })
+        await checked(db.from('event_cancellations').update({ status: states.some(r => r.status === 'attention') ? 'attention' : refundsFinished ? (states.every(r => r.status === 'not_paid') ? 'collected' : 'reconciliation') : 'refunding' })
           .eq('id', id).eq('lease_token', job.lease_token));
       }
       return { refundsFinished, error };
@@ -133,6 +145,13 @@ function createCancellationWorker({ db, stripe, livemode }) {
   }
   async function handleWebhook(event) {
     const object = event.data.object;
+    if (event.type === 'charge.refunded' || event.type.startsWith('charge.dispute.')) {
+      const charge = event.type === 'charge.refunded' ? object : await stripe.charges.retrieve(idOf(object.charge));
+      if (!idOf(charge.payment_intent)) return false;
+      const current = await stripe.paymentIntents.retrieve(idOf(charge.payment_intent));
+      if (current.metadata?.eclipse_purpose !== 'organizer_cancellation_collection') return false;
+      return handleWebhook({ type: 'payment_intent.succeeded', data: { object: current } });
+    }
     if (event.type.startsWith('payment_intent.') && object.metadata?.eclipse_purpose === 'organizer_cancellation_collection') {
       const row = await checked(db.from('cancellation_collections').select('*,event_cancellations!inner(organizer_id,livemode)')
         .eq('id', object.metadata.eclipse_collection_id).maybeSingle());
@@ -144,6 +163,11 @@ function createCancellationWorker({ db, stripe, livemode }) {
       // Retrieve current state: out-of-order failure events cannot undo success.
       const current = await stripe.paymentIntents.retrieve(object.id, { expand: ['latest_charge.balance_transaction'] });
       if (current.status === 'succeeded' && current.amount_received !== row.amount_cents) throw failure('COLLECTION_RECEIVED_MISMATCH');
+      if (current.latest_charge?.disputed || current.latest_charge?.amount_refunded > 0) {
+        await checked(db.from('cancellation_collections').update({ status: 'attention' }).eq('id', row.id));
+        await checked(db.from('event_cancellations').update({ status: 'attention', last_error: 'COLLECTION_REVERSED_OR_DISPUTED' }).eq('id', row.cancellation_id));
+        return true;
+      }
       const status = ['succeeded','requires_action','requires_payment_method'].includes(current.status) ? current.status : 'processing';
       let collectionFee = null;
       if (status === 'succeeded') {
@@ -152,10 +176,27 @@ function createCancellationWorker({ db, stripe, livemode }) {
       }
       await checked(db.from('cancellation_collections').update({ payment_intent_id: current.id, status,
         ...(collectionFee ? { collection_fee_evidence: collectionFee } : {}) }).eq('id', row.id));
-      await checked(db.from('event_cancellations').update({ status: status === 'succeeded' ? 'collected' : 'requires_action' }).eq('id', row.cancellation_id));
+      await checked(db.from('event_cancellations').update({ status: status === 'succeeded' ? 'collected' : 'requires_action' }).eq('id', row.cancellation_id)
+        .in('status', ['collection_pending','requires_action','collected']));
       return true;
     }
-    if (event.type.startsWith('refund.') && object.metadata?.eclipse_reason === 'organizer_cancellation') return true; // Worker retrieves authoritative state.
+    if (event.type.startsWith('refund.') && object.metadata?.eclipse_reason === 'organizer_cancellation') {
+      const row = await checked(db.from('cancellation_refunds').select('*').eq('transaction_id', object.metadata.eclipse_transaction_id).maybeSingle());
+      if (!row || row.cancellation_id !== object.metadata.eclipse_cancellation_id) throw failure('REFUND_LEDGER_MISMATCH');
+      const current = await stripe.refunds.retrieve(object.id);
+      const intent = await stripe.paymentIntents.retrieve(row.payment_intent_id);
+      if (intent.livemode !== livemode || idOf(current.payment_intent) !== intent.id ||
+        current.metadata?.eclipse_cancellation_id !== row.cancellation_id || current.metadata?.eclipse_transaction_id !== row.transaction_id) throw failure('REFUND_PAYMENT_MISMATCH');
+      const failed = ['failed','canceled'].includes(current.status);
+      await saveRefund(row.transaction_id, { status: failed ? 'attention' : 'processing', last_error: failed ? 'REFUND_FAILED_AFTER_SUBMISSION' : null });
+      if (failed) {
+        // Refunds may fail AFTER a success event. Reopen the buyer's case and
+        // freeze collections/payouts; never silently issue another card refund.
+        await checked(db.from('payment_transactions').update({ status: 'refund_pending' }).eq('id', row.transaction_id));
+        await checked(db.from('event_cancellations').update({ status: 'attention', last_error: 'REFUND_FAILED_AFTER_SUBMISSION' }).eq('id', row.cancellation_id));
+      }
+      return true;
+    }
     if (event.type.startsWith('payment_intent.') && object.metadata?.event_id) {
       const job = await checked(db.from('event_cancellations').select('id').eq('event_id', object.metadata.event_id).maybeSingle());
       if (job) return true; // Worker discovers and refunds late successful payments.

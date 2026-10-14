@@ -40,7 +40,7 @@ async function checkout(price: number, options: { kind?: string; rate?: string; 
     }]);
     if (url.includes('/rest/v1/profiles')) return reply([{ stripe_account_id: 'acct_fixture', stripe_charges_enabled: true }]);
     if (url.includes('/rest/v1/organizer_billing_accounts')) return reply(options.billing === 'missing' ? [] : [{
-      ready: true, livemode: options.billing === 'wrong_mode', policy_version: 'organizer-cancellation-full-refund-v1',
+      ready: true, livemode: options.billing === 'wrong_mode', policy_version: 'organizer-cancellation-full-refund-v2',
     }]);
     if (url.includes('/rest/v1/event_cancellations')) return reply(options.billing === 'debt' ? [{ id: 'pending-cancellation' }] : []);
     if (url.includes('/v1/accounts/acct_fixture')) return reply({ id: 'acct_fixture' });
@@ -106,7 +106,7 @@ it.each(['event_ticket', 'vip_table'])('%s keeps funds on the platform until pos
   expect(result.stripeParams?.has('transfer_data[destination]')).toBe(false);
   expect(result.stripeParams?.get('transfer_group')).toBe('event_event-fixture');
   expect(result.transaction.metadata.settlement_model).toBe('after_event_v1');
-  expect(result.transaction.metadata.cancellation_policy).toBe('organizer-cancellation-full-refund-v1');
+  expect(result.transaction.metadata.cancellation_policy).toBe('organizer-cancellation-full-refund-v2');
   expect(result.transaction.destination_account_id).toBe('acct_fixture');
   expect(result.transaction.destination_amount_cents).toBe(kind === 'event_ticket' ? 1800 : 1900);
 });

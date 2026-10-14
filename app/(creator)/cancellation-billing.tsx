@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Alert, Platform, ScrollView, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useStripe } from '@stripe/stripe-react-native';
+import { useOrganizerStripe } from '@/lib/payments/useOrganizerStripe';
 import * as Linking from 'expo-linking';
 import { Colors } from '@/constants/Colors';
 import { GlassView } from '@/components/ui/GlassView';
@@ -11,12 +11,12 @@ import { BillingOverview, organizerBillingRequest, organizerBillingVisible } fro
 
 const euros = (value: number) => `${(value / 100).toFixed(2).replace('.', ',')} €`;
 const states: Record<string, string> = { refunding: 'Devoluciones en curso', reconciliation: 'Calculando costes reales',
-  collection_pending: 'Desglose disponible', requires_action: 'Pago pendiente de completar', collected: 'Cargo principal pagado', attention: 'En revisión' };
+  collection_pending: 'Desglose disponible', requires_action: 'Pago pendiente de completar', collected: 'Devoluciones completadas', attention: 'En revisión' };
 
 export default function CancellationBillingScreen() {
   const router = useRouter();
   const { event_id: eventId } = useLocalSearchParams<{ event_id?: string }>();
-  const stripe = useStripe();
+  const stripe = useOrganizerStripe();
   const [data, setData] = useState<BillingOverview | null>(null);
   const [accepted, setAccepted] = useState(false);
   const [reason, setReason] = useState('');
@@ -101,10 +101,24 @@ export default function CancellationBillingScreen() {
           <Text style={styles.text}>Comisión Eclipse: {euros(payment.commission_cents)}</Text>
           <Text style={styles.text}>Costes Stripe conciliados: {euros(payment.stripe_costs_cents)}</Text>
           <Text style={styles.subtitle}>Total: {euros(payment.amount_cents)}</Text>
-          {payment.residual_costs_status === 'pending' && <Text style={styles.text}>Los gastos del propio cobro están pendientes de conciliación. Se comunicarán por separado.</Text>}
-          {payment.status !== 'succeeded' && <ThemedButton title={`Pagar ${euros(payment.amount_cents)}`} loading={busy} onPress={() => void pay(payment.id)} />}
+          <Text style={styles.text}>{payment.status === 'succeeded' ? 'Cargo principal pagado' : payment.status === 'deferred' ? 'Se compensará en la próxima liquidación; no se ha cargado a la tarjeta.' : 'Cargo pendiente'}</Text>
+          {payment.residual_costs_status === 'pending' ? <Text style={styles.text}>Los gastos del propio cobro están pendientes de conciliación. Se compensarán en tu siguiente liquidación, con aviso y desglose.</Text>
+            : <Text style={styles.text}>Gastos reales del cobro: {euros(payment.collection_costs_cents || 0)}. Total de costes Stripe revisados: {euros(payment.reconciled_total_costs_cents || 0)}.</Text>}
+          {!['succeeded','deferred'].includes(payment.status) && <ThemedButton title={`Pagar ${euros(payment.amount_cents)}`} loading={busy} onPress={() => void pay(payment.id)} />}
         </View>)}
       </GlassView>)}
+      {!!data?.costs.length && <GlassView style={styles.card}>
+        <Text style={styles.subtitle}>Ajustes en tus liquidaciones</Text>
+        <Text style={styles.text}>Los costes confirmados por Stripe se descuentan de tus próximas ganancias. Un importe negativo es saldo a tu favor. Si no hay ganancias suficientes, el saldo sigue pendiente; contacta con soporte para liquidarlo.</Text>
+        {data.costs.map(cost => <View key={cost.id} style={styles.card}>
+          <Text style={styles.text}>Ajuste: {euros(cost.amountCents)}</Text>
+          <Text style={styles.text}>Compensado: {euros(cost.settledCents)} · Pendiente: {euros(cost.outstandingCents)}</Text>
+          {cost.reservedCents !== 0 && <Text style={styles.text}>Incluido en una liquidación en curso: {euros(cost.reservedCents)}</Text>}
+          {!cost.noticeAcknowledged && <ThemedButton title="He leído el ajuste" loading={busy} onPress={() => void run(async () => {
+            await organizerBillingRequest(`/costs/${cost.id}/acknowledge`, {});
+          })} />}
+        </View>)}
+      </GlassView>}
       <ThemedButton title="Actualizar estado" variant="outline" loading={busy} onPress={() => void run(async () => {})} />
     </>}
   </ScrollView></SafeAreaView>;

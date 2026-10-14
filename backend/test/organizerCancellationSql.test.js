@@ -21,7 +21,7 @@ test('cancellation ledger enforces ownership, authorization, terminal state and 
     GRANT SELECT,INSERT,UPDATE ON events,payment_transactions TO service_role;`);
   await db.exec(fs.readFileSync(path.join(__dirname, '../../supabase/migrations/20261014001706_organizer_deferred_cancellation_billing.sql'), 'utf8'));
   await db.query(`INSERT INTO organizer_billing_accounts(organizer_id,stripe_customer_id,livemode,ready,policy_version,setup_intent_id)
-    VALUES($1,'cus_owner',false,true,'organizer-cancellation-full-refund-v1','seti_owner')`, [owner]);
+    VALUES($1,'cus_owner',false,true,'organizer-cancellation-full-refund-v2','seti_owner')`, [owner]);
   const event = async date => (await db.query("INSERT INTO events(creator_id,event_date) VALUES($1,COALESCE($2::timestamptz,now()+interval '2 days')) RETURNING id",[owner,date || null])).rows[0].id;
   const request = async (id, user = owner, live = false) => (await db.query('SELECT request_event_cancellation($1,$2,$3,$4) job',[id,user,'Motivo justificado',live])).rows[0].job;
   const id = await event();

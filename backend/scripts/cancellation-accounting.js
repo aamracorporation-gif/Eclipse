@@ -7,11 +7,12 @@ const { billingRuntime, checked } = require('../src/services/cancellation/organi
 const { createOrganizerSettlement } = require('../src/services/cancellation/organizerSettlement');
 const { supabaseAdmin } = require('../src/services/supabaseService');
 const { getStripeClient } = require('../src/services/stripe/stripeClient');
+const { importFeeReport, reconcileCollectionFees } = require('../src/services/cancellation/feeReconciliation');
 
 async function main(args) {
   const [operation, id, file, ...flags] = args;
-  if (!['prepare-collection','collect','release'].includes(operation) || !/^[0-9a-f-]{36}$/i.test(id || '')) {
-    throw new Error('Usage: prepare-collection <cancellation UUID> <reviewed-evidence.json> | collect <collection UUID> | release <payment UUID> [--execute --event-completion-verified]');
+  if (!['prepare-collection','reconcile-costs','collect','release'].includes(operation) || !/^[0-9a-f-]{36}$/i.test(id || '')) {
+    throw new Error('Usage: prepare-collection <cancellation UUID> <reviewed-evidence.json> | reconcile-costs <collection UUID> <fees.csv> <reviewed-manifest.json> | collect <collection UUID> | release <payment UUID> [--execute --event-completion-verified]');
   }
   const service = cancellationServices();
   if (operation === 'prepare-collection') {
@@ -19,6 +20,12 @@ async function main(args) {
     const evidence = JSON.parse(fs.readFileSync(file, 'utf8'));
     const result = await service.collections.prepare(id, evidence);
     console.log(JSON.stringify({ prepared: true, collectionId: result.id || null, amountCents: result.amount_cents || 0 }));
+  } else if (operation === 'reconcile-costs') {
+    if (!file || flags.length !== 1) throw new Error('Complete itemized fees CSV and reviewed manifest required');
+    const evidence = importFeeReport(fs.readFileSync(file,'utf8'), JSON.parse(fs.readFileSync(flags[0],'utf8')));
+    const { livemode } = billingRuntime();
+    const result = await reconcileCollectionFees({ db: supabaseAdmin, stripe: getStripeClient(), livemode }, id, evidence);
+    console.log(JSON.stringify(result));
   } else if (operation === 'collect') {
     // A prior customer-visible notice or explicit acknowledgement is mandatory.
     // This command cannot manufacture a notice-delivery timestamp.
@@ -31,7 +38,7 @@ async function main(args) {
     const { livemode } = billingRuntime();
     const result = await createOrganizerSettlement({ db: supabaseAdmin, stripe: getStripeClient(), livemode }).release(id,
       { execute: options.includes('--execute'), eventCompletionVerified: options.includes('--event-completion-verified') });
-    console.log(JSON.stringify({ paymentId: id, amountCents: result.amountCents, transferred: Boolean(result.transferId) }));
+    console.log(JSON.stringify({ paymentId: id, ...result, transferred: Boolean(result.transferId) }));
   }
 }
 if (require.main === module) main(process.argv.slice(2)).catch(e => { console.error(e.code || e.message); process.exitCode = 1; });

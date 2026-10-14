@@ -2,9 +2,10 @@ import { supabase } from '@/lib/supabase';
 
 export const organizerBillingVisible = process.env.EXPO_PUBLIC_ORGANIZER_CANCELLATION_BILLING === 'true';
 export type BillingPolicy = { version: string; text: string; sha256: string };
-export type Collection = { id: string; amount_cents: number; commission_cents: number; stripe_costs_cents: number; status: string; residual_costs_status: string };
+export type Collection = { id: string; amount_cents: number; commission_cents: number; stripe_costs_cents: number; status: string; residual_costs_status: string; collection_costs_cents: number | null; reconciled_total_costs_cents: number | null };
 export type Cancellation = { id: string; event_id: string; status: string; reason: string; cancellation_refunds: { status: string; amount_cents: number }[]; cancellation_collections: Collection[] };
-export type BillingOverview = { policy: BillingPolicy; ready: boolean; cancellations: Cancellation[] };
+export type CostEntry = { id: string; amountCents: number; settledCents: number; reservedCents: number; outstandingCents: number; noticeAcknowledged: boolean };
+export type BillingOverview = { policy: BillingPolicy; ready: boolean; cancellations: Cancellation[]; costs: CostEntry[] };
 
 export async function organizerBillingRequest<T>(path = '', body?: unknown): Promise<T> {
   const base = String(process.env.EXPO_PUBLIC_API_URL || '').trim().replace(/\/+$/, '').replace(/\/api$/, '');

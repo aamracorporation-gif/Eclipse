@@ -1,6 +1,6 @@
 'use strict';
 
-const POLICY_VERSION = 'organizer-cancellation-full-refund-v1';
+const POLICY_VERSION = 'organizer-cancellation-full-refund-v2';
 
 class CancellationCalculationError extends Error {
   constructor(code) {
@@ -126,5 +126,5 @@ function inlineStripeFeeEvidence(paymentIntent, expected) {
 }
 
 module.exports = {
-  POLICY_VERSION, CancellationCalculationError, calculateCancellationAmounts, inlineStripeFeeEvidence,
+  POLICY_VERSION, CancellationCalculationError, calculateCancellationAmounts, inlineStripeFeeEvidence, netProviderCosts,
 };

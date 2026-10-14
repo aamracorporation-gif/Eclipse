@@ -26,4 +26,7 @@ router.post('/events/:id/cancel', asyncHandler(async (req, res) => {
 router.post('/collections/:id/pay', asyncHandler(async (req, res) => {
   res.json(await cancellationServices().collections.acknowledgeAndCollect(z.string().uuid().parse(req.params.id), req.auth.userId));
 }));
+router.post('/costs/:id/acknowledge', asyncHandler(async (req, res) => {
+  res.json(await cancellationServices().billing.acknowledgeCost(req.auth.userId, z.string().uuid().parse(req.params.id)));
+}));
 module.exports = { organizerBillingRoutes: router };

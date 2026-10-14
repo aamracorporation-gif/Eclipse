@@ -10,6 +10,7 @@ function memoryDb(tables) {
     const filters=[]; let op='select',payload;
     const query={ select(){return query;}, eq(k,v){filters.push(row=>row[k]===v);return query;},
       neq(k,v){filters.push(row=>row[k]!==v);return query;},
+      in(k,v){filters.push(row=>v.includes(row[k]));return query;},
       is(k,v){filters.push(row=>(row[k]??null)===v);return query;},
       maybeSingle(){return run(true);},single(){return run(true);},update(v){op='update';payload=v;return query;},
       insert(v){op='insert';payload=v;return query;},upsert(v){op='insert';payload=v;return query;},
@@ -75,6 +76,8 @@ test('full refund reuses provider result after timeout instead of creating a sec
 test('prior partial refund reduces remainder; destination charge reverses allocation and application fee',async()=>{
   const tables={cancellation_refunds:[{transaction_id:'tx_1'}],payment_transactions:[{id:'tx_1'}]};let requested;
   const pi={...payment(),transfer_data:{destination:'acct_org'},application_fee_amount:256};
+  pi.latest_charge.transfer={amount:2056,amount_reversed:2056};
+  pi.latest_charge.application_fee={amount:256,amount_refunded:256};
   const worker=createCancellationWorker({db:memoryDb(tables),livemode:false,stripe:{paymentIntents:{retrieve:async()=>pi},refunds:{
     list:()=>({autoPagingToArray:async()=>[{id:'re_old',amount:1000,status:'succeeded'}]}),
     create:async p=>{requested=p;return{id:'re_new',amount:p.amount,status:'succeeded'};},
@@ -91,6 +94,30 @@ test('a wrong-mode payment cannot be refunded; a pending refund is not reported 
   pi.livemode=false;await worker.refundPurchase(job,tx,{});
   assert.equal(tables.cancellation_refunds[0].status,'processing');assert.equal(tables.payment_transactions[0].status,'refund_pending');
 });
+
+test('a historical refund without transfer reversal returns the buyer money but cannot close accounting',async()=>{
+  const tables={cancellation_refunds:[{transaction_id:'tx_1'}],payment_transactions:[{id:'tx_1'}]};
+  const pi={...payment(),transfer_data:{destination:'acct_org'},application_fee_amount:256};
+  pi.latest_charge.transfer={amount:2056,amount_reversed:1056};
+  pi.latest_charge.application_fee={amount:256,amount_refunded:131};
+  const worker=createCancellationWorker({db:memoryDb(tables),livemode:false,stripe:{paymentIntents:{retrieve:async()=>pi},refunds:{
+    list:()=>({autoPagingToArray:async()=>[{id:'re_old',amount:2056,status:'succeeded'}]}),
+  }}});
+  await assert.rejects(worker.refundPurchase(job,tx,{}),/LEGACY_ALLOCATION_NOT_RECOVERED/);
+  assert.equal(tables.payment_transactions[0].status,'refunded');
+  assert.equal(tables.cancellation_refunds[0].status,'attention');
+});
+
+test('a disputed organizer charge reopens the case using provider state, even after a stale success',async()=>{
+  const pi={id:'pi_debt',amount:290,amount_received:290,currency:'eur',livemode:false,status:'succeeded',customer:'cus_org',
+    metadata:{eclipse_purpose:'organizer_cancellation_collection',eclipse_collection_id:'debt'},latest_charge:{disputed:true}};
+  const row={id:'debt',cancellation_id:'job_1',amount_cents:290,status:'succeeded',payment_intent_id:'pi_debt',event_cancellations:{organizer_id:'organizer',livemode:false}};
+  const tables={cancellation_collections:[row],event_cancellations:[{id:'job_1',status:'collected'}],organizer_billing_accounts:[{organizer_id:'organizer',stripe_customer_id:'cus_org'}]};
+  const worker=createCancellationWorker({db:memoryDb(tables),livemode:false,stripe:{paymentIntents:{retrieve:async()=>pi},charges:{retrieve:async()=>({payment_intent:'pi_debt'})}}});
+  await worker.handleWebhook({type:'charge.dispute.created',data:{object:{charge:'ch_debt'}}});
+  await worker.handleWebhook({type:'payment_intent.succeeded',data:{object:pi}});
+  assert.equal(row.status,'attention');assert.equal(tables.event_cancellations[0].status,'attention');
+});
 test('billing refuses unknown costs and duplicate evidence; commission plus real cost is 2.56 EUR',()=>{
   const refunds=[{transaction_id:'tx_1',status:'succeeded',amount_cents:2056,service_charge_cents:56,commission_cents:200}];
   const evidence={reference:'stripe-report-reviewed',feesFinalized:true,purchases:[{transactionId:'tx_1',costs:[{reference:'txn_fee',amountCents:56,category:'processing',direction:'debit',currency:'eur'}]}]};
@@ -101,7 +128,7 @@ test('billing refuses unknown costs and duplicate evidence; commission plus real
 });
 test('organizer collection recovers lost response, does not charge again and keeps collection costs pending',async()=>{
   const row={id:'debt',cancellation_id:'job_1',amount_cents:256,notice_delivered_at:'2026-01-01',
-    event_cancellations:{organizer_id:'organizer',livemode:false},'event_cancellations.organizer_id':'organizer',residual_costs_status:'pending'};
+    event_cancellations:{organizer_id:'organizer',livemode:false,status:'collection_pending'},'event_cancellations.organizer_id':'organizer',residual_costs_status:'pending'};
   const tables={cancellation_collections:[row],event_cancellations:[{id:'job_1'}],organizer_billing_accounts:[{organizer_id:'organizer',stripe_customer_id:'cus_org',livemode:false,ready:true,policy_version:policy.version,payment_method_id:'pm_org'}]};
   const intents=[];let calls=0;
   const stripe={paymentIntents:{list:()=>({autoPagingToArray:async()=>intents}),retrieve:async()=>intents[0],create:async p=>{

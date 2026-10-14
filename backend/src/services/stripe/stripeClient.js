@@ -29,7 +29,7 @@ function getStripeClient() {
   if (stripeInstance) return stripeInstance;
   const key = getStripeSecretKey();
   stripeInstance = new Stripe(key, {
-    apiVersion: '2024-06-20',
+    apiVersion: '2026-08-26.dahlia',
     typescript: false,
   });
   return stripeInstance;

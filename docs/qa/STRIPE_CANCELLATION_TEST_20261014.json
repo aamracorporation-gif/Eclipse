@@ -1,0 +1,108 @@
+{
+  "runId": "cbe78000-5e65-4d28-b113-dda7db78d0de",
+  "account": "acct_1UKJbDQX94Oeeb3v",
+  "livemode": false,
+  "startedAt": "2026-10-14T18:41:28.660Z",
+  "cases": [
+    {
+      "name": "SetupIntent saves card without an initial charge",
+      "passed": true,
+      "setupIntentId": "seti_1UQX7FQX94Oeeb3vvJXJ6Emv",
+      "customerId": "cus_VRPxElFyLVqPHZ"
+    },
+    {
+      "name": "Buyer payment holds organizer proceeds until after event",
+      "passed": true,
+      "paymentIntentId": "pi_3UQX7HQX94Oeeb3v0rLPVJTX",
+      "amountCents": 2056
+    },
+    {
+      "name": "Full buyer refund, invalidated admission and lost-response retry without duplicate",
+      "passed": true,
+      "refundId": "re_3UQX7HQX94Oeeb3v07iQwPVB",
+      "amountCents": 2056
+    },
+    {
+      "name": "Off-session collection recovers lost response and charges only once",
+      "passed": true,
+      "paymentIntentId": "pi_3UQX7KQX94Oeeb3v5SG7FxVY",
+      "commissionCents": 200,
+      "originalFeeCents": 90,
+      "amountCents": 290,
+      "collectionFeeCents": 34
+    },
+    {
+      "name": "Out-of-order failure event cannot undo a successful collection",
+      "passed": true
+    },
+    {
+      "name": "Collection fee becomes an exact recoverable balance; same report cannot duplicate debt",
+      "passed": true,
+      "adjustmentCents": 34,
+      "feeEvidence": "actual test balance transactions; report-finality fixture"
+    },
+    {
+      "name": "Real Stripe transfer deducts collection expense once, after notice and event completion",
+      "passed": true,
+      "transferId": "tr_3UQX7VQX94Oeeb3v3N276vhG",
+      "grossCents": 1800,
+      "netCents": 1766,
+      "offsetCents": 34
+    },
+    {
+      "name": "Saved card can fail later; collection remains unpaid and repeated request reuses the same payment",
+      "passed": true,
+      "paymentIntentId": "pi_3UQX7ZQX94Oeeb3v4B2KD1G7",
+      "status": "requires_payment_method"
+    },
+    {
+      "name": "Organizer recovers a declined charge on the same PaymentIntent",
+      "passed": true,
+      "paymentIntentId": "pi_3UQX7ZQX94Oeeb3v4B2KD1G7"
+    },
+    {
+      "name": "Card setup requiring bank authentication is not falsely marked completed",
+      "passed": true,
+      "setupIntentId": "seti_1UQX7cQX94Oeeb3vUaqrF9EF",
+      "status": "requires_action"
+    },
+    {
+      "name": "Legacy destination/VIP purchase: partial plus final refund returns full price, reverses organizer transfer and application fee",
+      "passed": true,
+      "paymentIntentId": "pi_3UQX7dQX94Oeeb3v16jHpSVW",
+      "finalRefundId": "re_3UQX7dQX94Oeeb3v1tsNX7Hm"
+    },
+    {
+      "name": "Legacy partial refund without allocation reversal: buyer fully refunded, missing recovery explicitly blocks accounting",
+      "passed": true,
+      "paymentIntentId": "pi_3UQX7lQX94Oeeb3v5pkdicdP",
+      "finalRefundId": "re_3UQX7lQX94Oeeb3v5hocq38m"
+    },
+    {
+      "name": "Pending Stripe refund is never shown as completed",
+      "passed": true,
+      "paymentIntentId": "pi_3UQX7rQX94Oeeb3v3c0MSuQD",
+      "refundId": "re_3UQX7rQX94Oeeb3v3Rl4ABQ0"
+    },
+    {
+      "name": "Delayed Stripe refund completes after authoritative provider update",
+      "passed": true,
+      "paymentIntentId": "pi_3UQX7rQX94Oeeb3v3c0MSuQD",
+      "refundId": "re_3UQX7rQX94Oeeb3v3Rl4ABQ0"
+    },
+    {
+      "name": "Refund later fails: buyer case reopens, organizer collection is blocked, stale success cannot hide failure and no duplicate refund is issued",
+      "passed": true,
+      "paymentIntentId": "pi_3UQX9sQX94Oeeb3v07QSEYwh",
+      "refundId": "re_3UQX9sQX94Oeeb3v0XfzNIsF"
+    },
+    {
+      "name": "Organizer charge refunded later: case reopens, stale success cannot mark it paid and no replacement charge is issued",
+      "passed": true,
+      "paymentIntentId": "pi_3UQX7KQX94Oeeb3v5SG7FxVY",
+      "refundId": "re_3UQX7KQX94Oeeb3v5fncGG0k"
+    }
+  ],
+  "finishedAt": "2026-10-14T18:46:26.364Z",
+  "passed": true
+}

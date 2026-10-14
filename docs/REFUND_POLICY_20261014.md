@@ -1,62 +1,56 @@
-# Eclipse: cancelaciones y cobro posterior al organizador
+# Eclipse: cancelaciones sin fianza inicial
 
-Decisión vigente de Achraf, 14 de octubre de 2026: **«Sí, cobro posterior sin fianza inicial»**. Sustituye las propuestas anteriores de fianza, retención de comisión al comprador y retención del gasto de Stripe al comprador.
+Decisión vigente de Achraf: **cobro posterior sin fianza inicial**. Sustituye las propuestas de retener gastos al comprador o exigir un depósito. Consentimiento del candidato: organizer-cancellation-full-refund-v2.
 
-## Política acordada
+## Política y recorrido
 
-- Si cancela el organizador, el comprador recupera **todo lo pagado**, incluido el cargo de servicio, en el medio original. El cobro al organizador es independiente de esa devolución.
-- El organizador guarda una tarjeta y acepta expresamente una autorización. Guardarla no cobra una fianza. Su banco puede pedir autenticación para autorizarla.
-- Tras la cancelación, el organizador debe la comisión de Eclipse registrada en las ventas afectadas y los costes reales no recuperados de Stripe. Se entrega el desglose antes del cargo.
-- Los costes reales incluyen los de procesamiento, devolución y cobro de esa deuda cuando correspondan, netos de abonos. No se identifica el cargo de servicio calculado en la compra con el coste real de Stripe.
-- Las nuevas ventas acogidas a la política se liquidan al organizador después del evento. No se ha acordado un plazo fijo de 48 horas; la operación exige verificar la finalización y resolver incidencias.
-- No hay devolución voluntaria por simple cambio de opinión si el evento se celebra conforme a lo anunciado. Se mantienen todos los supuestos legalmente obligatorios.
-- Una tarjeta guardada no garantiza cobrar. El usuario ha aceptado expresamente el riesgo de rechazo, autenticación o impago para Eclipse. Eclipse también necesita liquidez para devolver antes de cobrar la deuda.
+1. El organizador guarda una tarjeta con autorización expresa. No se cobra una fianza. El banco puede pedir autenticación.
+2. Si cancela, se detienen las ventas, se invalidan las entradas y el comprador recibe **todo lo pagado, incluido el servicio**, en su medio original. Los fallos del cargo al organizador no suspenden esta devolución.
+3. El organizador debe la comisión histórica de Eclipse y los costes reales no recuperados de Stripe, netos de abonos. Se comunica un desglose antes del cobro. El cargo desatendido requiere entrega confirmada del aviso y al menos 24 horas configuradas; también puede pagarlo expresamente desde la app.
+4. Hay **un cargo inicial** por comisión y costes de venta/devolución ya conciliados. El coste real de ese cargo y los ajustes posteriores se registran como saldo y se compensan con las siguientes liquidaciones, después de avisar. Los abonos a favor del organizador también se trasladan a su saldo. No se encadenan microcargos a la tarjeta.
+5. Si la deuda inicial no alcanza 0,50 EUR, se compensa íntegramente con futuras liquidaciones sin redondearla al alza. Si no hay ingresos suficientes, el resto sigue pendiente y requiere resolución con soporte. Un crédito pendiente también sigue siendo dinero debido al organizador.
+6. Las nuevas ventas acogidas al modelo se liquidan después del evento y de verificar su finalización. No se ha pactado un plazo fijo de 48 horas. No se liberan fondos con devoluciones, gastos, avisos o incidencias pendientes.
+7. No hay devolución voluntaria por cambio de opinión cuando el evento se celebra conforme a lo anunciado; se respetan las devoluciones legalmente obligatorias.
 
-## Ejemplo y contabilidad
+**No existe garantía de pérdida cero:** la tarjeta puede fallar, requerir autenticación, ser revocada o sufrir una disputa. Puede no haber ganancias futuras para compensar. El riesgo de impago fue explicado y aceptado; Eclipse necesita liquidez para devolver al comprador antes de recuperar la deuda.
 
-Compra de 20,56 EUR: entrada 20 EUR, servicio 0,56 EUR, comisión Eclipse 2 EUR, asignación inicial al organizador 18 EUR. Si los gastos reales de la venta y devolución son 0,56 EUR:
+## Ejemplo ejecutado en Stripe TEST
+
+Los costes siguientes proceden de las transacciones de balance del ensayo; **no son una tarifa garantizada de vuestra cuenta live**. La revisión de cobertura/finalidad del informe fue un fixture de prueba.
 
 | Concepto | Importe |
 |---|---:|
-| Devolución total al comprador | 20,56 EUR |
-| Comisión incluida en la deuda del organizador | 2,00 EUR |
-| Costes Stripe conciliados de venta/devolución | 0,56 EUR |
-| Primer cargo al organizador | 2,56 EUR |
+| Compra y devolución íntegra al comprador | 20,56 EUR |
+| Comisión histórica de Eclipse | 2,00 EUR |
+| Coste Stripe de la venta en este ensayo | 0,90 EUR |
+| Cargo inicial al organizador | 2,90 EUR |
+| Coste Stripe de ese cargo | 0,34 EUR |
+| Siguiente liquidación bruta del organizador | 18,00 EUR |
+| Compensación de gastos avisados | −0,34 EUR |
+| Transferencia neta al organizador | 17,66 EUR |
 
-El propio cargo de 2,56 EUR puede generar otro gasto de Stripe. Ese gasto no se considera cero, no se inventa con una tarifa genérica y **no está cubierto por el ejemplo**. Se registra para conciliación posterior y resolución contable, sin una secuencia infinita de microcargos. Mientras no se resuelva, el expediente conserva costes pendientes y bloquea la liquidación posterior. No se promete un beneficio neto de 2 EUR hasta cobrar y conciliar todo.
+Reintentar el cargo, el informe y la transferencia no duplica ninguno. La comisión solo puede considerarse conservada neta cuando se han recuperado todos los costes. Las comisiones no disponibles o provisionales nunca se convierten automáticamente en cero.
 
-Las ventas antiguas con destination charges requieren recuperar su asignación mediante la reversión de transferencia. En una devolución completa se devuelve también la application fee original y la comisión contractual se recupera mediante el cobro de cancelación. Con las nuevas ventas retenidas no se envía una transferencia al crear la compra: la comisión se conserva por diferencia cuando se liquida el neto, no mediante application_fee_amount.
+## Conciliación y excepciones
 
-## Qué incluye el candidato de código
+El importador interno valida el informe detallado completo de Stripe, la cuenta, el modo, la moneda, los pagos/devoluciones afectados, impuestos de las comisiones y abonos. Usa instantáneas completas, no suma otra vez el fee inline. Cada revisión queda registrada y solo genera la diferencia respecto a la anterior. La descarga y revisión de cobertura del informe siguen siendo una tarea de operaciones; no hay un endpoint público para inventar costes.
 
-- Autorización con texto/version/hash/fecha, SetupIntent off_session y comprobación de propiedad, modo y tarjeta confirmada por Stripe.
-- Pantalla del organizador para autorizar tarjeta, solicitar cancelación, consultar devoluciones y desglose, y completar pagos que requieren intervención del banco. Sección legal de devoluciones.
-- Cancelación persistente: detiene ventas, conserva compras, invalida entradas y tramita devoluciones con reintentos. Una respuesta perdida no crea una segunda devolución. Se descuentan devoluciones parciales previas.
-- Protección de compras que se cruzan con la cancelación y de liquidaciones que se cruzan con ella. Los clientes no pueden escribir en el registro financiero ni cancelar un evento vendido saltándose este recorrido.
-- Nuevas ventas de entradas/mesas acogidas a la política sin transferencia inmediata. El endpoint de cobro antiguo queda bloqueado al activar el nuevo modelo.
-- Cargo inicial único por expediente, recuperación del mismo PaymentIntent tras errores, tratamiento de autenticación/impago y bloqueo de más exposición por expedientes pendientes.
-- Aviso de desglose mediante el sistema de notificaciones existente. El cobro desatendido exige constancia de entrega y un margen configurado de al menos 24 horas; es una salvaguarda operativa, no un nuevo plazo de liquidación. El organizador puede pagar antes desde la pantalla.
-- Herramienta interna para conciliar costes confirmados y liberar liquidaciones después de verificar el evento. No hay endpoint público que permita introducir gastos ni liquidarse a sí mismo.
+Las ventas antiguas con destination charges necesitan reversión de transferencia y devolución de application fee. Si una devolución parcial anterior omitió esas reversiones, el comprador recupera su importe pero la contabilidad queda en revisión; no se declara recuperado el dinero del organizador. Los casos históricos con saldo/reventa quedan también para conciliación. Una operación excepcional no bloquea la devolución de las demás compras compatibles.
 
-## Límites y pendientes antes de activar
+Una devolución pendiente no se presenta como completada. Si Stripe comunica un fallo posterior, se reabre el caso y se bloquea el cobro al organizador. Si se devuelve o disputa el cargo del organizador, se reabre su expediente sin crear otro cargo automático.
 
-**Candidato desactivado; no desplegado ni validado todavía con el recorrido completo de Stripe.** No se han ejecutado cobros, devoluciones ni transferencias reales durante este trabajo.
+## Dónde consultar cada importe
 
-1. Ensayo completo en Stripe de pruebas: tarjeta normal, autenticación, rechazo, método retirado, timeout, entrega de webhooks duplicada/desordenada, devolución pendiente/fallida y saldo insuficiente; recorrido iOS/Android con PaymentSheet real.
-2. Revisar tarifas y modo de facturación de vuestra cuenta. Los costes standalone pueden llegar después y requieren informes detallados. La conciliación final usa evidencia revisada por operaciones; todavía no existe un importador automático de esos informes. Un balance_transaction.fee=0 no acredita que todos los gastos sean cero.
-3. Completar la liquidación contable de los gastos del propio cobro y posibles abonos posteriores. El candidato los conserva pendientes; no los cobra mediante otro cargo automático ni declara cerrado el beneficio. Hace falta cerrar el procedimiento de ajuste/compensación antes de activar cobros reales.
-4. Confirmar configuración de métodos de pago para mostrar tarjeta, firma de webhooks, avisos recibidos, saldos y alertas. Las credenciales y el proyecto de pruebas deben coincidir en servidor y Edge.
-5. Ensayar las migraciones con el esquema real, revisar los asesores de Supabase y desplegar coordinadamente servidor/Edge/app. No basta con pruebas SQL aisladas.
-6. Revisar los textos contractuales definitivos y los datos del titular, aún pendientes del lanzamiento. La nueva página no sustituye el resto de documentación legal ni acredita validez jurídica por sí sola.
-7. Compras históricas mixtas con saldo/reventa, eventos ya iniciados y liquidaciones ya iniciadas requieren soporte. Una operación histórica excepcional queda identificada y no impide procesar las demás compras compatibles.
-8. Sigue pendiente presentar en las ventas del organizador el desglose comercial por operación y separar ventas, saldo Stripe, liquidación y abono bancario. No se deben leer las estadísticas Express como un desglose completo de la plataforma.
+- **Eclipse → organizador → Cancelaciones y cobros:** autorización, devoluciones, comisión, gastos conciliados, cargo y ajustes en liquidaciones, una vez activado el candidato.
+- **Stripe plataforma → Pagos:** pago del comprador y cargo independiente al organizador; los metadatos relacionan ambos con el expediente.
+- **Stripe → Saldos / Transacciones / Informes de gastos:** comisiones reales, sus impuestos y ajustes. El cargo de servicio del comprador no equivale necesariamente al coste real de Stripe.
+- **Stripe Connect → Comisiones recaudadas:** application fees históricas. Las nuevas ventas retenidas hasta después del evento conservan la comisión por diferencia al transferir el neto y no crean una application fee por venta.
+- **Connect → cuenta del organizador → Transferencias / pagos al banco:** dinero transferido por Eclipse y posterior abono bancario, que son movimientos distintos.
 
-## Dónde consultar los importes
+## Estado de activación
 
-- **Eclipse, organizador → Cancelaciones y cobros** (cuando se active el candidato): tarjeta autorizada, devolución, comisión, gastos conciliados, cargo y pendientes.
-- **Stripe, plataforma → Pagos**: pago del comprador y, por separado, cargo de cancelación al organizador; cada uno con importe, devolución y costes. Los metadatos relacionan expediente y operación.
-- **Stripe, Connect → Comisiones recaudadas**: comisiones de las ventas antiguas con application fees. En el modelo de transferencias posteriores no habrá una application fee por cada venta nueva.
-- **Stripe → Saldos / Transacciones / Informes de gastos**: movimientos y costes reales. Un gasto aún no disponible no se trata como cero.
-- **Stripe Connect → cuenta del organizador → Transferencias y pagos al banco**: transferencia del neto y posterior abono bancario, que son movimientos distintos.
+Código en PR40, controles financieros desactivados por defecto. Esquema aplicado y ensayado en staging con operaciones revertidas. Pruebas reales de API Stripe **TEST**, sin dinero real; detalles y límites en [la evidencia de aceptación](qa/DEFERRED_CANCELLATION_BILLING_20261014.md).
 
-Fuentes: [SetupIntents y autorización de cargos futuros](https://docs.stripe.com/payments/setup-intents), [devoluciones en Connect](https://docs.stripe.com/connect/marketplace/tasks/refunds-disputes), [cargos y transferencias separados](https://docs.stripe.com/connect/separate-charges-and-transfers), [costes standalone](https://docs.stripe.com/standalone-fees), [informe de gastos](https://docs.stripe.com/reports/all-fees), [visibilidad de pagos en Express](https://docs.stripe.com/connect/express-dashboard/payments).
+La activación exige todavía el despliegue coordinado del candidato, aceptación del recorrido completo en iOS/Android (incluida autenticación bancaria), webhooks firmados y avisos entregados por los servicios desplegados, configuración de costes/cuenta live y documentación contractual definitiva. Los ensayos de API no certifican estos puntos. Producción no se ha activado y los seis bloqueos de lanzamiento permanecen abiertos.
+
+Fuentes: [SetupIntents](https://docs.stripe.com/payments/setup-intents), [devoluciones Connect](https://docs.stripe.com/connect/marketplace/tasks/refunds-disputes), [transferencias separadas](https://docs.stripe.com/connect/separate-charges-and-transfers), [costes standalone](https://docs.stripe.com/standalone-fees), [informe de gastos](https://docs.stripe.com/reports/all-fees).
