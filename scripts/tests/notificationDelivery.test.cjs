@@ -55,3 +55,21 @@ test('missing email config excludes channel from claim',async()=>{const r=await 
 test('malformed token never sent',async()=>{const r=await run(make({to:'not a token'}),async()=>{throw Error('no');});assert.equal(r.completed[0].p_code,'INVALID_TOKEN');});
 test('delayed receipt reconciler uses stable per-delivery identifiers',async()=>{const calls=[];const rpc=async(name,args)=>{calls.push({name,args});return {error:null,data:name==='notification_receipts_v2'?[{id,provider_id:'r1'}]:true};};const n=await api.reconcileNotificationReceipts(rpc,environment(),async()=>json({data:{r1:{status:'ok'}}}));assert.equal(n,1);assert.equal(calls[1].args.p_outcome,'confirmed');assert.equal(calls[1].args.p_provider_id,'r1');});
 test('receipt missing is deferred, never reported as delivered',async()=>{let state;const rpc=async(name,args)=>{if(name==='complete_notification_receipt_v2')state=args.p_outcome;return {error:null,data:name==='notification_receipts_v2'?[{id,provider_id:'r1'}]:true};};await api.reconcileNotificationReceipts(rpc,environment(),async()=>json({data:{}}));assert.equal(state,'missing');});
+
+for(const [state,expected] of [['sent','missing'],['queued','missing'],['delivered','confirmed'],['opened','confirmed'],['clicked','confirmed'],['bounced','failed'],['complained','failed'],['failed','failed']]) {
+ test('email provider '+state+' maps to '+expected+' without equating acceptance and delivery',async()=>{
+  const completed=[];const rpc=async(name,args)=>({error:null,data:name==='notification_email_receipts_v2'?[{id,provider_id:project}]:(completed.push(args),true)});
+  await api.reconcileEmailReceipts(rpc,environment(),async(url,options)=>{assert.equal(url,'https://api.resend.com/emails/'+project);assert.equal(options.redirect,'error');return json({id:project,last_event:state});});
+  assert.equal(completed[0].p_outcome,expected);
+ });
+}
+test('mismatched email receipt never confirms a different delivery',async()=>{
+ const completed=[];const rpc=async(name,args)=>({error:null,data:name==='notification_email_receipts_v2'?[{id,provider_id:project}]:(completed.push(args),true)});
+ await api.reconcileEmailReceipts(rpc,environment(),async()=>json({id,last_event:'delivered'}));assert.equal(completed.length,0);
+});
+test('email receipt permission failure remains unconfirmed with a safe error code',async()=>{
+ const completed=[];const rpc=async(name,args)=>({error:null,data:name==='notification_email_receipts_v2'?[{id,provider_id:project}]:(completed.push(args),true)});
+ await api.reconcileEmailReceipts(rpc,environment(),async()=>json({private:'provider secret'},403));
+ assert.equal(completed[0].p_outcome,'missing');assert.equal(completed[0].p_code,'EMAIL_RECEIPT_HTTP_403');
+});
+

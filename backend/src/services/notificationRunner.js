@@ -26,13 +26,13 @@ function notificationRuntime(env) {
     SUPABASE_URL: env.SUPABASE_URL,
     EXPO_ACCESS_TOKEN: env.EXPO_ACCESS_TOKEN,
   };
-  return { url: env.SUPABASE_URL, key, read: name => values[name] };
+  return { url: env.SUPABASE_URL, key, read: name => values[name], viaEdge: env.NOTIFICATIONS_DISPATCH_VIA_EDGE === 'true' };
 }
 
 function startNotificationRunner({
   env = process.env, create = createClient, dispatch = runNotificationDispatchWithHealth,
   log = value => console.info('[NOTIFICATIONS_V2]', value),
-  schedule = setTimeout, cancel = clearTimeout,
+  schedule = setTimeout, cancel = clearTimeout, send = fetch,
 } = {}) {
   let runtime;
   try { runtime = notificationRuntime(env); }
@@ -46,7 +46,18 @@ function startNotificationRunner({
   async function tick() {
     if (stopped) return;
     try {
-      const result = await dispatch((name, args) => client.rpc(name, args), runtime.read);
+      let result;
+      if (runtime.viaEdge) {
+        // Keep provider credentials in Supabase; the destination is derived from
+        // the validated project URL and cannot be supplied by a caller.
+        const response = await send(runtime.url + '/functions/v1/dispatch-notifications-v2', {
+          method: 'POST', headers: { Authorization: 'Bearer ' + runtime.key, 'Content-Type': 'application/json' },
+          body: '{}', redirect: 'error', signal: AbortSignal.timeout(45000),
+        });
+        result = await response.json();
+        if (!response.ok || result?.ok !== true || !['processed','disabled'].includes(result.dispatch) ||
+            !Number.isSafeInteger(result.processed) || !Number.isSafeInteger(result.receipts)) throw Error('EDGE_NOTIFICATION_WORKER_FAILED');
+      } else result = await dispatch((name, args) => client.rpc(name, args), runtime.read);
       log({ status: result.dispatch, processed: result.processed, receipts: result.receipts });
     } catch {
       log({ status: 'failed' });
@@ -58,3 +69,4 @@ function startNotificationRunner({
   return { enabled: true, stop() { stopped = true; if (timer) cancel(timer); } };
 }
 module.exports = { notificationRuntime, startNotificationRunner };
+
