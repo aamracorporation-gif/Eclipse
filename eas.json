@@ -13,7 +13,9 @@
     },
     "preview": {
       "env": {
-        "ECLIPSE_BUILD_ENV": "staging"
+        "ECLIPSE_BUILD_ENV": "staging",
+        "EXPO_PUBLIC_ORGANIZER_CANCELLATION_BILLING": "true",
+        "EXPO_PUBLIC_API_URL": "https://eclipse-staging-staging.up.railway.app"
       },
       "distribution": "internal",
       "channel": "staging",
@@ -49,3 +51,4 @@
     }
   }
 }
+

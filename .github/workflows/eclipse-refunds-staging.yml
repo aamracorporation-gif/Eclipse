@@ -1,0 +1,99 @@
+name: Deploy tested refunds to Eclipse staging
+on:
+  push:
+    branches: [codex/organizer-cancellation-deferred]
+    paths: [.github/workflows/eclipse-refunds-staging.yml]
+permissions:
+  contents: read
+concurrency:
+  group: eclipse-refunds-staging
+  cancel-in-progress: false
+jobs:
+  checkout-service:
+    runs-on: ubuntu-latest
+    environment: staging
+    timeout-minutes: 15
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+      - name: Inspect staging configuration without exposing credentials
+        run: |
+          test -n "$SUPABASE_ACCESS_TOKEN"
+          supabase secrets set --help
+          supabase functions deploy --help
+          node - <<'NODE'
+          (async()=>{
+            const r=await fetch('https://api.supabase.com/v1/projects/uhondxttdpvywvkyqlkk/secrets',{headers:{Authorization:'Bearer '+process.env.SUPABASE_ACCESS_TOKEN}});
+            if(!r.ok)throw Error('Cannot inspect staging secret names: '+r.status);
+            const names=new Set((await r.json()).map(x=>x.name));
+            console.log('STAGING_CONFIGURATION='+JSON.stringify(Object.fromEntries(['STRIPE_SECRET_KEY','RESEND_API_KEY','NOTIFICATIONS_FROM_EMAIL'].map(k=>[k,names.has(k)]))));
+            if(!names.has('STRIPE_SECRET_KEY'))throw Error('Missing staging Stripe configuration');
+          })().catch(e=>{console.error(e.message);process.exitCode=1});
+          NODE
+      - name: Deploy reviewed checkout only and enable TEST policy
+        run: |
+          supabase functions deploy create-payment-intent-v2 --project-ref uhondxttdpvywvkyqlkk --use-api
+          supabase secrets set --project-ref uhondxttdpvywvkyqlkk ORGANIZER_CANCELLATION_BILLING_ENABLED=true ORGANIZER_BILLING_STRIPE_MODE=test
+      - name: Verify authentication and deployed function
+        run: |
+          node - <<'NODE'
+          (async()=>{
+            const r=await fetch('https://api.supabase.com/v1/projects/uhondxttdpvywvkyqlkk/functions',{headers:{Authorization:'Bearer '+process.env.SUPABASE_ACCESS_TOKEN}});
+            if(!r.ok)throw Error('Cannot verify checkout deployment');
+            const f=(await r.json()).find(x=>x.slug==='create-payment-intent-v2'||x.name==='create-payment-intent-v2');
+            if(!f||f.version<=18||!f.verify_jwt||f.status!=='ACTIVE')throw Error('Checkout deployment verification failed');
+            const response=await fetch('https://uhondxttdpvywvkyqlkk.supabase.co/functions/v1/create-payment-intent-v2',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});
+            if(response.status!==401)throw Error('Anonymous checkout must be rejected');
+            console.log('CHECKOUT_DEPLOYED='+JSON.stringify({version:f.version,status:f.status,verify_jwt:f.verify_jwt,anonymousStatus:response.status,commit:process.env.GITHUB_SHA}));
+          })().catch(e=>{console.error(e.message);process.exitCode=1});
+          NODE
+  mobile-staging:
+    needs: checkout-service
+    runs-on: ubuntu-latest
+    environment: staging
+    timeout-minutes: 45
+    env:
+      EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+      ECLIPSE_BUILD_ENV: staging
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: node --test scripts/tests/buildEnvironment.test.cjs scripts/tests/stagingServices.test.cjs
+      - uses: expo/expo-github-action@v8
+        with:
+          eas-version: 18.0.1
+          token: ${{ secrets.EXPO_TOKEN }}
+      - name: Enable refund screens in preview only
+        run: |
+          eas env:create --help
+          eas env:create --environment preview --name EXPO_PUBLIC_ORGANIZER_CANCELLATION_BILLING --value true --visibility plaintext --force --non-interactive
+          eas env:create --environment preview --name EXPO_PUBLIC_API_URL --value https://eclipse-staging-staging.up.railway.app --visibility plaintext --force --non-interactive
+      - name: Publish staging update and queue matching mobile candidates
+        run: |
+          mkdir -p build-receipts
+          git rev-parse HEAD > build-receipts/source-commit.txt
+          eas update --branch staging --platform all --environment preview --message "Staging refunds and cancellation billing" --non-interactive --json > build-receipts/update.json
+          eas build --platform ios --profile testflight --non-interactive --no-wait --json > build-receipts/ios.json
+          eas build --platform android --profile preview --non-interactive --no-wait --json > build-receipts/android.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: refund-staging-receipts-${{ github.sha }}
+          path: build-receipts/
+          if-no-files-found: ignore
+
