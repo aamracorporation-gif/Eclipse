@@ -93,7 +93,7 @@ export default function CreatorLayout() {
     return <Redirect href="/(creator)/verification" />;
   }
 
-  const adminOnlyRoutes = ['admin-verification', 'admin-tickets', 'admin-profile'];
+  const adminOnlyRoutes = ['admin-verification', 'admin-tickets', 'admin-profile', 'admin-cancellations'];
   if (profileRole !== 'admin' && adminOnlyRoutes.includes((segments as readonly string[])[1])) {
     return <Redirect href="/(creator)" />;
   }
@@ -112,6 +112,7 @@ export default function CreatorLayout() {
         <Tabs.Screen name="admin-verification" options={{ title: 'Usuarios', tabBarIcon: ({ color, size }) => <User color={color} size={size} /> }} />
         <Tabs.Screen name="manage-events" options={{ title: 'Eventos', tabBarIcon: ({ color, size }) => <Calendar color={color} size={size} /> }} />
         <Tabs.Screen name="admin-tickets" options={{ title: 'Entradas', tabBarIcon: ({ color, size }) => <QrCode color={color} size={size} /> }} />
+        <Tabs.Screen name="admin-cancellations" options={{ title: 'Cancelar', tabBarIcon: ({ color, size }) => <Ban color={color} size={size} /> }} />
         <Tabs.Screen name="admin-profile" options={{ title: 'Perfil', tabBarIcon: ({ color, size }) => <User color={color} size={size} /> }} />
         {['create-event', 'workers', 'verification', 'scan', 'stats', 'global-stats', 'event-stats/[id]',
           'event-discounts', 'discount-codes', 'worker-qr', 'organizer-profile', 'box-office', 'cancellation-billing'].map(name => (
@@ -200,6 +201,7 @@ export default function CreatorLayout() {
         <Tabs.Screen name="event-discounts" options={{ href: null }} />
         <Tabs.Screen name="admin-tickets" options={{ href: null }} />
         <Tabs.Screen name="admin-profile" options={{ href: null }} />
+        <Tabs.Screen name="admin-cancellations" options={{ href: null }} />
         <Tabs.Screen name="worker-qr" options={{ href: null }} />
       </Tabs>
     );

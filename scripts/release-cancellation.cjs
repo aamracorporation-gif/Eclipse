@@ -52,7 +52,7 @@ function receipt(build) {
   for (const [platform, profile] of [['IOS', 'testflight'], ['ANDROID', 'preview']]) {
     let build = candidate(builds, platform, profile);
     if (!build) {
-      const args = ['build', '--platform', platform.toLowerCase(), '--profile', profile, '--message', 'Cancellation keyboard, profile history and navigation fixes', '--non-interactive', '--no-wait', '--json'];
+      const args = ['build', '--platform', platform.toLowerCase(), '--profile', profile, '--message', 'Admin approval required before event cancellation and refunds', '--non-interactive', '--no-wait', '--json'];
       if (platform === 'IOS') args.push('--auto-submit-with-profile', 'testflight');
       const raw = JSON.parse(eas(args));
       const id = (Array.isArray(raw) ? raw[0] : raw)?.id;

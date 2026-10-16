@@ -1,4 +1,4 @@
-name: Cancellation fixes - TestFlight and APK
+name: Admin-approved cancellations - TestFlight and APK
 on:
   push:
     branches: [codex/organizer-cancellation-deferred]

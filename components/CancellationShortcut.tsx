@@ -11,7 +11,7 @@ export function CancellationShortcut() {
   const router = useRouter();
   const { data, loading, error } = useCancellationOverview();
   if (!organizerBillingVisible) return null;
-  const count = data?.cancellations.length;
+  const count = data?.requests?.filter(r => r.status === 'pending').length || 0;
   return <GlassView contentContainerStyle={{ padding: 16, gap: 12 }}>
     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
       <Ban size={24} color={Colors.dark.primary} />
@@ -19,8 +19,8 @@ export function CancellationShortcut() {
     </View>
     <Text style={{ color: Colors.dark.textSecondary, lineHeight: 22 }}>
       {error ? 'No se pudo actualizar el historial. Abre cancelaciones para reintentar.' : loading && !data
-        ? 'Consultando tus cancelaciones…' : count ? `${count} cancelaciones registradas. Consulta el estado de las devoluciones y los cobros.`
-          : 'Aquí encontrarás el historial de tus eventos cancelados y sus devoluciones.'}
+        ? 'Consultando tus cancelaciones…' : count ? `${count} solicitudes pendientes de aprobación del administrador.`
+          : 'Consulta las decisiones del administrador, tus cancelaciones y sus devoluciones.'}
     </Text>
     <ThemedButton title="Ver cancelaciones y devoluciones" variant="outline" onPress={() => router.push('/(creator)/cancellation-billing')} />
   </GlassView>;

@@ -71,9 +71,9 @@ export default function CancellationBillingScreen() {
   const cancel = () => {
     if (!eventId || !data?.ready || reason.trim().length < 3 || active.current || receipt?.eventId === eventId) return;
     Keyboard.dismiss();
-    Alert.alert('Cancelar el evento',
-    'Se detendrán las ventas, se invalidarán las entradas y se tramitará la devolución íntegra. Después se te cobrará la comisión de Eclipse y los costes reales de Stripe, con su desglose. Esta acción no se puede deshacer.', [
-      { text: 'Volver', style: 'cancel' }, { text: 'Cancelar evento', style: 'destructive', onPress: () => void run(async () => {
+    Alert.alert('Solicitar cancelación',
+    'El administrador revisará el motivo y el desglose de las devoluciones. Hasta que apruebe la solicitud, el evento seguirá activo y no se iniciarán reembolsos ni cargos por cancelación.', [
+      { text: 'Volver', style: 'cancel' }, { text: 'Enviar solicitud', onPress: () => void run(async () => {
         const result = await organizerBillingRequest<{ cancellationId: string; status: string }>(`/events/${eventId}/cancel`, { reason: reason.trim() });
         if (!result.cancellationId) throw new Error('No se pudo confirmar la cancelación. Actualiza el historial antes de reintentarlo.');
         setReceipt({ eventId, id: result.cancellationId });
@@ -98,7 +98,8 @@ export default function CancellationBillingScreen() {
     }
     Alert.alert('Pago enviado', 'El estado se actualizará cuando Stripe lo confirme.');
   });
-  const existing = receipt?.eventId === eventId || data?.cancellations.some(c => c.event_id === eventId);
+  const existing = receipt?.eventId === eventId || data?.cancellations.some(c => c.event_id === eventId)
+    || data?.requests?.some(r => r.event_id === eventId && r.status !== 'rejected');
   return <SafeAreaView edges={['top', 'left', 'right']} style={styles.screen}>
     <KeyboardAvoidingView style={styles.screen} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
     <ScrollView ref={scroll} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag"
@@ -112,19 +113,19 @@ export default function CancellationBillingScreen() {
       <Text style={styles.text}>Tus solicitudes, devoluciones y costes, en un solo lugar.</Text>
     </View>
     {!organizerBillingVisible ? <Text style={styles.text}>Esta función todavía no está disponible.</Text> : <>
-      <Text style={styles.text}>Sin fianza inicial. El comprador recupera todo su pago si cancelas. Tus ganancias se liquidan después del evento.</Text>
+      <Text style={styles.text}>La cancelación necesita aprobación del administrador. No se iniciarán devoluciones ni cargos por cancelación hasta que la apruebe.</Text>
       {!!(error || refreshError) && <View style={styles.warning}><Text accessibilityRole="alert" style={styles.error}>{error || refreshError}</Text>
         <ThemedButton title="Reintentar actualización" variant="outline" onPress={() => void refresh()} /></View>}
       {loading && !data && <Text style={styles.text}>Cargando tu historial…</Text>}
       {receipt && <View style={styles.notice} accessibilityLiveRegion="polite">
         <ShieldCheck size={24} color={Colors.dark.primary} />
-        <Text style={styles.subtitle}>Cancelación registrada</Text>
-        <Text style={styles.text}>Las ventas se han detenido. Las devoluciones se tramitan por separado; puedes seguir su estado aquí y desde tu perfil.</Text>
+        <Text style={styles.subtitle}>Solicitud enviada</Text>
+        <Text style={styles.text}>Consulta abajo la decisión del administrador. El evento solo se cancelará y se tramitarán devoluciones si se aprueba.</Text>
         <Text selectable style={styles.caption}>Referencia: {receipt.id}</Text>
       </View>}
       {eventId && !existing && <GlassView contentContainerStyle={styles.card}>
         <Text style={styles.eyebrow}>EVENTO SELECCIONADO</Text>
-        <Text style={styles.subtitle}>{getEventById(eventId)?.title || 'Cancelar este evento'}</Text>
+        <Text style={styles.subtitle}>{getEventById(eventId)?.title || 'Solicitar cancelación de este evento'}</Text>
         <Text style={styles.text}>Explica el motivo. Antes de enviar, podrás revisar las consecuencias de la cancelación.</Text>
         <Text style={styles.label}>Motivo de la cancelación</Text>
         <TextInput ref={reasonInput} value={reason} onChangeText={setReason} multiline maxLength={500}
@@ -133,7 +134,7 @@ export default function CancellationBillingScreen() {
           placeholderTextColor={Colors.dark.textSecondary} style={styles.input} />
         <Text style={styles.caption}>{reason.length}/500 · Mínimo 3 caracteres</Text>
         {!data?.ready && <Text style={styles.text}>Primero autoriza una tarjeta en el apartado de abajo. No se cobra una fianza.</Text>}
-        <ThemedButton title="Revisar cancelación" disabled={!data?.ready || reason.trim().length < 3} loading={busy} onPress={cancel} />
+        <ThemedButton title="Solicitar aprobación" disabled={!data?.ready || reason.trim().length < 3} loading={busy} onPress={cancel} />
       </GlassView>}
       {data && <GlassView contentContainerStyle={styles.card}>
         <Text style={styles.subtitle}>{data.ready ? 'Tarjeta autorizada' : 'Autorizar tarjeta'}</Text>
@@ -146,8 +147,17 @@ export default function CancellationBillingScreen() {
         <ThemedButton title={data.ready ? 'Cambiar tarjeta' : 'Guardar tarjeta sin fianza'} disabled={!accepted} loading={busy} onPress={() => void saveCard()} />
         </>}
       </GlassView>}
-      <Text style={styles.subtitle}>Historial de cancelaciones</Text>
-      {data && !data.cancellations.length && <View style={styles.notice}>
+      <Text style={styles.subtitle}>Solicitudes al administrador</Text>
+      {data?.requests?.map(request => <GlassView key={request.id} contentContainerStyle={styles.card}>
+        <Text style={styles.subtitle}>{request.status === 'pending' ? 'Pendiente de aprobación' : request.status === 'approved' ? 'Aprobada por el administrador' : 'Rechazada: el evento no se ha cancelado'}</Text>
+        <Text style={styles.text}>{getEventById(request.event_id)?.title || `Evento ${request.event_id.slice(0, 8)}`}</Text>
+        <Text style={styles.text}>{request.reason}</Text>
+        {!!request.review_reason && <Text style={styles.text}>Respuesta: {request.review_reason}</Text>}
+        {request.status === 'pending' && <Text style={styles.caption}>El evento sigue activo. No se han iniciado devoluciones por esta solicitud.</Text>}
+        <Text selectable style={styles.caption}>Referencia: {request.id}</Text>
+      </GlassView>)}
+      <Text style={styles.subtitle}>Cancelaciones ejecutadas y devoluciones</Text>
+      {data && !data.cancellations.length && !data.requests?.length && <View style={styles.notice}>
         <Text style={styles.text}>Todavía no hay cancelaciones registradas en tu cuenta.</Text>
         {!eventId && <ThemedButton title="Ir a mis eventos" variant="outline" onPress={() => router.push('/(creator)/manage-events')} />}
       </View>}

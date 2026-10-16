@@ -15,6 +15,8 @@ const actionLabels: Record<string, string> = {
   organizer_suspension_set: 'Suspensión de organizador',
   user_suspension_set: 'Cambio de estado de usuario',
   ticket_invalidated: 'Entrada invalidada',
+  cancellation_approved: 'Cancelación aprobada',
+  cancellation_rejected: 'Cancelación rechazada',
 };
 
 export default function AdminProfile() {
@@ -58,6 +60,7 @@ export default function AdminProfile() {
           <Text style={styles.text}>Reventa: {LAUNCH_FEATURES.resale ? 'activada' : 'desactivada'}</Text>
           <Text style={styles.text}>Monedero: {LAUNCH_FEATURES.walletCredit ? 'activado' : 'desactivado'}</Text>
         </GlassView>
+        <ThemedButton title="Revisar cancelaciones y devoluciones" onPress={() => router.push('/(creator)/admin-cancellations')} />
         <ThemedButton title="Estado de notificaciones" onPress={() => router.push('/notification-health')} />
         <Text style={styles.heading}>Actividad administrativa reciente</Text>
         <Text style={styles.muted}>Últimas 25 acciones registradas. Cada revisión queda vinculada a la cuenta que la realiza.</Text>
