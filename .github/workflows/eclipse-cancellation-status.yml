@@ -18,7 +18,7 @@ jobs:
           node - <<'NODE'
           (async()=>{
             const project='42ebb6eb-62b1-4784-a483-831ae3c804f2';
-            const sha='bb39d7dc5ae49a5ae88a678ac302cf84a6dde0e5';
+            const sha='12e4a281a441068b0d482160016e37288eb57904';
             const query='query($id:String!){app{byId(appId:$id){id builds(offset:0,limit:20){id status platform buildProfile appVersion appBuildVersion gitCommitHash artifacts{applicationArchiveUrl} submissions{id status iosConfig{ascAppIdentifier}}}}}}';
             const r=await fetch('https://api.expo.dev/graphql',{method:'POST',headers:{'Content-Type':'application/json',authorization:'Bearer '+process.env.EXPO_TOKEN},body:JSON.stringify({query,variables:{id:project}})});
             const d=await r.json();
