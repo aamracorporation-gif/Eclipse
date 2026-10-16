@@ -22,6 +22,26 @@ test('push-only runtime ignores existing email credentials', () => {
   assert.equal(runtime.read('NOTIFICATIONS_FROM_EMAIL'), undefined);
   assert.equal(runtime.read('NOTIFICATIONS_V2_SEND_ENABLED'), 'true');
 });
+
+test('Edge dispatch uses only the validated project and masks remote responses', async () => {
+  const calls=[], logs=[];
+  const runtime=env();
+  const runner=startNotificationRunner({env:{...runtime,NOTIFICATIONS_DISPATCH_VIA_EDGE:'true'},create:()=>({rpc(){throw Error('local dispatch forbidden');}}),
+    send:async(url,options)=>{calls.push({url,options});return new Response(JSON.stringify({ok:true,dispatch:'processed',processed:2,receipts:1,private:'not logged'}));},
+    dispatch(){throw Error('local dispatch forbidden');},log:x=>logs.push(x),schedule:()=>({unref(){}}),cancel(){}});
+  await new Promise(setImmediate);runner.stop();
+  assert.equal(calls[0].url,runtime.SUPABASE_URL+'/functions/v1/dispatch-notifications-v2');
+  assert.equal(calls[0].options.headers.Authorization,'Bearer '+runtime.SUPABASE_SERVICE_ROLE_KEY);
+  assert.equal(calls[0].options.redirect,'error');assert.ok(calls[0].options.signal);
+  assert.deepEqual(logs,[{status:'processed',processed:2,receipts:1}]);
+});
+test('failed Edge dispatch cannot be logged as a successful delivery', async () => {
+  const logs=[];
+  const runner=startNotificationRunner({env:{...env(),NOTIFICATIONS_DISPATCH_VIA_EDGE:'true'},create:()=>({rpc(){}}),
+    send:async()=>new Response(JSON.stringify({ok:false,private:'SECRET'}),{status:503}),
+    log:x=>logs.push(x),schedule:()=>({unref(){}}),cancel(){}});
+  await new Promise(setImmediate);runner.stop();assert.deepEqual(logs,[{status:'failed'}]);
+});
 test('scheduler waits for completion and shutdown prevents another tick', async () => {
   let resolve, scheduled = 0, called = 0;
   const done = new Promise(r => { resolve = r; });
@@ -44,3 +64,4 @@ test('failures reveal neither provider details nor service credentials and sched
   await new Promise(setImmediate);
   assert.deepEqual(logs, [{ status: 'failed' }]); assert.equal(scheduled, 1); runner.stop();
 });
+

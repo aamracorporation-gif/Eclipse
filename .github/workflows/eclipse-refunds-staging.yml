@@ -1,0 +1,73 @@
+name: Deploy tested refunds to Eclipse staging
+on:
+  push:
+    branches: [codex/organizer-cancellation-deferred]
+    paths: [.github/workflows/eclipse-refunds-staging.yml]
+permissions:
+  contents: read
+concurrency:
+  group: eclipse-refunds-staging
+  cancel-in-progress: false
+# Supabase checkout and dispatch deployed through the authenticated staging connection.
+jobs:
+  mobile-staging:
+    runs-on: ubuntu-latest
+    environment: staging
+    timeout-minutes: 45
+    env:
+      EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: node --test scripts/tests/buildEnvironment.test.cjs scripts/tests/stagingServices.test.cjs
+      - uses: expo/expo-github-action@v8
+        with:
+          eas-version: 18.0.1
+          token: ${{ secrets.EXPO_TOKEN }}
+      - name: Enable refund screens in preview only
+        run: |
+          eas env:create --help
+          eas env:create --environment preview --name EXPO_PUBLIC_ORGANIZER_CANCELLATION_BILLING --value true --visibility plaintext --force --non-interactive
+          eas env:create --environment preview --name EXPO_PUBLIC_API_URL --value https://eclipse-staging-staging.up.railway.app --visibility plaintext --force --non-interactive
+          eas env:pull --environment preview --path .env.local --non-interactive
+      - name: Publish staging update and queue matching mobile candidates
+        run: |
+          mkdir -p build-receipts
+          git rev-parse HEAD > build-receipts/source-commit.txt
+          node - <<'NODE'
+          const fs=require('node:fs');
+          const {spawnSync}=require('node:child_process');
+          const vars=require('dotenv').parse(fs.readFileSync('.env.local'));
+          for(const [name,value] of Object.entries(vars))if(name.startsWith('EXPO_PUBLIC_'))process.env[name]=value;
+          process.env.ECLIPSE_BUILD_ENV='staging';
+          require('./scripts/buildEnvironment.cjs').validateBuildEnvironment();
+          function run(name,args){
+            const result=spawnSync('eas',args,{encoding:'utf8',maxBuffer:32*1024*1024});
+            fs.writeFileSync('build-receipts/'+name+'.json',result.stdout||'');
+            if(result.status!==0){
+              let diagnostic=result.stderr||'';
+              for(const value of Object.values(process.env))if(value&&value.length>8)diagnostic=diagnostic.split(value).join('[masked]');
+              console.error(diagnostic.slice(-8000));
+              throw Error('EAS '+name+' failed; inspect existing candidates before retrying');
+            }
+            console.log(name+' completed; receipt saved');
+          }
+          run('update',['update','--branch','staging','--platform','all','--environment','preview','--message','Staging refunds and cancellation billing','--non-interactive','--json']);
+          run('ios',['build','--platform','ios','--profile','testflight','--non-interactive','--no-wait','--json']);
+          run('android',['build','--platform','android','--profile','preview','--non-interactive','--no-wait','--json']);
+          NODE
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: refund-staging-receipts-${{ github.sha }}
+          path: build-receipts/
+          if-no-files-found: ignore
+      - name: Remove local environment copy
+        if: always()
+        run: rm -f .env.local

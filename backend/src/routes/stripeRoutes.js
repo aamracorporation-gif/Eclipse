@@ -3,6 +3,7 @@ const { authMiddleware, requireRole } = require('../middlewares/auth');
 const { createAccount, onboardingLink, accountStatus } = require('../controllers/stripeController');
 
 const router = express.Router();
+router.use('/organizer-billing', require('./organizerBillingRoutes').organizerBillingRoutes);
 
 router.post('/create-account', authMiddleware, requireRole(['organizer', 'ORGANIZER']), createAccount);
 router.post('/onboarding-link', authMiddleware, requireRole(['organizer', 'ORGANIZER']), onboardingLink);

@@ -1,6 +1,6 @@
 const { statusAfterStripeEvent } = require('./webhookPolicy');
 
-function createWebhookHandler({ db, verify, getTransaction, fulfill, markStatus, updateAccount, refund }) {
+function createWebhookHandler({ db, verify, getTransaction, fulfill, markStatus, updateAccount, refund, cancellation }) {
   return async (rawBody, signature) => {
     let event;
     try {
@@ -8,7 +8,7 @@ function createWebhookHandler({ db, verify, getTransaction, fulfill, markStatus,
     } catch {
       return { status: 400, json: { received: false, error: 'Invalid webhook signature' } };
     }
-    if (!['payment_intent.succeeded', 'payment_intent.payment_failed', 'account.updated', 'refund.updated', 'refund.failed'].includes(event.type)) {
+    if (!['payment_intent.succeeded', 'payment_intent.payment_failed', 'payment_intent.requires_action', 'setup_intent.succeeded', 'account.updated', 'refund.updated', 'refund.failed', 'charge.refunded', 'charge.dispute.created', 'charge.dispute.updated', 'charge.dispute.closed'].includes(event.type)) {
       return { status: 200, json: { received: true, ignored: true } };
     }
 
@@ -23,7 +23,16 @@ function createWebhookHandler({ db, verify, getTransaction, fulfill, markStatus,
       token = claim.processing_token;
       const object = event.data.object;
 
-      if (event.type === 'account.updated') {
+      if (cancellation && await cancellation(event)) {
+        // The cancellation service validates ownership and retrieves Stripe state.
+      } else if (event.type === 'setup_intent.succeeded') {
+        // Unrelated SetupIntents do not issue tickets.
+      } else if (event.type.startsWith('charge.')) {
+        // The cancellation service handles its own reversed/disputed charges.
+        // Other charge events are not purchase PaymentIntents.
+      } else if (event.type === 'payment_intent.requires_action') {
+        // Buyer authentication is completed by PaymentSheet.
+      } else if (event.type === 'account.updated') {
         await updateAccount(object.id, Boolean(object.charges_enabled && object.payouts_enabled));
       } else if (event.type === 'refund.updated' || event.type === 'refund.failed') {
         if (['resale_unavailable', 'vip_unavailable', 'primary_unavailable'].includes(object.metadata?.eclipse_reason) && object.payment_intent) {

@@ -1,0 +1,12 @@
+{
+  "account": "acct_1UKJbDQX94Oeeb3v",
+  "livemode": false,
+  "startedAt": "2026-10-14T18:49:42.562Z",
+  "setupIntentId": "seti_1UQXFCQX94Oeeb3vmLSHVWRY",
+  "setupChallengeCompleted": true,
+  "paymentIntentId": "pi_3UQXFqQX94Oeeb3v41ORf3kE",
+  "samePaymentRecovered": true,
+  "collectionChallengeCompleted": true,
+  "passed": true,
+  "finishedAt": "2026-10-14T18:50:58.896Z"
+}

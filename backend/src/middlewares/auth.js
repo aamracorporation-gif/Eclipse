@@ -126,7 +126,8 @@ function authMiddleware(req, res, next) {
       }
       const lower = msg.toLowerCase();
       const canFallback =
-        lower.includes('invalid signature') || lower.includes('jwt audience invalid') || lower.includes('jwt issuer invalid');
+        lower.includes('invalid signature') || lower.includes('jwt audience invalid') || lower.includes('jwt issuer invalid') ||
+        lower.includes('invalid algorithm') || lower.includes('secret or public key must be provided');
 
       if (!canFallback) return sendAuthError(res, 401, 'INVALID_TOKEN', 'Invalid token');
 

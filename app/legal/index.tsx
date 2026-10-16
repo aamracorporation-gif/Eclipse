@@ -5,6 +5,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { ChevronLeft, ChevronRight, FileText } from '@/lib/icons';
 import { useTranslation } from 'react-i18next';
+import { organizerBillingVisible } from '@/lib/payments/organizerBilling';
 
 export default function LegalIndexScreen() {
   const insets = useSafeAreaInsets();
@@ -45,6 +46,11 @@ export default function LegalIndexScreen() {
           <Text style={styles.rowText}>{t('legal.items.terms')}</Text>
           <ChevronRight size={18} color="rgba(255,255,255,0.6)" />
         </TouchableOpacity>
+        {organizerBillingVisible && <TouchableOpacity activeOpacity={0.8} style={styles.row} onPress={() => router.push('/legal/devoluciones')}>
+          <View style={styles.iconWrap}><FileText size={18} color="#fff" /></View>
+          <Text style={styles.rowText}>Cancelaciones y devoluciones</Text>
+          <ChevronRight size={18} color="rgba(255,255,255,0.6)" />
+        </TouchableOpacity>}
       </View>
     </View>
   );

@@ -124,6 +124,37 @@ export async function runNotificationDispatch(rpc:Rpc, env:Environment, send:typ
       if (recorded) processed++;
     }));
   }
-  const receipts=await reconcileNotificationReceipts(rpc,env,send);
+  const receipts=await reconcileNotificationReceipts(rpc,env,send) +
+    (env('RESEND_EMAIL_RECEIPTS_ENABLED')==='true' ? await reconcileEmailReceipts(rpc,env,send) : 0);
   return {prepared,dispatch:'processed',processed,receipts};
 }
+
+/** Acceptance is not delivery: query the provider for the exact stored email ID. */
+export async function reconcileEmailReceipts(rpc: Rpc, env: Environment, send: typeof fetch=fetch) {
+  const key=env('RESEND_API_KEY');
+  if (!key) return 0;
+  const rows=await mustRpc(rpc,'notification_email_receipts_v2',{p_limit:10});
+  let count=0;
+  for (const row of rows ?? []) {
+    if (!UUID.test(row.provider_id)) continue;
+    let response:Response;
+    try { response=await send(`${RESEND_SEND}/${encodeURIComponent(row.provider_id)}`,{
+      headers:{Authorization:`Bearer ${key}`},signal:AbortSignal.timeout(7000),redirect:'error',
+    }); } catch { continue; }
+    if (response.status===429) break;
+    if (!response.ok) {
+      await mustRpc(rpc,'complete_notification_email_receipt_v2',{p_id:row.id,p_provider_id:row.provider_id,
+        p_outcome:'missing',p_code:`EMAIL_RECEIPT_HTTP_${response.status}`});
+      continue;
+    }
+    const email=await response.json().catch(()=>null);
+    if (email?.id!==row.provider_id) continue;
+    const outcome=['delivered','opened','clicked'].includes(email.last_event)?'confirmed':
+      ['bounced','complained','failed','suppressed','canceled'].includes(email.last_event)?'failed':'missing';
+    await mustRpc(rpc,'complete_notification_email_receipt_v2',{p_id:row.id,p_provider_id:row.provider_id,
+      p_outcome:outcome,p_code:outcome==='confirmed'?'EMAIL_PROVIDER_CONFIRMED':outcome==='failed'?'EMAIL_NOT_DELIVERED':'EMAIL_RECEIPT_PENDING'});
+    count++;
+  }
+  return count;
+}
+

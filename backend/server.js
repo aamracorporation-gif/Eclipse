@@ -5,6 +5,7 @@ const { startNotificationRunner } = require('./src/services/notificationRunner')
 // Entry point del backend para Railway/producción y desarrollo local.
 const app = createApp();
 const notifications = startNotificationRunner();
+const cancellations = require('./src/services/cancellation/runtime').startCancellationRunner();
 
 const server = app.listen(env.port, '0.0.0.0', () => {
   process.stdout.write(`Backend listening on port ${env.port}\n`);
@@ -12,6 +13,7 @@ const server = app.listen(env.port, '0.0.0.0', () => {
 
 function shutdown(signal) {
   notifications.stop();
+  cancellations.stop();
   // Cierre limpio para evitar conexiones colgadas en despliegues.
   process.stdout.write(`Received ${signal}, shutting down...\n`);
   server.close(() => process.exit(0));

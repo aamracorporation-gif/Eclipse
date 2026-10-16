@@ -15,7 +15,7 @@ let stripeInstance = null;
 function getStripeSecretKey() {
   const key = String(env.stripeSecretKey || '').trim();
   if (!key) throw new StripeConfigError('Stripe not configured: missing STRIPE_SECRET_KEY');
-  if (!key.startsWith('sk_')) throw new StripeConfigError('Stripe not configured: invalid STRIPE_SECRET_KEY');
+  if (!/^(sk|rk)_(test|live)_/.test(key)) throw new StripeConfigError('Stripe not configured: invalid STRIPE_SECRET_KEY');
   return key;
 }
 
@@ -29,7 +29,7 @@ function getStripeClient() {
   if (stripeInstance) return stripeInstance;
   const key = getStripeSecretKey();
   stripeInstance = new Stripe(key, {
-    apiVersion: '2024-06-20',
+    apiVersion: '2026-08-26.dahlia',
     typescript: false,
   });
   return stripeInstance;

@@ -109,6 +109,7 @@ const handleStripeWebhook = createWebhookHandler({
   markStatus: markPaymentStatusByIntentId,
   updateAccount: setOnboardingCompletedByStripeAccountId,
   refund: refundPaymentIntent,
+  cancellation: require('./cancellation/runtime').cancellationWebhook,
 });
 
 async function deleteStripeAccountForUser(userId) {
@@ -127,6 +128,11 @@ async function deleteStripeAccountForUser(userId) {
 }
 
 async function createIntentForEvent({ eventId, userId, quantity = 1, ticketTypeId = null, idempotencyKey }) {
+  if (process.env.ORGANIZER_CANCELLATION_BILLING_ENABLED === 'true') {
+    const error = new Error('Usa el flujo de compra actualizado de la app.');
+    error.status = 409;
+    throw error; // Legacy endpoint must not bypass held settlement and consent.
+  }
   const { data: eventRow, error: eventError } = await supabaseAdmin
     .from('events')
     .select('id, ticket_price, creator_id')

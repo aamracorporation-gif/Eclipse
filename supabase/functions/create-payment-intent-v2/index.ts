@@ -276,6 +276,25 @@ Deno.serve(async (req) => {
     };
 
     const requireOrganizerConnect = (Deno.env.get("REQUIRE_ORGANIZER_STRIPE_CONNECT") ?? "").trim().toLowerCase() === "true";
+    const deferredBillingEnabled = Deno.env.get('ORGANIZER_CANCELLATION_BILLING_ENABLED') === 'true';
+    const deferredPolicy = 'organizer-cancellation-full-refund-v2';
+    const requireDeferredBilling = async (organizerId: string, hasConnect: boolean, creditCents: number) => {
+      if (!deferredBillingEnabled) return false;
+      if (!hasConnect || creditCents !== 0) throw new Error('Esta compra necesita una cuenta de cobro válida y pago completo con tarjeta.');
+      const mode = Deno.env.get('ORGANIZER_BILLING_STRIPE_MODE');
+      const key = Deno.env.get('STRIPE_SECRET_KEY') || '';
+      if (!['test', 'live'].includes(mode || '') || !new RegExp(`^(sk|rk)_${mode}_`).test(key)) throw new Error('BILLING_MODE_MISMATCH');
+      const billing = await restGet(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY,
+        `organizer_billing_accounts?organizer_id=eq.${encodeURIComponent(organizerId)}&select=ready,livemode,policy_version`);
+      const row = Array.isArray(billing.json) ? billing.json[0] : null;
+      if (!billing.ok || !row?.ready || row.livemode !== (mode === 'live') || row.policy_version !== deferredPolicy) {
+        throw new Error('El organizador debe completar su autorización de cancelaciones antes de vender.');
+      }
+      const debts = await restGet(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY,
+        `event_cancellations?organizer_id=eq.${encodeURIComponent(organizerId)}&status=neq.collected&select=id&limit=1`);
+      if (!debts.ok || !Array.isArray(debts.json) || debts.json.length) throw new Error('El organizador tiene una cancelación pendiente de resolver.');
+      return true;
+    };
 
     if (kind === "event_ticket") {
       const eventId = String(body?.event_id || "");
@@ -377,6 +396,7 @@ Deno.serve(async (req) => {
       // Eclipse retiene comisión + passthrough como application_fee; organizer recibe el resto (90%)
       const platformFeeCents = eclipseCommissionCents;
       const destinationAmountCents = hasConnect ? (amountCents - applicationFeeAmountCents) : 0;
+      const deferredSettlement = await requireDeferredBilling(organizerId, hasConnect, creditDebitCents);
 
       const intentParams: Record<string, string> = {
         amount: String(amountCents),
@@ -396,7 +416,11 @@ Deno.serve(async (req) => {
         "metadata[credit_debit_cents]": String(creditDebitCents),
         ...(discountCodeId ? { "metadata[discount_code_id]": discountCodeId } : {}),
       };
-      if (hasConnect) {
+      if (deferredSettlement) {
+        intentParams.transfer_group = `event_${eventId}`;
+        intentParams['metadata[settlement_model]'] = 'after_event_v1';
+        intentParams['metadata[cancellation_policy]'] = deferredPolicy;
+      } else if (hasConnect) {
         intentParams["transfer_data[destination]"] = rawStripeAccountId;
         intentParams.application_fee_amount = String(applicationFeeAmountCents);
       }
@@ -440,6 +464,7 @@ Deno.serve(async (req) => {
 
       const metadata = {
         event_id: eventId,
+        ...(deferredSettlement ? { settlement_model: 'after_event_v1', cancellation_policy: deferredPolicy } : {}),
         product_snapshot: productSnapshot,
         ticket_type_id: ticketTypeId ?? "",
         quantity,
@@ -722,6 +747,7 @@ Deno.serve(async (req) => {
 
       const vipPlatformFeeCents = vipEclipseCommissionCents;
       const destinationAmountCents = hasConnect ? (amountCents - vipApplicationFeeAmountCents) : 0;
+      const deferredSettlement = await requireDeferredBilling(organizerId, hasConnect, creditDebitCents);
 
       const intentParams: Record<string, string> = {
         amount: String(amountCents),
@@ -743,7 +769,11 @@ Deno.serve(async (req) => {
         "metadata[commission_cap_cents]": String(vipCommissionCapCents),
         "metadata[credit_debit_cents]": String(creditDebitCents),
       };
-      if (hasConnect) {
+      if (deferredSettlement) {
+        intentParams.transfer_group = `event_${eventId}`;
+        intentParams['metadata[settlement_model]'] = 'after_event_v1';
+        intentParams['metadata[cancellation_policy]'] = deferredPolicy;
+      } else if (hasConnect) {
         intentParams["transfer_data[destination]"] = rawStripeAccountId;
         intentParams.application_fee_amount = String(vipApplicationFeeAmountCents);
       }
@@ -787,6 +817,7 @@ Deno.serve(async (req) => {
         event_id: eventId,
         product_snapshot: { kind: 'vip_table', category: 'vip_table', name: vip.name || 'Reservado de mesa VIP', metadata: { ...(vip.metadata || {}), vipGroupSize: vip.capacity_people, benefits: vip.description || '', vipBottles: vip.metadata?.vipBottles || (vip.included_bottles > 0 ? [{ brand: 'Botella incluida', quantity: vip.included_bottles }] : []) } },
         vip_reservado_id: vipId,
+        ...(deferredSettlement ? { settlement_model: 'after_event_v1', cancellation_policy: deferredPolicy } : {}),
         reference_id: vipId,
         buyer_name: buyerName,
         buyer_email: buyerEmail,
