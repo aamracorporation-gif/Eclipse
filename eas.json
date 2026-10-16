@@ -12,6 +12,7 @@
       }
     },
     "preview": {
+      "autoIncrement": true,
       "env": {
         "ECLIPSE_BUILD_ENV": "staging",
         "EXPO_PUBLIC_ORGANIZER_CANCELLATION_BILLING": "true",

@@ -1,0 +1,51 @@
+name: Cancellation fixes - TestFlight and APK
+on:
+  push:
+    branches: [codex/organizer-cancellation-deferred]
+    paths: [.github/workflows/eclipse-cancellation-release.yml]
+permissions:
+  contents: read
+concurrency:
+  group: eclipse-staging-release
+  cancel-in-progress: false
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    environment: staging
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Validate release source
+        run: |
+          npm run ci:check
+          node scripts/qa/cancellation-layout-regression.cjs
+          node --test scripts/tests/buildEnvironment.test.cjs scripts/tests/stagingServices.test.cjs
+          npx expo install --check
+          npm audit --omit=dev --audit-level=critical
+          npm --prefix backend ci
+          npm --prefix backend test
+          npm --prefix backend audit --omit=dev --audit-level=critical
+      - uses: expo/expo-github-action@v8
+        with:
+          eas-version: 18.0.1
+          token: ${{ secrets.EXPO_TOKEN }}
+      - name: Build both platforms and submit iOS
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        run: node scripts/release-cancellation.cjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: cancellation-release-${{ github.sha }}
+          path: build-receipts/
+          if-no-files-found: ignore
+      - name: Remove temporary environment
+        if: always()
+        run: rm -f .env.local
