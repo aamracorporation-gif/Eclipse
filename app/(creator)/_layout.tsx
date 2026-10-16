@@ -5,7 +5,8 @@ import { Colors } from '@/constants/Colors';
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { DiscoLoader } from '@/components/ui/DiscoLoader';
-import { Calendar, QrCode, TrendingUp, User } from '@/lib/icons';
+import { Ban, Calendar, QrCode, TrendingUp, User } from '@/lib/icons';
+import { organizerBillingVisible } from '@/lib/payments/organizerBilling';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { canAccessOrganizerPanel, CreatorAccessProfile } from '@/lib/creatorAccess';
@@ -113,7 +114,7 @@ export default function CreatorLayout() {
         <Tabs.Screen name="admin-tickets" options={{ title: 'Entradas', tabBarIcon: ({ color, size }) => <QrCode color={color} size={size} /> }} />
         <Tabs.Screen name="admin-profile" options={{ title: 'Perfil', tabBarIcon: ({ color, size }) => <User color={color} size={size} /> }} />
         {['create-event', 'workers', 'verification', 'scan', 'stats', 'global-stats', 'event-stats/[id]',
-          'event-discounts', 'discount-codes', 'worker-qr', 'organizer-profile', 'box-office'].map(name => (
+          'event-discounts', 'discount-codes', 'worker-qr', 'organizer-profile', 'box-office', 'cancellation-billing'].map(name => (
           <Tabs.Screen key={name} name={name} options={{ href: null }} />
         ))}
       </Tabs>
@@ -184,6 +185,11 @@ export default function CreatorLayout() {
         />
 
         <Tabs.Screen name="create-event" options={{ href: null }} />
+        <Tabs.Screen name="cancellation-billing" options={{
+          title: 'Cancelar', href: organizerBillingVisible ? undefined : null,
+          tabBarAccessibilityLabel: 'Cancelaciones y devoluciones',
+          tabBarIcon: ({ color, size }) => <Ban color={color} size={size ?? 22} />,
+        }} />
         <Tabs.Screen name="workers" options={{ href: null }} />
         <Tabs.Screen name="box-office" options={{ href: null }} />
         <Tabs.Screen name="verification" options={{ href: null }} />
