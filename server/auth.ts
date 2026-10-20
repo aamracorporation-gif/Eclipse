@@ -23,7 +23,9 @@ export class Auth{
   if(this.mode==='supabase'){
    const {error}=await this.remote().auth.signUp({email,password:p.password,options:{data:{rondiqo_name:name,rondiqo_adult:true,rondiqo_terms:TERMS_VERSION},emailRedirectTo:this.origin+'/login'}});
    ensure(!error,'REGISTER','No se ha podido crear la cuenta. Comprueba tus datos o recupera el acceso.',400);
-   return {verificationRequired:true,message:'Revisa tu correo, confirma la cuenta y después inicia sesión.'};
+   // Supabase deliberately returns success for repeat signups without sending
+   // another confirmation. Keep the response private and avoid promising delivery.
+   return {verificationRequired:true,message:'Si tu correo necesita confirmación, recibirás un enlace; revisa también spam. Si ya tienes cuenta en Eclipse o RONDIQO, pulsa «Ya tengo cuenta · Entrar» con tu contraseña anterior. Registrarte otra vez no la cambia. Si no la recuerdas, usa «He olvidado mi contraseña».'};
   }
   const userId=randomUUID();
   await this.db.transaction(async db=>{

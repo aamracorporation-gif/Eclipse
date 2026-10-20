@@ -84,6 +84,27 @@ test('rate limits hold across server instances and bounded local buckets recover
  }finally{await db.close();}
 });
 
+test('signup does not promise email delivery or reveal whether an Eclipse account already exists',async()=>{
+ const db=await openDatabase(':memory:'),auth=new Auth(db,'supabase','https://example.supabase.co','public-test-key',{allowDemo:false,origin:'https://app.example.com'});
+ try{
+  let repeated=false;
+  auth.remote=()=>({auth:{signUp:async(input:any)=>{
+   assert.equal(input.options.emailRedirectTo,'https://app.example.com/login');
+   assert.equal(input.options.data.rondiqo_terms,TERMS_VERSION);
+   return {error:null,data:{user:{identities:repeated?[]:[{provider:'email'}]},session:null}};
+  }}} as any);
+  const input={email:'private@example.com',password:'A valid signup phrase!',name:'Private Player',adult:true,terms_version:TERMS_VERSION};
+  const fresh=await auth.register(input);repeated=true;const existing=await auth.register(input);
+  assert.deepEqual(existing,fresh);
+  assert.equal(existing.verificationRequired,true);
+  assert.match(existing.message,/contraseña anterior/);
+  assert.match(existing.message,/no la cambia/);
+  assert.match(existing.message,/He olvidado mi contraseña/);
+  assert.equal(existing.token,undefined);
+  assert.equal(await one(db,'SELECT id FROM rondiqo.profiles'),undefined);
+ }finally{await db.close();}
+});
+
 test('beta serves nonce-protected HTML, secure cookies and rejects local origins and demo logins',async()=>{
  const db=await openDatabase(':memory:'),dist=await mkdtemp(join(tmpdir(),'rondiqo-http-'));
  await writeFile(join(dist,'index.html'),'<html><script>window.test=true;</script></html>');

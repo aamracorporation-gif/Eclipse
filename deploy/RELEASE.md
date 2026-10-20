@@ -1,57 +1,45 @@
 # Publicación · 20/10/2026
-Preparación comprobada y configuración Railway pendiente de aplicar. Publicación y TestFlight aún pendientes. La sustitución del servicio está autorizada; queda pendiente consentimiento explícito para publicar código en el repositorio GitHub público.
+
+Beta publicada y verificada: https://api.weareeclipseoficial.com. El titular confirma acceso correcto con una cuenta real. Pagos simulados. Consultar ../evidence/status.json para el estado actualizado de iOS y TestFlight.
 
 ## Destinos existentes
-Railway: Eclipse 806d62be-6671-40d3-9a3e-d25c07c5cb05; servicio 1097f683-8e92-4859-a80b-a50b169080da; entorno 8e9dc89a-5e5e-457d-b11c-d3df0df7cf6f. Puerto 8080, https://api.weareeclipseoficial.com.
-Supabase: AppFest / zurbdrfmwjqbrscairub, esquema rondiqo.
-Expo: @ashhhhhhhh/Eclipse / 42ebb6eb-62b1-4784-a483-831ae3c804f2.
-Apple: com.achraf.eclipse, App Store Connect 6773071994. Último build observado 77 (Eclipse anterior). Propuesta 1.1.0 (78). No enviar el build antiguo.
+- Railway: proyecto 806d62be-6671-40d3-9a3e-d25c07c5cb05; servicio 1097f683-8e92-4859-a80b-a50b169080da; entorno 8e9dc89a-5e5e-457d-b11c-d3df0df7cf6f. Puerto 8080.
+- Supabase: AppFest / zurbdrfmwjqbrscairub, esquema rondiqo, 17 tablas. Rol exclusivo; dos conexiones por réplica, límite total cinco.
+- Expo: @ashhhhhhhh/Eclipse / 42ebb6eb-62b1-4784-a483-831ae3c804f2.
+- Apple: com.achraf.eclipse, App Store Connect 6773071994. Nueva RONDIQO 1.1.0 (78); la anterior 1.0.0 (77) es Eclipse, no reenviarla.
+- GitHub: https://github.com/aamracorporation-gif/Eclipse/tree/rondiqo/beta-release. Código público expresamente autorizado.
 
-## Despliegue beta
-1. Verificar resolución de https://status.railway.com/incident/JUA1PC5H. Resuelta el 20/10 a las 20:56 UTC; no se ha activado ningún despliegue de RONDIQO.
-2. Revalidar presupuesto sin ampliar plan/recursos/réplicas. Railway mostró $2.06 de uso y $20 incluidos; no garantiza coste futuro.
-3. Construir/probar Dockerfile y revisar paquete de código. Servidor mínimo e imagen Linux construidos y probados localmente; la prueba del contenedor se realizó sin red externa y con usuario sin privilegios.
-4. Configurar release.env.example en el servicio existente. Credenciales únicamente en gestor de secretos. Conservar configuración anterior cifrada para rollback. No enviar secretos a Git/app/ZIP/chat.
-5. Configurar confirmación de correo y redirecciones exactas /login y /reset-password. Plantilla de recuperación: email-recovery-template.html, con {{.Token}}. Verificar alta real, confirmación, recuperación, caducidad y revocación. Auth comparte proyecto con Eclipse: conservar sus redirecciones necesarias.
-6. Publicar primero beta con Supabase Auth, pagos simulados y DEMO_ACCESS=false. Los datos del piloto siguen siendo ficticios; cuentas .test bloqueadas.
-7. Verificar HTTPS, /api/health, sesión real, permisos, inscripción, QR y correo desde fuera del ordenador. Monitorizar errores entre ambas réplicas.
+## Despliegue comprobado
+Railway 6d3f5f83-e1ec-42a4-9703-f8c66db35aac: SUCCESS, 20/10/2026 21:42 UTC. Fuente fijada a 29a58f5be9ed9c33446016367971bf0e747eb288. Se conservaron las dos regiones/réplicas, planes, variables antiguas y recursos existentes.
+RELEASE_MODE=beta, AUTH_MODE=supabase, PAYMENT_MODE=simulated, DEMO_ACCESS=false. RONDIQO_AUTH_URL y RONDIQO_AUTH_PUBLISHABLE_KEY aíslan la configuración nueva. DATABASE_URL transferida en memoria por canal privado a Railway, nunca a código, ZIP, chat o stdout.
+Verificados por HTTPS: /api/health identifica RONDIQO, AppFest, beta, Supabase Auth y pagos simulados; interfaz, nonce CSP, HSTS, consulta pública restringida, demos rechazadas y origen ajeno rechazado. Portada y catálogo sin errores de consola. Evidencia: ../evidence/public-beta-check.json. El titular confirmó acceso correcto sin compartir contraseña ni códigos.
+SMTP Resend existente configurado. Confirmación usa ConfirmationURL del proveedor; recuperación muestra Token y dirige a /reset-password. Plantillas adaptadas y persistidas. Conservar las redirecciones del proyecto compartido. Recepción real, recuperación completa, caducidad y revocación por correo pendientes de comprobar.
+No mantener el servidor local conectado a AppFest junto a las dos réplicas salvo mantenimiento planificado: el rol admite cinco conexiones. La instancia local se detuvo tras verificar la beta.
 
-El historial original incluye artefactos y material de firma antiguos. No publicar todo ese historial ni copiar credenciales. Revisar/rotar certificados potencialmente expuestos con el titular. No se han revocado certificados ni enviado código al remoto.
+## iPhone y TestFlight
+Firma/perfil remotos existentes activos hasta 03/06/2027; clave de envío existente. Sin nuevas credenciales ni acuerdos aceptados. Build completado y enviado e45415e5-dd49-4031-bbbb-c6f0dccdcf80, 1.1.0 (78), commit local 920960f80be52e4da272e69be69a3dddab7275cf.
+Antes de iniciar: 34 USD disponibles de 45 USD incluidos en Starter. iOS m-medium consume 2 USD del crédito según https://docs.expo.dev/billing/usage-based-pricing/. Sin cambios de plan. Revalidar antes de nuevos builds.
+Perfil testflight: EAS_REUSE_ECLIPSE=true, EXPO_PUBLIC_API_URL=https://api.weareeclipseoficial.com, EXPO_PUBLIC_RELEASE_MODE=beta. scripts/verify-native-release.cjs pasa contra el servidor público. Archivo EAS inspeccionado sin Git ni credenciales privadas detectadas.
+Enviar solo el ID de RONDIQO comprobado: eas-cli@25.3.0 submit --platform ios --profile testflight --id ID. No usar --latest sin comprobar identidad. Solicitud de envío, procesamiento Apple y disponibilidad para instalar son estados distintos: registrar cada uno.
+Probar en iPhone: acceso/recuperación, espacios, equipo, calendario, cámara/QR, inscripción, cierre de sesión y retorno de Checkout sandbox. No hay prueba física realizada por el agente. No añadir testers ni enviar nuevas invitaciones sin solicitud del titular.
 
 ## Pagos reales
-Solo se dispone de conexión Eclipse Staging en modo de prueba. No se han encontrado credenciales live utilizables ni ejecutado transacciones.
-Identificar plataforma/responsable live, aprobar comisión (500 bps es ejemplo), reembolsos y responsabilidades de destination charges antes de activar.
-Preparar clave restringida y secreto webhook separados de sandbox. Permisos necesarios: Checkout, lectura de cuentas/cobros y creación/lectura de reembolsos. Nunca enviar claves al cliente.
-Endpoint /api/webhook. Eventos: checkout.session.completed, checkout.session.async_payment_succeeded, checkout.session.async_payment_failed, checkout.session.expired y charge.refunded.
-La administración vincula cuentas Stripe YA conectadas, con reautenticación y verificación. No crea cuentas ni acepta acuerdos financieros.
-Validar sandbox real: Checkout/Connect, éxito, fallo, cancelación, duplicados, firma, cierre y reembolsos. Las pruebas incluidas usan simulaciones/firmas locales y no sustituyen la integración con el proveedor.
-Producción requiere correo verificado operativamente, URLs HTTPS reales de legal/soporte, ausencia de perfiles .test y credenciales locales, y las variables de activación de release.env.example. No rellenar indicadores approved/verified sin realizar las comprobaciones.
-No efectuar cobros de validación sin autorización para posibles comisiones.
+Checkout/Connect, firmas, aislamiento test/live, cuentas verificadas, idempotencia, conciliación y reembolsos implementados. Solo conexión Stripe Staging disponible; sin credenciales live ni validación completa con el proveedor. Pruebas actuales con simulaciones y firmas locales.
+Identificar responsable/plataforma live, comisión, reembolsos y responsabilidades de destination charges. 500 bps es ejemplo. La administración vincula cuentas ya conectadas con reautenticación y verificación; no abre cuentas financieras ni acepta acuerdos.
+Configurar clave restringida y secreto webhook separados en el servidor. Permisos mínimos: Checkout, lectura de cuentas/cobros, creación/lectura de reembolsos. Endpoint /api/webhook, eventos checkout.session.completed, checkout.session.async_payment_succeeded, checkout.session.async_payment_failed, checkout.session.expired y charge.refunded.
+Validar sandbox real: éxito, fallo, cancelación, duplicados, firma, cobro tardío, cierre, reembolso parcial y total. No hacer cobros con posibles comisiones sin autorización. No activar live porque pasen pruebas simuladas.
 
-## TestFlight
-1. Backend beta HTTPS operativo y cuenta real de prueba con correo confirmado.
-2. Sesión Apple verificada. Certificado y perfil remotos existentes activos hasta 03/06/2027. Clave de envío existente. Último build Apple observado: 77; se propone 78. No se crearon credenciales ni se aceptaron acuerdos.
-3. Crédito Expo verificado: Starter existente, $11 usados de $45, $34 disponibles. Las cuatro compilaciones iOS suman $8; cada m-medium cuesta $2 según documentación oficial. No se han iniciado builds. Revalidar antes de compilar si cambia el período o hay otros usos. https://docs.expo.dev/billing/usage-based-pricing/
-4. Variables locales: EAS_REUSE_ECLIPSE=true, EXPO_PUBLIC_API_URL=https://api.weareeclipseoficial.com, EXPO_PUBLIC_RELEASE_MODE=beta.
-5. Ejecutar node scripts/verify-native-release.cjs ANTES del build remoto. Ahora falla: el backend no es RONDIQO.
-6. Revisar archivo EAS (.easignore), guardar commit y usar npx eas-cli@25.3.0 build --platform ios --profile testflight. Solo firma existente verificada. No se ha iniciado este paso.
-7. Enviar el ID de ese build: npx eas-cli@25.3.0 submit --platform ios --profile testflight --id ID_DEL_BUILD_RONDIQO. No usar --latest sin verificar identidad y versión.
-8. Verificar procesamiento y disponibilidad en TestFlight; completar información beta, privacidad, contacto y cifrado estándar HTTPS. Solicitar envío no equivale a publicación.
-9. Probar iPhone: acceso/recuperación, espacios, equipo, calendario, cámara/QR, Checkout sandbox y retorno. No se ha realizado esta prueba.
-No se han enviado invitaciones ni publicado enlaces de beta.
+## Requisitos comerciales y operación
+Correo verificado operativamente, pruebas físicas, identidad/condiciones/privacidad/soporte definitivos, disponibilidad de marca, retirada planificada de datos ficticios, copias/restauración, monitorización y avisos heredados. Producción rechaza perfiles .test y credenciales locales. No falsear indicadores approved/verified de release.env.example.
+Auditoría servidor: 0 vulnerabilidades conocidas. Compilación: 19 altas transitivas de dos avisos sin parche oficial. scripts/patch-build-tools.cjs exige versiones exactas y aplica mitigaciones probadas; retirar tras parche oficial revisado.
+Supabase conserva avisos del legado public y protección de contraseñas filtradas desactivada; sin hallazgos del asesor sobre rondiqo. No mover pg_net ni revocar funciones indiscriminadamente. Historial público original contiene material de firma Android antiguo: revisar con el titular y rotar lo necesario de forma planificada. La rama nueva no lo incluye; no se revocaron certificados.
+Eliminación: solicitud autenticada, suspensión y cierre de sesiones; tramitar pagos, participaciones, clubes, retención y borrado/anonimización incluyendo Auth y legado compartido. Registrar resultado. La cola no automatiza todo ese proceso.
+Reembolsos: conciliación cada minuto con idempotencia; investigar los fallidos, no crear otro a ciegas.
 
-## Operación
-Antes de producción: copia y prueba de restauración local, inventario de demostraciones y retirada planificada, monitorización y soporte real. No borrar datos automáticamente.
-Rollback: restaurar código/configuración revisados anteriores; no DROP de tablas ni reversión de pagos.
-Reembolsos: conciliación cada minuto con idempotencia. Un failed requiere revisar Stripe; no crear otro a ciegas.
-Eliminación: solicitud autenticada, acceso suspendido, resolver pagos/participaciones/propiedad de clubes, aplicar retención y borrar/anonimizar datos que corresponda. Comprobar también Auth y legado compartido, registrar finalización y comunicar plazo/resultado por canal acordado. El código registra y suspende, no realiza todo ese proceso.
-Revisar avisos heredados Supabase; las funciones muestreadas comprueban identidad/propietario, pero no se auditó todo el legado. No mover pg_net ni revocar todas las funciones a ciegas. Protección de contraseñas filtradas desactivada: comprobar disponibilidad en plan existente sin contratar.
-Mitigaciones braces/node-forge: scripts/patch-build-tools.cjs exige versiones exactas y falla ante estructura inesperada. Retirar tras parche oficial revisado. Auditoría servidor 0; compilación 19 altas transitivas de 2 avisos sin parche.
+## Reversión y costes
+Despliegue anterior: 6522af28-0ca3-42d2-8f94-ef3deab62f59. Restaurar código/configuración anteriores revisados; no DROP de tablas ni reversión automática de pagos. Copia sin secretos en work/railway-before-rondiqo.json, fuera de la entrega.
+No se contrataron servicios, compraron recursos, cambiaron planes, crearon proyectos remotos ni cobraron pagos reales. Railway mostraba 2,06 USD de uso de 20 USD incluidos antes de desplegar. Son límites del ciclo observado, no garantía de uso gratuito ilimitado. Revisar consumo durante la beta.
 
-## Preparación comprobada de esta continuación
-- Código local: 42 pruebas correctas tras fijar la URL beta en EAS y aislar RONDIQO_AUTH_URL / RONDIQO_AUTH_PUBLISHABLE_KEY.
-- Archivo EAS inspeccionado localmente: 161 archivos, sin Git ni patrones de credenciales detectados. No es una compilación firmada.
-- Railway: 14 variables de RONDIQO y 7 ajustes de arranque preparados; sin aplicar ni desplegar. Las variables antiguas permanecen disponibles para reversión.
-- DATABASE_URL transferida mediante canal privado en memoria al panel Railway, sin stdout ni archivo plano. Un intento anterior de usar stdout fue bloqueado antes de ejecutarse.
-- Publicar el árbol de código en GitHub fue rechazado por revisión automática porque Eclipse es público; la autorización de despliegue no incluía exposición pública explícita. Esperar respuesta al consentimiento solicitado. No rodear el bloqueo con otra vía de publicación pública.
-- SMTP Resend ya configurado. Redirección HTTPS existente cubre /login y /reset-password. Plantilla antigua de recuperación usa TokenHash y no incluye el código Token: adaptar antes de verificar la recuperación. Copia local anterior en work, fuera del paquete público.
+## Resultado TestFlight y corrección de registro
+Apple valida 1.1.0 (78), build d03ff8e5-10ce-4bd4-8aa4-e3e8d64c9fe5. Grupo interno existente Eclipse Team asociado automáticamente. Indicaciones guardadas. Apple muestra la instalación de esta versión por el titular. Sin nuevos testers ni invitaciones manuales. No se ha validado un recorrido funcional completo en el dispositivo.
+Los intentos de registro consultados eran user_repeated_signup de cuentas Eclipse ya verificadas; el proveedor no envía otra confirmación ni modifica la contraseña. Se corrigió el mensaje del servidor para explicar el acceso y recuperación sin prometer un correo ni revelar la existencia de una cuenta. 43 pruebas pasan. No se ha confirmado manualmente ningún usuario ni desactivado la verificación.
