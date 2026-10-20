@@ -1,7 +1,1 @@
-import { LegalDocumentScreen } from '@/components/legal/LegalDocumentScreen';
-import { useTranslation } from 'react-i18next';
-
-export default function TerminosScreen() {
-  const { t } = useTranslation();
-  return <LegalDocumentScreen title={t('legal.documents.terms.title')} text={t('legal.documents.terms.text')} />;
-}
+import {Text} from 'react-native';import {Screen} from '@/components/rondiqo/Screen';import {s} from '@/src/ui/components';export default function Terms(){return <Screen title="Condiciones del piloto"><Text style={s.body}>Esta versión permite evaluar RONDIQO con datos ficticios. Participación limitada a mayores de 18 años por declaración. Los pagos son simulados y las competiciones de ejemplo no reservan instalaciones ni incluyen seguros, árbitros o licencias.</Text><Text style={s.h3}>Tus datos</Text><Text style={s.body}>El perfil, equipos, inscripciones y actividad se guardan en AppFest. La app muestra públicamente el nombre visible de los equipos y resultados; tu email, plantilla privada y pase QR se restringen según tus permisos. La contraseña se almacena como un hash, nunca en texto legible. No introduzcas datos sensibles en este piloto.</Text><Text style={s.h3}>Antes del lanzamiento</Text><Text style={s.body}>Las condiciones comerciales y de privacidad definitivas, el responsable y los canales de ejercicio de derechos deben configurarse antes de aceptar clientes reales. El piloto no ofrece servicio comercial ni cobros reales.</Text></Screen>}

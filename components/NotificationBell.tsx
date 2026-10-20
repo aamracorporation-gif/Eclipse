@@ -11,6 +11,8 @@ export function NotificationBell() {
 
   return (
     <TouchableOpacity
+      accessibilityRole="button"
+      accessibilityLabel={unreadCount ? `Notificaciones, ${unreadCount} sin leer` : "Notificaciones"}
       onPress={() => router.push('/notifications')}
       style={styles.container}
       activeOpacity={0.7}
@@ -53,7 +55,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 2,
   },
   badgeText: {
-    color: 'white',
+    color: '#0C1718',
     fontSize: 10,
     fontWeight: '800',
   },

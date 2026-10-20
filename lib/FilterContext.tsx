@@ -1,31 +1,9 @@
-import { createContext, useContext, useState, type ReactNode } from 'react';
-
-export type FilterState = {
-  minAge:    number | null;
-  dressCode: string | null;
-  musicType: string | null;
-  maxPrice:  number | null;
-};
-
-export const EMPTY_FILTERS: FilterState = {
-  minAge: null, dressCode: null, musicType: null, maxPrice: null,
-};
-
-type FilterCtx = {
-  filters: FilterState;
-  setFilters: (f: FilterState) => void;
-};
-
-const Ctx = createContext<FilterCtx>({
-  filters: EMPTY_FILTERS,
-  setFilters: () => {},
-});
-
-export function FilterProvider({ children }: { children: ReactNode }) {
-  const [filters, setFilters] = useState<FilterState>(EMPTY_FILTERS);
-  return <Ctx.Provider value={{ filters, setFilters }}>{children}</Ctx.Provider>;
+import React,{createContext,useContext,useState} from 'react';
+export type FilterState={sport:string;query:string;city:string;level:string;kind:string;maxPrice:string};
+const initial={sport:'all',query:'',city:'Sevilla',level:'all',kind:'all',maxPrice:''};
+const Context=createContext<{filters:FilterState;update:(patch:Partial<FilterState>)=>void;reset:()=>void}>({filters:initial,update:()=>{},reset:()=>{}});
+export function FilterProvider({children}:{children:React.ReactNode}){
+ const [filters,setFilters]=useState(initial);
+ return <Context.Provider value={{filters,update:patch=>setFilters(previous=>({...previous,...patch})),reset:()=>setFilters(initial)}}>{children}</Context.Provider>;
 }
-
-export function useFilters() {
-  return useContext(Ctx);
-}
+export const useFilters=()=>useContext(Context);

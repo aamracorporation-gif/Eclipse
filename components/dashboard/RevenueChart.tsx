@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import { View, Text, StyleSheet, Dimensions } from 'react-native';
 import { Svg, Path, Defs, LinearGradient, Stop, Circle, Line } from 'react-native-svg';
 import { useResponsive } from '@/lib/responsive';
@@ -12,10 +12,10 @@ interface RevenueChartProps {
   height?: number;
 }
 
-export function RevenueChart({ data, timeRange, color = '#8b5cf6', height = 220 }: RevenueChartProps) {
+export function RevenueChart({ data, timeRange, color = '#D9FA65', height = 220 }: RevenueChartProps) {
   const { maxContentWidth } = useResponsive();
-  const screenWidth = Math.min(Dimensions.get('window').width, maxContentWidth);
-  const chartWidth = screenWidth - 48; // Padding
+  const [availableWidth,setAvailableWidth]=useState(320);
+  const chartWidth = Math.max(180,availableWidth-40);
   const chartHeight = height - 40; // Space for labels
   
   // Process data based on time range
@@ -40,7 +40,7 @@ export function RevenueChart({ data, timeRange, color = '#8b5cf6', height = 220 
       groupBy = 'day';
     } else if (timeRange === 'month') {
       startDate = new Date(now);
-      startDate.setMonth(now.getMonth() - 1);
+      startDate.setDate(now.getDate() - 29);
       startDate.setHours(0, 0, 0, 0);
       groupBy = 'day';
     }
@@ -49,12 +49,10 @@ export function RevenueChart({ data, timeRange, color = '#8b5cf6', height = 220 
     const buckets: { label: string; date: Date; value: number }[] = [];
     const current = new Date(startDate);
     
-    // Add buffer end time to include current bucket
+    // Include the current bucket without inventing a future zero-value day.
     const end = new Date(endDate);
-    if (groupBy === 'hour') end.setHours(end.getHours() + 1);
-    else end.setDate(end.getDate() + 1);
 
-    while (current < end) {
+    while (current <= end) {
       let label = '';
       if (groupBy === 'hour') {
         label = `${current.getHours()}:00`;
@@ -106,7 +104,7 @@ export function RevenueChart({ data, timeRange, color = '#8b5cf6', height = 220 
 
   if (chartPoints.length === 0) {
     return (
-      <View style={[styles.container, { height }]}>
+      <View onLayout={e=>setAvailableWidth(e.nativeEvent.layout.width)} style={[styles.container, { height, width:'100%' }]}>
         <Text style={styles.noDataText}>No hay datos para este periodo</Text>
       </View>
     );
@@ -132,7 +130,7 @@ export function RevenueChart({ data, timeRange, color = '#8b5cf6', height = 220 
   const visibleLabels = points.filter((_, i) => i % labelInterval === 0);
 
   return (
-    <View style={[styles.container, { height }]}>
+    <View onLayout={e=>setAvailableWidth(e.nativeEvent.layout.width)} style={[styles.container, { height, width:'100%' }]}>
       <Svg width={chartWidth} height={chartHeight + 30}>
         <Defs>
           <LinearGradient id="gradient" x1="0" y1="0" x2="0" y2="1">
@@ -196,7 +194,7 @@ export function RevenueChart({ data, timeRange, color = '#8b5cf6', height = 220 
               style={[
                 styles.label, 
                 { 
-                  left: p.x - 20, // Center the 40px width label
+                  left: Math.max(0,Math.min(chartWidth-40,p.x-20)), // Center the 40px width label
                   textAlign: 'center'
                 }
               ]}

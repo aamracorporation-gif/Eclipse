@@ -1,0 +1,15 @@
+{
+  "name": "rondiqo-runtime",
+  "private": true,
+  "version": "0.4.0",
+  "type": "module",
+  "engines": {
+    "node": ">=24.14.0 <25"
+  },
+  "dependencies": {
+    "@electric-sql/pglite": "0.3.14",
+    "@supabase/supabase-js": "2.118.0",
+    "pg": "8.23.1",
+    "stripe": "23.0.0"
+  }
+}

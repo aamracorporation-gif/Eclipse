@@ -1,151 +1,37 @@
-# Eclipse (Expo + Supabase) — Notificaciones
+# RONDIQO · Eclipse adaptado · 0.4
+App de pádel y fútbol 7. Rama local rondiqo/deportes del repositorio real Eclipse, basada en 7d1efc1006a815c44dbab1b18c8e24eef5f9b0e0. No se ha enviado al remoto.
 
-## Objetivo
-Garantizar que:
-- Cualquier cambio relevante en un evento notifique al 100% de compradores en < 60s.
-- Las compras, recordatorios y cambios críticos lleguen por in-app + push + email + sms (según preferencias).
-- Existan trazas/auditoría por usuario, evento, canal, estado y timestamp.
-- El usuario pueda activar/desactivar canales y marketing (opt-in).
+## Abrir
+http://127.0.0.1:4173/welcome. Reiniciar con ./start-appfest.ps1.
+Credencial AppFest cifrada mediante Windows DPAPI en ../../work/appfest-backend.secret, fuera de la entrega.
+Cuentas ficticias: organiza@rondiqo.test, jugador@rondiqo.test, capitan@rondiqo.test, arbitro@rondiqo.test, acceso@rondiqo.test, admin@rondiqo.test. Contraseña local: RondaLocal2026!
+Estas cuentas no acceden en beta/producción. Los tokens no se comparten entre entornos ni modos de autenticación.
+Sin AppFest: Node 24.14.x, npm ci, npm run seed, npm run build:web y npm start (PGlite local). No ejecutar semillas contra datos reales.
 
-## Arquitectura (alto nivel)
-- **Persistencia**: `public.notifications` (historial) + `public.notification_deliveries` (cola por canal).
-- **Entrega**: Edge Functions procesan `notification_deliveries` pendientes:
-  - `send-push` (Expo)
-  - `send-email-notifications` (Resend)
-  - `send-sms-notifications` (Twilio)
-- **Despacho unificado**: `dispatch-notifications` invoca push/email/sms en una sola llamada.
-- **Trazabilidad**: `public.notification_delivery_events` registra cada transición de delivery (userId, eventId, canal, estado, error, provider).
-- **Idioma**:
-  - `public.profiles.language` decide el idioma del usuario.
-  - `public.notification_template_translations` permite título/cuerpo por idioma.
-  - `enqueue_notification_from_template(...)` selecciona traducción y renderiza placeholders `{{...}}`.
+## Arquitectura y funciones
+Se reutilizan Expo/React Native/Expo Router, grupos de rutas, proveedores Auth/Event/Notification/Filter, ThemedButton/Input, GlassView, AppDialog, campana, gráficos, iconos y diseño adaptable. Se conserva licencia y atribución. El legado de ocio no autoriza operaciones deportivas.
+Jugador: registro/acceso, equipos, invitaciones, inscripciones, espera, agenda/ICS, resultados, clasificación y QR.
+Organizador: clubes y personal, asistente, borradores con versiones, publicación, inscripciones, cuadros, horarios, resultados y disputas.
+Administración: verificación, suspensión, auditoría, conciliación, cuentas Stripe existentes y solicitudes de eliminación.
+Pádel por parejas; fútbol 7 con siete miembros como mínimo. Ligas hasta 32 equipos, eliminatorias hasta 128. Revisar horarios generados.
 
-## Flujo (diagrama)
-```text
-[UPDATE events] (organizer/admin)
-        |
-        v
-Trigger: on_event_update -> handle_event_updates_notification()
-        |
-        v
-INSERT notifications (por cada comprador, según tipo de cambio)
-        |
-        v
-Trigger: trg_create_notification_deliveries -> INSERT notification_deliveries (push/email/sms)
-        |
-        v
-dispatch-notifications (edge)  --->  send-push / send-email-notifications / send-sms-notifications
-        |
-        v
-UPDATE notification_deliveries (sent/failed) + trigger log (notification_delivery_events)
-```
+## Seguridad y pagos
+AppFest / zurbdrfmwjqbrscairub: esquema rondiqo, 17 tablas RLS, usuario exclusivo y TLS con CA verificada. Pool de dos conexiones por réplica para el límite de cinco. Tres migraciones *_rondiqo_*.sql aplicadas; no ejecutar las migraciones/funciones históricas ni migraciones remotas automáticas.
+Sesiones opacas de 12 horas, cookies HttpOnly/Secure/SameSite, SecureStore móvil, revocación al cambiar contraseña, limitación compartida en PostgreSQL, CSP con nonce, HSTS y límites de peticiones.
+Supabase Auth preparado para correo confirmado, recuperación por código y usuarios Eclipse con consentimiento. Correo real pendiente de configurar/verificar.
+Eliminación: solicitud con contraseña, suspensión y cierre de sesiones inmediato, cola administrativa. El borrado final requiere tramitación.
+Stripe Checkout/Connect preparado: importe de servidor, cuentas verificadas, idempotencia, firma de webhooks, separación test/live, conciliación y reembolsos. Reservas impagadas caducan; cobros fuera de plazo se reembolsan. Cobros reales desactivados.
 
-## Criterio clave: “evento actualizado”
-Se envía notificación si cambia cualquier campo del evento **excepto** contadores de stock (`available_tickets`, `sold_tickets`) para evitar spam durante compras.
+## Verificación
+42 pruebas y TypeScript correctos; Expo Doctor 20/20; exportaciones web/Android/iOS correctas. Paquete mínimo instalado por separado y probado por HTTP con base temporal. AppFest: operaciones verificadas en transacción revertida; 26 perfiles y 9 competiciones del piloto conservados.
+Auditoría de dependencias del servidor: 0 vulnerabilidades conocidas.
+Árbol completo: 19 altas transitivas de dos avisos sin parche oficial (braces/node-forge), 0 críticas/moderadas. scripts/patch-build-tools.cjs aplica mitigaciones deterministas probadas. npm audit sigue mostrando los avisos.
+Supabase conserva avisos del esquema public y protección de contraseñas filtradas desactivada; sin hallazgos del asesor sobre rondiqo. No equivale a una auditoría externa completa.
 
-Tipos emitidos según cambio:
-- `event_cancelled`
-- `event_time_changed`
-- `event_location_changed`
-- `event_access_policy_changed`
-- `event_capacity_or_price_changed`
-- `event_lineup_changed`
-- `event_updated` (genérico)
-
-## Preferencias (RGPD / opt-out)
-Tabla: `public.notification_settings`
-- Canales: `push_enabled`, `email_enabled`, `sms_enabled`
-- Marketing: `marketing_opt_in` (solo opt-in para `event_discount` / `event_offer`)
-
-La UI se gestiona desde `app/notification-preferences.tsx`.
-
-## Enlace único de calendario
-Edge Function:
-- `ticket-calendar`: genera un `.ics` validando `ticket_id` + `qr_token` (token único).
-
-URL (relativa):
-`/functions/v1/ticket-calendar?ticket_id=<uuid>&token=<qr_token>`
-
-## APIs nuevas (RPC)
-- `join_event_waitlist(p_event_id uuid) -> jsonb`
-- `claim_waitlist_offer(p_offer_token uuid) -> jsonb`
-- `notify_event_marketing_to_buyers(p_event_id uuid, p_type text, p_title text, p_body text) -> jsonb`
-
-## Plantillas (notification_templates)
-Claves principales:
-- Compra: `purchase_completed`, `organizer_realtime_sale`, `resale_sold`
-- Evento: `event_updated`, `event_time_changed`, `event_location_changed`, `event_access_policy_changed`, `event_capacity_or_price_changed`, `event_lineup_changed`, `event_cancelled`
-- Recordatorios: `event_reminder_24h`, `event_reminder_1h`
-- Ticket: `ticket_cancelled_or_refunded`, `ticket_upgraded_or_changed`
-- Lista espera: `waitlist_ticket_available`
-- Marketing (opt-in): `event_discount`, `event_offer`
-
-## Operación (entrega < 60s)
-Recomendado:
-- Tras actualizar evento, la app llama a `dispatch-notifications` para vaciar la cola de envíos.
-- Para 100% automático (sin depender del cliente), configurar un scheduler externo/cron que llame a `dispatch-notifications` cada minuto.
-
-## Variables de entorno (Supabase Secrets)
-- Push:
-  - `EXPO_ACCESS_TOKEN` (opcional)
-- Email:
-  - `RESEND_API_KEY`
-  - `NOTIFICATIONS_FROM_EMAIL`
-- SMS:
-  - `TWILIO_ACCOUNT_SID`
-  - `TWILIO_AUTH_TOKEN`
-  - `TWILIO_FROM_NUMBER`
-
-## Tests
-`npm test`
-
-Cobertura mínima (notificaciones): 90% (configurada para `lib/notificationSchema.ts`).
-
-## Compartición de eventos (enlace persistente + deep link)
-Objetivo:
-- Compartir un enlace único por evento con formato: `https://weareeclipseoficial.com/evento/<token>`
-- Abrir el evento dentro de la app (`eclipse://evento/<token>`) si está instalada.
-- Registrar métricas de clics y conversiones.
-
-Backend:
-- Migración: `supabase/migrations/20260510093000_event_share_links.sql`
-  - `event_share_links` (token persistente)
-  - `event_share_clicks` (métricas de clic)
-  - `event_share_conversions` (métricas de conversión: open/login)
-- Edge Function: `event-share`
-  - `POST /functions/v1/event-share` body `{ action: "create", eventId }` (requiere auth) → `{ url, eventId, token }`
-  - `GET /functions/v1/event-share/resolve?token=...` (público) → valida estado del evento + registra click
-  - `GET /functions/v1/event-share/evento/<token>` (público) → landing HTML que intenta abrir la app y si no, manda a la tienda
-
-App:
-- Botón compartir: `app/(tabs)/event/[id].tsx` → llama `event-share` con `{ action: "create" }` y usa el `url` devuelto.
-- Deep link handler: `app/evento/[token].tsx`
-  - Resuelve el token, guarda `pending_event_share` en AsyncStorage y navega al evento.
-  - Tras login/registro, `lib/AuthContext.tsx` reporta conversión llamando `event-share/convert`.
-
-Variables de entorno (Supabase Secrets) para `event-share`:
-- `WEB_BASE_URL` (ej: `https://dominio.com`)
-- `APP_SCHEME` (ej: `eclipse`)
-- `PLAY_STORE_URL` (URL a Google Play)
-- `APP_STORE_URL` (URL a App Store)
-
-## Checklist manual pre-producción
-- Editar evento y cambiar:
-  - título/descripcion/cartel -> llega `event_updated`
-  - fecha/hora -> llega `event_time_changed`
-  - ubicación -> llega `event_location_changed` (map_url en data)
-  - políticas -> llega `event_access_policy_changed`
-  - precio -> llega `event_capacity_or_price_changed`
-  - cancelar (status/is_cancelled) -> llega `event_cancelled`
-- Comprar entrada:
-  - llega `purchase_completed` con `calendar_url`
-  - llega notificación al organizador (`organizer_realtime_sale`)
-- Recordatorios:
-  - 24h -> llega `event_reminder_24h` con `ticket_id/qr_token`
-  - 1h -> llega `event_reminder_1h` con `ticket_id/qr_token`
-- Preferencias:
-  - desactivar email -> no se crean deliveries email
-  - desactivar sms -> no se crean deliveries sms
-  - marketing opt-in off -> no llegan `event_discount/event_offer`
-- Auditoría:
-  - existe `notification_delivery_events` para cada cambio de estado de delivery
+## Publicación
+Dockerfile/railway.json y TestFlight preparados. Reutilizan Eclipse, com.achraf.eclipse y App Store Connect 6773071994; propuesta 1.1.0 (78), a revalidar antes de construir.
+El backend HTTPS actual no sirve RONDIQO. La incidencia Railway está resuelta (20:56 UTC); despliegue pendiente; Apple no ofrece sesión utilizable en el navegador integrado.
+No hay despliegue de RONDIQO, IPA firmada, build EAS nuevo ni subida TestFlight. La exportación Hermes no es prueba en iPhone. Imagen Linux construida y probada localmente, sin red externa y con usuario sin privilegios.
+Consultar [procedimiento de publicación](deploy/RELEASE.md).
+Pendiente: correo, Stripe live y prueba integral, condiciones/privacidad/soporte, retirada planificada de demostraciones, restauración, monitorización, revisión del legado, marca y dispositivos.
+No se han contratado servicios, realizado cobros, contactado clubes ni creado nuevos proyectos remotos.

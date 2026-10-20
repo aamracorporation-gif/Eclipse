@@ -1,4 +1,4 @@
-﻿import { TextInput, View, StyleSheet, TextInputProps, Text, StyleProp, ViewStyle, TextStyle } from 'react-native';
+import { TextInput, View, StyleSheet, TextInputProps, Text, StyleProp, ViewStyle, TextStyle } from 'react-native';
 import { Colors } from '@/constants/Colors';
 import { AlertCircle, CheckCircle2, AppIconComponent } from '@/lib/icons';
 import React, { forwardRef, isValidElement } from 'react';
@@ -15,7 +15,7 @@ interface ThemedInputProps extends Omit<TextInputProps, 'style'> {
   inputStyle?: StyleProp<TextStyle>;
 }
 
-export const ThemedInput = forwardRef<TextInput, ThemedInputProps>(({ icon: Icon, rightIcon, error, success, label, style, containerStyle, inputStyle, ...props }, ref) => {
+export const ThemedInput = forwardRef<React.ElementRef<typeof TextInput>, ThemedInputProps>(({ icon: Icon, rightIcon, error, success, label, style, containerStyle, inputStyle, ...props }, ref) => {
   const resolvedRightIcon =
     rightIcon ??
     (error

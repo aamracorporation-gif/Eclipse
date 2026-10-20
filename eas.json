@@ -1,28 +1,42 @@
 {
   "cli": {
-    "version": ">= 18.0.1",
-    "appVersionSource": "remote"
+    "version": ">=25.3.0",
+    "appVersionSource": "local",
+    "requireCommit": true
   },
   "build": {
-    "development": {
-      "developmentClient": true,
-      "distribution": "internal",
-      "android": {
-        "buildType": "apk"
-      }
-    },
-    "preview": {
-      "distribution": "internal",
-      "android": {
-        "buildType": "apk"
+    "testflight": {
+      "distribution": "store",
+      "environment": "preview",
+      "ios": {
+        "resourceClass": "m-medium",
+        "credentialsSource": "remote"
+      },
+      "env": {
+        "EAS_REUSE_ECLIPSE": "true",
+        "EXPO_PUBLIC_API_URL": "https://api.weareeclipseoficial.com",
+        "EXPO_PUBLIC_RELEASE_MODE": "beta"
       }
     },
     "production": {
-      "autoIncrement": true,
-      "channel": "production"
+      "distribution": "store",
+      "environment": "production",
+      "ios": {
+        "resourceClass": "m-medium",
+        "credentialsSource": "remote"
+      },
+      "env": {
+        "EAS_REUSE_ECLIPSE": "true",
+        "EXPO_PUBLIC_RELEASE_MODE": "production"
+      }
     }
   },
   "submit": {
+    "testflight": {
+      "ios": {
+        "ascAppId": "6773071994"
+      }
+    },
     "production": {
       "ios": {
         "ascAppId": "6773071994"

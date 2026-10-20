@@ -2,8 +2,12 @@
   "extends": "expo/tsconfig.base",
   "compilerOptions": {
     "strict": true,
-    "checkJs": false,
-    "allowJs": true,
+    "allowImportingTsExtensions": true,
+    "noEmit": true,
+    "types": [
+      "node",
+      "react"
+    ],
     "paths": {
       "@/*": [
         "./*"
@@ -11,14 +15,26 @@
     }
   },
   "include": [
-    "**/*.ts",
-    "**/*.tsx",
-    "**/*.js",
-    "nativewind-env.d.ts",
-    ".expo/types/**/*.ts",
-    "expo-env.d.ts"
+    "app/**/*.tsx",
+    "src/domain/**/*.ts",
+    "src/ui/**/*.tsx",
+    "src/ui/theme.ts",
+    "src/api.ts",
+    "server/**/*.ts",
+    "tests/**/*.ts",
+    "lib/AppStateContext.tsx",
+    "lib/AuthContext.tsx",
+    "lib/EventContext.tsx",
+    "lib/NotificationContext.tsx",
+    "lib/FilterContext.tsx",
+    "components/rondiqo/**/*.tsx",
+    "scripts/check-appfest.ts",
+    "scripts/bootstrap-appfest-demo.ts"
   ],
   "exclude": [
-    "supabase/functions/**"
+    "node_modules",
+    "dist",
+    "supabase",
+    "__tests__"
   ]
 }

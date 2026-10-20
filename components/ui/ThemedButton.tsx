@@ -17,21 +17,23 @@ interface ThemedButtonProps {
   iconPosition?: 'left' | 'right';
 }
 
-export function ThemedButton({ 
-  title, 
-  onPress, 
-  loading = false, 
-  disabled = false, 
+export function ThemedButton({
+  title,
+  onPress,
+  loading = false,
+  disabled = false,
   variant = 'primary',
   style,
   textStyle,
   icon,
   iconPosition = 'left'
 }: ThemedButtonProps) {
-  
+
   if (variant === 'outline') {
     return (
       <TouchableOpacity
+        accessibilityRole="button"
+        accessibilityLabel={title}
         onPress={onPress}
         disabled={disabled || loading}
         style={[styles.outlineButton, disabled && styles.disabled, style]}
@@ -53,6 +55,8 @@ export function ThemedButton({
 
   return (
     <TouchableOpacity
+        accessibilityRole="button"
+        accessibilityLabel={title}
       onPress={onPress}
       disabled={disabled || loading}
       activeOpacity={0.8}
@@ -61,11 +65,11 @@ export function ThemedButton({
     >
       <LinearGradient
         colors={
-          disabled 
-            ? ['rgba(15, 23, 42, 0.25)', 'rgba(15, 23, 42, 0.18)'] 
-            : variant === 'secondary' 
-              ? ['#B39DFF', '#6B4EFF'] 
-              : ['#6B4EFF', '#5B38FF']
+          disabled
+            ? ['rgba(15, 23, 42, 0.25)', 'rgba(15, 23, 42, 0.18)']
+            : variant === 'secondary'
+              ? ['#24383A', '#1D3032']
+              : ['#D9FA65', '#CCE95E']
         }
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
@@ -77,7 +81,7 @@ export function ThemedButton({
         ) : (
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
             {iconPosition === 'left' && icon}
-            <Text style={[styles.text, textStyle]}>{title}</Text>
+            <Text style={[styles.text, variant==='secondary'&&{color:Colors.dark.text}, textStyle]}>{title}</Text>
             {iconPosition === 'right' && icon}
           </View>
         )}
@@ -105,7 +109,7 @@ const styles = StyleSheet.create({
   },
   // Removed contentContainer as it is no longer needed
   text: {
-    color: 'white',
+    color: '#0C1718',
     fontSize: theme.typography.size.md,
     fontWeight: theme.typography.weight.bold,
     letterSpacing: 0.2,

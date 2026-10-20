@@ -1,0 +1,10 @@
+-- Only the new RONDIQO schema is changed.
+CREATE INDEX IF NOT EXISTS matches_home ON rondiqo.matches(home);
+CREATE INDEX IF NOT EXISTS matches_away ON rondiqo.matches(away);
+CREATE INDEX IF NOT EXISTS matches_winner ON rondiqo.matches(winner);
+CREATE INDEX IF NOT EXISTS matches_proposer ON rondiqo.matches(proposed_by);
+CREATE INDEX IF NOT EXISTS organizations_owner ON rondiqo.organizations(owner_id);
+CREATE INDEX IF NOT EXISTS registrations_team ON rondiqo.registrations(team_id);
+CREATE INDEX IF NOT EXISTS registrations_user ON rondiqo.registrations(user_id);
+CREATE INDEX IF NOT EXISTS sessions_user ON rondiqo.sessions(user_id);
+CREATE INDEX IF NOT EXISTS teams_captain ON rondiqo.teams(captain_id);

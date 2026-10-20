@@ -1,71 +1,12 @@
-const appJson = require('./app.json');
-
-const PASSKITE_PLUGIN_PATH = './plugins/withPasskite';
-
-const normalizePlugins = (plugins = []) =>
-  plugins.map((plugin) => {
-    if (plugin === 'expo-passkite') return PASSKITE_PLUGIN_PATH;
-    if (Array.isArray(plugin) && plugin[0] === 'expo-passkite') {
-      return [PASSKITE_PLUGIN_PATH, plugin[1] || {}];
-    }
-    return plugin;
-  });
-
-const getHttpsHost = () => {
-  const enableAssociatedDomains = process.env.EXPO_PUBLIC_ENABLE_ASSOCIATED_DOMAINS === '1';
-  if (!enableAssociatedDomains) return null;
-  const baseUrl = process.env.EXPO_PUBLIC_WEB_BASE_URL || process.env.EXPO_PUBLIC_API_URL;
-  if (!baseUrl || typeof baseUrl !== 'string') return null;
-  if (!baseUrl.startsWith('https://')) return null;
-  try {
-    return new URL(baseUrl).host;
-  } catch {
-    return null;
-  }
-};
-
-module.exports = () => {
-  const host = getHttpsHost();
-  const expoConfig = appJson.expo;
-  const plugins = normalizePlugins(expoConfig.plugins);
-
-  if (!host) {
-    return {
-      ...expoConfig,
-      plugins,
-    };
-  }
-
-  const intentFilters = [
-    {
-      action: 'VIEW',
-      data: [
-        {
-          scheme: 'https',
-          host,
-          pathPrefix: '/event',
-        },
-        {
-          scheme: 'https',
-          host,
-          pathPrefix: '/evento',
-        },
-      ],
-      category: ['BROWSABLE', 'DEFAULT'],
-      autoVerify: false,
-    },
-  ];
-
-  return {
-    ...expoConfig,
-    plugins,
-    android: {
-      ...expoConfig.android,
-      intentFilters,
-    },
-    ios: {
-      ...expoConfig.ios,
-      associatedDomains: Array.from(new Set([...(expoConfig.ios?.associatedDomains ?? []), `applinks:${host}`])),
-    },
-  };
+module.exports=({config:base})=>{
+ const config={...base,...require('./app.json').expo,ios:{...require('./app.json').expo.ios}};
+ if(process.env.EAS_REUSE_ECLIPSE==='true'){
+  if(!/^https:\/\//.test(process.env.EXPO_PUBLIC_API_URL||''))throw new Error('TestFlight requiere la URL HTTPS del backend verificado.');
+  config.owner='ashhhhhhhh';config.slug='Eclipse';config.version='1.1.0';
+  config.ios.bundleIdentifier='com.achraf.eclipse';
+  config.ios.buildNumber='78';
+  config.ios.infoPlist={...(config.ios.infoPlist||{}),ITSAppUsesNonExemptEncryption:false};
+  config.extra={...(config.extra||{}),eas:{projectId:'42ebb6eb-62b1-4784-a483-831ae3c804f2'}};
+ }
+ return config;
 };
