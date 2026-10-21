@@ -1,2 +1,2 @@
-import SportsApp from '@/src/ui/SportsApp';
-export default function Screen(){return <SportsApp space="player" section="profile"/>;}
+import {LegacySpaceRedirect} from '@/components/rondiqo/LegacySpaceRedirect';
+export default function Legacy(){return <LegacySpaceRedirect space="player" section="profile"/>;}

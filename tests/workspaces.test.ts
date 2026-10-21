@@ -7,9 +7,9 @@ import {TERMS_VERSION} from '../src/domain/model.ts';
 import {spaceTabs,pathFor,sectionFor} from '../src/domain/navigation.ts';
 
 test('separate routes cannot turn player navigation into organizer or admin navigation',()=>{
-  assert.equal(pathFor('organizer','dashboard'),'/(creator)/dashboard');
-  assert.equal(pathFor('player','calendar'),'/(tabs)/agenda');
-  assert.equal(sectionFor('player','administracion'),'discover');
+  assert.equal(pathFor('organizer','dashboard'),'/organizador/panel');
+  assert.equal(pathFor('player','calendar'),'/jugador/agenda');
+  assert.equal(sectionFor('player','administracion'),'home');
   assert.equal(spaceTabs('player',true).some(x=>x.id==='admin'),false);
   assert.equal(spaceTabs('organizer',false).some(x=>x.id==='admin'),false);
 });
@@ -48,7 +48,26 @@ test('workspaces scope agendas, metrics and participants by authenticated member
     assert.equal(limited.canCheckin,true);assert.equal(limited.canManage,false);
     assert.equal(limited.roster[0].payment_intent,undefined);
     assert.equal(limited.roster[0].roster,undefined);
+    assert.equal(limited.roster[0].members,undefined);
+    assert.equal(limited.roster[0].contact,undefined);
+    assert.ok((await svc.detail(c,owner)).roster[0].contact.email);
+    assert.equal((await svc.detail(c,referee)).roster[0].contact,undefined);
+    assert.equal((await svc.detail(c,stranger)).roster.length,0);
     assert.equal((await svc.detail(c,referee)).canCheckin,false);
+    const match=(await svc.detail(c,player)).matches[0];
+    assert.equal(match.actions.propose,true);
+    assert.equal((await svc.detail(c,stranger)).matches[0].actions.propose,false);
+    assert.equal((await svc.detail(c,checker)).matches[0].actions.propose,false);
+    assert.equal((await svc.detail(c,null)).matches[0].actions.confirm,false);
+    await svc.execute(player,'match.propose',{match_id:match.id,version:match.version,score:{sets:[[6,2],[6,3]]}});
+    const proposed=(await svc.detail(c,player)).matches[0];
+    assert.equal(proposed.actions.confirm,false);
+    assert.equal(proposed.actions.dispute,true);
+    assert.equal((await svc.detail(c,rival)).matches[0].actions.confirm,true);
+    assert.equal((await svc.detail(c,referee)).matches[0].actions.confirm,true);
+    assert.equal((await svc.detail(c,checker)).matches[0].actions.confirm,false);
+    assert.equal((await svc.detail(c,rival)).matches[0].proposed_by,null);
+    await assert.rejects(svc.execute(player,'match.confirm',{match_id:match.id,version:proposed.version}),/confirmar el rival/);
     await svc.execute(owner,'organization.member',{org_id:org,email:checker.email,role:'remove'});
     assert.equal((await svc.snapshot(checker)).organizer,null);
   }finally{await db.close();}

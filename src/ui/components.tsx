@@ -1,5 +1,6 @@
 import {ThemedButton} from '@/components/ui/ThemedButton';
 import {ThemedInput} from '@/components/ui/ThemedInput';
+import {DateInput} from '@/components/rondiqo/DateInput';
 import React from 'react';
 import { View,Text,Pressable,StyleSheet,TextInput,Modal,ScrollView,ActivityIndicator } from 'react-native';
 import Svg,{Path,Rect,Circle,Line} from 'react-native-svg';
@@ -28,7 +29,7 @@ export function Heading({eyebrow,title,subtitle}:{eyebrow?:string;title:string;s
 export function Empty({title,body,children}:{title:string;body:string;children?:React.ReactNode}){
   return <View style={[s.panel,{padding:28,gap:12}]}><Text style={s.h3}>{title}</Text><Text style={s.body}>{body}</Text>{children}</View>;
 }
-export type Field={key:string;label:string;type?:'password'|'number'|'select'|'check'|'multiline';options?:{value:string;label:string}[];hint?:string};
+export type Field={key:string;label:string;type?:'password'|'number'|'select'|'check'|'multiline'|'date';options?:{value:string;label:string}[];hint?:string};
 export type FormConfig={title:string;intro?:string;fields:Field[];initial?:Record<string,any>;submit?:string;run:(values:Record<string,any>)=>Promise<void>};
 export function FormDialog({form,close}:{form:FormConfig|null;close:()=>void}){
   const [values,setValues]=React.useState<Record<string,any>>({}),[error,setError]=React.useState(''),[busy,setBusy]=React.useState(false);
@@ -39,8 +40,8 @@ export function FormDialog({form,close}:{form:FormConfig|null;close:()=>void}){
     <View style={[s.row,{justifyContent:'space-between',padding:24,paddingBottom:10}]}><Text style={[s.h3,{flex:1}]}>{form.title}</Text><Pressable accessibilityRole="button" accessibilityLabel="Cerrar formulario" onPress={close} disabled={busy}><Text style={{color:c.muted,fontSize:25,padding:8}}>×</Text></Pressable></View>
     <ScrollView contentContainerStyle={{padding:24,paddingTop:10,gap:18}} keyboardShouldPersistTaps="handled">
       {form.intro&&<Text style={s.body}>{form.intro}</Text>}
-      {form.fields.map(f=><View key={f.key} style={{gap:8}}>{f.type!=='check'&&<Text style={s.label}>{f.label}</Text>}
-        {f.type==='select'?<View style={[s.row,{flexWrap:'wrap'}]}>{f.options?.map(o=><Pressable key={o.value} accessibilityRole="radio" accessibilityState={{checked:values[f.key]===o.value}} onPress={()=>setValues({...values,[f.key]:o.value})} style={[s.chip,values[f.key]===o.value&&s.chipActive]}><Text style={{color:values[f.key]===o.value?c.ink:c.text,fontSize:13,fontWeight:'600'}}>{o.label}</Text></Pressable>)}</View>:
+      {form.fields.map(f=><View key={f.key} style={{gap:8}}>{!['check','date'].includes(f.type||'')&&<Text style={s.label}>{f.label}</Text>}
+        {f.type==='date'?<DateInput label={f.label} value={String(values[f.key]||'')} onChange={v=>setValues({...values,[f.key]:v})}/>:f.type==='select'?<View style={[s.row,{flexWrap:'wrap'}]}>{f.options?.map(o=><Pressable key={o.value} accessibilityRole="radio" accessibilityState={{checked:values[f.key]===o.value}} onPress={()=>setValues({...values,[f.key]:o.value})} style={[s.chip,values[f.key]===o.value&&s.chipActive]}><Text style={{color:values[f.key]===o.value?c.ink:c.text,fontSize:13,fontWeight:'600'}}>{o.label}</Text></Pressable>)}</View>:
         f.type==='check'?<Pressable accessibilityRole="checkbox" accessibilityState={{checked:!!values[f.key]}} onPress={()=>setValues({...values,[f.key]:!values[f.key]})} style={[s.row,{alignItems:'flex-start'}]}><View style={[s.checkbox,values[f.key]&&{backgroundColor:c.lime}]}><Text style={{color:c.ink,fontWeight:'900'}}>{values[f.key]?'✓':''}</Text></View><Text style={[s.body,{flex:1}]}>{f.label}</Text></Pressable>:
         <ThemedInput accessibilityLabel={f.label} containerStyle={{marginBottom:0}} value={String(values[f.key]??'')} onChangeText={v=>setValues({...values,[f.key]:v})} secureTextEntry={f.type==='password'} autoCapitalize="none" multiline={f.type==='multiline'} keyboardType={f.type==='number'?'numeric':'default'} placeholderTextColor={c.muted} inputStyle={f.type==='multiline'?{height:95,textAlignVertical:'top'}:{}}/>}
         {f.hint&&<Text style={s.caption}>{f.hint}</Text>}

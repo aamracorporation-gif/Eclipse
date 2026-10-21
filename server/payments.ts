@@ -1,3 +1,4 @@
+import {notifyTeam} from './notifications.ts';
 import Stripe from 'stripe';
 import { randomUUID } from 'node:crypto';
 import type { Database, DB } from './db.ts';
@@ -101,7 +102,7 @@ export class Payments {
           ensure(typeof s.payment_intent==='string','WEBHOOK','Falta referencia del pago.');
           await db.query('UPDATE rondiqo.registrations SET status=$1,checkout_id=$2,payment_intent=$3 WHERE id=$4',[canConfirm?'confirmed':'refund_pending',s.id,s.payment_intent,r.id]);
           if(!canConfirm) await db.query("INSERT INTO rondiqo.refunds(id,registration_id,status,reason) VALUES($1,$2,'pending','Pago recibido después de cancelación o cierre') ON CONFLICT(registration_id) DO NOTHING",[randomUUID(),r.id]);
-          await db.query('INSERT INTO rondiqo.notifications(id,user_id,title,message) VALUES($1,$2,$3,$4)',[randomUUID(),r.user_id,canConfirm?'Pago confirmado':'Reembolso pendiente',canConfirm?'Ya puedes consultar tu pase QR.':'Se ha recibido un pago fuera de plazo. La plaza no se confirma; se ha abierto un reembolso.']);
+          await notifyTeam(db,r,canConfirm?'Pago confirmado':'Reembolso pendiente',canConfirm?'Ya puedes consultar tu pase QR.':'Se ha recibido un pago fuera de plazo. La plaza no se confirma; se ha abierto un reembolso.');
         } else if(['checkout.session.expired','checkout.session.async_payment_failed'].includes(event.type) && r.status==='pending') {
           await db.query("UPDATE rondiqo.registrations SET status='expired',checkout_id=$1 WHERE id=$2",[s.id,r.id]);
         }

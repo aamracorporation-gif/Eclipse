@@ -95,10 +95,10 @@ export async function createApp(db:Database, options:{origin?:string;mode?:strin
         res.setHeader('Set-Cookie',cookie(result.token));
         json(res,200,requestOrigin?{user:result.user}:result);return;
       }
-      if(['/api/auth/forgot-password','/api/auth/reset-password'].includes(path)&&req.method==='POST'){
+      if(['/api/auth/forgot-password','/api/auth/reset-password','/api/auth/resend-confirmation'].includes(path)&&req.method==='POST'){
         ensure(await limiter.allow(ip+':recovery',5,60000),'RATE_LIMIT','Espera antes de volver a solicitar un código.',429);
         ensure(await limiter.allow('recovery:'+createHash('sha256').update(String(p.email).trim().toLowerCase()).digest('hex'),5,60000),'RATE_LIMIT','Demasiados intentos.',429);
-        json(res,200,path.endsWith('forgot-password')?await auth.requestReset(p.email):await auth.resetPassword(p));return;
+        json(res,200,path.endsWith('resend-confirmation')?await auth.resendConfirmation(p.email):path.endsWith('forgot-password')?await auth.requestReset(p.email):await auth.resetPassword(p));return;
       }
       if(path==='/api/auth/logout' && req.method==='POST'){await auth.logout(token);res.setHeader('Set-Cookie',cookie('',true));json(res,200,{ok:true});return;}
       if(path==='/api/state' && req.method==='GET'){json(res,200,{...await service.snapshot(actor),database:options.database||'local',release,authMode:auth.mode,supportUrl:process.env.PUBLIC_SUPPORT_URL||null});return;}

@@ -1,3 +1,3 @@
-import {Redirect,useLocalSearchParams} from 'expo-router';
-import {pathFor,sectionFor} from '@/src/domain/navigation';
-export default function Legacy(){const {section}=useLocalSearchParams<{section:string}>();return <Redirect href={pathFor('organizer',sectionFor('organizer',section)) as any}/>;}
+import {useLocalSearchParams} from 'expo-router';
+import SportsApp from '@/src/ui/SportsApp';
+export default function OrganizerPage(){const {section}=useLocalSearchParams<{section:string}>();return <SportsApp space="organizer" section={section}/>;}

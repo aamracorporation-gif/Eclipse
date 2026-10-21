@@ -22,6 +22,7 @@ export class Auth{
   const name=text(p.name,'Nombre',2,60),pw=await passwordHash(p.password);
   if(this.mode==='supabase'){
    const {error}=await this.remote().auth.signUp({email,password:p.password,options:{data:{rondiqo_name:name,rondiqo_adult:true,rondiqo_terms:TERMS_VERSION},emailRedirectTo:this.origin+'/login'}});
+   this.emailProviderError(error);
    ensure(!error,'REGISTER','No se ha podido crear la cuenta. Comprueba tus datos o recupera el acceso.',400);
    // Supabase deliberately returns success for repeat signups without sending
    // another confirmation. Keep the response private and avoid promising delivery.
@@ -38,6 +39,7 @@ export class Auth{
   email=this.email(email);
   if(this.mode==='supabase'){
    const {data,error}=await this.remote().auth.signInWithPassword({email,password});
+   if(error?.code==='email_not_confirmed')ensure(false,'EMAIL_NOT_CONFIRMED','Confirma tu correo antes de entrar. Puedes reenviar el enlace desde esta pantalla.',401);
    ensure(!error&&data.user?.email_confirmed_at,'LOGIN','Email o contraseña incorrectos, o correo sin confirmar.',401);
    return data.user;
   }
@@ -74,8 +76,19 @@ export class Auth{
   const normalized=this.email(email);
   const {error}=await this.remote().auth.resetPasswordForEmail(normalized,{redirectTo:this.origin+'/reset-password'});
   // Do not expose existence of a registered email.
-  if(error&&error.status&&error.status>=500)ensure(false,'EMAIL_UNAVAILABLE','El correo no está disponible. Inténtalo más tarde.',503);
+  this.emailProviderError(error);
   return {ok:true,message:'Si la cuenta existe, recibirás un correo para recuperar el acceso.'};
+ }
+ emailProviderError(error:{status?:number;code?:string}|null){
+  if(error?.status===429)ensure(false,'EMAIL_RATE_LIMIT','Espera un minuto antes de solicitar otro correo.',429);
+  if(error?.status&&error.status>=500)ensure(false,'EMAIL_UNAVAILABLE','No hemos podido enviar el correo. Inténtalo de nuevo en unos minutos.',503);
+ }
+ async resendConfirmation(email:string){
+  const normalized=this.email(email);
+  const {error}=await this.remote().auth.resend({type:'signup',email:normalized,options:{emailRedirectTo:this.origin+'/login'}});
+  this.emailProviderError(error);
+  // The same response protects absent, pending and confirmed accounts.
+  return {ok:true,message:'Si tu cuenta está pendiente de confirmar, recibirás un nuevo enlace. Si ya usabas Eclipse o RONDIQO, entra con tu contraseña o recupera el acceso.'};
  }
  async resetPassword(p:Row){
   await passwordHash(p.password);

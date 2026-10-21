@@ -247,12 +247,12 @@ test('live payment path rejects test events and simulated payment; account linki
 });
 test('football 7 needs seven consenting members and supports drawn league results',async()=>{
   const c=await competition({sport:'football7',format:'league',entry_mode:'team',venue:'Football Test',starts_at:future(30)});
-  const captains:Actor[]=[];
+  const captains:Actor[]=[],members:Actor[]=[];
   for(let t=0;t<2;t++){
     const captain=await user(`Football${t}Captain`);captains.push(captain);
     const team=await svc.execute(captain,'team.create',{name:`Football Team ${t}`,sport:'football7'});
     await assert.rejects(reg(captain,c,{team_id:team.id}),/al menos 7/);
-    for(let n=1;n<7;n++)await svc.execute(await user(`Football${t}Member${n}`),'team.join',{invite:team.invite});
+    for(let n=1;n<7;n++){const member=await user(`Football${t}Member${n}`);members.push(member);await svc.execute(member,'team.join',{invite:team.invite});}
     await reg(captain,c,{team_id:team.id});
   }
   await svc.execute(owner,'competition.start',{competition_id:c});
@@ -263,6 +263,7 @@ test('football 7 needs seven consenting members and supports drawn league result
   const detail=await svc.detail(c,owner);
   assert.equal(detail.competition.status,'completed');
   assert.deepEqual(detail.standings.map(r=>r.points),[1,1]);
+  for(const member of members){const notices=(await svc.snapshot(member)).notifications;assert.ok(notices.some(n=>n.title==='Calendario disponible'));assert.ok(notices.some(n=>n.title==='Resultado confirmado'));}
   const team=await one(db,'SELECT id FROM rondiqo.teams WHERE captain_id=$1',[captains[0].id]);
   const invite=await svc.execute(captains[0],'team.invite',{team_id:team!.id});
   await svc.execute(player,'team.join',{invite:invite.invite});

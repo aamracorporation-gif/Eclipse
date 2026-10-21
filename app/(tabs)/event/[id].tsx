@@ -1,3 +1,2 @@
-import {useLocalSearchParams} from 'expo-router';
-import SportsApp from '@/src/ui/SportsApp';
-export default function Event(){const {id}=useLocalSearchParams<{id:string}>();return <SportsApp space="player" section="discover" competitionId={id}/>;}
+import {LegacySpaceRedirect} from '@/components/rondiqo/LegacySpaceRedirect';
+export default function Legacy(){return <LegacySpaceRedirect space="player" section="discover"/>;}

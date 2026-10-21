@@ -1,3 +1,6 @@
+import {notifyTeam,notifyUsers} from './notifications.ts';
+import {scheduleOptions,planSchedule} from '../src/domain/schedule.ts';
+import type {BusySlot} from '../src/domain/schedule.ts';
 import { randomUUID } from 'node:crypto';
 import { ensure, text, integer, choice, isoDate, TERMS_VERSION, DomainError } from '../src/domain/model.ts';
 import type { Actor, Row, Sport, Format } from '../src/domain/model.ts';
@@ -93,19 +96,36 @@ export class Service {
     if (action === 'team.join') {
       const t = await one(db, 'SELECT * FROM rondiqo.teams WHERE invite_hash=$1', [hash(text(p.invite, 'Invitación', 40, 50))]);
       ensure(t, 'INVITE', 'Invitación no válida.', 404);
-      const active = await one(db, "SELECT r.id FROM rondiqo.registrations r JOIN rondiqo.competitions c ON c.id=r.competition_id WHERE r.team_id=$1 AND r.status IN ('pending','confirmed') AND c.status NOT IN ('completed','cancelled')", [t.id]);
+      if(await one(db,'SELECT user_id FROM rondiqo.team_members WHERE team_id=$1 AND user_id=$2',[t.id,actor.id]))return {id:t.id};
+      const active = await one(db, "SELECT r.id FROM rondiqo.registrations r JOIN rondiqo.competitions c ON c.id=r.competition_id WHERE r.team_id=$1 AND r.status IN ('pending','confirmed','waitlisted','refund_pending') AND c.status NOT IN ('completed','cancelled')", [t.id]);
       ensure(!active, 'ROSTER_LOCKED', 'La plantilla está cerrada mientras el equipo tiene inscripciones activas.', 409);
       const count = Number((await one(db, 'SELECT count(*) n FROM rondiqo.team_members WHERE team_id=$1', [t.id]))?.n);
-      ensure(count < 20, 'ROSTER', 'La plantilla está completa.', 409);
+      ensure(count < (t.sport==='padel'?2:20), 'ROSTER', t.sport==='padel'?'La pareja ya tiene dos jugadores.':'La plantilla está completa.', 409);
       await db.query('INSERT INTO rondiqo.team_members(team_id,user_id) VALUES($1,$2) ON CONFLICT DO NOTHING', [t.id, actor.id]);
       await audit(db, actor.id, action, t.id); return { id: t.id };
     }
     if (action === 'team.leave') {
       const t = await one(db, 'SELECT * FROM rondiqo.teams WHERE id=$1', [p.team_id]);
       ensure(t && t.captain_id !== actor.id, 'CAPTAIN', 'El capitán conserva la responsabilidad del equipo.');
-      const active = await one(db, "SELECT r.id FROM rondiqo.registrations r JOIN rondiqo.competitions c ON c.id=r.competition_id WHERE r.team_id=$1 AND r.status IN ('pending','confirmed') AND c.status NOT IN ('completed','cancelled')", [t.id]);
+      const active = await one(db, "SELECT r.id FROM rondiqo.registrations r JOIN rondiqo.competitions c ON c.id=r.competition_id WHERE r.team_id=$1 AND r.status IN ('pending','confirmed','waitlisted','refund_pending') AND c.status NOT IN ('completed','cancelled')", [t.id]);
       ensure(!active, 'ROSTER_LOCKED', 'La plantilla tiene inscripciones activas.', 409);
       await db.query('DELETE FROM rondiqo.team_members WHERE team_id=$1 AND user_id=$2', [p.team_id, actor.id]); return { ok: true };
+    }
+    if (['team.update','team.remove','team.captain'].includes(action)) {
+      const team=await one(db,'SELECT * FROM rondiqo.teams WHERE id=$1 FOR UPDATE',[p.team_id]);
+      ensure(team?.captain_id===actor.id,'FORBIDDEN','Solo el capitán puede gestionar este equipo.',403);
+      const active=await one(db,"SELECT r.id FROM rondiqo.registrations r JOIN rondiqo.competitions c ON c.id=r.competition_id WHERE r.team_id=$1 AND r.status IN ('pending','confirmed','waitlisted','refund_pending') AND c.status NOT IN ('completed','cancelled')",[team.id]);
+      ensure(!active,'ROSTER_LOCKED','Cancela o finaliza las inscripciones activas antes de cambiar el equipo.',409);
+      if(action==='team.update')await db.query('UPDATE rondiqo.teams SET name=$1 WHERE id=$2',[text(p.name,'Nombre del equipo',2,60),team.id]);
+      else {
+        ensure(p.user_id!==actor.id,'CAPTAIN','Elige a otro jugador del equipo.');
+        ensure(await one(db,'SELECT m.user_id FROM rondiqo.team_members m JOIN rondiqo.profiles p ON p.id=m.user_id WHERE m.team_id=$1 AND m.user_id=$2 AND NOT p.suspended',[team.id,p.user_id]),'MEMBER','Elige a un jugador activo de este equipo.',404);
+        if(action==='team.remove')await db.query('DELETE FROM rondiqo.team_members WHERE team_id=$1 AND user_id=$2',[team.id,p.user_id]);
+        else await db.query('UPDATE rondiqo.teams SET captain_id=$1 WHERE id=$2',[p.user_id,team.id]);
+        // An old invitation cannot re-add a removed player or outlive a change of captain.
+        await db.query('UPDATE rondiqo.teams SET invite_hash=$1 WHERE id=$2',[hash(secret()),team.id]);
+      }
+      await audit(db,actor.id,action,team.id,{user_id:p.user_id||null});return {ok:true};
     }
     if (action === 'organization.create') {
       const orgId = id();
@@ -162,7 +182,7 @@ export class Service {
       const starts = isoDate(p.starts_at), closes = isoDate(p.registration_closes_at);
       ensure(Date.parse(closes) > Date.now() && Date.parse(closes) <= Date.parse(starts),'DATE','El cierre debe ser futuro y anterior o igual al inicio.');
       const capacity = format === 'challenge' ? 2 : integer(p.capacity,'Plazas',2,128);
-      ensure(format !== 'league' || capacity <= 32,'CAPACITY','El piloto admite ligas de hasta 32 participantes.');
+      ensure(format !== 'league' || capacity <= 32,'CAPACITY','Las ligas admiten hasta 32 participantes.');
       const price = action === 'challenge.create' ? 0 : integer(p.price_cents,'Precio en céntimos',0,100000);
       ensure(price === 0 || price >= 50,'PRICE','Las inscripciones de pago empiezan en 0,50 €.');
       const minRoster = entry === 'individual' ? 1 : sport === 'padel' ? 2 : sport === 'football7' ? 7 : sport === 'basket3x3' ? 3 : 2;
@@ -202,7 +222,7 @@ export class Service {
       ensure(r.status === 'pending' && c.status === 'open','STATE','La reserva ya no admite pago.',409);
       await db.query("UPDATE rondiqo.registrations SET status='confirmed' WHERE id=$1",[r.id]);
       await audit(db,actor.id,action,r.id,{amount:r.amount_cents,simulated:true});
-      await notify(db,r.user_id,'Inscripción confirmada (simulación)',`Tu plaza en ${c.title} está confirmada. No se ha cobrado dinero.`);
+      await notifyTeam(db,r,'Inscripción confirmada (simulación)',`Tu plaza en ${c.title} está confirmada. No se ha cobrado dinero.`);
       return {ok:true,simulated:true};
     }
     if (action === 'registration.cancel') {
@@ -212,6 +232,7 @@ export class Service {
       if (['cancelled','refunded','refund_pending','expired'].includes(r.status)) return {ok:true};
       await this.cancelRegistration(db,r,text(p.reason || 'Cancelación solicitada','Motivo',3,300));
       await audit(db,actor.id,action,r.id);
+      await notifyTeam(db,r,'Inscripción cancelada',`${c.title}: consulta el estado de la inscripción y, si procede, del reembolso.`);
       const waiters = (await db.query("SELECT user_id FROM rondiqo.registrations WHERE competition_id=$1 AND status='waitlisted'",[c.id])).rows;
       for(const w of waiters) await notify(db,w.user_id,'Plaza liberada',`Revisa ${c.title} y reclama tu plaza. La confirmación depende de la disponibilidad.`);
       return {ok:true};
@@ -222,42 +243,38 @@ export class Service {
       if(c.status === 'cancelled') return {ok:true};
       const reason=text(p.reason,'Motivo',5,300);
       const regs=(await db.query("SELECT * FROM rondiqo.registrations WHERE competition_id=$1 AND status IN ('confirmed','pending','waitlisted')",[c.id])).rows;
-      for(const r of regs){await this.cancelRegistration(db,r,reason);await notify(db,r.user_id,'Competición cancelada',`${c.title}: ${reason}`);}
+      for(const r of regs){await this.cancelRegistration(db,r,reason);await notifyTeam(db,r,'Competición cancelada',`${c.title}: ${reason}`);}
       await db.query("UPDATE rondiqo.competitions SET status='cancelled',version=version+1 WHERE id=$1",[c.id]);
       await audit(db,actor.id,action,c.id,{reason});return {ok:true};
     }
-    if (action === 'competition.start') {
+    if (action === 'competition.preview' || action === 'competition.start') {
       const c = await getCompetition(db,p.competition_id); await requireOrg(db,actor,c.org_id);
       ensure(c.status === 'open','STATE','La competición no está abierta.',409);
       const pending=await one(db,"SELECT id FROM rondiqo.registrations WHERE competition_id=$1 AND status IN ('pending','refund_pending') LIMIT 1",[c.id]);
       ensure(!pending,'PENDING','Resuelve las reservas y reembolsos pendientes antes de generar el cuadro.',409);
-      const regs=(await db.query("SELECT id,roster FROM rondiqo.registrations WHERE competition_id=$1 AND status='confirmed' ORDER BY created_at,id",[c.id])).rows;
-      const list=fixtures(regs.map(r=>r.id),c.format);
-      const allPlayers=[...new Set<string>(regs.flatMap(r=>r.roster))];
-      const court=`${c.venue} · ${c.sport==='football7'?'Campo':'Pista'} 1`;
-      let slot=0;
-      for(const f of list) {
-        const bye=f.round===1 && !f.away;
-        let starts: string|null=null;
-        if(!bye){
-          starts=new Date(Date.parse(c.starts_at)+slot++*90*60000).toISOString();
-          while(await scheduleConflict(db,starts,75,court,allPlayers)){
-            ensure(slot<5000,'SCHEDULE','No hay hueco disponible; cambia la fecha inicial.',409);
-            starts=new Date(Date.parse(c.starts_at)+slot++*90*60000).toISOString();
-          }
-        }
-        await db.query(`INSERT INTO rondiqo.matches(id,competition_id,round,position,home,away,status,winner,starts_at,court,duration_minutes)
-          VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
-          [id(),c.id,f.round,f.position,f.home,f.away,bye?'bye':'scheduled',bye?f.home:null,starts,court,75]);
-      }
-      await db.query("UPDATE rondiqo.competitions SET status='running',version=version+1 WHERE id=$1",[c.id]);
-      if(c.format==='knockout') {
-        const byes=(await db.query("SELECT * FROM rondiqo.matches WHERE competition_id=$1 AND status='bye'",[c.id])).rows;
-        for(const m of byes) await this.advance(db,c,m);
-      }
-      for(const r of (await db.query("SELECT user_id FROM rondiqo.registrations WHERE competition_id=$1 AND status='confirmed'",[c.id])).rows)
-        await notify(db,r.user_id,'Calendario disponible',`${c.title}: consulta horarios y rivales. Los horarios iniciales son una propuesta del organizador.`);
-      await audit(db,actor.id,action,c.id);return {ok:true,matches:list.length};
+      const regs=(await db.query("SELECT id,roster,display_name FROM rondiqo.registrations WHERE competition_id=$1 AND status='confirmed' ORDER BY created_at,id",[c.id])).rows;
+      const pairs=fixtures(regs.map(r=>r.id),c.format),options=scheduleOptions(c,p.schedule||{});
+      ensure(Date.parse(options.starts_at)>Date.now(),'DATE','El primer partido debe empezar en el futuro. Cambia su fecha y hora.');
+      const busy=(await db.query(`SELECT m.starts_at,m.duration_minutes,m.court,
+        coalesce((SELECT jsonb_agg(player) FROM rondiqo.registrations r CROSS JOIN LATERAL jsonb_array_elements_text(r.roster) AS player
+          WHERE r.competition_id=m.competition_id AND (r.id=m.home OR r.id=m.away OR (m.home IS NULL OR m.away IS NULL) AND r.status='confirmed')),'[]'::jsonb) players
+        FROM rondiqo.matches m JOIN rondiqo.competitions c ON c.id=m.competition_id
+        WHERE c.status IN ('running','completed') AND m.status<>'bye' AND m.starts_at IS NOT NULL
+        AND m.starts_at > $1::timestamptz-interval '1 day' AND m.starts_at < $1::timestamptz+interval '400 days'
+        ORDER BY m.starts_at LIMIT 50001`,[options.starts_at])).rows;
+      ensure(busy.length<=50000,'SCHEDULE','Hay demasiados partidos en este período. Contacta con administración para preparar el calendario.');
+      const list=planSchedule(pairs,regs,c,options,busy as BusySlot[]);
+      const previewToken=hash(JSON.stringify({version:c.version,registrations:regs,options,list}));
+      if(action==='competition.preview')return {options,preview_token:previewToken,matches:list.map(m=>({...m,home_name:regs.find(r=>r.id===m.home)?.display_name||'Por decidir',away_name:m.status==='bye'?'Pase directo':regs.find(r=>r.id===m.away)?.display_name||'Por decidir'}))};
+      if(p.preview_token)ensure(p.preview_token===previewToken,'SCHEDULE_CHANGED','Las inscripciones o la disponibilidad han cambiado. Revisa el calendario de nuevo.',409);
+      for(const match of list)await db.query(`INSERT INTO rondiqo.matches(id,competition_id,round,position,home,away,status,winner,starts_at,court,duration_minutes)
+        VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,[id(),c.id,match.round,match.position,match.home,match.away,match.status,match.winner,match.starts_at,match.court,match.duration_minutes]);
+      const firstMatch=list.filter(match=>match.starts_at).map(match=>match.starts_at!).sort()[0];
+      await db.query("UPDATE rondiqo.competitions SET status='running',starts_at=$2,registration_closes_at=least(registration_closes_at,now()),version=version+1 WHERE id=$1",[c.id,firstMatch]);
+      if(c.format==='knockout')for(const match of (await db.query("SELECT * FROM rondiqo.matches WHERE competition_id=$1 AND status='bye'",[c.id])).rows)await this.advance(db,c,match);
+      for(const registration of (await db.query("SELECT user_id,roster FROM rondiqo.registrations WHERE competition_id=$1 AND status='confirmed'",[c.id])).rows)
+        await notifyTeam(db,registration,'Calendario disponible',`${c.title}: consulta tus horarios y rivales.`);
+      await audit(db,actor.id,action,c.id,{schedule:options});return {ok:true,matches:list.length};
     }
     if (action.startsWith('match.')) return this.matchCommand(db,actor,action,p);
     if (action === 'checkin') {
@@ -270,6 +287,7 @@ export class Service {
       await db.query('UPDATE rondiqo.registrations SET checked_in_at=now() WHERE id=$1',[r.id]);
       await audit(db,actor.id,action,r.id);return {ok:true,name:r.display_name};
     }
+    if(action==='notification.read-all'){await db.query('UPDATE rondiqo.notifications SET read_at=now() WHERE user_id=$1 AND read_at IS NULL',[actor.id]);return {ok:true};}
     if(action==='notification.read') {
       await db.query('UPDATE rondiqo.notifications SET read_at=now() WHERE id=$1 AND user_id=$2',[p.id,actor.id]);return {ok:true};
     }
@@ -297,7 +315,7 @@ export class Service {
       VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,now()+interval '35 minutes')`,
       [regId,c.id,actor.id,teamId,displayName,JSON.stringify(roster),status,c.price_cents,provider,secret()]);
     await audit(db,actor.id,'registration.create',regId,{terms:TERMS_VERSION,competition_version:c.version,amount_cents:c.price_cents,status});
-    await notify(db,actor.id,status==='waitlisted'?'En lista de espera':'Inscripción recibida',`${c.title}: ${status==='pending'?'completa el pago para confirmar tu plaza':status==='confirmed'?'plaza confirmada':'te avisaremos cuando se libere una plaza'}.`);
+    await notifyTeam(db,{user_id:actor.id,roster},status==='waitlisted'?'En lista de espera':'Inscripción recibida',`${c.title}: ${status==='pending'?'completa el pago para confirmar tu plaza':status==='confirmed'?'plaza confirmada':'te avisaremos cuando se libere una plaza'}.`);
     return {id:regId,status,amount_cents:c.price_cents,provider};
   }
   async cancelRegistration(db:DB,r:Row,reason:string) {
@@ -331,8 +349,8 @@ export class Service {
         ensure(!dependency,'DEPENDENCY','El horario debe respetar las rondas anteriores y posteriores.',409);
       }
       await db.query('UPDATE rondiqo.matches SET starts_at=$1,court=$2,duration_minutes=$3,version=version+1 WHERE id=$4',[starts,court,duration,m.id]);
-      const regs=(await db.query('SELECT user_id FROM rondiqo.registrations WHERE id=$1 OR id=$2',[m.home,m.away])).rows;
-      for(const r of regs) await notify(db,r.user_id,'Cambio de horario',`${c.title}: revisa el nuevo horario del partido.`);
+      const regs=(await db.query('SELECT user_id,roster FROM rondiqo.registrations WHERE id=$1 OR id=$2',[m.home,m.away])).rows;
+      for(const r of regs) await notifyTeam(db,r,'Cambio de horario',`${c.title}: revisa el nuevo horario del partido.`);
       await audit(db,actor.id,action,m.id,{starts,court,duration});return {ok:true};
     }
     ensure(m.home && m.away,'PARTICIPANTS','Todavía faltan rivales.',409);
@@ -362,7 +380,7 @@ export class Service {
       if(c.format==='knockout') await this.advance(db,c,{...m,winner:win});
       const remaining=await one(db,"SELECT id FROM rondiqo.matches WHERE competition_id=$1 AND status NOT IN ('confirmed','bye') LIMIT 1",[c.id]);
       if(!remaining) await db.query("UPDATE rondiqo.competitions SET status='completed',version=version+1 WHERE id=$1",[c.id]);
-      await notify(db,home.user_id,'Resultado confirmado',c.title);await notify(db,away.user_id,'Resultado confirmado',c.title);
+      await notifyUsers(db,[...home.roster,...away.roster],'Resultado confirmado',c.title);
     } else throw new DomainError('ACTION','Acción de partido desconocida.',404);
     await audit(db,actor.id,action,m.id,{score:p.score || m.score,reason:p.reason || null});return {ok:true};
   }
@@ -382,10 +400,12 @@ export class Service {
         ORDER BY c.starts_at,c.created_at,c.id`,[uid,admin])).rows;
       const mine=uid?(await db.query(`SELECT r.*,c.title,c.sport FROM rondiqo.registrations r JOIN rondiqo.competitions c ON c.id=r.competition_id WHERE r.roster ? $1 ORDER BY r.created_at DESC`,[uid])).rows:[];
       const teams=uid?(await db.query(`SELECT t.id,t.name,t.sport,t.captain_id,
+        EXISTS(SELECT 1 FROM rondiqo.registrations r JOIN rondiqo.competitions c ON c.id=r.competition_id WHERE r.team_id=t.id AND r.status IN ('pending','confirmed','waitlisted','refund_pending') AND c.status NOT IN ('completed','cancelled')) roster_locked,
         (SELECT jsonb_agg(jsonb_build_object('id',p.id,'name',p.name)) FROM rondiqo.team_members m JOIN rondiqo.profiles p ON p.id=m.user_id WHERE m.team_id=t.id) members
         FROM rondiqo.teams t WHERE EXISTS(SELECT 1 FROM rondiqo.team_members m WHERE m.team_id=t.id AND m.user_id=$1)`,[uid])).rows:[];
       const organizations=uid?(await db.query(`SELECT o.id,o.name,o.city,o.verified,om.role FROM rondiqo.organizations o LEFT JOIN rondiqo.org_members om ON om.org_id=o.id AND om.user_id=$1 WHERE $2 OR om.user_id=$1`,[uid,admin])).rows:[];
-      const notifications=uid?(await db.query('SELECT * FROM rondiqo.notifications WHERE user_id=$1 ORDER BY created_at DESC LIMIT 50',[uid])).rows:[];
+      const notifications=uid?(await db.query('SELECT * FROM rondiqo.notifications WHERE user_id=$1 ORDER BY (read_at IS NULL) DESC,created_at DESC LIMIT 50',[uid])).rows:[];
+      const notificationUnread=uid?Number((await one(db,'SELECT count(*) n FROM rondiqo.notifications WHERE user_id=$1 AND read_at IS NULL',[uid]))?.n||0):0;
       const orgMembers=uid?(await db.query(`SELECT m.org_id,m.user_id,m.role,p.name,p.email FROM rondiqo.org_members m JOIN rondiqo.profiles p ON p.id=m.user_id
         WHERE $2 OR EXISTS(SELECT 1 FROM rondiqo.org_members own WHERE own.org_id=m.org_id AND own.user_id=$1 AND own.role='owner')`,[uid,admin])).rows:[];
       const agendaFields=`m.id,m.competition_id,m.round,m.position,m.status,m.starts_at,m.court,m.duration_minutes,
@@ -426,7 +446,7 @@ export class Service {
         audit:(await db.query('SELECT * FROM rondiqo.audit ORDER BY created_at DESC LIMIT 100')).rows,
         refunds:(await db.query('SELECT f.*,r.amount_cents,r.provider FROM rondiqo.refunds f JOIN rondiqo.registrations r ON r.id=f.registration_id')).rows
       }:null;
-      return {user:actor,competitions,registrations:mine,teams,organizations,orgMembers,notifications,agenda,organizer,admin:adminData,paymentMode:this.paymentMode,termsVersion:TERMS_VERSION};
+      return {user:actor,competitions,registrations:mine,teams,organizations,orgMembers,notifications,notificationUnread,agenda,organizer,admin:adminData,paymentMode:this.paymentMode,termsVersion:TERMS_VERSION};
     });
   }
   async detail(compId:string,actor:Actor|null) {
@@ -435,15 +455,25 @@ export class Service {
       const manager=actor?await orgPermission(db,actor,c.org_id,['owner','manager','referee','checkin']):false;
       const canManage=actor?await orgPermission(db,actor,c.org_id,['owner','manager']):false;
       const canCheckin=actor?await orgPermission(db,actor,c.org_id,['owner','manager','checkin']):false;
+      const canScore=actor?await orgPermission(db,actor,c.org_id,['owner','manager','referee']):false;
       ensure(c.status!=='draft'||manager,'NOT_FOUND','Competición no encontrada.',404);
       const regs=(await db.query('SELECT * FROM rondiqo.registrations WHERE competition_id=$1 ORDER BY created_at,id',[c.id])).rows;
       const matches=(await db.query('SELECT * FROM rondiqo.matches WHERE competition_id=$1 ORDER BY round,position',[c.id])).rows;
       const ranking=standings(regs,matches);
       const entrants=regs.filter(r=>r.status==='confirmed').map(r=>({id:r.id,display_name:r.display_name,status:r.status,checked_in:!!r.checked_in_at}));
-      const roster=manager?regs.map(({qr_token,...r})=>canManage?r:({id:r.id,display_name:r.display_name,status:r.status,checked_in_at:r.checked_in_at})):[];
+      const playerIds=[...new Set<string>(regs.flatMap(r=>r.roster))];
+      const profiles=canManage&&playerIds.length?(await db.query('SELECT id,name,email FROM rondiqo.profiles WHERE id=ANY($1::uuid[])',[playerIds])).rows:[];
+      const roster:Row[]=manager?regs.map(({qr_token,...r})=>canManage?{...r,contact:profiles.find(p=>p.id===r.user_id),members:r.roster.map((member:string)=>({id:member,name:profiles.find(p=>p.id===member)?.name||'Jugador'}))}:({id:r.id,display_name:r.display_name,status:r.status,checked_in_at:r.checked_in_at})):[];
       // Never expose payment IDs, bearer QR tokens, personal email or roster publicly.
       const {stripe_account,owner_id,...publicCompetition}=c;
-      return {competition:publicCompetition,matches:matches.map<Row>(({proposed_by,...m})=>({...m,proposed_by:actor&&manager?proposed_by:actor&&proposed_by===actor.id?actor.id:null})),entrants,standings:ranking,roster,manager,canManage,canCheckin};
+      return {competition:publicCompetition,matches:matches.map<Row>(({proposed_by,...m})=>{
+        const home=regs.find(r=>r.id===m.home),away=regs.find(r=>r.id===m.away);
+        const captain=!!actor&&(home?.user_id===actor.id||away?.user_id===actor.id);
+        const opposite=!!actor&&((home?.user_id===actor.id&&away?.user_id===proposed_by)||(away?.user_id===actor.id&&home?.user_id===proposed_by));
+        const running=c.status==='running',playing=!!m.home&&!!m.away;
+        return {...m,proposed_by:actor&&manager?proposed_by:actor&&proposed_by===actor.id?actor.id:null,
+          actions:{schedule:running&&canManage&&['scheduled','proposed','disputed'].includes(m.status),propose:running&&playing&&m.status==='scheduled'&&(canScore||captain),confirm:running&&playing&&m.status==='proposed'&&(canScore||opposite),dispute:running&&playing&&m.status==='proposed'&&(canScore||captain),resolve:running&&playing&&m.status==='disputed'&&canScore}};
+      }),entrants,standings:ranking,roster,manager,canManage,canCheckin};
     });
   }
   async exportCalendar(compId:string,actor:Actor|null) {

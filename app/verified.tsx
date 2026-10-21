@@ -1,2 +1,2 @@
 import {Redirect} from "expo-router";
-export default function Alias(){return <Redirect href="/(creator)/organizer-profile"/>;}
+export default function Verified(){return <Redirect href="/login"/>;}
